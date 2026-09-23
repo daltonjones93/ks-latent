@@ -278,6 +278,84 @@ for the specific conversational context each citation was found in.)*
   precedent for this project's own local-latent-field research
   direction.
 
+**Linot & Graham (UW-Madison; Linot now UCLA Mechanical & Aerospace
+Engineering) -- the closest existing prior-art lineage to this project's
+own methodology,** user-directed literature search 2026-09-23 (verified
+against arXiv/journal pages). Their whole program is essentially this
+project's own approach (autoencoder dimension reduction + a learned
+ODE/map on the resulting latent coordinates, applied to KS and related
+spatiotemporal chaos) predating it by several years -- reading these
+papers directly, not just their abstracts, before any future publication
+claim is essential.
+
+- Linot, A. J. & Graham, M. D. (2020), "Deep learning to discover and
+  predict dynamics on an inertial manifold," *Phys. Rev. E* 101:062209,
+  [arXiv:2001.04263](https://arxiv.org/abs/2001.04263). Hybrid linear +
+  nonlinear (autoencoder) dimension reduction onto KS's own inertial
+  manifold, with translation invariance and energy conservation built
+  into the formalism; substantially outperforms linear reduction alone.
+  **The single most directly relevant prior paper to this project's own
+  KS/L96 "inertial manifold / spectral gap" finding** (`docs/RESULTS.md`)
+  -- read this one first if reading only one.
+- Linot, A. J. & Graham, M. D. (2022), "Data-driven reduced-order
+  modeling of spatiotemporal chaos with neural ordinary differential
+  equations," *Chaos* 32:073110,
+  [arXiv:2109.00060](https://arxiv.org/abs/2109.00060). Autoencoder finds
+  manifold coordinates, a neural-ODE learns the dynamics on them; applied
+  to KS at multiple domain sizes, finds dimension reduction improves
+  forecast performance relative to ambient-space prediction. Already an
+  indirect influence on this codebase before this literature search: its
+  L1-vs-L2 latent-loss finding motivated `Stage2TrainingConfig.
+  latent_loss` (`ks_latent/config.py`).
+- Pérez De Jesús, C. E., Linot, A. J. & Graham, M. D. (2024), "Building
+  symmetries into data-driven manifold dynamics models for complex
+  flows: application to two-dimensional Kolmogorov flow," *Phys. Rev.
+  Fluids*, [DOI:10.1103/ts3k-flx6](https://doi.org/10.1103/ts3k-flx6),
+  [arXiv:2312.10235](https://arxiv.org/abs/2312.10235). "Symmetry
+  charting" -- building continuous translation and discrete
+  rotation/shift-reflect symmetries directly into the autoencoder +
+  neural-ODE framework for 2D Kolmogorov flow. Directly relevant to this
+  project's own 2D Rayleigh-Bénard work: a template for how a genuinely
+  2D chaotic flow's known symmetries (RBC has periodic-x translation,
+  same as this project's own solver) could be built into a future
+  encoder rather than left to shift-augmentation alone.
+- Zeng, K., Pérez De Jesús, C. E., Fox, A. J. & Graham, M. D. (2023),
+  "Autoencoders for discovering manifold dimension and coordinates in
+  data from complex dynamical systems," *Machine Learning: Science and
+  Technology* (IOP),
+  [arXiv:2305.01090](https://arxiv.org/abs/2305.01090). Same lab, not a
+  Linot paper. An autoencoder architecture (implicit regularization +
+  internal linear layers + weight decay) that AUTOMATICALLY estimates
+  the correct latent dimension from data, rather than it being chosen a
+  priori. Directly relevant to this project's own "d_latent vs. true
+  D_KY sizing is a dominant lever" finding on L96 (Part 1.2) -- this
+  paper is a candidate method for doing that sizing principled rather
+  than by sweep.
+- Guo, A. & Graham, M. D. (2025), "Blending data and physics for
+  reduced-order modeling of systems with spatiotemporal chaotic
+  dynamics," [arXiv:2507.21299](https://arxiv.org/abs/2507.21299). Same
+  lab, not a Linot paper. A hybrid physics+data reduced-order model
+  (PI-DManD): the full-order vector field is projected onto the
+  autoencoder-discovered invariant manifold and then corrected by data
+  (or used as a Bayesian prior updated with data), tested on KS and the
+  complex Ginzburg-Landau equation; the hybrid approach roughly halves
+  the one-Lyapunov-time forecast error versus the data-only method.
+  Directly relevant to this project's own open question about whether a
+  stochastic/hybrid closure term (Part 2.C's Mori-Zwanzig `Phi + xi`
+  decomposition) could resolve the Lorenz-96 memory requirement more
+  principled than pure history-length sweeps.
+- Vinograd, M. Y. & Clark di Leoni, P. (2024), "Reduced Representations
+  of Rayleigh-Bénard Flows via Autoencoders," *Journal of Fluid
+  Mechanics*,
+  [arXiv:2410.01496](https://arxiv.org/abs/2410.01496). NOT a Linot/
+  Graham-group paper, found via the same search. Convolutional
+  autoencoders on the 2D RBC temperature field at Pr=1, Ra from 10^6 to
+  10^8 (turbulent regime, well beyond this project's own Ra=3e4). The
+  direct precedent for "autoencoder dimension reduction applied to RBC
+  specifically" -- worth reading before any further RBC latent-modeling
+  work, both for its own findings and for what Ra/resolution regime it
+  considers tractable.
+
 ### B. Latent-space data assimilation
 
 - Peyron, Fillion, Gürol, Marchais, Gratton, Boudier & Goret (2021),
