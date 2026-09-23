@@ -836,8 +836,21 @@ own pre-registered structure, restated here for this specific proposal):
   variant (mapping/transport PF, physical space) -- worth checking for
   overlap with this project's own NAT-PFF localization argument
   (`CLAUDE_CODE_BRIEF.md` Phase 13) even though not latent-space.
-- "Feature-preserving Latent-EnKF for Data Assimilation of Flows with
-  Shocks," [arXiv:2606.12559](https://arxiv.org/abs/2606.12559) (2026).
-  Found via this search, not yet read in full -- flagged for the same
-  reason as Pasmans et al.: another very recent latent-EnKF paper that
-  needs checking before any localization-novelty claim is finalized.
+- Chandravamsi, H., Hu, H., Thiagarajan, P. et al. (2026), "Feature-
+  preserving Latent-EnKF for Data Assimilation of Flows with Shocks,"
+  [arXiv:2606.12559](https://arxiv.org/abs/2606.12559), Johns Hopkins
+  Dept. of Mechanical Engineering. **Read in full 2026-09-23 -- does
+  NOT overlap with 4.3, checked directly, not just by abstract.** A
+  different problem entirely: EnKF's Gaussian assumption breaks when
+  shock-location uncertainty makes ensemble statistics multimodal,
+  producing spurious oscillations; their fix performs the analysis
+  update in a learned, GLOBAL low-dimensional latent manifold (a single
+  shared decoder back to physical space -- no spatial/lattice structure)
+  specifically to preserve sharp shock/contact-discontinuity features
+  through the update. "Gaspari": 0 mentions. "taper": 0 mentions.
+  "localization": exactly 1, in the Introduction, as generic background
+  on EnKF in general -- not implemented or tested here. Their own
+  Conclusion frames the contribution as extending latent EnKF to
+  discontinuous flows and lists 3D/other physical systems as future
+  work; no mention of localization or ensemble-size scaling. Ruled out
+  as prior art for 4.3.
