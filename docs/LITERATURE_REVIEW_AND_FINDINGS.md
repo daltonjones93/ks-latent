@@ -818,6 +818,52 @@ This is the closest this proposal will get to a clean "as far as a
 real, non-exhaustive search can tell" novelty statement; it is not a
 substitute for a professional literature search before submission.
 
+**Broader implication if this works** (user-directed 2026-09-23, asked
+before any experiment was run -- worth having on record independent of
+the outcome):
+
+1. **It resolves a real tension in the current ML+DA literature, not
+   just a KS/L96-specific gap.** Every latent-DA paper found in this
+   review (Peyron et al.; ROAD-EnKF; LAE-EnKF; Pasmans et al. -- three
+   of the four read in full, Part 2.B/4.3) uses a GLOBAL latent vector,
+   because that is what a standard autoencoder naturally produces. None
+   of them localize. A positive result shows that "cheap, low-dimensional
+   learned surrogate" and "localizable" are not fundamentally in
+   tension -- the encoder architecture just has to preserve spatial
+   structure instead of collapsing to a flat vector. That is a general
+   design principle, exportable beyond this project's own three systems,
+   not a one-off result.
+2. **It relocates the ensemble-size win classical localized DA already
+   achieved in physical space (the LETKF revolution of the 2000s) into
+   a learned, cheap reduced-order surrogate.** Required ensemble size
+   would scale with local per-site dimension (~1-3 for KS/L96) rather
+   than the full attractor dimension (~11-22), inside a model cheap
+   enough to run large ensembles of in the first place -- the entire
+   reason a reduced-order surrogate was wanted to begin with.
+3. **The L-transfer corollary is the practically unique part.** A
+   local-field surrogate transfers to a larger domain with ZERO
+   retraining, being shared-weight by construction. No current ML-based
+   reduced-order DA method in Part 2.B can do this -- they are all tied
+   to the exact state dimension they were trained on. SEC cannot do it
+   either (fit to one training distribution). This is the one result in
+   the whole proposal that only the local-latent approach can produce,
+   and per the brief's own framing (§7) is the argument that turns "we
+   cannot localize at all" into "here is what generalizes further,"
+   which is the stronger claim.
+4. **It is the direct, concrete bridge to the weather/CM1 conversation**
+   (`docs/RESULTS.md`'s "Weather-relevance context" entry). Localization
+   is literally why ensemble DA is operationally feasible at NWP scale
+   at all. A validated result here becomes the justification for
+   attempting the same on Rayleigh-Benard/CM1-scale convection later,
+   rather than a hopeful analogy with nothing behind it.
+
+A negative result (local-latent + Gaspari-Cohn fails to beat SEC) is
+still informative, not a wasted experiment: it would establish that
+distance-free empirical localization is the more robust choice for
+systems at this scale, and the L-transfer property alone -- which SEC
+structurally cannot ever have -- would remain the sole surviving
+argument for the architecturally heavier local-field approach.
+
 **What this project already has that supports pursuing it** (checked
 directly against the codebase before writing this, not assumed):
 
