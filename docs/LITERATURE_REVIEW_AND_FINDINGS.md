@@ -230,6 +230,63 @@ for the specific conversational context each citation was found in.)*
 
 ### A. Chaotic PDE/ODE reduced-order & latent dynamics modeling
 
+**Whitney/Takens/Sauer-Yorke-Casdagli -- the classical embedding
+theorems, and the precise statement behind "D_KY = n implies embedding
+dimension 2n+1."** User-directed 2026-09-23: Peter Jan reportedly
+believes he discovered this relationship. He did not -- it is one of
+the most-cited results in all of nonlinear dynamics, dating to 1981
+(generalized to fractal attractors in 1991):
+
+- Takens, F. (1981), "Detecting Strange Attractors in Turbulence," in
+  D. Rand & L.-S. Young (eds.), *Dynamical Systems and Turbulence,
+  Warwick 1980*, Lecture Notes in Mathematics vol. 898,
+  Springer-Verlag, pp. 366-381. The original embedding theorem: for a
+  smooth dynamical system whose attractor is a compact manifold of
+  (integer) dimension `d`, a delay-coordinate map built from `m >= 2d+1`
+  generic time-delayed samples of a generic scalar observable is,
+  generically, an embedding (i.e. a smooth, invertible reconstruction of
+  the full attractor and its dynamics, up to a diffeomorphism) -- the
+  literal origin of the "2d+1" rule. `Takens's theorem` on Wikipedia is
+  a reasonable non-paywalled starting point for the statement.
+- Sauer, T., Yorke, J. A. & Casdagli, M. (1991), "Embedology," *Journal
+  of Statistical Physics* 65:579-616,
+  [DOI:10.1007/BF01053745](https://doi.org/10.1007/BF01053745). The
+  generalization that makes the rule apply to genuinely fractal/chaotic
+  attractors (Takens's original theorem assumes a smooth manifold, i.e.
+  an integer dimension): for a compact set `A` with box-counting
+  dimension `d_box(A)`, if `n` is an integer STRICTLY GREATER THAN
+  `2*d_box(A)`, then almost every delay-coordinate map (in the sense of
+  prevalence) is an embedding of `A`. The smallest such integer is
+  `floor(2*d_box(A)) + 1` -- "2n+1" is the standard safe rounding of
+  this when `d_box(A) = n` is itself an integer or close to one, exactly
+  the form of the claim in question.
+- Whitney, H. (1936), "Differentiable Manifolds," *Annals of
+  Mathematics* 37(3):645-680. The purely topological precursor (smooth
+  compact `d`-manifolds embed in `R^(2d+1)`, with no dynamical-systems
+  content) that both of the above build on.
+
+**The precise caveat that matters for using this with Kaplan-Yorke
+dimension specifically**: the theorems above are stated in terms of
+BOX-COUNTING (or a closely related fractal) dimension, not the
+Kaplan-Yorke dimension `D_KY` this project computes from the Lyapunov
+spectrum. `D_KY` is used as a *practical proxy* for the attractor's true
+fractal/information dimension via the Kaplan-Yorke conjecture (Kaplan &
+Yorke, 1979) -- empirically well-supported and used throughout this
+project's own replication targets, but a conjecture, not a theorem, and
+known to fail in constructed counterexamples. So the fully precise
+chain is `D_KY ~= d_box` (conjectured) `=> embedding dimension > 2*D_KY`
+(Sauer-Yorke-Casdagli) `=> 2*D_KY + 1 is a safe integer choice`
+(rounding) -- three well-established steps, not one, but none of them
+new. **This project's own results already independently corroborate the
+same relationship empirically, without originally citing this as the
+reason**: Section 201's L96 result (Part 1.2) -- 5 steps of history
+closing the chaos gap where 0-1 steps failed -- is a direct delay-
+embedding experiment in exactly this sense (stacking time-lagged copies
+of a lossy `d_latent`-dimensional observable to reconstruct the full
+dynamics), and the "d_latent must comfortably exceed true D_KY" sizing
+lever found across this project's whole L96 line is the single-snapshot
+special case of the same theorem.
+
 - Kassam, A.-K. & Trefethen, L. N. (2005), "Fourth-Order Time-Stepping
   for Stiff PDEs," *SIAM Journal on Scientific Computing* 26(4):1214-1233,
   [DOI:10.1137/S1064827502410633](https://doi.org/10.1137/S1064827502410633).
@@ -703,6 +760,17 @@ rather than re-deriving it from nothing.
   ID) -- this was on record in this project's own history before the
   advisor's claim of novelty that prompted Part 2.E's entry, not a new
   finding from this literature search.
+- **"If D_KY = n, the latent dimension should be `2n+1`-dimensional"**
+  -- see Part 2.A's new entry above: this is Takens (1981) generalized
+  to fractal attractors by Sauer, Yorke & Casdagli (1991), i.e.
+  44-and-35-year-old results respectively, among the most-cited papers
+  in all of nonlinear dynamics. Not a discovery -- textbook material,
+  covered in essentially every time-series-embedding course and
+  reference (e.g. Kantz & Schreiber, *Nonlinear Time Series Analysis*).
+  Also already on this project's own reading list before this question
+  was asked: `docs/LATENT_PDE_RESEARCH_NOTES.md` §10 itself lists
+  "Whitney (1936, 1944); Takens (1981); Sauer–Yorke–Casdagli (1991) --
+  embedding" under "Already in the project handoff."
 
 ### 4.2 Still open, ranked
 
