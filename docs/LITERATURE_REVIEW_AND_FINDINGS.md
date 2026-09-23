@@ -356,6 +356,38 @@ claim is essential.
   work, both for its own findings and for what Ra/resolution regime it
   considers tractable.
 
+**Racca & Magri (Cambridge/Imperial, MagriLab) -- the direct prior-art
+answer to "is matching the true system's Lyapunov exponents/Kaplan-Yorke
+dimension in a learned latent space novel?"** User-directed search
+2026-09-23 (a collaborator's advisor believed this specific result --
+recovering the true system's own Lyapunov dimension in a latent/reduced
+representation -- was a novel finding; it is not, and has not been for
+several years). See Part 2.E for the direct statement of this.
+
+- Racca, A., Doan, N. A. K. & Magri, L. (2023), "Predicting turbulent
+  dynamics with the convolutional autoencoder echo state network,"
+  *Journal of Fluid Mechanics* 975:A2,
+  [DOI:10.1017/jfm.2023.716](https://doi.org/10.1017/jfm.2023.716),
+  [arXiv:2211.11379](https://arxiv.org/abs/2211.11379). A convolutional
+  autoencoder finds a low-dimensional latent representation of KS (L=22
+  -- this project's own second Phase-1 replication target), an echo
+  state network propagates the dynamics on it, and the paper explicitly
+  reports that this pipeline "accurately infers the Lyapunov exponents
+  and covariant Lyapunov vectors (CLVs) in this low-dimensional manifold
+  for different attractors." This is precisely the claim in question --
+  reproducing the true system's own Lyapunov spectrum (and hence
+  Kaplan-Yorke dimension) from a learned latent representation -- done,
+  published, peer-reviewed, on the exact system (KS) this project itself
+  uses.
+- Özalp, E. & Magri, L. (2025), "Stability analysis of chaotic systems in
+  latent spaces," *Nonlinear Dynamics* 113:13791-13806,
+  [DOI:10.1007/s11071-024-10712-w](https://doi.org/10.1007/s11071-024-10712-w),
+  [arXiv:2410.00480](https://arxiv.org/abs/2410.00480). A direct
+  follow-up, entirely dedicated to this question (latent-space stability/
+  Lyapunov analysis of chaotic systems, again including KS), from the
+  same group. Removes any doubt that recovering Lyapunov dimension in a
+  latent space is an open or novel question as of this writing.
+
 ### B. Latent-space data assimilation
 
 - Peyron, Fillion, Gürol, Marchais, Gratton, Boudier & Goret (2021),
@@ -434,6 +466,31 @@ claim is essential.
 Carried over from `CLAUDE_CODE_BRIEF.md` §22, restated here for the
 literature review's own completeness:
 
+- **"Recovering the true system's own Lyapunov exponents / Kaplan-Yorke
+  dimension in a learned latent space is a novel finding" is NOT an
+  available claim, and should not be presented as one in any paper or
+  talk.** Directly answers a question raised 2026-09-23: a collaborator's
+  advisor believed their own replication of this result (matching
+  Lyapunov dimension between a chaotic system and its latent
+  representation) was novel. It is not -- **Racca, Doan & Magri (2023),
+  *JFM* 975:A2** (Part 2.A above) explicitly reports "accurately infers
+  the Lyapunov exponents and covariant Lyapunov vectors ... in this
+  low-dimensional manifold," on KS, published and peer-reviewed two-plus
+  years before this note was written, with **Özalp & Magri (2025),
+  *Nonlinear Dynamics*** as a direct, entirely-dedicated follow-up on
+  the same question. This project's OWN replication targets
+  (`CLAUDE.md`/`docs/REPLICATION_LOG.md`: "Latent D_KY (Benettin,
+  single-state) ~= 21.4") already implicitly assume matching Lyapunov
+  dimension in a latent space is achievable and is being used as a
+  correctness CHECK on this project's own pipeline, not presented
+  anywhere as this project's own novel contribution -- that framing is
+  correct and should be kept. **If a paper or talk is being prepared
+  that presents latent-space Lyapunov-dimension matching itself as the
+  novel result, stop and re-scope it before proceeding** -- the novel
+  content, if any, has to be in what is DONE WITH that matching (this
+  project's own strongest candidate, per Part 3.2-3.4, is the
+  spectral-gap-as-predictor and cross-system generalization angles, not
+  the matching itself).
 - **"We show KS admits local reduced models" is not an available claim**
   -- Wittenberg & Holmes (1999) and the associated wavelet-projection
   literature made essentially this argument ~25 years earlier by
