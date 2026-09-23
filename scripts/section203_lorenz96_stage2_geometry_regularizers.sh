@@ -35,17 +35,34 @@
 # to any backbone. Smoke-tested combined with --w-varmatch/--w-spatial/
 # --w-spectrum-shape all at once before this launch.
 #
-# Otherwise identical to Section 202 (killed mid-Stage-1 to relaunch with
-# these fixes, wasted ~5 minutes of compute -- Stage 1 itself was already
-# correct, w_var/w_spatial/w_logdet were always applied there): ViT
-# encoder (pos_encoding=linear, full attention), d_latent=20,
-# mode=markovian, --multistep --full-propagator (Section 202's "idea 2"),
-# --w-spectrum-shape retargeted for L96 (Section 202's "idea 1"), same
-# Lorenz-96 N=64/F=4.2/dt_snap=0.1 dataset, same 40/60-epoch schedule.
-# Stage-2 regularizer weights below are a first pass (varmatch/spatial
-# reuse Stage 1's own 0.02/0.01 magnitudes; logdet-rollout-latent reuses
-# Stage 1's own 0.0035) -- not separately tuned for the rollout setting,
-# flagged here in case results suggest retuning.
+# RERUN, user-directed: "please rerun 203 with no rollout in phase 1."
+# Confirmed cause of the first attempt's Stage-1 collapse (D_KY=0.00,
+# n_positive=0/20 -- see docs/OPEN_QUESTIONS.md): --multistep extends
+# Stage 1's own auxiliary-propagator L_pred term to an 8-step rollout
+# (k_pred ramped 2->8), which is exactly the long-horizon-MSE mechanism
+# already diagnosed as Stage 2's collapse cause -- it was evidently
+# reintroducing that same pressure inside Stage 1 itself. `--multistep`
+# REMOVED below (this also reverts aux-propagator sizing/checkpoint-
+# saving to depend on `--full-propagator` alone, which is kept --
+# hidden=128/n_blocks=3 sizing and Stage-2-compatible checkpoint saving,
+# unrelated to the rollout curriculum). With `--multistep` gone,
+# `Stage1TrainingConfig.k_pred_max` reverts to its own default of 0 (no
+# --multistep -> 0, per --k-pred-max's own CLI help) -- genuinely NO
+# multi-step rollout term in Stage 1, exactly matching Sections 199/201's
+# own successful (non-collapsed) configuration. `--w-spectrum-shape`
+# (idea 1, retargeted for L96: n_expand=5, target=1.1, floor=0.6,
+# two_sided) is the only thing left on top of that known-good base --
+# isolates whether idea 1 ALONE preserves Stage-1 chaos and then also
+# protects Stage 2, the original question Section 203 was meant to
+# answer before --multistep confounded it.
+#
+# Otherwise identical to the first attempt: ViT encoder (pos_encoding=
+# linear, full attention), d_latent=20, mode=markovian, same Lorenz-96
+# N=64/F=4.2/dt_snap=0.1 dataset, same 40/60-epoch schedule, same Stage-2
+# geometry regularizers (--w-varmatch/--w-spatial/--w-logdet-rollout-
+# latent, the actual fix for this section's own original "do we apply
+# w_var/w_logdet/w_spatial in Stage 2" question, unaffected by the
+# --multistep bug and kept unchanged).
 set -e
 cd /Users/daltonjones/Documents/latent_DA
 
@@ -53,13 +70,13 @@ TAG=section203_lorenz96_stage2_geometry_regularizers
 DATASET=artifacts/datasets/lorenz96_trajectories_n64_f4.2.h5
 SPECTRUM_ARGS=(--w-spectrum-shape 0.4 --spectrum-shape-n-expand 5 --spectrum-shape-expand-target 1.1 --spectrum-shape-contract-floor 0.6 --spectrum-shape-n-samples 32 --spectrum-shape-two-sided)
 
-echo "=== [1/3] Stage 1: ViT encoder (pos_encoding=linear, full attention), d_latent=20, mode=markovian, --multistep (k_pred 2->8) + --w-spectrum-shape (n_expand=5, target=1.1, floor=0.6, two_sided), w_var=0.02, w_spatial=0.01 signed, w_logdet=0.0035, on Lorenz-96 N=64 F=4.2 dt_snap=0.1, --amp, 40 epochs ==="
+echo "=== [1/3] Stage 1: ViT encoder (pos_encoding=linear, full attention), d_latent=20, mode=markovian, NO rollout (--multistep removed) + --w-spectrum-shape (n_expand=5, target=1.1, floor=0.6, two_sided), w_var=0.02, w_spatial=0.01 signed, w_logdet=0.0035, on Lorenz-96 N=64 F=4.2 dt_snap=0.1, --amp, 40 epochs ==="
 mamba run -n da_env python scripts/train_stage1_patched.py \
   --profile full --dataset "$DATASET" --nx 64 --d-latent 20 \
   --encoder vit --aux-backbone mlp --mode markovian \
   --pos-encoding linear \
   --w-decorr 0 --w-var 0.02 --w-spatial 0.01 --spatial-signed --w-var-floor 0 --w-logdet 0.0035 \
-  --multistep --full-propagator "${SPECTRUM_ARGS[@]}" --amp \
+  --full-propagator "${SPECTRUM_ARGS[@]}" --amp \
   --epochs 40 --checkpoint-every 4 \
   --tag "$TAG" \
   > artifacts/logs/stage1_${TAG}.log 2>&1

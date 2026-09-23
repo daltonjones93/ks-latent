@@ -1086,6 +1086,60 @@ the top 20 of 120 directions, a *shorter* history (`n_history=3` or `4`,
 giving 60 or 80 raw dimensions -- at or below N=64) may already recover
 most of Section 201's chaos gain. Not yet run.
 
+### Section 203 rerun: `--multistep` diagnosis confirmed, but a dedicated Stage-2 anti-collapse regularizer stack still fails (2026-09-23)
+
+First attempt at Section 203 (idea 1 `--w-spectrum-shape` + idea 2
+`--multistep`, combined, on top of the markovian ViT recipe) collapsed
+**Stage 1 itself** to `D_KY=0.00`, before Stage 2 ever ran -- a new,
+unexpected regression, since every prior bare Stage-1 L96 run had produced
+genuine chaos (199: 1.35, 201: 11.94). Working hypothesis: `--multistep`
+extends Stage 1's own auxiliary-propagator `L_pred` term to an 8-step
+rollout (`k_pred` ramped 2->8) -- the same long-horizon-MSE mechanism
+already diagnosed as the Stage-2 collapse cause -- reintroducing that
+pressure inside Stage 1's own jointly-regularized objective.
+
+**Rerun, `--multistep` removed, everything else unchanged:**
+
+| stage | config | lambda1 | n_positive | D_KY |
+|---|---|---|---|---|
+| Stage 1 | ViT, markovian, w-spectrum-shape (n_expand=5, target=1.1, floor=0.6, two_sided), w_var=0.02, w_spatial=0.01 signed, w_logdet=0.0035, NO multistep | 0.00315 | 1/20 | **2.117** |
+| Stage 2 | warm-started from above; w_varmatch=0.02 adaptive, w_spatial=0.01 signed, w_logdet_rollout_latent=0.0035, k_max=12 | -0.00235 | 0/20 | **0.0** |
+
+(True L96 N=64/F=4.2 reference: `lambda1=0.080, n_positive=5/64,
+D_KY=11.3`. Section 199 comparison: stage1 D_KY=1.35, stage2 D_KY=0.00.
+Section 201 comparison: stage1 D_KY=11.94, stage2 D_KY=0.00.)
+
+**Two results, read together:**
+
+1. **The `--multistep` diagnosis is confirmed.** Removing it alone
+   recovered Stage 1 to `D_KY=2.117` -- better than the bare Section 199
+   baseline (1.35) and comfortably chaotic. `--w-spectrum-shape` and the
+   other Stage-1 regularizers (`w_var`, `w_spatial`, `w_logdet`) do not
+   cause Stage-1 collapse on their own; `--multistep`'s 8-step rollout
+   term does.
+2. **Stage 2 still collapsed to exactly 0.00, despite a regularizer stack
+   built specifically to prevent this.** `w_varmatch` (adaptive) +
+   `w_spatial` (signed) + `w_logdet_rollout_latent` (the new
+   general-backbone logdet anti-collapse term built for this run, see
+   `ks_latent/config.py`/`ks_latent/training/loops.py`/
+   `scripts/train_stage2_patched.py`) were all active simultaneously,
+   warm-started from a Stage-1 checkpoint whose chaos (D_KY=2.117) was
+   already reasonable. None of it mattered -- Stage 2 still drove the
+   system to a fixed point (`lambda1` went slightly *negative*, all 20
+   directions contracting).
+
+This is the **fourth** independent confirmation that pure k-step
+supervised `horizon_weighted_latent_loss` training collapses autonomous
+chaos on L96 (Sections 197, 199, 201, 203 -- local_field and ViT
+encoders, 0 and 5 steps of propagator history, with and without geometry
+regularizers), and the first case where a dedicated anti-collapse
+regularizer stack was tried and still failed. The remaining untried
+candidate in the existing toolkit is applying the pde_head
+self-rollout/spectrum-shape regularizer (Sections 192-193, built to
+discourage Jacobian contraction along a self-generated rollout) directly
+to Stage 2's *main* propagator rather than only to the separate
+`pde_head` distillation target -- see `docs/OPEN_QUESTIONS.md`.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

@@ -289,18 +289,47 @@ full finding and citations; unresolved items only, here:
   WITHOUT `--multistep` (keep only `--w-spectrum-shape`) to isolate
   whether spectrum-shape alone preserves Stage-1 chaos and then also
   protects Stage 2 -- the original idea 1, tested in isolation.
+- **Section 203 RERUN (2026-09-23, `--multistep` removed) confirms the
+  `--multistep` diagnosis for Stage 1, but Stage 2 still collapsed even
+  with a dedicated anti-collapse regularizer stack.** Stage 1 (ViT,
+  markovian, `--w-spectrum-shape` n_expand=5/target=1.1/floor=0.6/
+  two_sided, `--w-var 0.02`, `--w-spatial 0.01` signed, `--w-logdet
+  0.0035`, NO `--multistep`) recovered to `D_KY=2.117, n_positive=1/20,
+  lambda1=0.00315` -- confirms `--multistep` (not spectrum-shape, not the
+  other Stage-1 regularizers) was the cause of the first attempt's
+  Stage-1 collapse (`D_KY=0.00`), and is better than the bare Section 199
+  baseline (`D_KY=1.35`). Stage 2 was then warm-started from this good
+  checkpoint with `--w-varmatch 0.02` adaptive + `--w-spatial 0.01` signed
+  + the newly-built `--w-logdet-rollout-latent 0.0035` (general-backbone
+  logdet anti-collapse term on the propagator's rolled-out `z_pred`,
+  built specifically for this rerun -- see
+  `scripts/section203_lorenz96_stage2_geometry_regularizers.sh` header) --
+  and STILL collapsed: `D_KY=0.0, n_positive=0/20, lambda1=-0.00235`
+  (slightly negative). This is the **fourth** independent confirmation of
+  Stage-2 collapse (197, 199, 201, 203) and the **first time it survived a
+  regularizer stack purpose-built to prevent it** -- `w_varmatch`,
+  `w_spatial`, and `w_logdet_rollout_latent` together were not enough.
+  Narrows the remaining untried candidate to the pde_head
+  self-rollout/spectrum-shape regularizer applied directly to Stage 2's
+  *main* propagator (see next entry) -- everything else in the current
+  regularizer toolkit has now been tried and failed on L96.
 - **Stage-2 collapse-to-zero is now confirmed a structural property of
-  the training objective, not a fixable-by-better-inputs symptom.**
-  Section 201 (2026-09-23) started Stage 2 from a Stage-1 checkpoint whose
-  D_KY=11.94 essentially matched the true system's 11.3, and Stage 2
-  still collapsed it to exactly 0.00 -- the third independent confirmation
-  (197, 199, 201; local_field and ViT encoders; 0 and 5 steps of
-  propagator history) that pure k-step supervised `horizon_weighted_
-  latent_loss` training destroys autonomous chaos regardless of how good
-  the dynamics were beforehand. Never tried: applying the pde_head
-  self-rollout/spectrum-shape regularizers (Sections 192-193, built to
-  discourage Jacobian contraction along a self-generated rollout, so far
-  only used on the separate `pde_head` distillation target) directly to
-  Stage 2's *main* propagator, on either KS or L96. This is the most
-  direct existing candidate fix and has not been attempted on either
-  system.
+  the training objective, not a fixable-by-better-inputs symptom, and not
+  fixable by the variance/spatial/logdet regularizer toolkit tried so
+  far.** Section 201 (2026-09-23) started Stage 2 from a Stage-1
+  checkpoint whose D_KY=11.94 essentially matched the true system's 11.3,
+  and Stage 2 still collapsed it to exactly 0.00; Section 203's rerun
+  (above) then showed that adding `w_varmatch` + `w_spatial` +
+  `w_logdet_rollout_latent` on top of a good Stage-1 checkpoint (D_KY=
+  2.117) *still* collapses to 0.00. Four independent confirmations total
+  (197, 199, 201, 203; local_field and ViT encoders; 0 and 5 steps of
+  propagator history; with and without geometry regularizers) that pure
+  k-step supervised `horizon_weighted_latent_loss` training destroys
+  autonomous chaos regardless of how good the dynamics were beforehand or
+  what anti-collapse terms are added on top. Never tried: applying the
+  pde_head self-rollout/spectrum-shape regularizers (Sections 192-193,
+  built to discourage Jacobian contraction along a self-generated
+  rollout, so far only used on the separate `pde_head` distillation
+  target) directly to Stage 2's *main* propagator, on either KS or L96.
+  This is now the single remaining direct candidate fix in the existing
+  toolkit and has not been attempted on either system.
