@@ -737,8 +737,18 @@ representation, not a flat vector) enables covariance/kernel
 localization in latent-space DA, letting required ensemble size scale
 with *local* per-site dimension rather than the full attractor
 dimension -- and this specifically has NOT been demonstrated in the
-latent-DA literature as of this writing (multiple independent checks,
-below).
+latent-DA literature as of this writing. **Status as of 2026-09-23: all
+three papers found during this search that plausibly could have scooped
+this have now been read in full and ruled out** -- Chandravamsi et al.
+(global manifold, different problem entirely: shock multimodality, not
+localization), Guerrieri et al. (physical-space localization of a
+different algorithm, no learned representation at all), and Pasmans et
+al. (localization appears exactly once, as an unimplemented future-work
+sentence, in a low-dimensional test regime where it wouldn't be
+load-bearing anyway) -- see each entry below for the specific check.
+This is the closest this proposal will get to a clean "as far as a
+real, non-exhaustive search can tell" novelty statement; it is not a
+substitute for a professional literature search before submission.
 
 **What this project already has that supports pursuing it** (checked
 directly against the codebase before writing this, not assumed):
@@ -796,13 +806,11 @@ own pre-registered structure, restated here for this specific proposal):
    result that makes this a strong paper rather than an incremental one
    -- neither a global latent vector nor an SEC-tapered one can do this
    at all, which is the actual contrast worth publishing.
-5. Read Pasmans et al. (2025, below) IN FULL before drafting anything --
-   conflicting search signals on whether they already apply Gaspari-Cohn
-   convolution localization in a VAE latent space; if they do, this
-   proposal's novelty narrows to "on a genuinely high-dimensional
-   spatiotemporal chaotic system," since their own test system is a
-   simple circular (low-dimensional) model where localization is not
-   load-bearing the way it is for KS/L96/RBC.
+5. ~~Read Pasmans et al. (2025, below) IN FULL before drafting anything~~
+   -- **done, 2026-09-23: confirmed clear, see below.** All three papers
+   flagged during this search (Chandravamsi et al., Guerrieri et al.,
+   Pasmans et al.) have now been read in full and ruled out as prior art
+   for this proposal. Step 1-4 above remain the actual blockers.
 
 **Additional related literature**, found via this specific search
 (2026-09-23), not already in Part 2:
@@ -813,14 +821,21 @@ own pre-registered structure, restated here for this specific proposal):
   [DOI:10.1002/qj.70070](https://doi.org/10.1002/qj.70070),
   [arXiv:2502.12987](https://arxiv.org/abs/2502.12987) (already cited in
   `docs/LATENT_PDE_RESEARCH_NOTES.md` §10 as a preprint; now published).
-  **Read in full before relying on this**: one search pass reported it
-  "discusses application of covariance localization using convolution,
-  referencing Gaspari & Cohn (1999)"; a follow-up, more targeted search
-  found no confirmation of this detail. Their twin-experiment test
-  system is described as "a simple circular model" -- low-dimensional,
-  which would make any localization discussion there far less load-
-  bearing than on this project's own KS/L96/RBC systems regardless of
-  the outcome of that check.
+  **Read in full 2026-09-23 -- does NOT overlap with 4.3, resolving the
+  earlier conflicting search signal.** Their focus is entirely
+  non-Gaussianity/constrained-variable handling (e.g. sea ice
+  concentration bounded in [0,1], Mohr-Coulomb stress constraints) via a
+  VAE latent mapping -- not localization. The Gaspari-Cohn reference
+  appears exactly once, in the Discussion, as a FUTURE-WORK suggestion
+  for how the method might scale to higher dimensions ("future work
+  should also investigate... an approach similar to the application of
+  covariance localisation using convolution (Gaspari and Cohn, 1999)")
+  -- never implemented or tested anywhere in the paper. Consistent with
+  this: their own twin-experiment test system (a "simple circular
+  model") has an ensemble-size-to-state-dimension ratio of 32 -- the
+  paper states this explicitly as "much higher than the << 1 ratios
+  typical of operational forecasting systems" -- i.e. a regime where
+  localization is not remotely load-bearing, unlike KS/L96/RBC.
 - Poterjoy, J. (2016), "A Localized Particle Filter for High-Dimensional
   Nonlinear Systems," *Monthly Weather Review* 144:59-76,
   [DOI:10.1175/MWR-D-15-0163.1](https://doi.org/10.1175/MWR-D-15-0163.1).
