@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ks-latent"
+version = "0.1.0"
+description = "Latent-space data assimilation and manifold analysis for the Kuramoto-Sivashinsky equation"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "pyyaml",
+    "h5py",
+    "scikit-learn",
+    "mpmath",
+    "gudhi",
+    "ripser",
+    "persim",
+    "giotto-tda",
+    "pysindy",
+    "pywavelets",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "hypothesis"]
+
+[tool.setuptools.packages.find]
+include = ["ks_latent*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast unit tests (<1s)",
+    "integration: smoke-profile integration tests (<60s)",
+    "slow: replication-tier tests, run manually",
+    "golden: golden reference-array tests",
+]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.coverage.run]
+source = ["ks_latent"]
+omit = ["*/plotting*", "*plotting.py"]

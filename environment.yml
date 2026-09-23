@@ -1,0 +1,31 @@
+# Portability fallback only (brief §1.1). The real environment for this
+# project is the existing `da_env`; do not use this file to recreate it for
+# actual work -- see environment.lock.yml for the exact exported env, and
+# README.md for the mamba/pip install commands actually used.
+name: ks-latent
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - torch
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - pyyaml
+  - h5py
+  - scikit-learn
+  - mpmath
+  - gudhi
+  - ripser
+  - persim
+  - pywavelets
+  - hypothesis
+  - pytest
+  - pytest-cov
+  - spyder-kernels
+  - setuptools<81
+  - pip
+  - pip:
+      - giotto-tda
+      - pysindy
