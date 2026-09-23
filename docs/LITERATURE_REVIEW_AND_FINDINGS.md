@@ -899,32 +899,73 @@ this document should be read as claiming the localization result
 itself -- only that the prerequisite pieces are unusually far along for
 how little of the actual experiment has been run.
 
-**What it would take to become a viable paper**, in order, each gated
-on the last passing (mirrors `CLAUDE_CODE_BRIEF.md` Phases 7 and 13's
-own pre-registered structure, restated here for this specific proposal):
+**Literature-check status**: ~~Read Pasmans et al. (2025, below) IN FULL
+before drafting anything~~ -- **done, 2026-09-23: confirmed clear.** All
+three papers flagged during this search (Chandravamsi et al., Guerrieri
+et al., Pasmans et al.) have now been read in full and ruled out as
+prior art for this proposal. The experimental design below is the
+actual remaining blocker.
 
-1. Run Phase 7: the SEC empirical-localization baseline, `N_ens` in
-   {8,16,32,64,128,256}, on the existing global (non-local) latent, with
-   and without SEC. Report analysis RMSE vs. `N_ens`.
-2. Run the equivalent sweep on the local-latent-field model (already
-   trained, Section 196/197) with genuine Gaspari-Cohn tapering on its
-   lattice index.
-3. **Pre-registered decision rule (already stated in the brief, restated
-   here as this proposal's own bar): the local-latent + Gaspari-Cohn
-   result must beat the SEC baseline from step 1, not merely beat
-   no-localization at all.** This is what makes the result credible
-   rather than a foregone conclusion -- SEC is a real, competitive
-   method (Anderson 2012), not a strawman.
-4. If step 3 passes: the L-transfer experiment (train at one domain
-   size / one L96 N, run DA at a larger one with zero retraining) is the
-   result that makes this a strong paper rather than an incremental one
-   -- neither a global latent vector nor an SEC-tapered one can do this
-   at all, which is the actual contrast worth publishing.
-5. ~~Read Pasmans et al. (2025, below) IN FULL before drafting anything~~
-   -- **done, 2026-09-23: confirmed clear, see below.** All three papers
-   flagged during this search (Chandravamsi et al., Guerrieri et al.,
-   Pasmans et al.) have now been read in full and ruled out as prior art
-   for this proposal. Step 1-4 above remain the actual blockers.
+**Experimental design (2026-09-23), checked directly against the
+codebase before writing -- not assumed.** What already exists and can
+be reused as-is: `ks_latent/da/pff.py` (validated NAT-PFF, Phase 5/Gate
+3), `ks_latent/da/sec.py` (SEC), `ks_latent/da/cycling.py` +
+`scripts/run_da_pff.py` (DA cycling driver -- currently hardcoded to a
+single global KS setup, no localization hook), and trained L96
+local-field checkpoints (Sections 196/197, `n_sites=8, channels=2,
+d_latent=16`, flattened SITE-MAJOR -- confirmed by reading
+`ks_latent/models/autoencoder_local_field.py` directly:
+`z.reshape(B, n_sites, channels)`, i.e. `site = i // channels`, the
+detail that matters for indexing the taper correctly). What does NOT
+exist yet -- real code, not just new config: `ks_latent/da/
+localization.py` (zero "Gaspari" hits anywhere in the codebase,
+confirmed by grep), and any N_ens sweep result at all (Phase 7 and
+Phase 13 both absent from `docs/RESULTS.md`).
+
+Staged, each gated on the last:
+
+- **Stage 0 -- build the missing infrastructure.**
+  `gaspari_cohn_taper(distance, c)` (standard piecewise quintic) +
+  `build_latent_taper_matrix(n_sites, channels, c)`, using CIRCULAR site
+  distance (both KS and L96 are periodic domains) and respecting the
+  confirmed site-major flattening. Wire a localizer hook into PFF's `B`
+  computation (Schur product on the ensemble covariance before it enters
+  `F = J-bar^T R^-1 J-bar + B^-1`, per the brief's own Phase 13 spec).
+  Generalize `run_da_pff.py`: accept `--encoder local_field`,
+  `--localizer {none,sec,gaspari_cohn}`, sweep `--n-ensemble`
+  automatically, support both KS and the existing L96 checkpoints
+  without the current L=100 hardcoding.
+- **Stage 1 -- Phase 7 baseline (never run before): SEC sweep on the
+  EXISTING GLOBAL latent.** `N_ens` in {8,16,32,64,128,256}, with and
+  without SEC, analysis RMSE vs. `N_ens`. One methodological question to
+  resolve empirically rather than assume: use a Stage-1-only checkpoint
+  (genuine intrinsic chaos, weaker short-horizon forecast) or a Stage-2
+  checkpoint (collapsed intrinsic chaos, better short-horizon forecast)?
+  DA cycling only ever runs short free-run segments between analysis
+  updates, so the Stage-2 checkpoint may be the fairer comparator
+  despite its collapsed standalone Lyapunov spectrum -- run both, report
+  which is actually the right baseline rather than guessing.
+- **Stage 2 -- Phase 13 core: same sweep on the local-field
+  architecture with real Gaspari-Cohn tapering.** Reuses Section
+  196/197's already-trained checkpoints; no new training needed for a
+  first pass.
+- **Stage 3 -- pre-registered decision rule (already stated in the
+  brief, restated here as this proposal's own bar, not decided after
+  the fact): the local-field + Gaspari-Cohn result must beat the Stage
+  1 SEC curve, not merely beat no-localization.** SEC is a real,
+  competitive method (Anderson 2012), not a strawman -- this is what
+  makes a pass credible.
+- **Stage 4 -- if Stage 3 passes: L-transfer, the headline result.**
+  Take the N=64-trained local-field model, run DA at a larger L96 `N`
+  (e.g. 128) by adding lattice sites with zero retraining. Compare
+  against the global-latent model (structurally cannot even run at a
+  different `N`) and SEC (fit to one training distribution, cannot
+  transfer either) -- neither comparator can do this at all, which is
+  the actual contrast worth publishing.
+
+The DA cycling itself should be cheap (no gradient descent, just running
+an already-trained model) -- the real cost is Stage 0's code, not
+compute.
 
 **Additional related literature**, found via this specific search
 (2026-09-23), not already in Part 2:
