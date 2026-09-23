@@ -831,11 +831,31 @@ own pre-registered structure, restated here for this specific proposal):
 - Guerrieri, J. M., Pulido, M., Miyoshi, T., Amemiya, A. & Ruiz, J. J.
   (2026), "Localization in the mapping particle filter," *Nonlinear
   Processes in Geophysics* 33:33,
-  [https://npg.copernicus.org/articles/33/33/2026/](https://npg.copernicus.org/articles/33/33/2026/).
-  Very recent (2026), localization for a different particle-filter
-  variant (mapping/transport PF, physical space) -- worth checking for
-  overlap with this project's own NAT-PFF localization argument
-  (`CLAUDE_CODE_BRIEF.md` Phase 13) even though not latent-space.
+  [DOI:10.5194/npg-33-33-2026](https://doi.org/10.5194/npg-33-33-2026).
+  **Read in full 2026-09-23 -- does NOT overlap with 4.3.** Two
+  localization schemes (alpha: local kernel, global state update;
+  beta: full local mapping, physical partitioning) for the Mapping
+  Particle Filter (MPF, an SVGD-based particle-flow method -- a
+  different algorithm from this project's own NAT-PFF), tested on the
+  two-scale Lorenz-96 system. Entirely in PHYSICAL state space: the
+  state vector is the raw L96 grid, Gaspari-Cohn-style distance decay
+  (they cite Gaspari & Cohn 1999 directly) is applied to physical
+  grid-point distance. No autoencoder, no learned latent representation,
+  no dimension reduction anywhere in the paper -- same category as
+  Poterjoy (2016) above, the classical non-latent comparator. **Notable:
+  this paper was reviewed by Peter Jan van Leeuwen himself** (see its
+  Review statement) -- direct, current confirmation of his own active
+  engagement with localized-particle-flow-filter research, consistent
+  with `docs/LATENT_PDE_RESEARCH_NOTES.md`'s own framing of the
+  localization argument as "in Peter Jan's own language." One genuinely
+  useful, citable result to reuse in 4.3's own writeup: their Figs. 5-6
+  show the optimal localization radius tracks directly whether ensemble
+  size exceeds or falls short of the number of positive Lyapunov
+  exponents (20 particles vs. ~16-19 exponents needs looser localization;
+  10 particles needs tighter) -- a clean, quantitative illustration of
+  exactly the "ensemble size should scale with effective, not full,
+  dimension" argument 4.3 is built on, done in physical space rather
+  than latent space.
 - Chandravamsi, H., Hu, H., Thiagarajan, P. et al. (2026), "Feature-
   preserving Latent-EnKF for Data Assimilation of Flows with Shocks,"
   [arXiv:2606.12559](https://arxiv.org/abs/2606.12559), Johns Hopkins
