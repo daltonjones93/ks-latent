@@ -1140,6 +1140,57 @@ discourage Jacobian contraction along a self-generated rollout) directly
 to Stage 2's *main* propagator rather than only to the separate
 `pde_head` distillation target -- see `docs/OPEN_QUESTIONS.md`.
 
+### Sections 204/205: L96 N=16, x+x' augmented state, self-rollout spectrum-shape regularizer -- Stage 1 itself collapses under ViT, not under plain MLP (2026-09-23)
+
+Testing the one remaining candidate flagged by the Section 203 rerun
+above (`--w-spectrum-shape-self`, the self-rollout analogue of Section
+193's pde_head-only mechanism, now generalized to the MAIN propagator
+and to `mode="history"` -- see `ks_latent.training.loops._propagator_
+spectrum_shape_self_pool` and `Stage2TrainingConfig.w_spectrum_shape_
+self`), on a new operating point: L96 N=16, F=6.0 (F=4.2, this line's
+usual forcing, measured directly to be NON-chaotic at N=16 -- D_KY=0.0;
+F=6.0 gives D_KY=9.39, the closer match to this test's d_latent=8 of the
+two chaotic candidates tried), state augmented with the exact analytic
+derivative (`x` concatenated with `x'=l96_rhs(x,F)`, doubling the stored
+state to 32 dims -- `ks_latent.solver.lorenz96_dataset.generate_
+trajectory_dataset(..., include_derivative=True)`), `mode="history"`
+(`n_history=6`, following Section 201's own depth).
+
+**Section 204 (`--encoder mlp --aux-backbone mlp`)**: killed mid-Stage-1,
+user-directed, before completion, to swap in the ViT architecture
+instead (see Section 205). Left as an open comparison cell (script kept,
+annotated as superseded) rather than deleted.
+
+**Section 205 (`--encoder vit --aux-backbone vit`, `pos_encoding=linear`,
+FULL attention -- no `--attn-window`)**: Stage 1 trained cleanly on
+reconstruction (`val_recon_final=0.0836`, smooth monotonic descent, no
+collapse plateau) but the PROPAGATOR itself collapsed: `lambda1=
+-4.51e-05, n_positive=0/8, D_KY=0.0`. Stage 2 was cancelled (user-
+directed: "don't run stage 2 then") once this came in -- warm-starting
+the self-rollout regularizer test from an already-collapsed Stage-1
+propagator can't demonstrate anything about whether that regularizer
+prevents collapse; a collapsed input producing more collapse is
+uninformative either way.
+
+**Reading the two together**: the reconstruction quality (healthy) vs.
+propagator health (collapsed) split, on the SAME dataset/regularizer
+stack that a plain MLP propagator survived in Section 204's own 2-epoch
+dry run (recon 0.546->0.424, no collapse signal in that short a window --
+not power to detect eventual collapse, but no immediate red flag either,
+unlike Section 205's decisive negative), points at the ViT-backbone
+PROPAGATOR specifically, not the data augmentation or the regularizer
+stack, as the proximate cause here. This is consistent with this
+project's own established pattern (`ks_latent.models.propagator._
+LocalMLPDeltaBody`'s docstring, KS-side): "every self-attention-based
+propagator tried... collapsed to a fixed point... every architecture
+WITHOUT self-attention... recovered rich chaos" -- this is a further
+confirmation of that pattern, now on a NEW system configuration (L96
+N=16, x+x' augmented state, mode=history) rather than a repeat of an
+existing one. Section 204's mlp/mlp variant was never run to full
+completion, so this is not yet a controlled, same-day head-to-head
+confirmation -- reopening/finishing Section 204 (or a fresh mlp/mlp
+rerun with identical settings) would make it one.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

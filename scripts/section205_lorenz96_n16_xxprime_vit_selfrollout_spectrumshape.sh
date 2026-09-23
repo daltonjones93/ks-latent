@@ -1,4 +1,17 @@
 #!/bin/zsh
+# RESULT (2026-09-23): Stage 1 itself collapsed -- lambda1=-4.51e-05,
+# n_positive=0/8, D_KY=0.00 -- despite healthy reconstruction
+# (val_recon_final=0.0836, smooth monotonic descent, no collapse
+# plateau). User-directed "don't run stage 2 then" once this came in:
+# Stage 2 (where --w-spectrum-shape-self actually applies) was never
+# run -- warm-starting it from an already-collapsed propagator can't
+# test whether that regularizer prevents collapse. Points at the ViT
+# backbone itself (not the regularizer stack or the x+x' augmentation)
+# as the likely cause -- see docs/RESULTS.md's "Sections 204/205" entry
+# and docs/OPEN_QUESTIONS.md for the full writeup and the recommended
+# next step (finish Section 204's plain-MLP variant as the actual
+# controlled test).
+#
 # User-directed 2026-09-23: "kill 204, and replace the encoder and
 # decoder with the ViT. No attention mask needed please."
 #

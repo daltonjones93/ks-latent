@@ -333,3 +333,25 @@ full finding and citations; unresolved items only, here:
   target) directly to Stage 2's *main* propagator, on either KS or L96.
   This is now the single remaining direct candidate fix in the existing
   toolkit and has not been attempted on either system.
+- **`--w-spectrum-shape-self` (the candidate above) was finally attempted
+  (Section 205, L96 N=16, x+x' augmented state, mode=history) but the
+  test was confounded: Stage 1 ITSELF collapsed under the ViT encoder/
+  propagator** (`D_KY=0.00, n_positive=0/8`, despite healthy
+  reconstruction, `val_recon_final=0.0836`) before Stage 2 (where
+  `w_spectrum_shape_self` actually applies) ever ran; Stage 2 was
+  cancelled rather than run against an already-collapsed input. Section
+  204 (identical setup, plain MLP encoder/decoder/propagator instead of
+  ViT) was killed mid-Stage-1 by user direction before it could serve as
+  the controlled comparison, though its own quick 2-epoch dry run showed
+  no immediate collapse signal (not enough epochs to be conclusive, but a
+  contrast worth noting against Section 205's decisive negative). This
+  points at the ViT-backbone propagator itself, not the regularizer
+  stack, as the likely proximate cause, consistent with `ks_latent.
+  models.propagator._LocalMLPDeltaBody`'s own documented KS-side finding
+  ("every self-attention-based propagator tried... collapsed... every
+  architecture WITHOUT self-attention... recovered rich chaos"). **Next
+  step if this line resumes**: finish/rerun Section 204's plain-MLP
+  variant to completion (same dataset/regularizers) as the actual
+  controlled test of `--w-spectrum-shape-self` -- it still has not been
+  tested against a Stage 2 that starts from a genuinely chaotic Stage-1
+  checkpoint.
