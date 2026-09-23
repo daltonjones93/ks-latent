@@ -664,3 +664,180 @@ rather than the physical-systems framing. If the DA angle (Part 2.B) is
 developed further (e.g. an actual latent-DA experiment on L96 or RBC,
 not yet attempted -- `docs/RESULTS.md`), *QJRMS* is the direct venue
 given the Peyron et al. (2021) precedent already sits there.
+
+---
+
+## Part 4: Assessment of Peter Jan's Proposed Directions
+
+User-directed 2026-09-23: is anything Peter Jan proposes in
+`docs/LATENT_PDE_RESEARCH_NOTES.md` (his own request for "a PDE that
+models the latent variables," written 2026-08-28, updated 2026-09-12)
+novel? That document is itself unusually self-aware about prior art --
+it has its own risk table (its §8) and a 30-citation related-work log
+(its §10) that already catch most of the overlap. What follows confirms
+and sharpens that self-assessment against this document's own Part 2,
+rather than re-deriving it from nothing.
+
+### 4.1 Not novel
+
+- **Interpretation A** (inertial-form neural ODE + SINDy on the latent)
+  -- the source document itself calls this "low-risk and quick," i.e.
+  applying existing Linot & Graham tooling (Part 2.A). Not claimed as
+  novel there either.
+- **Interpretation B's general framework** (manifold-learn an emergent
+  spatial coordinate, then fit a PDE local in it) -- this is Kemeth,
+  Bertalan, Thiem, Dietrich, Moon, Laing & Kevrekidis (2022), *Nat.
+  Commun.* 13:3318, arXiv:2012.12738, which the source document itself
+  calls "the central reference." The general idea is theirs.
+- **The core local-latent-field architecture** (patch-decomposed field +
+  shared-weight local stencil propagator, on KS) -- Constante-Amores,
+  Linot & Graham (arXiv:2410.01238, already in Part 2.A) do this on KS
+  *and* 2D Kolmogorov flow, "motivated explicitly by attractor dimension
+  scaling linearly with domain size." The source document's own risk
+  table marks this overlap "High -- read this first" and already narrows
+  what might be left over to exactly the three items in 4.2 below.
+- **Matching Lyapunov exponents/D_KY in a learned latent space** -- see
+  Part 2.E: Racca, Doan & Magri (2023) and Özalp & Magri (2025) already
+  did this. Worth noting explicitly: the source document itself already
+  cites the Özalp & Magri paper (its §10, dated 2026-09-12, via its PMC
+  ID) -- this was on record in this project's own history before the
+  advisor's claim of novelty that prompted Part 2.E's entry, not a new
+  finding from this literature search.
+
+### 4.2 Still open, ranked
+
+1. **Latent-space localization for ensemble/particle-flow DA** --
+   expanded into a full proposal in 4.3 below. The strongest candidate.
+2. **The h-refinement multi-resolution consistency test** (source
+   document §5.4): train the same local stencil law at 2-3 site
+   spacings and check whether the *same* function fits all of them,
+   after the usual h-scaling of the finite-difference operators -- a
+   sharper, more falsifiable criterion for "is this actually a PDE"
+   than anything found cited elsewhere. Provisional on confirming
+   Constante-Amores/Linot/Graham didn't already run an equivalent
+   consistency check, since their architecture is shared-weight by
+   construction and might make this a natural thing for them to have
+   checked too.
+3. **L-transfer** (train at one domain size, run at a larger one with
+   zero retraining): moderate confidence for the same reason as #2 -- a
+   shared-weight patch architecture is transferable by construction, so
+   arXiv:2410.01238 may already demonstrate something like this even if
+   not framed the same way.
+4. **KPZ/Burgers universality as an independent validation target for a
+   learned latent PDE**: the physics (Yakhot 1981 onward) is decades
+   old, not novel; using it as a ground-truth check on a *learned*
+   latent operator specifically is a reasonable methodological choice,
+   not a headline finding on its own.
+
+### 4.3 Full proposal: latent-space localization for ensemble/particle-
+    flow data assimilation
+
+**Claim being tested**: a local latent field (a genuinely spatial latent
+representation, not a flat vector) enables covariance/kernel
+localization in latent-space DA, letting required ensemble size scale
+with *local* per-site dimension rather than the full attractor
+dimension -- and this specifically has NOT been demonstrated in the
+latent-DA literature as of this writing (multiple independent checks,
+below).
+
+**What this project already has that supports pursuing it** (checked
+directly against the codebase before writing this, not assumed):
+
+- A **measured, quotable localization-radius design rule** already
+  exists and is validated: `minimum_localization_radius = max(
+  encoder_receptive_field, v_star * Delta_t)`
+  (`ks_latent.analysis.spreading.minimum_localization_radius`), derived
+  from Phase 2's information-spreading-velocity measurement (Gate 2,
+  passed, `docs/RESULTS.md`). This is a real, already-published-quality
+  theoretical contribution independent of whether the DA experiment
+  below is ever run.
+- A **working local latent field architecture** (`ks_latent/models/
+  autoencoder_local_field.py`) exists and has now been validated on TWO
+  systems, not one -- KS (the original architecture search) and Lorenz-
+  96 (Section 196, `docs/RESULTS.md`'s Lorenz-96 entry) -- giving it a
+  genuine spatial/lattice index a Gaspari-Cohn taper could act on
+  directly.
+- The **PFF (particle flow filter) DA machinery is built and validated**
+  (`ks_latent/da/pff.py`, Phase 5/Gate 3, `docs/RESULTS.md`) against the
+  analytic Kalman-filter answer in the linear-Gaussian case -- the
+  correctness baseline the whole DA line depends on.
+- The **distance-free empirical localization (SEC) baseline is already
+  coded** (`ks_latent/da/sec.py`, brief Phase 7) -- the honest
+  comparator `CLAUDE_CODE_BRIEF.md` itself pre-registers as the bar the
+  local-latent approach must beat, not merely beat no-localization.
+
+**What is missing -- this is a ready-to-run experiment, not a completed
+result.** Checked directly against `docs/RESULTS.md`: there is no Phase
+7 entry (the SEC/`N_ens` sweep baseline has not been run or reported)
+and no Phase 13 entry (the actual localized-latent-DA `N_ens` sweep,
+compared against the SEC baseline, has not been attempted). Nothing in
+this document should be read as claiming the localization result
+itself -- only that the prerequisite pieces are unusually far along for
+how little of the actual experiment has been run.
+
+**What it would take to become a viable paper**, in order, each gated
+on the last passing (mirrors `CLAUDE_CODE_BRIEF.md` Phases 7 and 13's
+own pre-registered structure, restated here for this specific proposal):
+
+1. Run Phase 7: the SEC empirical-localization baseline, `N_ens` in
+   {8,16,32,64,128,256}, on the existing global (non-local) latent, with
+   and without SEC. Report analysis RMSE vs. `N_ens`.
+2. Run the equivalent sweep on the local-latent-field model (already
+   trained, Section 196/197) with genuine Gaspari-Cohn tapering on its
+   lattice index.
+3. **Pre-registered decision rule (already stated in the brief, restated
+   here as this proposal's own bar): the local-latent + Gaspari-Cohn
+   result must beat the SEC baseline from step 1, not merely beat
+   no-localization at all.** This is what makes the result credible
+   rather than a foregone conclusion -- SEC is a real, competitive
+   method (Anderson 2012), not a strawman.
+4. If step 3 passes: the L-transfer experiment (train at one domain
+   size / one L96 N, run DA at a larger one with zero retraining) is the
+   result that makes this a strong paper rather than an incremental one
+   -- neither a global latent vector nor an SEC-tapered one can do this
+   at all, which is the actual contrast worth publishing.
+5. Read Pasmans et al. (2025, below) IN FULL before drafting anything --
+   conflicting search signals on whether they already apply Gaspari-Cohn
+   convolution localization in a VAE latent space; if they do, this
+   proposal's novelty narrows to "on a genuinely high-dimensional
+   spatiotemporal chaotic system," since their own test system is a
+   simple circular (low-dimensional) model where localization is not
+   load-bearing the way it is for KS/L96/RBC.
+
+**Additional related literature**, found via this specific search
+(2026-09-23), not already in Part 2:
+
+- Pasmans, I., Chen, Y., Finn, T. S., Bocquet, M. & Carrassi, A. (2025),
+  "Ensemble Kalman filter in latent space using a variational
+  autoencoder pair," *QJRMS*,
+  [DOI:10.1002/qj.70070](https://doi.org/10.1002/qj.70070),
+  [arXiv:2502.12987](https://arxiv.org/abs/2502.12987) (already cited in
+  `docs/LATENT_PDE_RESEARCH_NOTES.md` §10 as a preprint; now published).
+  **Read in full before relying on this**: one search pass reported it
+  "discusses application of covariance localization using convolution,
+  referencing Gaspari & Cohn (1999)"; a follow-up, more targeted search
+  found no confirmation of this detail. Their twin-experiment test
+  system is described as "a simple circular model" -- low-dimensional,
+  which would make any localization discussion there far less load-
+  bearing than on this project's own KS/L96/RBC systems regardless of
+  the outcome of that check.
+- Poterjoy, J. (2016), "A Localized Particle Filter for High-Dimensional
+  Nonlinear Systems," *Monthly Weather Review* 144:59-76,
+  [DOI:10.1175/MWR-D-15-0163.1](https://doi.org/10.1175/MWR-D-15-0163.1).
+  Classical (physical-space, not latent) localized particle filter --
+  the non-latent comparator this project's own PFF localization result
+  should be positioned against, not just the SEC/no-localization
+  contrast.
+- Guerrieri, J. M., Pulido, M., Miyoshi, T., Amemiya, A. & Ruiz, J. J.
+  (2026), "Localization in the mapping particle filter," *Nonlinear
+  Processes in Geophysics* 33:33,
+  [https://npg.copernicus.org/articles/33/33/2026/](https://npg.copernicus.org/articles/33/33/2026/).
+  Very recent (2026), localization for a different particle-filter
+  variant (mapping/transport PF, physical space) -- worth checking for
+  overlap with this project's own NAT-PFF localization argument
+  (`CLAUDE_CODE_BRIEF.md` Phase 13) even though not latent-space.
+- "Feature-preserving Latent-EnKF for Data Assimilation of Flows with
+  Shocks," [arXiv:2606.12559](https://arxiv.org/abs/2606.12559) (2026).
+  Found via this search, not yet read in full -- flagged for the same
+  reason as Pasmans et al.: another very recent latent-EnKF paper that
+  needs checking before any localization-novelty claim is finalized.
