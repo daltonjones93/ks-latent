@@ -1,4 +1,14 @@
 #!/bin/zsh
+# KILLED mid-Stage-1, user-directed 2026-09-23: "kill 204, and replace
+# the encoder and decoder with the ViT. No attention mask needed
+# please." -- superseded by scripts/section205_lorenz96_n16_xxprime_vit_
+# selfrollout_spectrumshape.sh (identical in every other respect: same
+# dataset, same F=6.0 choice/reasoning, same Stage-1/Stage-2
+# regularizers, same --w-spectrum-shape-self test). Kept here (not
+# deleted) for provenance -- the --encoder mlp/--aux-backbone mlp
+# variant was never actually run to completion, so it remains an open
+# comparison cell if this line continues.
+#
 # User-directed 2026-09-23: "alright, I want to try the self rollout
 # spectrum-shape regularizer. But use it on L96 data in 16 dimensions,
 # let the latent dimension be 8. Let the encoder, decoder and propagator
