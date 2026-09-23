@@ -269,6 +269,26 @@ full finding and citations; unresolved items only, here:
   reading the actual augmentation they used (and whether it's a fair
   comparison point or a fundamentally different question) is worth doing
   before citing it further.
+- **Section 203 (idea 1 + idea 2 combined: `--w-spectrum-shape` +
+  `--multistep`, both on markovian) found Stage 1 ITSELF collapsed**
+  (`D_KY=0.00, n_positive=0/20`, `val_recon_final=0.0025` -- trained
+  cleanly, no nan/errors, just landed non-chaotic) before Stage 2 ever
+  ran. Every prior bare-Stage-1 L96 run produced genuine chaos (199:
+  1.35, 201: 11.94), so this is a new, unexpected regression. Likely
+  cause (not yet confirmed): `--multistep` extends STAGE 1's own
+  auxiliary-propagator loss to an 8-step rollout -- exactly the kind of
+  longer-horizon multi-step MSE term already diagnosed as the Stage-2
+  collapse mechanism. If so, the working hypothesis "pushing rollout-
+  fitting into Stage 1's jointly-regularized regime is safer than
+  Stage 2's propagator-only regime" was wrong, or at least insufficient
+  at this rollout length -- collapse pressure from long-horizon MSE may
+  operate inside Stage 1's own objective too, not just Stage 2's. Killed
+  before Stage 2 ran (uninformative to continue from an already-
+  collapsed Stage 1); user paused this line 2026-09-23 to return to the
+  Rayleigh-Bénard work. **Next step when resumed**: rerun Section 203
+  WITHOUT `--multistep` (keep only `--w-spectrum-shape`) to isolate
+  whether spectrum-shape alone preserves Stage-1 chaos and then also
+  protects Stage 2 -- the original idea 1, tested in isolation.
 - **Stage-2 collapse-to-zero is now confirmed a structural property of
   the training objective, not a fixable-by-better-inputs symptom.**
   Section 201 (2026-09-23) started Stage 2 from a Stage-1 checkpoint whose

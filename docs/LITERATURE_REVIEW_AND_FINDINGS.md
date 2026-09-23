@@ -445,3 +445,165 @@ literature review's own completeness:
   statement: a minimal flow unit is non-extensive by construction, which
   is exactly why a global latent vector works there and does not scale
   to KS/L96/RBC's own extensive regimes.
+- **The Linot/Graham lineage (Part 2.A) is close enough to this
+  project's own approach that overlap risk is real, not hypothetical.**
+  Linot & Graham (2020) already reduces KS onto its inertial manifold
+  with an autoencoder; this project's own "KS has a spectral gap, hence
+  a small Markovian reduction can work" framing may already be present,
+  explicitly or implicitly, in that paper's own reasoning. **Do not
+  claim the spectral-gap/inertial-manifold argument as novel until the
+  full text (not the abstract) of Linot & Graham (2020) and Pérez De
+  Jesús, Linot & Graham (2024) have been read.** See Part 3 below for
+  what is more likely to survive that check.
+
+---
+
+## Part 3: Recommended Research and Publication Directions
+
+Written after the literature search above, calibrated against it --
+these are ranked by how much of each idea's novelty survives the
+Linot/Graham overlap risk just flagged, not by how interesting each
+idea is in isolation. **None of these are ready to write up yet**: the
+two most promising threads (spectral-gap-as-predictor, Stage-2 collapse)
+both have an unresolved experiment sitting in `docs/OPEN_QUESTIONS.md`
+that needs to land before the finding is actually a finding.
+
+### 3.1 Do this first, before any of the below: read four papers in full
+
+Not a research direction, a prerequisite. Abstracts were verified for
+Part 2's citations; full texts were not read. Before drafting anything
+publication-shaped:
+
+1. Linot & Graham (2020) -- checks whether "KS's inertial manifold is
+   *why* small-Markovian-latent reduction works, and this is testable by
+   comparing against a system that lacks one" is already their own
+   framing.
+2. Pérez De Jesús, Linot & Graham (2024) -- checks whether the
+   symmetry-charting approach already addresses what this project's own
+   local-latent-field plan (`CLAUDE_CODE_BRIEF.md` Phase 10) was going
+   to attempt, which would change that phase from "build it" to "apply
+   their method."
+3. Guo & Graham (2025) -- checks whether their hybrid physics+data
+   correction already covers the ground this project's own "does L96
+   need a stochastic closure term, not just more history" open question
+   (Part 2.C, `docs/OPEN_QUESTIONS.md`) is asking.
+4. Xu & Chen (2026) -- already read closely enough to cite specifics in
+   `docs/RESULTS.md`, but re-read alongside Linot & Graham (2020)
+   specifically to check whether ITS "coarse-to-fine recoverability"
+   framing and this project's own spectral-gap framing are actually the
+   same underlying idea in different language, which would change how
+   the two should be cited relative to each other.
+
+### 3.2 Most promising candidate: the spectral-gap criterion as a
+    quantitative predictor, not just a qualitative pass/fail
+
+**Current state**: a qualitative diagnosis (KS has a gap, L96 doesn't;
+the gap's presence/absence tracks whether a small Markovian latent
+reduction works at all) plus exactly one data point suggesting the gap's
+ABSENCE predicts a quantitative need (Section 201: 5 steps of history
+closed most of L96's chaos gap, at matched d_latent). That is a
+demonstration, not yet a predictive theory.
+
+**What would make this a real contribution**: a quantitative relationship
+between a measurable property of the true system's spectral gap (e.g.
+the ratio of the trace to the largest exponent, or the wavenumber at
+which damping crosses some threshold) and the MINIMUM propagator memory
+length needed to recover a target fraction of the true D_KY. Concrete
+experiment: sweep `n_history` on L96 systematically (not just 0/1/5 as
+done so far) at 2-3 different F values with different degrees of
+"gaplessness," and check whether the memory length needed scales with
+some closed-form function of each system's own measured spectrum shape.
+If a clean relationship exists, this becomes a genuinely new, portable
+design rule ("here is how much memory your propagator needs, computed
+from the true system's linear operator alone, before you train
+anything") -- publishable on its own, likely at a venue like *Chaos* or
+*Physical Review Fluids/E* given the Linot/Graham precedent for exactly
+those venues.
+
+**Blocking**: needs the Section 201-style history sweep repeated at
+several F values, and (per 3.1) needs the Linot & Graham (2020)/Xu & Chen
+(2026) overlap check done first, since a version of "gap size predicts
+required memory" may already exist in the Mori-Zwanzig / optimal-
+prediction literature (Part 2.C) under different vocabulary
+(memory-kernel decay rate vs. spectral gap).
+
+### 3.3 Second candidate: Stage-2 collapse as a general critique of
+    k-step MSE training for chaotic surrogate models, with a validated fix
+
+**Current state**: the phenomenon (pure multi-step MSE propagator
+training destroys measured chaos while improving forecast skill) is
+demonstrated across two systems, several architectures, and multiple
+propagator-memory lengths -- a genuinely broad empirical base. The
+mechanistic explanation (MSE's asymmetric penalty: amplified error costs
+more than damped error, biasing any imperfect model toward contraction)
+is plausible but not independently verified against the literature.
+**Section 203's own fix attempt is still unresolved** (`--multistep`
+appears to have reintroduced the same collapse pressure inside Stage 1
+itself -- see `docs/OPEN_QUESTIONS.md`), so there is not yet a validated
+fix to report, only a validated problem.
+
+**What would make this a real contribution**: (a) the isolation
+experiment already queued in `docs/OPEN_QUESTIONS.md`
+(`--w-spectrum-shape` alone, no `--multistep`) actually run and shown to
+preserve chaos through Stage 2 on L96, not just KS; (b) a genuine
+comparison against a non-MSE loss family -- a probabilistic/ensemble
+propagator scored with a proper scoring rule (CRPS or an energy score),
+motivated directly by the Mori-Zwanzig `Phi + xi` decomposition (Part
+2.C) -- since a fix via loss-family change, if it works, is a stronger
+and more general result than a fix via one more regularizer term; (c) a
+literature check specifically for the "blurry forecast" / "regression to
+the mean" phenomenon in ML weather forecasting (video prediction and
+precipitation nowcasting have well-known versions of this under names
+like "double penalty problem" -- not yet searched for this project, a
+real gap in Part 2 as written) to confirm whether the MECHANISM claimed
+here is already established elsewhere, even if the specific
+cross-system/cross-architecture chaos-measurement evidence is new.
+
+### 3.4 Third candidate: a three-system ladder (KS -> L96 -> RBC) as
+    the paper's actual organizing structure
+
+Rather than publishing the spectral-gap finding or the Stage-2 finding
+in isolation, the strongest single narrative this project is positioned
+to tell -- not obviously duplicated by anything found in Part 2 -- is
+the deliberate three-system progression itself: a 1D periodic system
+with a scale-selective linear damping (KS), a 1D periodic system without
+one (L96), and a 2D system with a genuinely bounded (non-periodic)
+axis (RBC), each chosen specifically to isolate one structural axis at a
+time (spectral gap presence/absence, then dimensionality/boundary type),
+with a consistent measurement protocol (Lyapunov spectrum matching, not
+just forecast skill) applied throughout. Vinograd & Clark di Leoni
+(2024) is the closest existing RBC-autoencoder precedent but works at a
+single system (RBC only, Ra=1e6-1e8, no comparison against a
+spectral-gap-bearing system); nothing found in Part 2 runs this specific
+three-system comparative design. **Blocking**: RBC's own chaos regime is
+still unresolved (`docs/OPEN_QUESTIONS.md`) -- there is no third rung on
+the ladder yet, only a solver capable of building one.
+
+### 3.5 Honest assessment of what is NOT yet a contribution
+
+- The RBC solver itself, however carefully validated, is not
+  independently publishable -- Vinograd & Clark di Leoni (2024) and the
+  broader pseudospectral-RBC literature already establish the method
+  class; this project's own solver is an implementation, not a new
+  numerical method.
+- "We built a latent model of KS/L96/RBC" alone is not a claim -- Linot
+  & Graham's own line already does this, earlier, on KS specifically,
+  with more architectural sophistication (symmetry-equivariant encoders,
+  automatic dimension discovery) than this project has built.
+- The d_latent-vs-true-D_KY sizing finding (Part 1.2) is very likely
+  already implicit in, or superseded by, Zeng et al. (2023)'s automatic
+  dimension-discovery method (Part 2.A) -- this project swept d_latent by
+  hand; their method estimates it directly from data. Citing their
+  method as the principled alternative to this project's own sweep-based
+  approach is more defensible than presenting the sweep finding as novel.
+
+### 3.6 Suggested venues, once one of 3.2-3.4 has a resolved result
+
+*Chaos* (AIP) and *Physical Review Fluids*/*E* both have direct
+Linot/Graham precedent for exactly this material (Part 2.A). *Machine
+Learning: Science and Technology* (IOP) is the right venue if the
+methodological/diagnostic-criterion framing (3.2) is the lead result
+rather than the physical-systems framing. If the DA angle (Part 2.B) is
+developed further (e.g. an actual latent-DA experiment on L96 or RBC,
+not yet attempted -- `docs/RESULTS.md`), *QJRMS* is the direct venue
+given the Peyron et al. (2021) precedent already sits there.
