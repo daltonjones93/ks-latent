@@ -3976,6 +3976,49 @@ class Stage2TrainingConfig:
     w_spectrum_shape_multistep: float = 0.0
     spectrum_shape_multistep_k: int = 10
     spectrum_shape_multistep_n_samples: int = 16
+    # `w_spectrum_shape_self` (added 2026-09-23, Section 204, user-
+    # directed: "I want to try the self rollout spectrum-shape
+    # regularizer" -- the candidate flagged in docs/OPEN_QUESTIONS.md
+    # after Section 203's rerun: `w_spectrum_shape` above, plus
+    # `w_varmatch`/`w_spatial`/`w_logdet_rollout_latent`, all evaluated
+    # on real, on-attractor states, still collapsed the MAIN propagator
+    # to D_KY=0.00 on L96. Direct analogue of `w_pde_spectrum_shape_self`
+    # (Section 193), which exists ONLY for the separate `pde_head`
+    # distillation target -- this is the first time the SAME self-
+    # rollout-sampled mechanism is applied to the propagator that is
+    # actually cycled/decoded/used everywhere else in this project.
+    # Motivation (see `w_pde_spectrum_shape_self`'s docstring for the
+    # original diagnosis): `w_spectrum_shape` above is evaluated ONLY on
+    # real, encoder-derived on-attractor states -- it shapes the
+    # propagator's Jacobian correctly NEAR THE TRUE ATTRACTOR, but says
+    # nothing about states the propagator's OWN free rollout actually
+    # visits once it starts drifting toward a fixed point, which is
+    # exactly the region a real-data-anchored loss never samples from.
+    # Uses `_propagator_spectrum_shape_self_pool`
+    # (`ks_latent.training.loops`): rolls the propagator forward
+    # `spectrum_shape_self_rollout_k` steps under `torch.no_grad()` from
+    # a real starting window, takes the FINAL state (or, `mode="history"`,
+    # the final `n_hist`-length window) as the evaluation pool, then
+    # applies `propagator_spectrum_shape_loss` there WITH gradient --
+    # cheap (no backprop through the rollout chain itself), same "evaluate
+    # AT a batch of self-visited points" convention as
+    # `w_pde_spectrum_shape_self`. Shares `spectrum_shape_n_expand`/
+    # `expand_target`/`contract_floor`/`two_sided` above (the same target
+    # shape, just sampled from a different state distribution) rather
+    # than duplicating them, matching how `w_pde_spectrum_shape_self`
+    # reuses `pde_spectrum_shape_n_expand` etc. GENERALIZED to
+    # `mode="history"` (unlike `w_spectrum_shape`, which is `mode=
+    # "markovian"` only) -- `_propagator_spectrum_shape_self_pool`
+    # flattens the trailing `(n_hist, d)` window to a single vector before
+    # differentiating through `step_history`, mirroring `step_history`'s
+    # own internal flatten for `backbone="mlp"`. `mode="two_step"` still
+    # unsupported (same restriction as every other spectrum-shape loss in
+    # this project). OFF by default (0.0); may be combined with
+    # `w_spectrum_shape` (independent weights, real-data-anchored vs.
+    # self-rollout-sampled, same as the pde_head pair).
+    w_spectrum_shape_self: float = 0.0
+    spectrum_shape_self_rollout_k: int = 20
+    spectrum_shape_self_n_samples: int = 16
     # `pde_head` continuation into Stage 2 (added 2026-09-08, see
     # docs/sine_transform_pde_plan.md §21, user-directed: "is the pde_head
     # trained during phase 2 as well. we should try to get pde rollout to
@@ -4209,6 +4252,8 @@ class Stage2TrainingConfig:
             )
         if self.w_logdet_rollout < 0:
             raise ValueError(f"w_logdet_rollout must be >= 0, got {self.w_logdet_rollout!r}")
+        if self.w_spectrum_shape_self < 0:
+            raise ValueError(f"w_spectrum_shape_self must be >= 0, got {self.w_spectrum_shape_self!r}")
 
 
 @dataclass(frozen=True)

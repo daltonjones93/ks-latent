@@ -620,6 +620,30 @@ def main() -> None:
         "two_sided setting through into Stage 2 consistently).",
     )
     parser.add_argument(
+        "--w-spectrum-shape-self", type=float, default=None,
+        help="mode=markovian or mode=history, any backbone. Override Stage2TrainingConfig."
+        "w_spectrum_shape_self (default 0.0, off). Section 204, user-directed: 'I want to try "
+        "the self rollout spectrum-shape regularizer' -- applies the SAME mechanism Section "
+        "193 built for pde_head (w_pde_spectrum_shape_self) to the MAIN propagator instead: "
+        "shapes propagator.step_one's (or, mode=history, step_history's) Jacobian spectrum at "
+        "states drawn from the propagator's OWN self-generated rollout, not just real "
+        "on-attractor states (--w-spectrum-shape). Shares --spectrum-shape-n-expand/"
+        "expand-target/contract-floor/two-sided above (same target shape, different sampling "
+        "distribution). May be combined with --w-spectrum-shape.",
+    )
+    parser.add_argument(
+        "--spectrum-shape-self-rollout-k", type=int, default=None,
+        help="--w-spectrum-shape-self only. Override Stage2TrainingConfig."
+        "spectrum_shape_self_rollout_k (default 20): number of steps the propagator's own "
+        "free rollout runs (torch.no_grad()) before its final state (or final n_hist-length "
+        "history window) becomes the evaluation pool.",
+    )
+    parser.add_argument(
+        "--spectrum-shape-self-n-samples", type=int, default=None,
+        help="--w-spectrum-shape-self only. Override Stage2TrainingConfig."
+        "spectrum_shape_self_n_samples (default 16).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-graded", type=float, default=None,
         help="mode=markovian only (any backbone). Override Stage2TrainingConfig."
         "w_spectrum_shape_graded (default 0.0, off). Section 134 -- see Stage1's own flag of "
@@ -1249,6 +1273,12 @@ def main() -> None:
             full_kwargs["spectrum_shape_n_samples"] = args.spectrum_shape_n_samples
         if args.spectrum_shape_two_sided:
             full_kwargs["spectrum_shape_two_sided"] = True
+        if args.w_spectrum_shape_self is not None:
+            full_kwargs["w_spectrum_shape_self"] = args.w_spectrum_shape_self
+        if args.spectrum_shape_self_rollout_k is not None:
+            full_kwargs["spectrum_shape_self_rollout_k"] = args.spectrum_shape_self_rollout_k
+        if args.spectrum_shape_self_n_samples is not None:
+            full_kwargs["spectrum_shape_self_n_samples"] = args.spectrum_shape_self_n_samples
         if args.w_spectrum_shape_graded is not None:
             full_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:

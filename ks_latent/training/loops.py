@@ -1288,6 +1288,71 @@ def _pde_head_self_rollout_states(
     return z_self
 
 
+def _propagator_spectrum_shape_self_pool(
+    propagator: LatentPropagator,
+    windows: torch.Tensor,
+    n_hist: int,
+    k: int,
+    n_samples: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]] | None:
+    """Generalizes `_pde_head_self_rollout_states` to the MAIN Stage-2
+    propagator (Section 203 rerun -- see `Stage2TrainingConfig.
+    w_spectrum_shape_self`'s docstring for the full motivation), and to
+    `mode="history"` (which `_pde_head_self_rollout_states`'s `.rollout`
+    call cannot fit through -- `LatentPropagator._require_not_history`
+    raises -- since `pde_head` is always `mode="markovian"` and never
+    needed this).
+
+    Dispatches on `propagator.mode`:
+    - `"markovian"`: reuses `_pde_head_self_rollout_states` (identical
+      mechanism, `propagator` in place of `pde_head`) and returns
+      `propagator.step_one` (already `(B,d) -> (B,d)`) as the step
+      function to shape.
+    - `"history"`: rolls `propagator.rollout_history` forward `k` steps
+      under `torch.no_grad()` from a real `(B, n_hist, d)` starting
+      window, then takes the TRAILING `n_hist`-length window of
+      `cat([z_hist0, self_roll])` as the evaluation point (the actual
+      `step_history` input shape). `_propagator_step_jacobian_singular_
+      values` (shared with every other spectrum-shape loss) requires a
+      FLAT per-sample vector to differentiate through
+      `torch.func.vmap(jacrev(...))` correctly -- so the returned pool is
+      flattened to `(n_samples, n_hist*d)` and paired with a `step_fn`
+      closure that reshapes back to `(B, n_hist, d)` before calling
+      `propagator.step_history`, then flattens again is NOT needed since
+      `step_history` already returns `(B, d)`. This is the same
+      flatten-for-jacrev trick `LatentPropagator.step_history` itself
+      uses internally for `backbone="mlp"` (`z_hist.reshape(B, -1)`).
+
+    Returns `None` if the self-rollout goes non-finite (same discipline
+    as `_pde_head_self_rollout_states`) -- caller must skip this batch's
+    contribution rather than poison the whole loss."""
+    B_full = windows.shape[0]
+    n_sample = min(n_samples, B_full)
+    sample_idx = torch.randperm(B_full, device=device)[:n_sample]
+    if propagator.mode == "history":
+        z_hist0 = windows[sample_idx, :n_hist].detach()
+        with torch.no_grad():
+            self_roll = propagator.rollout_history(z_hist0, k)
+            full = torch.cat([z_hist0, self_roll], dim=1)
+            z_hist_self = full[:, -n_hist:].detach()
+        if not torch.isfinite(z_hist_self).all():
+            return None
+        d = z_hist_self.shape[-1]
+        z_pool = z_hist_self.reshape(n_sample, -1).float()
+
+        def step_fn(z_flat: torch.Tensor) -> torch.Tensor:
+            bsz = z_flat.shape[0]
+            return propagator.step_history(z_flat.reshape(bsz, n_hist, d))
+
+        return z_pool, step_fn
+    z0 = windows[sample_idx, 0].detach()
+    z_self = _pde_head_self_rollout_states(propagator, z0, k)
+    if z_self is None:
+        return None
+    return z_self.float(), propagator.step_one
+
+
 @dataclass
 class Stage2Result:
     train_history: list[dict]
@@ -1552,6 +1617,7 @@ def train_stage2(
         epoch_pde_coeff_l1 = torch.zeros((), device=device)
         n_batches = 0
         spectrum_shape_applied_this_epoch = False
+        spectrum_shape_self_applied_this_epoch = False
         spectrum_shape_graded_applied_this_epoch = False
         spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
@@ -1904,6 +1970,37 @@ def train_stage2(
                     two_sided=cfg.spectrum_shape_two_sided,
                 )
                 loss = loss + cfg.w_spectrum_shape * l_spectrum_shape
+
+            if (
+                cfg.w_spectrum_shape_self > 0
+                and not spectrum_shape_self_applied_this_epoch
+                and propagator.mode in ("markovian", "history")
+                and not freeze_propagator
+            ):
+                # See Stage2TrainingConfig.w_spectrum_shape_self's
+                # docstring -- SELF-rollout-sampled analogue of
+                # w_spectrum_shape, applied to the MAIN propagator (the
+                # candidate left untried after Section 203's rerun: see
+                # docs/OPEN_QUESTIONS.md). Same once-per-epoch/outside-
+                # autocast convention; `_propagator_spectrum_shape_self_
+                # pool` dispatches on propagator.mode and returns None on
+                # a non-finite self-rollout (skip this batch's
+                # contribution, same discipline as w_pde_energy_floor).
+                spectrum_shape_self_applied_this_epoch = True
+                pool = _propagator_spectrum_shape_self_pool(
+                    propagator, windows, n_hist, cfg.spectrum_shape_self_rollout_k,
+                    cfg.spectrum_shape_self_n_samples, device,
+                )
+                if pool is not None:
+                    z_pool_self, step_fn_self = pool
+                    l_spectrum_shape_self = propagator_spectrum_shape_loss(
+                        step_fn_self, z_pool_self,
+                        n_expand=cfg.spectrum_shape_n_expand,
+                        expand_target=cfg.spectrum_shape_expand_target,
+                        contract_floor=cfg.spectrum_shape_contract_floor,
+                        two_sided=cfg.spectrum_shape_two_sided,
+                    )
+                    loss = loss + cfg.w_spectrum_shape_self * l_spectrum_shape_self
 
             if (
                 cfg.w_spectrum_shape_graded > 0
