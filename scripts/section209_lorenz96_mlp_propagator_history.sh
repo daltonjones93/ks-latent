@@ -1,4 +1,15 @@
 #!/bin/zsh
+# KILLED mid-Stage-1 (epoch 10/40), user-directed: "is 209 using 6
+# history steps? let's just use 3 and relaunch." -- superseded by
+# scripts/section210_lorenz96_mlp_propagator_history3.sh (identical
+# except N_HISTORY=3). Before killing, recon had reached 0.0038 by
+# epoch 10 -- tracking Section 201's own pace almost exactly (0.0043 at
+# epoch 10), consistent with reconstruction quality being propagator-
+# architecture-agnostic (the propagator only affects L_pred, not
+# L_recon directly). Kept here (not deleted) for provenance -- an
+# n_history=6 MLP-propagator variant was never run to completion and
+# remains an open comparison cell if this line continues.
+#
 # User-directed 2026-09-23: "let's try 1 then 2" -- option 2 of two
 # proposed next steps after Section 207 abandoned the x' augmentation.
 # Rationale (given alongside the proposal): this project's own
