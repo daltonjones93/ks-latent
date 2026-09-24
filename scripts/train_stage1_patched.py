@@ -460,6 +460,30 @@ def main() -> None:
         "(default 32).",
     )
     parser.add_argument(
+        "--w-jacobian-bandedness", type=float, default=None,
+        help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
+        "w_jacobian_bandedness (default 0.0, off). User-directed (2026-09-24, Section 214: "
+        "'let's make D3 into a loss, since this seems like it's the most important statistic "
+        "to improve our chances at being able to localize as in 4.3 in the literature review "
+        "document'). D3's differentiable analogue (ks_latent.training.losses.propagator_"
+        "jacobian_bandedness_loss) -- pushes the propagator's own step-Jacobian toward "
+        "concentrating coupling mass near the diagonal in the CURRENT latent index order "
+        "(no seriation search -- meaningful for a local_field encoder, whose index IS "
+        "physical site position by construction). Same expensive/once-per-epoch convention "
+        "as --w-spectrum-shape.",
+    )
+    parser.add_argument(
+        "--jacobian-bandedness-bandwidth", type=float, default=None,
+        help="--w-jacobian-bandedness only. Override Stage1TrainingConfig."
+        "jacobian_bandedness_bandwidth (default 3.0, in latent-index-ring units -- same "
+        "convention as --spatial-bandwidth).",
+    )
+    parser.add_argument(
+        "--jacobian-bandedness-n-samples", type=int, default=None,
+        help="--w-jacobian-bandedness only. Override Stage1TrainingConfig."
+        "jacobian_bandedness_n_samples (default 32).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-graded", type=float, default=None,
         help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
         "w_spectrum_shape_graded (default 0.0, off). User-directed (2026-09-10, Section 134, "
@@ -2227,6 +2251,12 @@ def main() -> None:
             smoke_kwargs["spectrum_shape_contract_floor"] = args.spectrum_shape_contract_floor
         if args.spectrum_shape_n_samples is not None:
             smoke_kwargs["spectrum_shape_n_samples"] = args.spectrum_shape_n_samples
+        if args.w_jacobian_bandedness is not None:
+            smoke_kwargs["w_jacobian_bandedness"] = args.w_jacobian_bandedness
+        if args.jacobian_bandedness_bandwidth is not None:
+            smoke_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
+        if args.jacobian_bandedness_n_samples is not None:
+            smoke_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
         if args.w_spectrum_shape_graded is not None:
             smoke_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:
@@ -2643,6 +2673,12 @@ def main() -> None:
             stage1_kwargs["spectrum_shape_contract_floor"] = args.spectrum_shape_contract_floor
         if args.spectrum_shape_n_samples is not None:
             stage1_kwargs["spectrum_shape_n_samples"] = args.spectrum_shape_n_samples
+        if args.w_jacobian_bandedness is not None:
+            stage1_kwargs["w_jacobian_bandedness"] = args.w_jacobian_bandedness
+        if args.jacobian_bandedness_bandwidth is not None:
+            stage1_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
+        if args.jacobian_bandedness_n_samples is not None:
+            stage1_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
         if args.w_spectrum_shape_graded is not None:
             stage1_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:

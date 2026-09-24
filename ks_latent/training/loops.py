@@ -33,6 +33,7 @@ from ks_latent.training.losses import (
     logdet_barrier_loss,
     low_pass_spectral_loss,
     propagator_graded_spectrum_shape_loss,
+    propagator_jacobian_bandedness_loss,
     propagator_multistep_spectrum_shape_loss,
     propagator_local_expansion_floor_loss,
     propagator_spectrum_shape_loss,
@@ -532,6 +533,7 @@ def train_stage1(
         spectrum_shape_applied_this_epoch = False
         spectrum_shape_graded_applied_this_epoch = False
         spectrum_shape_multistep_applied_this_epoch = False
+        jacobian_bandedness_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -1006,6 +1008,25 @@ def train_stage1(
                     two_sided=cfg.spectrum_shape_two_sided,
                 )
                 loss = loss + cfg.w_spectrum_shape * l_spectrum_shape
+
+            if (
+                cfg.w_jacobian_bandedness > 0
+                and not jacobian_bandedness_applied_this_epoch
+                and aux.mode == "markovian"
+            ):
+                # See Stage1TrainingConfig.w_jacobian_bandedness's
+                # docstring -- D3's differentiable analogue, same
+                # expensive/once-per-epoch/outside-autocast convention
+                # as w_spectrum_shape (shares the same Jacobian
+                # computation cost class).
+                jacobian_bandedness_applied_this_epoch = True
+                n_sample = min(cfg.jacobian_bandedness_n_samples, z.shape[0])
+                sample_idx = torch.randperm(z.shape[0], device=device)[:n_sample]
+                z_sample = z[sample_idx].float()
+                l_jacobian_bandedness = propagator_jacobian_bandedness_loss(
+                    aux.step_one, z_sample, bandwidth=cfg.jacobian_bandedness_bandwidth,
+                )
+                loss = loss + cfg.w_jacobian_bandedness * l_jacobian_bandedness
 
             if (
                 cfg.w_spectrum_shape_graded > 0
@@ -1620,6 +1641,7 @@ def train_stage2(
         spectrum_shape_self_applied_this_epoch = False
         spectrum_shape_graded_applied_this_epoch = False
         spectrum_shape_multistep_applied_this_epoch = False
+        jacobian_bandedness_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -1970,6 +1992,27 @@ def train_stage2(
                     two_sided=cfg.spectrum_shape_two_sided,
                 )
                 loss = loss + cfg.w_spectrum_shape * l_spectrum_shape
+
+            if (
+                cfg.w_jacobian_bandedness > 0
+                and not jacobian_bandedness_applied_this_epoch
+                and propagator.mode == "markovian"
+                and not freeze_propagator
+            ):
+                # See Stage2TrainingConfig.w_jacobian_bandedness's
+                # docstring -- D3's differentiable analogue, evaluated
+                # directly on propagator.step_one (no rollout) using
+                # real, UNNOISED encoded states, same convention as
+                # Stage 2's own w_spectrum_shape.
+                jacobian_bandedness_applied_this_epoch = True
+                z_pool = windows.reshape(-1, d)
+                n_sample = min(cfg.jacobian_bandedness_n_samples, z_pool.shape[0])
+                sample_idx = torch.randperm(z_pool.shape[0], device=device)[:n_sample]
+                z_sample = z_pool[sample_idx].float()
+                l_jacobian_bandedness = propagator_jacobian_bandedness_loss(
+                    propagator.step_one, z_sample, bandwidth=cfg.jacobian_bandedness_bandwidth,
+                )
+                loss = loss + cfg.w_jacobian_bandedness * l_jacobian_bandedness
 
             if (
                 cfg.w_spectrum_shape_self > 0

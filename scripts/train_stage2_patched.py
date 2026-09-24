@@ -620,6 +620,25 @@ def main() -> None:
         "two_sided setting through into Stage 2 consistently).",
     )
     parser.add_argument(
+        "--w-jacobian-bandedness", type=float, default=None,
+        help="mode=markovian only (any backbone). Override Stage2TrainingConfig."
+        "w_jacobian_bandedness (default 0.0, off). User-directed (2026-09-24, Section 214: "
+        "'let's make D3 into a loss'). D3's differentiable analogue (ks_latent.training."
+        "losses.propagator_jacobian_bandedness_loss), evaluated directly on propagator."
+        "step_one (no rollout) using real, UNNOISED encoded states, same convention as "
+        "--w-spectrum-shape.",
+    )
+    parser.add_argument(
+        "--jacobian-bandedness-bandwidth", type=float, default=None,
+        help="--w-jacobian-bandedness only. Override Stage2TrainingConfig."
+        "jacobian_bandedness_bandwidth (default 3.0, in latent-index-ring units).",
+    )
+    parser.add_argument(
+        "--jacobian-bandedness-n-samples", type=int, default=None,
+        help="--w-jacobian-bandedness only. Override Stage2TrainingConfig."
+        "jacobian_bandedness_n_samples (default 32).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-self", type=float, default=None,
         help="mode=markovian or mode=history, any backbone. Override Stage2TrainingConfig."
         "w_spectrum_shape_self (default 0.0, off). Section 204, user-directed: 'I want to try "
@@ -1273,6 +1292,12 @@ def main() -> None:
             full_kwargs["spectrum_shape_n_samples"] = args.spectrum_shape_n_samples
         if args.spectrum_shape_two_sided:
             full_kwargs["spectrum_shape_two_sided"] = True
+        if args.w_jacobian_bandedness is not None:
+            full_kwargs["w_jacobian_bandedness"] = args.w_jacobian_bandedness
+        if args.jacobian_bandedness_bandwidth is not None:
+            full_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
+        if args.jacobian_bandedness_n_samples is not None:
+            full_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
         if args.w_spectrum_shape_self is not None:
             full_kwargs["w_spectrum_shape_self"] = args.w_spectrum_shape_self
         if args.spectrum_shape_self_rollout_k is not None:

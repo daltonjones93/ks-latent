@@ -2980,6 +2980,30 @@ class Stage1TrainingConfig:
     # SAME-SIGN local coherence specifically. Only meaningful with
     # w_spatial > 0.
     spatial_signed: bool = False
+    # `w_jacobian_bandedness` (added 2026-09-24, Section 214, user-
+    # directed: "let's make D3 into a loss, since this seems like it's
+    # the most important statistic to improve our chances at being able
+    # to localize as in 4.3 in the literature review document"). D3's
+    # own differentiable analogue -- see `ks_latent.training.losses.
+    # propagator_jacobian_bandedness_loss`'s docstring for the full
+    # mechanism and why D3 (dynamical Jacobian coupling) matters MORE
+    # than D7/w_spatial (same-time encoder coherence) for Part 4.3's
+    # Gaspari-Cohn localization proposal specifically: a taper on the
+    # latent's SITE structure only makes physical sense if the
+    # PROPAGATOR also respects that locality, not just the encoder's
+    # instantaneous representation. `mode="markovian"` only (same
+    # restriction as `w_spectrum_shape`); evaluated on `aux.step_one`
+    # directly (no rollout), same once-per-epoch/outside-autocast/
+    # expensive-Jacobian convention as `w_spectrum_shape`. OFF by
+    # default (0.0) -- genuinely new, untested at scale; test with full
+    # Gate 3/4 monitoring (and, critically for this use case, a real
+    # standalone Lyapunov check -- see docs/OPEN_QUESTIONS.md/RESULTS.md
+    # for why short-horizon training diagnostics alone have repeatedly
+    # missed real long-rollout instability in this project) before
+    # trusting any result from this.
+    w_jacobian_bandedness: float = 0.0
+    jacobian_bandedness_bandwidth: float = 3.0
+    jacobian_bandedness_n_samples: int = 32
     # Two anti-collapse regularizers (added 2026-08-31, user-directed --
     # Phase 2 architecture doc Section 35/38, options 3a/3b): both OFF by
     # default (0.0). `ks_latent.training.losses.variance_floor_loss`
@@ -3912,6 +3936,17 @@ class Stage2TrainingConfig:
     # See Stage1TrainingConfig.spatial_signed's docstring -- identical
     # meaning, applied to Stage 2's own w_spatial term.
     spatial_signed: bool = False
+    # Stage-2 analogue of Stage1TrainingConfig.w_jacobian_bandedness --
+    # see that field's docstring and `ks_latent.training.losses.
+    # propagator_jacobian_bandedness_loss`'s docstring for the full
+    # mechanism (D3's differentiable analogue). Evaluated directly on
+    # `propagator.step_one` using real, UNNOISED encoded states drawn
+    # from the current batch's own windows -- no rollout involved, same
+    # convention as Stage 2's own `w_spectrum_shape`. `mode="markovian"`
+    # only. OFF by default (0.0).
+    w_jacobian_bandedness: float = 0.0
+    jacobian_bandedness_bandwidth: float = 3.0
+    jacobian_bandedness_n_samples: int = 32
     # `encoder_kind="spectral_field"`/`backbone="spectral_pde"` only (added
     # 2026-09-08, docs/sine_transform_pde_plan.md, user-directed after
     # visualizing Section 104's D_KY=22 result: "it seems like the next

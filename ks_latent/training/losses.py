@@ -291,6 +291,80 @@ def spatial_coherence_loss(
     return 1.0 - bandedness_score
 
 
+def propagator_jacobian_bandedness_loss(
+    step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor, bandwidth: float = 3.0, eps: float = 1e-3,
+) -> torch.Tensor:
+    """Differentiable training-time version of D3 (`ks_latent.analysis.
+    diagnostics.jacobian_coupling`/`bandedness` -- user-directed
+    2026-09-24: "let's make D3 into a loss, since this seems like it's
+    the most important statistic to improve our chances at being able to
+    localize as in 4.3 in the literature review document"). `step_fn`: a
+    single-step markovian map `(B, d) -> (B, d)` (e.g. `propagator.
+    step_one`); `z`: `(B, d)` real encoded states to evaluate at (a
+    subsample, for cost -- see the cost note below). Returns
+    `1 - bandedness_score`, to be MINIMIZED -- an exact structural mirror
+    of `spatial_coherence_loss` above, just scoring the PROPAGATOR'S
+    JACOBIAN `A[k,l] = E|d z_{n+1,k}/d z_{n,l}|` (D3's statistic -- true
+    DYNAMICAL coupling, cross-time) instead of the encoder's same-time
+    channel correlation (D7 -- no propagator, no time lag involved).
+
+    **Why D3 specifically, for Part 4.3's localization proposal**
+    (`docs/LITERATURE_REVIEW_AND_FINDINGS.md`): a Gaspari-Cohn taper on a
+    local latent field's site structure (`ks_latent.da.localization.
+    build_latent_taper_matrix`) only makes physical sense if the
+    DYNAMICS respect that same locality, not merely the representation
+    at rest. `w_spatial`/D7 already push the ENCODER toward a spatially
+    coherent instantaneous representation, but say nothing about whether
+    the PROPAGATOR then mixes site 0 into site 20 on every step -- D3
+    measures exactly the coupling structure a Gaspari-Cohn taper
+    implicitly assumes exists, and this loss is the first mechanism in
+    this codebase that puts training-time pressure on it directly.
+
+    Scored in the CURRENT, FIXED latent index order -- no Fiedler
+    seriation search (same reasoning as `spatial_coherence_loss`: a loss
+    needs the index itself, not some permutation of it, to become
+    meaningful). For a `local_field` encoder this is exactly the right
+    frame already, with no seriation needed at all: the index IS
+    physical site position by construction (site-major flattening,
+    confirmed directly in `ks_latent/models/autoencoder_local_field.py`).
+    For a non-spatially-organized encoder (e.g. a densely-pooled ViT
+    latent) this loss is not obviously meaningful -- the index has no
+    a priori physical meaning to be local WITH RESPECT TO -- callers
+    should restrict this to genuinely spatial latents.
+
+    Off-diagonal-only normalization, same fix `spatial_coherence_loss`
+    applies to D7's own naive first version -- see that function's
+    docstring for the exact degenerate optimum this avoids (without
+    excluding the diagonal, the global optimum is "zero coupling
+    everywhere," not locality, since the diagonal's fixed large
+    contribution dominates and dilutes any off-diagonal locality signal).
+
+    `mode="markovian"` only (`step_fn` a single-step `(B,d)->(B,d)` map),
+    matching every other Jacobian-based regularizer in this module.
+    Cost: the same `torch.func.vmap(jacrev(...))` machinery
+    `_propagator_step_jacobian_singular_values`/`propagator_spectrum_
+    shape_loss` already use -- expensive per sample, so callers should
+    apply this at the same once-per-epoch cadence and small subsample
+    size `w_spectrum_shape` already established, not every batch."""
+    def f(z_single: torch.Tensor) -> torch.Tensor:
+        return step_fn(z_single.unsqueeze(0)).squeeze(0)
+
+    J = vmap(jacrev(f))(z)  # (B, d, d), differentiable w.r.t. step_fn's parameters
+    A = J.abs().mean(dim=0)  # (d, d)
+    d = A.shape[0]
+    off_diag = 1.0 - torch.eye(d, device=A.device, dtype=A.dtype)
+    idx = torch.arange(d, device=A.device, dtype=torch.float32)
+    diff = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs()
+    dist = torch.minimum(diff, d - diff)
+    W = torch.exp(-(dist**2) / (2.0 * bandwidth**2))
+    A_off = A * off_diag
+    numer = (A_off * W).sum()
+    denom = A_off.sum()
+    baseline = (W * off_diag).mean()  # mean(W) over off-diagonal pairs
+    bandedness_score = (numer + eps * baseline) / (denom + eps)
+    return 1.0 - bandedness_score
+
+
 def temporal_smoothness_loss(z_win: torch.Tensor, curvature_weight: float = 1.0) -> torch.Tensor:
     """Differentiable training-time version of
     `scripts/analyze_latent_smoothness.py`'s encoded-real-trajectory step
