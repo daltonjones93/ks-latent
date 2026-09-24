@@ -291,6 +291,32 @@ def spatial_coherence_loss(
     return 1.0 - bandedness_score
 
 
+def _propagator_step_jacobian_matrix(
+    step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor,
+) -> torch.Tensor:
+    """Shared helper for `propagator_jacobian_bandedness_loss` and
+    `propagator_jacobian_diagonal_bound_loss` (added 2026-09-24, Section
+    216, factored out when the second one was built so the two -- meant
+    to be used TOGETHER, see that function's docstring -- share a single
+    naming convention for the raw Jacobian; each still calls this
+    separately rather than computing it once and passing it around,
+    matching this module's existing precedent of `propagator_local_
+    expansion_floor_loss`/`propagator_spectrum_shape_loss` each calling
+    `_propagator_step_jacobian_singular_values` independently rather
+    than threading a shared computation between two independently-
+    toggleable loss terms). `step_fn`: a single-step markovian map
+    `(B, d) -> (B, d)`; `z`: `(B, d)` real encoded states. Returns the
+    differentiable, per-sample `(B, d, d)` Jacobian via `torch.func.
+    vmap(jacrev(...))` -- unlike `ks_latent.analysis.diagnostics.
+    jacobian_coupling`'s post-hoc diagnostic version (which `.detach()`es
+    and averages immediately), gradient flows through this back into
+    `step_fn`'s own parameters."""
+    def f(z_single: torch.Tensor) -> torch.Tensor:
+        return step_fn(z_single.unsqueeze(0)).squeeze(0)
+
+    return vmap(jacrev(f))(z)  # (B, d, d), differentiable w.r.t. step_fn's parameters
+
+
 def propagator_jacobian_bandedness_loss(
     step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor, bandwidth: float = 3.0, eps: float = 1e-3,
 ) -> torch.Tensor:
@@ -346,10 +372,7 @@ def propagator_jacobian_bandedness_loss(
     shape_loss` already use -- expensive per sample, so callers should
     apply this at the same once-per-epoch cadence and small subsample
     size `w_spectrum_shape` already established, not every batch."""
-    def f(z_single: torch.Tensor) -> torch.Tensor:
-        return step_fn(z_single.unsqueeze(0)).squeeze(0)
-
-    J = vmap(jacrev(f))(z)  # (B, d, d), differentiable w.r.t. step_fn's parameters
+    J = _propagator_step_jacobian_matrix(step_fn, z)  # (B, d, d)
     A = J.abs().mean(dim=0)  # (d, d)
     d = A.shape[0]
     off_diag = 1.0 - torch.eye(d, device=A.device, dtype=A.dtype)
@@ -363,6 +386,59 @@ def propagator_jacobian_bandedness_loss(
     baseline = (W * off_diag).mean()  # mean(W) over off-diagonal pairs
     bandedness_score = (numer + eps * baseline) / (denom + eps)
     return 1.0 - bandedness_score
+
+
+def propagator_jacobian_diagonal_bound_loss(
+    step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor, ceiling: float = 1.5,
+) -> torch.Tensor:
+    """Companion to `propagator_jacobian_bandedness_loss` (added
+    2026-09-24, Section 216, user-directed: "it looks like stage 2 is
+    having trouble converging. If we combined the D3 regularizer with a
+    term that bounded the magnitude of the diagonal of the jacobian,
+    maybe that would help"). Penalizes the propagator's own per-site
+    SELF-coupling magnitude -- the diagonal of its step-Jacobian,
+    `|d z_{n+1,k}/d z_{n,k}|` -- for exceeding `ceiling`. One-sided
+    (`relu`), same convention as every other floor/ceiling in this
+    module: never penalizes a diagonal entry for being small or even
+    contractive, only for runaway growth.
+
+    **Why this is needed alongside bandedness, not instead of it**
+    (Section 215's own finding, the direct motivation): pushing the
+    Jacobian toward bandedness ALONE constrains WHERE coupling mass
+    concentrates (near the diagonal, in index distance) but says
+    NOTHING about HOW LARGE any individual entry -- including the
+    diagonal itself -- is allowed to be. Measured directly: Section 215
+    (`--w-jacobian-bandedness 0.05` alone) pushed D3's own bandedness
+    score from Section 211's baseline `0.19` to `0.99` (near-perfect
+    concentration) -- and made the standalone-rollout divergence WORSE,
+    not better (`D_KY` `74.93 -> 90.64`, `max|z|` reaching `6265` vs.
+    `1019` over the same 2000 steps). The likely mechanism: forcing
+    coupling to be purely local doesn't remove the instability, it just
+    concentrates it into sharper, more self-reinforcing PER-SITE growth
+    -- exactly what an unconstrained diagonal entry is free to do. This
+    loss targets that mechanism directly and is completely orthogonal
+    to bandedness (it says nothing about off-diagonal structure at all,
+    only about each site's own self-dependence), so the two are meant
+    to be combined, each with its own weight, not treated as
+    alternatives.
+
+    `ceiling=1.5` (default): reuses `propagator_spectrum_shape_loss`'s
+    own `expand_target` calibration point (Section 85's measured median
+    propagator-Jacobian norm for a genuinely chaotic propagator) as the
+    nearest existing reference in this codebase -- a first attempt, not
+    a value independently tuned for the diagonal specifically. Computed
+    PER-SAMPLE (not on the batch-averaged Jacobian D3 uses -- matching
+    `propagator_spectrum_shape_loss`'s own per-sample convention
+    instead of `propagator_jacobian_bandedness_loss`'s batch-averaged
+    one) so a few individual states with an already-explosive
+    self-coupling are penalized directly, not diluted by averaging
+    against many milder ones first.
+
+    Same `mode="markovian"` restriction and once-per-epoch/expensive-
+    Jacobian cost convention as `propagator_jacobian_bandedness_loss`."""
+    J = _propagator_step_jacobian_matrix(step_fn, z)  # (B, d, d)
+    diag = torch.diagonal(J, dim1=-2, dim2=-1).abs()  # (B, d)
+    return F.relu(diag - ceiling).pow(2).mean()
 
 
 def temporal_smoothness_loss(z_win: torch.Tensor, curvature_weight: float = 1.0) -> torch.Tensor:

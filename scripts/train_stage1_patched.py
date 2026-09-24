@@ -484,6 +484,29 @@ def main() -> None:
         "jacobian_bandedness_n_samples (default 32).",
     )
     parser.add_argument(
+        "--w-jacobian-diagonal-bound", type=float, default=None,
+        help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
+        "w_jacobian_diagonal_bound (default 0.0, off). User-directed (2026-09-24, Section 216: "
+        "'it looks like stage 2 is having trouble converging. If we combined the D3 regularizer "
+        "with a term that bounded the magnitude of the diagonal of the jacobian, maybe that "
+        "would help'). Companion to --w-jacobian-bandedness (ks_latent.training.losses."
+        "propagator_jacobian_diagonal_bound_loss): caps each site's own self-coupling magnitude "
+        "directly, orthogonal to bandedness -- Section 215 found bandedness ALONE made "
+        "standalone divergence worse, since it constrains WHERE coupling concentrates, not HOW "
+        "LARGE the surviving entries are. Same expensive/once-per-epoch convention.",
+    )
+    parser.add_argument(
+        "--jacobian-diagonal-bound-ceiling", type=float, default=None,
+        help="--w-jacobian-diagonal-bound only. Override Stage1TrainingConfig."
+        "jacobian_diagonal_bound_ceiling (default 1.5, reusing --spectrum-shape-expand-target's "
+        "own calibration point -- not independently tuned for the diagonal).",
+    )
+    parser.add_argument(
+        "--jacobian-diagonal-bound-n-samples", type=int, default=None,
+        help="--w-jacobian-diagonal-bound only. Override Stage1TrainingConfig."
+        "jacobian_diagonal_bound_n_samples (default 32).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-graded", type=float, default=None,
         help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
         "w_spectrum_shape_graded (default 0.0, off). User-directed (2026-09-10, Section 134, "
@@ -2257,6 +2280,12 @@ def main() -> None:
             smoke_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
         if args.jacobian_bandedness_n_samples is not None:
             smoke_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
+        if args.w_jacobian_diagonal_bound is not None:
+            smoke_kwargs["w_jacobian_diagonal_bound"] = args.w_jacobian_diagonal_bound
+        if args.jacobian_diagonal_bound_ceiling is not None:
+            smoke_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
+        if args.jacobian_diagonal_bound_n_samples is not None:
+            smoke_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
         if args.w_spectrum_shape_graded is not None:
             smoke_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:
@@ -2679,6 +2708,12 @@ def main() -> None:
             stage1_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
         if args.jacobian_bandedness_n_samples is not None:
             stage1_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
+        if args.w_jacobian_diagonal_bound is not None:
+            stage1_kwargs["w_jacobian_diagonal_bound"] = args.w_jacobian_diagonal_bound
+        if args.jacobian_diagonal_bound_ceiling is not None:
+            stage1_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
+        if args.jacobian_diagonal_bound_n_samples is not None:
+            stage1_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
         if args.w_spectrum_shape_graded is not None:
             stage1_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:

@@ -34,6 +34,7 @@ from ks_latent.training.losses import (
     low_pass_spectral_loss,
     propagator_graded_spectrum_shape_loss,
     propagator_jacobian_bandedness_loss,
+    propagator_jacobian_diagonal_bound_loss,
     propagator_multistep_spectrum_shape_loss,
     propagator_local_expansion_floor_loss,
     propagator_spectrum_shape_loss,
@@ -534,6 +535,7 @@ def train_stage1(
         spectrum_shape_graded_applied_this_epoch = False
         spectrum_shape_multistep_applied_this_epoch = False
         jacobian_bandedness_applied_this_epoch = False
+        jacobian_diagonal_bound_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -1027,6 +1029,28 @@ def train_stage1(
                     aux.step_one, z_sample, bandwidth=cfg.jacobian_bandedness_bandwidth,
                 )
                 loss = loss + cfg.w_jacobian_bandedness * l_jacobian_bandedness
+
+            if (
+                cfg.w_jacobian_diagonal_bound > 0
+                and not jacobian_diagonal_bound_applied_this_epoch
+                and aux.mode == "markovian"
+            ):
+                # See Stage1TrainingConfig.w_jacobian_diagonal_bound's
+                # docstring -- companion to w_jacobian_bandedness
+                # (Section 216), caps each site's own self-coupling
+                # magnitude directly. Same once-per-epoch convention;
+                # independent sample draw from w_jacobian_bandedness's
+                # own (simplicity over micro-optimization, matching
+                # this module's existing precedent -- see
+                # _propagator_step_jacobian_matrix's docstring).
+                jacobian_diagonal_bound_applied_this_epoch = True
+                n_sample = min(cfg.jacobian_diagonal_bound_n_samples, z.shape[0])
+                sample_idx = torch.randperm(z.shape[0], device=device)[:n_sample]
+                z_sample = z[sample_idx].float()
+                l_jacobian_diagonal_bound = propagator_jacobian_diagonal_bound_loss(
+                    aux.step_one, z_sample, ceiling=cfg.jacobian_diagonal_bound_ceiling,
+                )
+                loss = loss + cfg.w_jacobian_diagonal_bound * l_jacobian_diagonal_bound
 
             if (
                 cfg.w_spectrum_shape_graded > 0
@@ -1642,6 +1666,7 @@ def train_stage2(
         spectrum_shape_graded_applied_this_epoch = False
         spectrum_shape_multistep_applied_this_epoch = False
         jacobian_bandedness_applied_this_epoch = False
+        jacobian_diagonal_bound_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -2013,6 +2038,27 @@ def train_stage2(
                     propagator.step_one, z_sample, bandwidth=cfg.jacobian_bandedness_bandwidth,
                 )
                 loss = loss + cfg.w_jacobian_bandedness * l_jacobian_bandedness
+
+            if (
+                cfg.w_jacobian_diagonal_bound > 0
+                and not jacobian_diagonal_bound_applied_this_epoch
+                and propagator.mode == "markovian"
+                and not freeze_propagator
+            ):
+                # See Stage2TrainingConfig.w_jacobian_diagonal_bound's
+                # docstring -- companion to w_jacobian_bandedness
+                # (Section 216), evaluated directly on propagator.
+                # step_one, same convention as this file's own
+                # w_jacobian_bandedness.
+                jacobian_diagonal_bound_applied_this_epoch = True
+                z_pool = windows.reshape(-1, d)
+                n_sample = min(cfg.jacobian_diagonal_bound_n_samples, z_pool.shape[0])
+                sample_idx = torch.randperm(z_pool.shape[0], device=device)[:n_sample]
+                z_sample = z_pool[sample_idx].float()
+                l_jacobian_diagonal_bound = propagator_jacobian_diagonal_bound_loss(
+                    propagator.step_one, z_sample, ceiling=cfg.jacobian_diagonal_bound_ceiling,
+                )
+                loss = loss + cfg.w_jacobian_diagonal_bound * l_jacobian_diagonal_bound
 
             if (
                 cfg.w_spectrum_shape_self > 0

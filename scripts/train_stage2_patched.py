@@ -639,6 +639,25 @@ def main() -> None:
         "jacobian_bandedness_n_samples (default 32).",
     )
     parser.add_argument(
+        "--w-jacobian-diagonal-bound", type=float, default=None,
+        help="mode=markovian only (any backbone). Override Stage2TrainingConfig."
+        "w_jacobian_diagonal_bound (default 0.0, off). Section 216 companion to "
+        "--w-jacobian-bandedness (ks_latent.training.losses.propagator_jacobian_diagonal_"
+        "bound_loss) -- caps each site's own self-coupling magnitude, orthogonal to "
+        "bandedness. Evaluated directly on propagator.step_one, same convention as "
+        "--w-jacobian-bandedness.",
+    )
+    parser.add_argument(
+        "--jacobian-diagonal-bound-ceiling", type=float, default=None,
+        help="--w-jacobian-diagonal-bound only. Override Stage2TrainingConfig."
+        "jacobian_diagonal_bound_ceiling (default 1.5).",
+    )
+    parser.add_argument(
+        "--jacobian-diagonal-bound-n-samples", type=int, default=None,
+        help="--w-jacobian-diagonal-bound only. Override Stage2TrainingConfig."
+        "jacobian_diagonal_bound_n_samples (default 32).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-self", type=float, default=None,
         help="mode=markovian or mode=history, any backbone. Override Stage2TrainingConfig."
         "w_spectrum_shape_self (default 0.0, off). Section 204, user-directed: 'I want to try "
@@ -1298,6 +1317,12 @@ def main() -> None:
             full_kwargs["jacobian_bandedness_bandwidth"] = args.jacobian_bandedness_bandwidth
         if args.jacobian_bandedness_n_samples is not None:
             full_kwargs["jacobian_bandedness_n_samples"] = args.jacobian_bandedness_n_samples
+        if args.w_jacobian_diagonal_bound is not None:
+            full_kwargs["w_jacobian_diagonal_bound"] = args.w_jacobian_diagonal_bound
+        if args.jacobian_diagonal_bound_ceiling is not None:
+            full_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
+        if args.jacobian_diagonal_bound_n_samples is not None:
+            full_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
         if args.w_spectrum_shape_self is not None:
             full_kwargs["w_spectrum_shape_self"] = args.w_spectrum_shape_self
         if args.spectrum_shape_self_rollout_k is not None:

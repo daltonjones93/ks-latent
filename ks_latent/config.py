@@ -3004,6 +3004,28 @@ class Stage1TrainingConfig:
     w_jacobian_bandedness: float = 0.0
     jacobian_bandedness_bandwidth: float = 3.0
     jacobian_bandedness_n_samples: int = 32
+    # `w_jacobian_diagonal_bound` (added 2026-09-24, Section 216, user-
+    # directed: "it looks like stage 2 is having trouble converging. If
+    # we combined the D3 regularizer with a term that bounded the
+    # magnitude of the diagonal of the jacobian, maybe that would
+    # help"). Companion to `w_jacobian_bandedness` -- see `ks_latent.
+    # training.losses.propagator_jacobian_diagonal_bound_loss`'s
+    # docstring for the full mechanism and the Section 215 finding that
+    # motivates it: bandedness alone pushed D3's own score from 0.19 to
+    # 0.99 but made standalone divergence WORSE (D_KY 74.93 -> 90.64),
+    # because bandedness constrains WHERE coupling concentrates, not
+    # HOW LARGE the surviving (near-diagonal, including self-coupling)
+    # entries are allowed to be. This term caps each site's own
+    # self-coupling magnitude directly, orthogonal to bandedness -- the
+    # two are meant to be combined, not substituted for each other.
+    # `mode="markovian"` only, same once-per-epoch/expensive-Jacobian
+    # convention as `w_jacobian_bandedness`. OFF by default (0.0) --
+    # genuinely new, first real attempt; the ceiling default (1.5)
+    # reuses `spectrum_shape_expand_target`'s own calibration point
+    # (Section 85), not independently tuned for the diagonal.
+    w_jacobian_diagonal_bound: float = 0.0
+    jacobian_diagonal_bound_ceiling: float = 1.5
+    jacobian_diagonal_bound_n_samples: int = 32
     # Two anti-collapse regularizers (added 2026-08-31, user-directed --
     # Phase 2 architecture doc Section 35/38, options 3a/3b): both OFF by
     # default (0.0). `ks_latent.training.losses.variance_floor_loss`
@@ -3947,6 +3969,17 @@ class Stage2TrainingConfig:
     w_jacobian_bandedness: float = 0.0
     jacobian_bandedness_bandwidth: float = 3.0
     jacobian_bandedness_n_samples: int = 32
+    # Stage-2 analogue of Stage1TrainingConfig.w_jacobian_diagonal_bound
+    # -- see that field's docstring and `ks_latent.training.losses.
+    # propagator_jacobian_diagonal_bound_loss`'s docstring for the full
+    # mechanism (Section 216's fix for Section 215's finding that
+    # bandedness alone made standalone divergence worse). Evaluated
+    # directly on `propagator.step_one` using real, UNNOISED encoded
+    # states, same convention as this file's own `w_jacobian_
+    # bandedness`. `mode="markovian"` only. OFF by default (0.0).
+    w_jacobian_diagonal_bound: float = 0.0
+    jacobian_diagonal_bound_ceiling: float = 1.5
+    jacobian_diagonal_bound_n_samples: int = 32
     # `encoder_kind="spectral_field"`/`backbone="spectral_pde"` only (added
     # 2026-09-08, docs/sine_transform_pde_plan.md, user-directed after
     # visualizing Section 104's D_KY=22 result: "it seems like the next
