@@ -1,4 +1,24 @@
 #!/bin/zsh
+# KILLED mid-Stage-1, user-directed ("kill it"), epoch 30/40, recon
+# still at 0.088 -- essentially IDENTICAL to Section 205's own
+# reconstruction trajectory (0.43/0.15/0.10/0.09 vs. 205's
+# 0.43/0.15/0.10/final 0.084) despite the --aux-backbone fix below.
+# Since BOTH propagator backbones (vit here in 206's predecessor 205,
+# mlp here) show the same slow convergence, the earlier "ViT propagator
+# collapses" diagnosis does NOT explain this experiment -- the shared
+# bottleneck is upstream of the propagator entirely. User directly
+# prompted this by comparing against Section 201 (same --aux-backbone
+# vit --mode history, but recon converged to ~0.003 within 10 epochs):
+# "I wonder what is different from this stage 1 and the other stage 1
+# where we actually recovered chaos." See docs/RESULTS.md's correction
+# entry (under "Sections 204/205") and docs/OPEN_QUESTIONS.md for the
+# full reasoning -- likely cause: concatenating x/x' into one flat
+# 32-dim vector before ViT patch-tokenization gives the encoder no
+# structural signal that tokens 2-3 are "same sites, different
+# quantity" rather than "further along the ring", confounded with N=16's
+# fewer tokens (4 vs 201's 8) and d_latent=8 (vs 20). Revised next step:
+# encode x/x' as two CHANNELS per site instead of concatenating.
+#
 # Correction of Section 205, same day, user-directed: after Section 205
 # collapsed at Stage 1 (D_KY=0.00) with --aux-backbone vit, the user
 # asked "wait I thought we were using the mlp as the propagator?" --

@@ -355,3 +355,30 @@ full finding and citations; unresolved items only, here:
   controlled test of `--w-spectrum-shape-self` -- it still has not been
   tested against a Stage 2 that starts from a genuinely chaotic Stage-1
   checkpoint.
+- **Correction to the entry above: the "ViT propagator collapses"
+  diagnosis was wrong for this experiment.** Section 205 had used
+  `--aux-backbone vit` by mistake (a misreading of "replace the encoder
+  and decoder with the ViT" -- `--aux-backbone` is a separate flag from
+  `--encoder`, caught directly by the user: "wait I thought we were
+  using the mlp as the propagator?"). Section 206 reran with the
+  intended `--encoder vit --aux-backbone mlp` and got the SAME slow,
+  poorly-converging reconstruction curve as Section 205 (epoch 0/10/20/
+  30 recon 0.43/0.15/0.10/0.09 either way, vs. Section 201's 0.11/0.004/
+  0.002/final 0.003 at the SAME `--aux-backbone vit --mode history`).
+  Since both propagator backbones inherit the identical bad Stage-1
+  latent, the propagator is not the shared bottleneck; both Section 205
+  and 206 are uninformative about `--w-spectrum-shape-self` for the same
+  underlying reason (bad Stage 1), not because of the propagator choice.
+  Likely real cause (see `docs/RESULTS.md`'s correction entry for the
+  full reasoning): concatenating `x`/`x'` into one flat 32-dim vector
+  before ViT patch-tokenization gives the encoder no structural signal
+  that tokens 2-3 are "the same sites, a different quantity" rather than
+  "further along the ring" -- confounded with N=16's fewer tokens (4 vs.
+  201's 8) and `d_latent=8` (vs. 20), none separated in this experiment.
+  Section 206 killed (user-directed) before completion. **Revised next
+  step if this line resumes**: encode `x`/`x'` as two CHANNELS per site
+  (shape `(N,2)`) instead of concatenating into a longer sequence,
+  before re-attempting `--w-spectrum-shape-self` on this operating
+  point -- Section 204's plain-MLP variant (which does not tokenize by
+  patch and so may not share this specific failure mode) remains the
+  other untried, cheaper thing to finish first.

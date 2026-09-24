@@ -1191,6 +1191,53 @@ completion, so this is not yet a controlled, same-day head-to-head
 confirmation -- reopening/finishing Section 204 (or a fresh mlp/mlp
 rerun with identical settings) would make it one.
 
+**Correction (Section 205's own causal claim above), same day:** Section
+205 used `--aux-backbone vit` by mistake -- a misreading of the user's
+"replace the encoder and decoder with the ViT" request (`--encoder`
+covers the autoencoder; `--aux-backbone`, a separate flag, was supposed
+to stay `mlp` per Section 204's original, never-rescinded spec). Caught
+directly by the user. Section 206 reran with the CORRECT
+`--encoder vit --aux-backbone mlp` -- and reconstruction convergence was
+**just as bad** (epoch 0/10/20/30 recon: 0.426/0.145/0.104/0.088, killed
+at epoch 30 before completion -- essentially the same trajectory as
+Section 205's own 0.43/0.145/0.104/.../0.084 final). Since BOTH the vit-
+and mlp-backbone propagators show the identical slow-convergence
+reconstruction curve, the propagator backbone is NOT the shared
+bottleneck -- **the "self-attention propagator collapses" diagnosis
+above does not explain this experiment's actual problem.** User-directed
+comparison against Section 201 (L96 N=64, F=4.2, raw x only, d_latent=
+20, ALSO `--aux-backbone vit --mode history` -- i.e. the SAME propagator
+backbone Section 205 used, but which recovered D_KY=11.94) makes this
+concrete: Section 201's recon curve is 0.110/0.0043/0.0023/.../0.0028
+(epoch 0/10/20/final) -- nearly converged within 10 epochs -- against
+Sections 205/206's 0.43/0.145/0.10/~0.085, a much higher, much slower-
+descending plateau regardless of propagator choice.
+
+**Likely actual cause, not yet confirmed**: concatenating `x` and `x'`
+into one flat 32-dim vector before ViT patch-tokenization
+(`patch_size=8` -> tokens `[x_0:8, x_8:16, x'_0:8, x'_8:16]`) hands the
+encoder's `CircularPositionalEncoding`/`LinearPositionalEncoding` four
+tokens as if they sit on ONE ring, when tokens 2-3 are not "further
+along in space" from tokens 0-1 -- they are a DIFFERENT physical
+quantity at the SAME sites. Nothing in the architecture tells the model
+this; it would have to discover the distinction from data alone, a
+strictly harder problem than Section 201's homogeneous single-quantity
+64-dim `x`. Confounded with two further simultaneously-changed variables
+(N=16 gives only 4 tokens vs. 201's 8; `d_latent=8` vs. 20) that this
+experiment's own design never separated (see Section 204's header:
+"THREE independent new variables in this one experiment... a genuinely
+combined test, not a controlled single-variable one") -- this reasoning
+is a diagnosis, not yet an isolated confirmation. Given both propagator
+variants inherit the same poorly-converged Stage-1 latent, Section 206
+was killed (user-directed) before finishing rather than let it produce
+an uninformative Stage-2 result on top of a bad foundation. **If this
+line resumes**, the natural next step is a single-variable fix: encode
+`x`/`x'` as two CHANNELS per site (shape `(N, 2)`, analogous to a
+2-channel image) rather than concatenating them into one longer
+sequence -- giving the encoder the site-alignment structurally instead
+of asking it to learn x/x' are "the same place, different quantity"
+from scratch.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any
