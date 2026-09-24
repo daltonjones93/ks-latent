@@ -1358,6 +1358,74 @@ objective instead of pointwise MSE, or abandoning the Stage-1/Stage-2
 split in favor of Section 5.1/5.2 addendum's flagged-but-never-run
 "two_stage" experiment, `Stage1TrainingConfig.w_pred=0.0`).
 
+### Sections 211-213: no historical local_field checkpoint survives scrutiny, and the "did Section 52 regress" scare resolves to a methodological gap, not a real regression (2026-09-24)
+
+Continuing the Part 4.3 pivot (latent-space DA localization on KS):
+after the full audit of 19 historical local_field checkpoints found none
+survive a rigorous 2000-step standalone Lyapunov check (see the
+`docs/OPEN_QUESTIONS.md` entry for the full table), three fresh
+attempts were made, all using the SAME Section-52-derived regularizer
+recipe (`w_var=0.02, w_spatial=0.01` signed, `w_logdet=0.0035`) to
+isolate the architecture as the remaining variable:
+
+- **Section 211** (local_field + fully-GLOBAL `mlp` propagator): badly
+  over-chaotic and apparently unbounded -- `D_KY=74.93, n_positive=
+  39/96`, `max|z|` climbing monotonically and unboundedly across the
+  whole 2000-step rollout (8.07 -> 1019.30, never turning over).
+- **Section 212** (local_field + LOCAL `masked_mlp` propagator,
+  `attn_window=18`): launched to test whether a propagator matching the
+  encoder's own spatial locality fares better -- superseded before
+  completing (see below).
+- **Section 213** (exact rerun of Section 52's own original command --
+  `--encoder vit`, NOT local_field -- as a regression test): Stage 1
+  ALONE was *also* badly over-chaotic and apparently unbounded --
+  `D_KY=38.41, n_positive=20/44`, `max|z|` climbing from 2.68 to
+  2070.11 over 2000 steps, never turning over. This looked, at first,
+  like the shared training code itself had regressed since Section 52
+  (2026-09-01) -- the user, reasonably, found this concerning ("why the
+  heck would section 52 have worked and now it doesn't").
+
+**Resolution: nothing regressed. The comparison was apples-to-oranges.**
+Section 52's own historically-recorded good result (`D_KY=21.42,
+lambda1=0.083`, `artifacts/analysis_suite_full_section52_..._
+warmstart_k12_300ep.json`) was measured on the **Stage-2** propagator,
+after 300 further epochs of k-step supervised training -- nobody, on
+2026-09-01, ever ran a standalone 2000-step autoregressive rollout on
+Section 52's Stage-1-ONLY checkpoint (that specific test did not exist
+until this investigation). Running Section 213's own Stage 2
+continuation (Section 52's exact original schedule: `k_max=12,
+k_warmup_epochs=210, k_mid=8, k_mid_epochs=175, 300 epochs`) on TODAY's
+Stage-1 checkpoint reproduces the historical result almost exactly:
+
+| | historical (2026-09-01) | today's rerun |
+|---|---|---|
+| `D_KY` | 21.42 | **21.55** |
+| `lambda1` | 0.083 | **0.086** |
+| `n_positive` | (not recorded) | **11/44** (matches the ~11+-2 literature target) |
+
+And, critically, `max|z|` is genuinely BOUNDED across the entire
+2000-step standalone rollout on this Stage-2 checkpoint (oscillating
+2.4-3.4, never climbing) -- a real attractor, not a diverging
+trajectory that happened to land on a plausible-looking summary number
+(the exact failure mode Section 140 demonstrated: never trust a
+summary number without checking the standalone trajectory itself).
+
+**The actual, reconciling finding: Stage 1 alone is reliably,
+severely over-chaotic/diverging for this ViT/global-mlp-propagator
+architecture, and Stage 2's k-step supervised training reliably tames
+it into the correct, bounded, target-matching regime -- this has
+apparently ALWAYS been true for Section 52's own recipe, just never
+checked with this rigor before.** This reframes the entire local_field
+investigation: Section 211's own severe Stage-1 over-chaos (`D_KY=
+74.93`) may not indicate a deeper architectural problem at all -- it
+may just be the SAME "Stage 1 overshoots, Stage 2 corrects" pattern
+Section 52 already exhibits, never given the chance to run through
+Stage 2 before being judged. Section 212 (the `masked_mlp` local
+propagator alternative) was superseded and not completed once this
+reframing was identified -- the more informative, lower-cost next step
+was running Stage 2 on Section 211's EXISTING checkpoint first, to
+test this hypothesis directly before building a new architecture.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any
