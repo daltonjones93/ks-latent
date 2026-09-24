@@ -26,20 +26,23 @@ not merely beat no-localization. SEC is a real, competitive method
   Stage 2 (`warmstart_k12_300ep`): `D_KY=21.55`, `lambda1=0.086`,
   `n_positive=11/44`, standalone 2000-step rollout genuinely bounded
   (`max|z|` oscillates 2.4-3.4, never diverges).
-- [x] **A validated LOCAL-FIELD KS checkpoint exists -- three candidates
-  measured, `TENTATIVE PICK: Section 216`.**
-  | tag | Stage-1 regularizers | Stage-2 `D_KY` | bounded? | D3 bandedness (Stage 2) |
+- [x] **FROZEN: `LOCAL_AE`/`LOCAL_PROP` = Section 216.** Four
+  candidates measured:
+  | tag | Stage-1 propagator/regularizers | Stage-2 `D_KY` | bounded? | D3 bandedness (Stage 2) |
   |---|---|---|---|---|
-  | 211 | Section 52 recipe only | 23.04 | yes | 0.1883 |
-  | 215 | + `--w-jacobian-bandedness` alone | -- (Stage 2 killed, Stage-1-only divergence got WORSE: `D_KY=90.64`) | no (Stage 1) | 0.9938 (Stage 1, not Stage 2) |
-  | **216** | + `--w-jacobian-bandedness` + `--w-jacobian-diagonal-bound` | **22.59** | **yes** | **0.2146** |
-  216 matches 211's chaos quality with measurably better D3 bandedness,
-  entirely from Stage-1-only regularization (neither D3 loss was active
-  during Stage 2). Before fully freezing this pick: Section 216's own
-  Stage 2 never had the D3 losses active either -- try keeping
-  `--w-jacobian-bandedness`/`--w-jacobian-diagonal-bound` on THROUGH
-  Stage 2 too (cheap, already wired) to see if bandedness pushes higher
-  still without losing bounded chaos, before calling this final.
+  | 211 | global `mlp`, Section 52 recipe only | 23.04 | yes | 0.1883 |
+  | 215 | global `mlp` + `--w-jacobian-bandedness` alone | -- (Stage 2 killed, Stage-1-only divergence got WORSE: `D_KY=90.64`) | no (Stage 1) | 0.9938 (Stage 1, not Stage 2) |
+  | **216** | global `mlp` + `--w-jacobian-bandedness` + `--w-jacobian-diagonal-bound` | **22.59** | **yes** | **0.2146** |
+  | 217 | LOCAL `masked_mlp`, no D3 loss | -- (Stage 2 could not rescue it: NaN by step ~350) | no | 0.2970 (Stage 2, but on a diverging checkpoint -- unusable) |
+  216 wins: matches 211's chaos quality with measurably better D3
+  bandedness, entirely from Stage-1-only regularization. 217 confirmed
+  `masked_mlp` (both variants -- also the historical `masked_mlp_
+  expand` arc, all 8 checkpoints) is fundamentally unstable as a
+  standalone propagator, independent of any D3 loss -- dropped as a
+  candidate. Not yet tried: keeping `--w-jacobian-bandedness`/
+  `--w-jacobian-diagonal-bound` active THROUGH Stage 2 too on the
+  global-`mlp` architecture (cheap, already wired) -- a possible future
+  refinement, not blocking Phase B.
 - [x] **D3/D7 measured on Section 211 (Gate 4, full D1-D8 report):**
   `docs/diagnostics_report_section211_..._warmstart_k12_300ep.md` --
   D3=`0.1883` (p=0.0000), D7=`0.2415` (p=0.0000), D8=`0.2694`
@@ -185,21 +188,24 @@ cannot run on a different input/output dimension at all. **The
 L-transfer claim structurally requires a translation-equivariant,
 weight-shared propagator** (`backbone` in `{masked_mlp, local_mlp, cnn,
 node}` -- anything whose parameter count doesn't depend on `n_sites`),
-not the propagator Phase A just validated. This was the ORIGINAL
-motivation for trying `--aux-backbone masked_mlp` (Section 212, launched
-then superseded mid-investigation by the Section-52-regression
-question) -- it needs to be revisited specifically for this phase, not
-skipped.
+not the propagator Phase A just validated. **`masked_mlp` was tried and
+ruled out (Section 217, 2026-09-24)**: standalone divergence so severe
+it crashed the Lyapunov computation outright (`max|z|` reached `1e30`),
+and -- unprecedented this session -- Stage 2 could NOT rescue it (NaN
+by step ~350). This matches the historical `masked_mlp_expand` arc
+(all 8 checkpoints also diverged). `local_mlp`/`cnn`/`node` remain
+untried and are the real candidates for F1 now, not `masked_mlp`.
 
 - [ ] **F1. Train and validate a size-transferable local propagator**
   on `LOCAL_AE`'s own encoder (or a fresh matching one): `local_field`
-  encoder + `masked_mlp` (or `local_mlp`/`cnn`/`node`) propagator,
-  same regularizer recipe, same Stage 1 -> Stage 2 pipeline Phase A
-  used. Call the result `TRANSFER_PROP`.
+  encoder + `local_mlp`, `cnn`, or `node` propagator (NOT `masked_mlp` --
+  ruled out, see above), same regularizer recipe, same Stage 1 -> Stage
+  2 pipeline Phase A used. Call the result `TRANSFER_PROP`.
   **Test:** identical bar to A1 -- Stage-2 standalone 2000-step rollout,
-  `D_KY` in `[21,24]`, `max|z|` bounded. Do not skip this because
-  Section 212 "seemed to work" in an earlier smoke test -- it was never
-  run through Stage 2 or checked this rigorously.
+  `D_KY` in `[21,24]`, `max|z|` bounded. Given `masked_mlp`'s own
+  failure, do not assume any of these three are safe either -- run the
+  full dry-run-then-Stage-1-then-Stage-2-then-diagnose pipeline for
+  each before trusting one.
 - [ ] **F2. Architecture-level transfer test, no DA yet.** Run
   `LOCAL_AE`/`TRANSFER_PROP` (both trained at `L=100`) at a LARGER `L`
   (e.g. `L=200`, by re-deriving `n_sites`/`NX` for the new `L` and

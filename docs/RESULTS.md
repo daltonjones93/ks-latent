@@ -1504,6 +1504,67 @@ apparent divergence for every architecture/regularizer combination
 tried so far, and only Stage 2's own standalone rollout is the real
 bar for judging a result.
 
+### Section 217: `masked_mlp` propagator gives higher D3 bandedness than any prior candidate, but Stage 2 cannot rescue its Stage-1 divergence (2026-09-24)
+
+User-directed: "Can we run 211 with the masked mlp instead. get rid of
+the D3 regularizer. I think maybe that could increase bandedness as
+well." Hypothesis: `--aux-backbone masked_mlp`'s weights are
+architecturally masked to exactly zero outside a fixed circular band
+(`MaskedLinear`), so its Jacobian should be band-limited by
+construction rather than by soft regularization -- possibly sidestepping
+Sections 215/216's finding that penalizing bandedness competes against
+stability for gradient budget. Exact copy of Section 211's recipe with
+`--aux-backbone mlp` -> `masked_mlp --attn-window 18`, NO D3 loss.
+
+**Stage 1 diverged catastrophically** -- not merely over-chaotic like
+every prior candidate, genuinely unbounded: `max|z|` `7.3 -> 23,106`
+(t=300) `-> 3.8e8` (t=600) `-> 2.1e14` (t=1000) `-> 2.1e30` (t=1999).
+This crashed the Lyapunov Benettin computation outright (reference
+trajectory exceeded the divergence bound), which in turn crashed this
+project's own diagnostic script (not written to tolerate a Lyapunov
+failure) and halted the section script under `set -e` before Stage 2
+could launch automatically -- Stage 2 was relaunched manually. This
+matches the historical `masked_mlp_expand` arc exactly: all 8 of those
+checkpoints (Sections 135, 145-153) also diverged outright when
+audited earlier this session -- now a second, independent confirmation
+that the `masked_mlp` FAMILY (both the "expand" variant and this plain
+one) is prone to much more severe standalone instability than the
+global `mlp` propagator ever showed.
+
+**Stage 2 could not tame it -- the first checkpoint this session where
+the "always run Stage 2" rule's own pattern broke.** `best_val_kmax_mse
+=0.34` (an order of magnitude worse than every other Stage-2 run this
+session, which land around `0.02-0.09`). Standalone rollout: bounded
+through ~100 steps (`max|z|~10`), then explodes to `9e15` by step 300
+and NaN shortly after (`first non-finite step: 348`); the direct
+Lyapunov computation fails the same way Stage 1's did.
+
+**D3 bandedness was genuinely higher than any prior candidate --
+`0.2970`, vs. Section 216's `0.2146` and Section 211's `0.1883` -- but
+on a checkpoint that diverges to NaN, making the number unusable.**
+Mechanistic note: the "architecturally exact zeros" reasoning motivating
+this test does not hold as cleanly as expected for a MULTI-layer masked
+body -- `0 / 9120` off-diagonal Jacobian entries were exactly zero
+(checked directly). `MaskedLinear`'s hard-zero guarantee is proven for
+a SINGLE linear layer's own weight; `_MaskedMLPDeltaBody` stacks
+several such layers with GELU nonlinearities between them, and the
+CHAIN-RULE-composed Jacobian through multiple nonlinear layers does not
+preserve exact zeros the way pure linear composition would, even
+though every individual layer's own weight does. The higher bandedness
+score is real but soft (learned through training, not structurally
+guaranteed), and it came bundled with much worse instability.
+
+**Verdict: `masked_mlp` dropped as a propagator candidate for now.**
+Section 216 remains the frozen local-field checkpoint (best validated
+D3 bandedness among the checkpoints that actually reach a bounded
+attractor after Stage 2). This also affects Phase F of
+`docs/steps_4-3.md` (L-transfer): `masked_mlp` was the natural
+candidate for a size-transferable propagator (weight-shared, unlike
+the global `mlp`), and its own standalone instability -- independent
+of any D3 loss -- means Phase F needs a genuinely stable
+translation-equivariant propagator found first, not just a reuse of
+this exact configuration.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any
