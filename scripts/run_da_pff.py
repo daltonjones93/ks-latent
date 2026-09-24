@@ -25,8 +25,11 @@ from ks_latent.config import (
     Stage2TrainingConfig,
 )
 from ks_latent.da.cycling import CycleConfig, run_da_experiment
+from ks_latent.da.localization import build_latent_taper_matrix
 from ks_latent.da.pff import PFFConfig
+from ks_latent.da.sec import build_sec_table, make_fixed_taper_localizer, make_sec_localizer
 from ks_latent.models import load_autoencoder_checkpoint, load_propagator_checkpoint
+from ks_latent.models.autoencoder_local_field import KSAutoencoderLocalField
 from ks_latent.models.permuted_autoencoder import PermutedAutoencoder, load_latent_permutation
 from ks_latent.models.autoencoder_patched import KSAutoencoderPatched
 from ks_latent.models.propagator import AuxPropagator, LatentPropagator
@@ -140,6 +143,30 @@ def main() -> None:
         "--latent-permutation-key", type=str, default="d3_permutation",
         help="See run_diagnostics.py's --latent-permutation-key help text.",
     )
+    parser.add_argument(
+        "--localizer", choices=["none", "sec", "gaspari_cohn"], default="none",
+        help="Added 2026-09-23, Part 4.3 of docs/LITERATURE_REVIEW_AND_FINDINGS.md (Stage 0). "
+        "'none' (default): no localization, matches this script's original behavior. 'sec': "
+        "Anderson (2012) sampling error correction (ks_latent.da.sec), distance-free, built "
+        "fresh at --n-ensemble's own size (an SEC table is ensemble-size-specific). "
+        "'gaspari_cohn': ks_latent.da.localization's distance-BASED taper on a local latent "
+        "field's site structure -- requires the checkpoint's autoencoder to be "
+        "KSAutoencoderLocalField (raises otherwise, since a flat/globally-pooled latent has "
+        "no physical distance for this to act on); needs --gc-c.",
+    )
+    parser.add_argument(
+        "--gc-c", type=float, default=2.0,
+        help="--localizer gaspari_cohn only. Gaspari-Cohn half-width in PHYSICAL SITE units "
+        "(support radius = 2*gc_c sites) -- see ks_latent.da.localization.gaspari_cohn_taper's "
+        "docstring. Default 2.0 (support radius 4 sites) is a starting point, not yet tuned "
+        "against Phase 2's own measured light-cone bound "
+        "(ks_latent.analysis.spreading.minimum_localization_radius) -- sweep this.",
+    )
+    parser.add_argument(
+        "--sec-n-trials", type=int, default=2000,
+        help="--localizer sec only. Override ks_latent.da.sec.build_sec_table's n_trials "
+        "(default 2000).",
+    )
     args = parser.parse_args()
     set_seed(args.seed)
 
@@ -160,9 +187,24 @@ def main() -> None:
     z0_ensemble = z0.unsqueeze(0) + 0.1 * torch.randn(n_ensemble, d, generator=rng)
     z_minus1_ensemble = z0_ensemble.clone()
 
+    localize_fn = None
+    if args.localizer == "sec":
+        table = build_sec_table(n_ens=n_ensemble, n_trials=args.sec_n_trials, seed=args.seed)
+        localize_fn = make_sec_localizer(table)
+    elif args.localizer == "gaspari_cohn":
+        if not isinstance(ae, KSAutoencoderLocalField):
+            raise ValueError(
+                f"--localizer gaspari_cohn requires a KSAutoencoderLocalField checkpoint "
+                f"(a genuine local latent field with physical sites), got {type(ae).__name__}. "
+                f"A flat/globally-pooled latent has no physical distance for this to act on."
+            )
+        taper = build_latent_taper_matrix(ae.cfg.n_sites, ae.cfg.local_channels, c=args.gc_c)
+        localize_fn = make_fixed_taper_localizer(taper)
+
     cfg = CycleConfig(
         n_prop_steps=n_prop_steps, n_cycles=n_cycles, n_ensemble=n_ensemble,
         pff_config=PFFConfig(method="NAT", n_steps=100), seed=args.seed,
+        localize_fn=localize_fn,
     )
     if getattr(prop, "mode", None) == "history":
         # mode="history" (added 2026-08-29, user-directed): bootstrap all
@@ -189,6 +231,9 @@ def main() -> None:
         "spread": spread,
         "calibration_spread_over_rmse": spread / rmse_da if rmse_da > 0 else float("nan"),
         "skill_free_over_da": rmse_free / rmse_da if rmse_da > 0 else float("nan"),
+        "n_ensemble": n_ensemble,
+        "localizer": args.localizer,
+        "gc_c": args.gc_c if args.localizer == "gaspari_cohn" else None,
     }
     ARTIFACTS_DIR.mkdir(exist_ok=True)
     suffix = f"_{args.tag}" if args.tag else ""

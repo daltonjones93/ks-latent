@@ -57,7 +57,26 @@ def load_autoencoder_checkpoint(path, device: str | torch.device = "cpu"):
     ae_cfg = ckpt["ae_config"]
     encoder_kind = ckpt.get("encoder_kind", "transformer")
     ae = build_autoencoder(encoder_kind, ae_cfg)
-    ae.load_state_dict(ckpt["ae_state_dict"])
+    sd = ckpt["ae_state_dict"]
+    # Legacy compatibility (added 2026-09-23, Section 207): local_field
+    # checkpoints trained before Section 153's own "root fix" (see
+    # KSAutoencoderLocalField's docstring -- a learnable enc_out bias let
+    # the residual channels drift to a large, arbitrary constant, aliasing
+    # onto one self-FFT mode) were saved with an enc_out.bias parameter
+    # that the CURRENT architecture (bias=False) no longer has. Restore it
+    # dynamically ONLY for this exact legacy shape (an unexpected
+    # 'enc_out.bias' key on an otherwise-matching local_field model) so a
+    # pre-fix checkpoint's actually-trained bias loads faithfully instead
+    # of the whole load failing outright or the value being silently
+    # dropped via strict=False.
+    if (
+        encoder_kind == "local_field"
+        and "enc_out.bias" in sd
+        and getattr(ae, "enc_out", None) is not None
+        and ae.enc_out.bias is None
+    ):
+        ae.enc_out.bias = torch.nn.Parameter(torch.zeros(ae.enc_out.out_channels))
+    ae.load_state_dict(sd)
     # `build_autoencoder` constructs fresh (CPU) parameters, and
     # `load_state_dict` copies values in place without moving device -- so
     # without this, `ae` silently stays on CPU even when `device` is mps/cuda
