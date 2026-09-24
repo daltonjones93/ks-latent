@@ -198,6 +198,74 @@ def test_encode_decode_shapes_cls_pool():
     assert ae.enc_cls is not None
 
 
+def test_n_channels_default_is_backward_compatible():
+    """n_channels=1 (default, omitted here) must be bit-for-bit identical
+    in shape/behavior to the pre-existing single-channel path -- this is
+    the exact scenario every other test in this file already exercises,
+    just asserted explicitly against the new field's default."""
+    cfg = ViTAutoencoderConfig(NX=32, patch_size=4, d_model=16, n_heads=2, n_blocks=1, d_latent=6, pool="mean")
+    assert cfg.n_channels == 1
+    assert cfg.n_tokens == 8  # unchanged: NX/patch_size
+
+
+def test_n_channels_two_encode_decode_shapes_and_token_count():
+    """n_channels=2 (Section 207): NX physical raw scalars are N=NX/2
+    sites of 2 channels each; n_tokens must shrink accordingly (same
+    physical receptive field per token as n_channels=1 at the same
+    N), and encode/decode must round-trip shapes correctly."""
+    cfg = ViTAutoencoderConfig(
+        NX=64, patch_size=4, n_channels=2, d_model=16, n_heads=2, n_blocks=1, d_latent=6, pool="mean",
+    )
+    assert cfg.n_tokens == 8  # (64/2)/4 = 8, matching an n_channels=1, NX=32, patch_size=4 config
+    ae = KSAutoencoderViT(cfg)
+    assert ae.enc_proj.in_features == 4 * 2
+    assert ae.dec_out.out_features == 4 * 2
+    u = torch.randn(5, 64)
+    z = ae.encode(u)
+    assert z.shape == (5, 6)
+    u_hat = ae.decode(z)
+    assert u_hat.shape == (5, 64)
+
+
+def test_n_channels_two_tokenizes_by_physical_site_not_by_block():
+    """The whole point of n_channels=2 (see ViTAutoencoderConfig.
+    n_channels's docstring): each token must be built from patch_size
+    CONSECUTIVE PHYSICAL SITES' worth of BOTH channels (site-major/
+    channel-minor input), not from one contiguous block of channel-0
+    values followed by a separate block of channel-1 values. Verify
+    directly on the raw tensor `circular_overlap_tokenize` produces,
+    independent of any learned weights: for input
+    `[x_0, xp_0, x_1, xp_1, ..., x_7, xp_7]` (N=8 sites, patch_size=4,
+    so n_tokens=2), token 0 must contain exactly sites 0-3 (both
+    channels, interleaved) and token 1 exactly sites 4-7."""
+    cfg = ViTAutoencoderConfig(
+        NX=16, patch_size=4, n_channels=2, d_model=8, n_heads=2, n_blocks=1, d_latent=4, pool="mean",
+    )
+    assert cfg.n_tokens == 2
+    x = torch.arange(8, dtype=torch.float32)
+    xp = torch.arange(100, 108, dtype=torch.float32)
+    u = torch.stack([x, xp], dim=-1).reshape(1, 16)  # interleaved, matching the config's own convention
+    tokens = circular_overlap_tokenize(u, cfg.patch_size * cfg.n_channels, cfg.patch_size * cfg.n_channels, cfg.n_tokens)
+    assert tokens.shape == (1, 2, 8)
+    expected_token0 = torch.tensor([0.0, 100.0, 1.0, 101.0, 2.0, 102.0, 3.0, 103.0])
+    expected_token1 = torch.tensor([4.0, 104.0, 5.0, 105.0, 6.0, 106.0, 7.0, 107.0])
+    assert torch.allclose(tokens[0, 0], expected_token0)
+    assert torch.allclose(tokens[0, 1], expected_token1)
+
+
+def test_n_channels_requires_nx_divisible_by_n_channels():
+    with pytest.raises(ValueError, match="n_channels"):
+        ViTAutoencoderConfig(NX=33, patch_size=4, n_channels=2, d_latent=4)
+
+
+def test_n_channels_requires_physical_sites_divisible_by_patch_size():
+    # NX=64, n_channels=3 -> 64/3 is not an integer number of sites at all,
+    # but NX % n_channels != 0 catches that first; use a case where sites
+    # divides evenly but patch_size does not divide the site count.
+    with pytest.raises(ValueError, match="patch_size"):
+        ViTAutoencoderConfig(NX=48, patch_size=5, n_channels=2, d_latent=4)  # 48/2=24 sites, 24%5!=0
+
+
 def test_readout_mlp_encode_decode_shapes():
     """`readout='mlp'` (added 2026-09-03, user-directed: "after the mean
     pool, there is a linear map from 96 to 44 ... can we have the option

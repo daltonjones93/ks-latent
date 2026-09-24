@@ -446,7 +446,13 @@ class KSAutoencoderViT(nn.Module):
         # tokenization -- enc_proj's input width becomes the wider window
         # instead of patch_size when set. See ViTAutoencoderConfig's docstring.
         self._token_window = cfg.token_window if cfg.token_window is not None else cfg.patch_size
-        self.enc_proj = nn.Linear(self._token_window, cfg.d_model)
+        # n_channels (Section 207): patch_size/token_window are in PHYSICAL
+        # SITE units; each token's raw input is n_channels times wider
+        # (all channels of its patch_size/token_window sites, interleaved
+        # site-major/channel-minor -- see ViTAutoencoderConfig.n_channels's
+        # docstring). n_channels=1 (default) makes this exactly the
+        # original scalar-field behavior.
+        self.enc_proj = nn.Linear(self._token_window * cfg.n_channels, cfg.d_model)
         # A CLS aggregation token has no position on the ring; folding it
         # into the circular encoding would make the ring n_tokens+1 long
         # and break the periodicity the encoding exists to express, so it
@@ -675,15 +681,19 @@ class KSAutoencoderViT(nn.Module):
             [ViTBlock(cfg.d_model, cfg.n_heads, cfg.mlp_ratio, cfg.dropout) for _ in range(cfg.n_blocks)]
         )
         self.dec_norm = nn.LayerNorm(cfg.d_model)
-        self.dec_out = nn.Linear(cfg.d_model, cfg.patch_size)
+        self.dec_out = nn.Linear(cfg.d_model, cfg.patch_size * cfg.n_channels)
         # No CLS token on the decoder side, so no padding needed here.
         self.register_buffer("dec_attn_mask", mask_fn(n_tokens, cfg.attn_window), persistent=False)
 
     def encode(self, u: torch.Tensor) -> torch.Tensor:
-        """`u`: `(B, NX)` -> `z`: `(B, d_latent)`."""
+        """`u`: `(B, NX)` -> `z`: `(B, d_latent)`. If `cfg.n_channels > 1`,
+        `u` must be laid out site-major/channel-minor (see
+        `ViTAutoencoderConfig.n_channels`'s docstring)."""
         cfg = self.cfg
         B = u.shape[0]
-        tokens = circular_overlap_tokenize(u, cfg.patch_size, self._token_window, cfg.n_tokens)
+        tokens = circular_overlap_tokenize(
+            u, cfg.patch_size * cfg.n_channels, self._token_window * cfg.n_channels, cfg.n_tokens
+        )
         h = self.enc_pos(self.enc_proj(tokens))
         h = apply_fno_layers(h, self.enc_fno)
         if self.enc_cls is not None:
@@ -772,7 +782,7 @@ class KSAutoencoderViT(nn.Module):
         for block in self.dec_blocks:
             h = block(h, attn_mask=self.dec_attn_mask)
         h = self.dec_norm(h)
-        patches = self.dec_out(h)  # (B, n_tokens, patch_size)
+        patches = self.dec_out(h)  # (B, n_tokens, patch_size*n_channels)
         return patches.reshape(B, cfg.NX)
 
     def forward(self, u: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

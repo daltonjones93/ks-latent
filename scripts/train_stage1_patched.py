@@ -1895,6 +1895,19 @@ def main() -> None:
         "physical length), unless attn_window is raised to compensate.",
     )
     parser.add_argument(
+        "--n-channels", type=int, default=1,
+        help="--encoder vit only (added 2026-09-23, Section 207). Override "
+        "ViTAutoencoderConfig.n_channels (default 1, unchanged behavior). At n_channels=k>1, "
+        "--nx is interpreted as (physical_sites * k), laid out SITE-MAJOR/CHANNEL-MINOR "
+        "(e.g. k=2, x/x': [x_0, x'_0, x_1, x'_1, ...], NOT concatenated blocks) -- --dataset "
+        "must already be stored this way. patch_size stays in PHYSICAL SITE units, so each "
+        "token becomes patch_size*n_channels raw values (all channels of its patch_size "
+        "sites) instead of patch_size -- see that field's docstring for why this keeps the "
+        "positional encoding's 'adjacent token = adjacent physical site' meaning intact, "
+        "unlike concatenating channels into one flat NX-dim vector (Sections 204-206's "
+        "approach, found to likely be the cause of their badly-converging reconstruction).",
+    )
+    parser.add_argument(
         "--d-model", type=int, default=None,
         help="--encoder vit only. Override ViTAutoencoderConfig.d_model (default 96, "
         "n_heads=4/n_blocks=3/mlp_ratio=4 unchanged). Added 2026-09-02, user-directed "
@@ -2030,7 +2043,7 @@ def main() -> None:
                 NX=NX, patch_size=8, d_model=16, n_heads=2, n_blocks=1, d_latent=d_latent,
                 attn_window=args.attn_window, pos_encoding=args.pos_encoding,
                 pool=args.pool, pool_window=args.pool_window, pool_bandwidth=args.pool_bandwidth,
-                token_window=args.token_window,
+                token_window=args.token_window, n_channels=args.n_channels,
                 use_fno=args.ae_fno, fno_modes=args.ae_fno_modes, fno_n_layers=args.ae_fno_n_layers,
             )
         elif args.encoder == "spectral_field":
@@ -2368,7 +2381,7 @@ def main() -> None:
                 NX=NX, patch_size=args.patch_size, d_latent=d_latent, attn_window=args.attn_window,
                 pos_encoding=args.pos_encoding, pool=args.pool, pool_window=args.pool_window,
                 pool_bandwidth=args.pool_bandwidth, dec_pool=args.dec_pool,
-                token_window=args.token_window,
+                token_window=args.token_window, n_channels=args.n_channels,
                 use_fno=args.ae_fno, fno_modes=args.ae_fno_modes, fno_n_layers=args.ae_fno_n_layers,
                 **vit_kwargs,
             )

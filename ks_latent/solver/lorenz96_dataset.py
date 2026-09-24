@@ -41,6 +41,7 @@ def generate_trajectory_dataset(
     n_val: int = 10,
     trajectory_time: float,
     include_derivative: bool = False,
+    derivative_layout: str = "block",
 ) -> Path:
     """`n_train + n_val` independent trajectories, each spun up separately
     -- exact mirror of `ks_latent.solver.dataset.generate_trajectory_
@@ -78,9 +79,31 @@ def generate_trajectory_dataset(
     metadata become 2-element arrays `[x_stat, xprime_stat]` instead of
     a bare scalar in this case (nothing else in this codebase reads
     those attrs back, confirmed by grep, so this shape change is safe);
-    `state_layout="x_xprime"` and `n_phys=N` are additionally recorded so
-    a downstream reader can tell this dataset apart from a plain
-    `N`-dim one."""
+    `state_layout` and `n_phys=N` are additionally recorded so a
+    downstream reader can tell this dataset apart from a plain `N`-dim
+    one.
+
+    `derivative_layout` (added 2026-09-23, Section 207, user-directed:
+    "can you think of a way of augmenting 201 with x' that will work
+    with the vit's assumptions"): `include_derivative=True` only.
+    `"block"` (default, Sections 204-206's original layout): `[x_0..
+    x_{N-1}, x'_0..x'_{N-1}]`, concatenated blocks -- found likely
+    responsible for those sections' badly-converging reconstruction,
+    since it hands a ViT's patch-tokenizer patches that are either
+    "all x" or "all x'", breaking the positional encoding's single-ring
+    assumption (an x'-patch is not "further along in space" than an
+    x-patch; it's the SAME sites, a different quantity). `"interleaved"`:
+    `[x_0, x'_0, x_1, x'_1, ..., x_{N-1}, x'_{N-1}]`, site-major/
+    channel-minor -- pairs with `ViTAutoencoderConfig.n_channels=2`
+    (see that field's docstring), which patch-tokenizes `patch_size`
+    CONSECUTIVE SITES worth of both channels together, keeping each
+    token a genuine, single physical location -- the fix this section
+    actually implements and tests. `state_layout` is recorded as
+    `"x_xprime_block"` or `"x_xprime_interleaved"` accordingly so a
+    downstream reader (or a human skimming metadata) cannot mix the two
+    up."""
+    if derivative_layout not in ("block", "interleaved"):
+        raise ValueError(f"derivative_layout must be 'block' or 'interleaved', got {derivative_layout!r}")
     path = Path(path)
     n_runs = n_train + n_val
     n_steps = int(round(trajectory_time / cfg.dt))
@@ -93,15 +116,24 @@ def generate_trajectory_dataset(
 
     if include_derivative:
         trajectories_xprime = l96_rhs(trajectories_x, cfg.F)
-        trajectories = np.concatenate([trajectories_x, trajectories_xprime], axis=-1)
+        if derivative_layout == "block":
+            trajectories = np.concatenate([trajectories_x, trajectories_xprime], axis=-1)
+            x_slice, xp_slice = (Ellipsis, slice(None, cfg.N)), (Ellipsis, slice(cfg.N, None))
+            state_layout = "x_xprime_block"
+        else:
+            trajectories = np.stack([trajectories_x, trajectories_xprime], axis=-1).reshape(
+                *trajectories_x.shape[:-1], 2 * cfg.N
+            )
+            x_slice, xp_slice = (Ellipsis, slice(0, None, 2)), (Ellipsis, slice(1, None, 2))
+            state_layout = "x_xprime_interleaved"
         train = trajectories[:n_train]
-        mean_x, std_x = train[..., : cfg.N].mean(), train[..., : cfg.N].std()
-        mean_xp, std_xp = train[..., cfg.N :].mean(), train[..., cfg.N :].std()
+        mean_x, std_x = train[x_slice].mean(), train[x_slice].std()
+        mean_xp, std_xp = train[xp_slice].mean(), train[xp_slice].std()
         normalized = trajectories.copy()
-        normalized[..., : cfg.N] = (trajectories[..., : cfg.N] - mean_x) / std_x
-        normalized[..., cfg.N :] = (trajectories[..., cfg.N :] - mean_xp) / std_xp
+        normalized[x_slice] = (trajectories[x_slice] - mean_x) / std_x
+        normalized[xp_slice] = (trajectories[xp_slice] - mean_xp) / std_xp
         mean, std = np.array([mean_x, mean_xp]), np.array([std_x, std_xp])
-        extra_meta = {"state_layout": "x_xprime", "n_phys": cfg.N}
+        extra_meta = {"state_layout": state_layout, "n_phys": cfg.N}
     else:
         trajectories = trajectories_x
         train = trajectories[:n_train]

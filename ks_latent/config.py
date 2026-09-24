@@ -817,6 +817,44 @@ class ViTAutoencoderConfig:
     # untouched, so no overlap-add step is needed. See
     # `circular_overlap_tokenize`'s docstring for the exact construction.
     token_window: int | None = None
+    # `n_channels` (added 2026-09-23, Section 207, user-directed: "can you
+    # think of a way of augmenting 201 with x' that will work with the
+    # vit's assumptions" -- Sections 205/206 found concatenating x/x' into
+    # one flat NX-dim vector before ViT patch-tokenization was likely the
+    # real cause of that experiment's badly-converging reconstruction: the
+    # encoder's positional encoding treats all n_tokens as one ring, but a
+    # token built from the x' BLOCK is not "further along in space" from a
+    # token built from the x block -- it is the SAME physical sites, a
+    # different quantity, and nothing in the architecture told it that).
+    #
+    # `n_channels=1` (default, unchanged behavior): `NX` raw scalars are
+    # `NX` physical positions, one channel each, exactly as before.
+    #
+    # `n_channels=k>1`: `NX` raw scalars are interpreted as `NX/k`
+    # physical SITES of `k` channels each, laid out SITE-MAJOR/CHANNEL-
+    # MINOR (`[site_0_ch_0, site_0_ch_1, ..., site_0_ch_{k-1}, site_1_ch_0,
+    # ...]` -- e.g. for k=2, x/x': `[x_0, x'_0, x_1, x'_1, ...]`, exactly
+    # `np.stack([x, x'], axis=-1).reshape(-1)`, NOT the block-concatenated
+    # `[x_0..x_{N-1}, x'_0..x'_{N-1}]` layout Sections 204-206 used).
+    # `patch_size` stays in SITE units (a token still covers `patch_size`
+    # consecutive PHYSICAL sites, same physical receptive field as
+    # `n_channels=1`), so `n_tokens = (NX/n_channels)/patch_size` is
+    # smaller than the `n_channels=1` case at the same `NX`/`patch_size`
+    # -- e.g. NX=128 (64 sites x 2 channels), patch_size=8 -> n_tokens=8,
+    # matching the `n_channels=1`/N=64 case's own token count exactly,
+    # unlike Section 205/206's approach (NX=32 flat, 4 tokens, only 2 of
+    # which were even "x tokens"). Each token's raw vector becomes
+    # `patch_size*n_channels` long (all channels of its `patch_size`
+    # sites, interleaved) instead of `patch_size` -- `enc_proj`/`dec_out`
+    # are sized accordingly (`KSAutoencoderViT.__init__`) -- so the SAME
+    # positional encoding / attention mask (which only ever see the
+    # `n_tokens` axis, now genuinely "one entry per physical location,
+    # all channels together") keeps its "adjacent token = adjacent
+    # physical site" meaning intact; nothing about the ring assumption
+    # is violated by adding channels this way, unlike concatenation.
+    # Requires `NX % n_channels == 0` and `(NX // n_channels) % patch_size
+    # == 0` (validated below).
+    n_channels: int = 1
     # FNO+ViT hybrid encoder/decoder (added 2026-08-30, user-directed:
     # "implement the FNO for the encoder and decoder in conjunction with
     # the ViT structure" -- see docs/PHASE2_ARCHITECTURE_EXPERIMENTS.md
@@ -874,8 +912,15 @@ class ViTAutoencoderConfig:
         return self.dec_pool if self.dec_pool is not None else self.pool
 
     def __post_init__(self):
-        if self.NX % self.patch_size != 0:
-            raise ValueError(f"NX={self.NX} must be divisible by patch_size={self.patch_size}")
+        if self.n_channels < 1:
+            raise ValueError(f"n_channels must be >= 1, got {self.n_channels!r}")
+        if self.NX % self.n_channels != 0:
+            raise ValueError(f"NX={self.NX} must be divisible by n_channels={self.n_channels}")
+        if (self.NX // self.n_channels) % self.patch_size != 0:
+            raise ValueError(
+                f"NX/n_channels={self.NX // self.n_channels} (physical sites) must be divisible "
+                f"by patch_size={self.patch_size}, got NX={self.NX}, n_channels={self.n_channels}"
+            )
         if self.token_window is not None and self.token_window < self.patch_size:
             raise ValueError(
                 f"token_window={self.token_window} must be >= patch_size={self.patch_size}"
@@ -964,7 +1009,7 @@ class ViTAutoencoderConfig:
 
     @property
     def n_tokens(self) -> int:
-        return self.NX // self.patch_size
+        return (self.NX // self.n_channels) // self.patch_size
 
     @property
     def n_sites(self) -> int:
