@@ -1445,6 +1445,65 @@ experiment (Stage 0 infrastructure already built --
 `ks_latent/da/localization.py`, `scripts/run_da_pff.py --localizer
 gaspari_cohn`).
 
+### Sections 215-216: D3-as-a-loss, and its companion diagonal-magnitude-bound term (2026-09-24)
+
+Continuing directly from Section 211's validated checkpoint (baseline
+D3 bandedness `0.1883`, Gate 4): tested whether `--w-jacobian-
+bandedness` (D3's new differentiable loss, Section 214) can push that
+number higher while a Stage-2 continuation still reaches genuine,
+bounded, target-matching chaos.
+
+**Section 215 (`--w-jacobian-bandedness 0.05` alone, Stage 1 only):**
+D3 bandedness went from `0.19` to **`0.9938`** (near-perfect
+concentration near the diagonal) -- but standalone-rollout divergence
+got WORSE, not better: `D_KY` `74.93 -> 90.64`, `max|z|` reaching
+`6265` (vs. `1019`) over the same 2000 steps. Diagnosis: bandedness
+constrains WHERE coupling mass concentrates, not HOW LARGE the
+surviving (near-diagonal, including self-coupling) entries are allowed
+to be -- forcing locality apparently concentrated the instability into
+sharper, more self-reinforcing per-site growth rather than damping it.
+
+**Section 216 (`--w-jacobian-bandedness 0.05` + new `--w-jacobian-
+diagonal-bound 0.1` at `ceiling=1.5`, Stage 1 + Stage 2):**
+`ks_latent.training.losses.propagator_jacobian_diagonal_bound_loss`
+caps each site's own self-coupling magnitude directly (one-sided,
+per-sample, verified orthogonal to bandedness by a dedicated unit
+test). Stage 1 result: the diagonal ceiling worked with near-perfect
+precision (mean `|diagonal|`=`1.0000`, max=`1.0026`, 0% over the
+ceiling) -- but standalone divergence was essentially UNCHANGED from
+Section 215 (`D_KY=95.07`, `max|z|@1999=5872`). **This cleanly falsifies
+the "large diagonal entries are the driver" hypothesis**: even with
+every individual diagonal entry pinned at ~1.0, the system still
+diverges just as badly, pointing instead at the aggregate/collective
+magnitude of the OFF-diagonal-but-within-band neighbor coupling
+(unconstrained by a diagonal-only term) as the more likely mechanism.
+
+**Stage 2 (Section 52's plain schedule, no D3 losses active) tamed it
+again, with a small but real, survived improvement:**
+
+| | `D_KY` (Stage 2) | `max\|z\|` bounded? | D3 bandedness (Stage 2) |
+|---|---|---|---|
+| Section 211 (no D3 loss anywhere) | 23.04 | yes | 0.1883 |
+| Section 216 (D3 losses in Stage 1 only) | 22.59 | yes | **0.2146** |
+
+Chaos quality is essentially equivalent to Section 211 (both centered
+in the `[21,24]` target), but D3 bandedness is measurably higher
+(`0.2146` vs `0.1883`) -- despite NEITHER D3 loss being active during
+Stage 2 at all. Some of Stage 1's much stronger bandedness push (`0.99`
+right after Stage 1) survived Stage 2's plain k-step training, even
+though most of it washed back out. This is a genuine, if modest, win,
+and suggests an obvious next lever: keep `--w-jacobian-bandedness`/
+`--w-jacobian-diagonal-bound` active DURING Stage 2 too (already wired
+via `Stage2TrainingConfig`, never yet invoked there) to see whether
+bandedness can be pushed further without losing bounded chaos -- not
+yet tried.
+
+Both experiments followed the "always run Stage 2" rule adopted this
+session (see `MEMORY.md`): Stage 1 alone reliably overshoots into
+apparent divergence for every architecture/regularizer combination
+tried so far, and only Stage 2's own standalone rollout is the real
+bar for judging a result.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

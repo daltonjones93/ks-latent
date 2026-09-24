@@ -26,19 +26,26 @@ not merely beat no-localization. SEC is a real, competitive method
   Stage 2 (`warmstart_k12_300ep`): `D_KY=21.55`, `lambda1=0.086`,
   `n_positive=11/44`, standalone 2000-step rollout genuinely bounded
   (`max|z|` oscillates 2.4-3.4, never diverges).
-- [ ] **A validated LOCAL-FIELD KS checkpoint** -- Section 211
-  (`local_field`, `n_sites=32`, `local_channels=3`, `d_latent=96`,
-  global `mlp` propagator) Stage 2: `D_KY=23.04`, `lambda1=0.091`,
-  `n_positive=13/96`, standalone rollout genuinely bounded. Section 215
-  (same recipe + `--w-jacobian-bandedness`, the new D3 loss) still
-  running -- pick whichever of 211/215 has the better D3 bandedness
-  p-value AND survives Stage 2 with a bounded standalone rollout, once
-  both are in. **Update this line with the chosen tag before starting
-  Phase B.**
-- [ ] **D3/D7 measured on the chosen local-field checkpoint** (Gate 4,
-  `run_diagnostics.py` -- already includes D1-D8, no separate D7 run
-  needed). Record the actual bandedness p-values here once Gate 4
-  finishes.
+- [x] **A validated LOCAL-FIELD KS checkpoint exists -- three candidates
+  measured, `TENTATIVE PICK: Section 216`.**
+  | tag | Stage-1 regularizers | Stage-2 `D_KY` | bounded? | D3 bandedness (Stage 2) |
+  |---|---|---|---|---|
+  | 211 | Section 52 recipe only | 23.04 | yes | 0.1883 |
+  | 215 | + `--w-jacobian-bandedness` alone | -- (Stage 2 killed, Stage-1-only divergence got WORSE: `D_KY=90.64`) | no (Stage 1) | 0.9938 (Stage 1, not Stage 2) |
+  | **216** | + `--w-jacobian-bandedness` + `--w-jacobian-diagonal-bound` | **22.59** | **yes** | **0.2146** |
+  216 matches 211's chaos quality with measurably better D3 bandedness,
+  entirely from Stage-1-only regularization (neither D3 loss was active
+  during Stage 2). Before fully freezing this pick: Section 216's own
+  Stage 2 never had the D3 losses active either -- try keeping
+  `--w-jacobian-bandedness`/`--w-jacobian-diagonal-bound` on THROUGH
+  Stage 2 too (cheap, already wired) to see if bandedness pushes higher
+  still without losing bounded chaos, before calling this final.
+- [x] **D3/D7 measured on Section 211 (Gate 4, full D1-D8 report):**
+  `docs/diagnostics_report_section211_..._warmstart_k12_300ep.md` --
+  D3=`0.1883` (p=0.0000), D7=`0.2415` (p=0.0000), D8=`0.2694`
+  (p=0.0000), all significant. Gate 4 not yet run on Section 216 (only
+  the lighter `coupling_graph_diagnostic`-only D3 check was) -- run the
+  full Gate 4 on whichever checkpoint is finally frozen.
 
 ---
 
