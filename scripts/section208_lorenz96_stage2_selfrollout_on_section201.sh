@@ -1,4 +1,19 @@
 #!/bin/zsh
+# RESULT (2026-09-23): still collapsed -- lambda1=-0.0028, n_positive=
+# 0/20, D_KY=0.0 -- despite warm-starting from the best Stage-1
+# checkpoint this L96 line has produced (D_KY=11.94) and despite
+# w_spectrum_shape_self being active alongside the already-tried stack.
+# Notable nuance: settled onto a BOUNDED, non-trivial orbit (max|z|
+# stays ~2.5-3.0, final-state pairwise spread stays real, 0.82-10.37)
+# rather than a literal fixed point -- a stable limit cycle, not chaos,
+# but zero positive Lyapunov exponents either way. Fifth independent
+# confirmation of Stage-2 collapse (197, 199, 201, 203, 208); closes
+# out the regularizer-toolkit line of inquiry -- see docs/RESULTS.md's
+# "Section 208" entry and docs/OPEN_QUESTIONS.md for the full writeup
+# and candidate directions OUTSIDE the existing regularizer toolkit
+# (w_pred=0 "two_stage" experiment; a distributional rollout objective;
+# direct Lyapunov-spectrum optimization as the primary Stage-2 loss).
+#
 # User-directed 2026-09-23: "let's try 1 then 2" -- option 1 of two
 # proposed next steps after Section 207 found x' augmentation hurts
 # propagator chaos (D_KY 11.94 -> 2.19) and was abandoned ("clearly we

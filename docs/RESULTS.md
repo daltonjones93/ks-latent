@@ -1313,6 +1313,51 @@ isolating whether it's specifically the ROLLOUT-RECONSTRUCTION pressure
 on `x'` (this section's hypothesis) or something else about the
 augmented representation driving the chaos loss.
 
+### Section 208: `--w-spectrum-shape-self` gets its clean test, and still fails to prevent Stage-2 collapse (2026-09-23)
+
+User-directed ("let's try 1 then 2" after Section 207's x' augmentation
+was abandoned): the cleanest possible test of `--w-spectrum-shape-self`
+(built Section 204, never yet cleanly tested -- Sections 204-207 were
+all confounded by unrelated data-representation/architecture problems)
+-- warm-start Stage 2 DIRECTLY from Section 201's own Stage-1 checkpoint
+(`D_KY=11.94`, no new Stage-1 run needed), with the Section 203 stack
+(`w_varmatch` + `w_spatial` + `w_logdet_rollout_latent`, which alone
+already failed once at a WEAKER Stage-1 starting point, `D_KY=2.117`)
+plus `--w-spectrum-shape-self 0.4` on top. Same dataset, same 60-epoch/
+`k_max=12` schedule as every prior Stage-2 attempt in this line.
+
+**Result: still collapsed. `lambda1=-0.0028, n_positive=0/20, D_KY=0.0`**
+-- despite starting from the best Stage-1 checkpoint this entire L96
+line has produced, and despite the one regularizer specifically built
+to prevent exactly this failure mode being active. Worth noting: unlike
+some earlier collapses, this one settled onto a BOUNDED, non-trivial
+orbit rather than a literal fixed point -- `max|z|` stays around
+2.5-3.0 across the whole 2000-step rollout (vs. shrinking toward 0),
+and the final-state pairwise spread across 20 ICs stays real (0.82 min,
+10.37 max, 6.27 mean) rather than collapsing toward 0 -- i.e. a stable
+limit cycle or quasi-periodic torus, not a point attractor. Still zero
+positive Lyapunov exponents either way.
+
+**This is now the fifth independent confirmation of Stage-2 collapse on
+L96** (197, 199, 201, 203, 208), and the first case where the
+regularizer toolkit's own most-recently-built, most-targeted candidate
+was tested cleanly (no confound) and still failed. Every anti-collapse
+mechanism currently in this codebase's toolkit -- `w_varmatch`,
+`w_spatial`, `w_logdet_rollout_latent`, `w_spectrum_shape` (real-data-
+anchored), and now `w_spectrum_shape_self` (self-rollout-sampled) -- has
+been tried, individually and combined, and none has prevented Stage 2's
+pure k-step supervised `horizon_weighted_latent_loss` training from
+destroying autonomous chaos. **The open question is no longer "which
+regularizer fixes this" (the existing toolkit is now exhausted) but
+whether the training OBJECTIVE itself (long-horizon MSE against a
+`k_max`-ramped rollout) is fundamentally incompatible with sustained
+chaos, independent of any regularizer added on top** -- see
+`docs/OPEN_QUESTIONS.md` for candidate directions outside the existing
+toolkit (e.g. training against a distributional/statistical rollout
+objective instead of pointwise MSE, or abandoning the Stage-1/Stage-2
+split in favor of Section 5.1/5.2 addendum's flagged-but-never-run
+"two_stage" experiment, `Stage1TrainingConfig.w_pred=0.0`).
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

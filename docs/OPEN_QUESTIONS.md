@@ -405,3 +405,44 @@ full finding and citations; unresolved items only, here:
   Stage-1 foundation than Section 201's 11.94) -- `--w-spectrum-shape-
   self`'s actual test (per the original motivating question) remains
   untested on a genuinely chaotic Stage-1 checkpoint.
+- **RESOLVED (Section 208): `--w-spectrum-shape-self` finally got its
+  clean test and still failed.** Warm-started Stage 2 directly from
+  Section 201's own Stage-1 checkpoint (`D_KY=11.94`, the best in this
+  line, no confound this time) with the Section 203 stack
+  (`w_varmatch`+`w_spatial`+`w_logdet_rollout_latent`) plus
+  `w_spectrum_shape_self` on top -- still collapsed to `D_KY=0.00,
+  n_positive=0/20, lambda1=-0.0028` (settled onto a bounded limit cycle,
+  not a literal fixed point, but zero positive exponents either way).
+  This is the fifth independent confirmation of Stage-2 collapse (197,
+  199, 201, 203, 208) and closes out the regularizer-toolkit line of
+  inquiry that started with Section 192: `w_varmatch`, `w_spatial`,
+  `w_logdet_rollout_latent`, `w_spectrum_shape` (real-data-anchored),
+  and `w_spectrum_shape_self` (self-rollout-sampled) have ALL now been
+  tried, individually and combined, against a genuinely chaotic Stage-1
+  starting point, and NONE prevents Stage 2's pure k-step
+  `horizon_weighted_latent_loss` training from destroying autonomous
+  chaos. **The open question is no longer "which regularizer fixes
+  this" -- it is whether the TRAINING OBJECTIVE itself (long-horizon
+  pointwise MSE against a `k_max`-ramped rollout) is structurally
+  incompatible with sustained chaos, independent of anything added on
+  top.** Candidate directions outside the existing regularizer toolkit,
+  not yet tried on either system:
+  1. The Section 5.1/5.2 addendum's own flagged-but-never-run
+     "two_stage" experiment: `Stage1TrainingConfig.w_pred=0.0` (drop the
+     auxiliary propagator's prediction loss out of Stage 1 entirely,
+     let Stage 2 do 100% of the dynamics fitting from a PURE
+     reconstruction-trained encoder) -- explicitly deferred at the time
+     ("once Gate 3/4's current canonical training finishes"), never
+     revisited since.
+  2. A genuinely different Stage-2 loss family -- e.g. a distributional/
+     statistical rollout objective (matching the ROLLED-OUT trajectory's
+     invariant statistics -- energy spectrum, attractor-density moments
+     -- rather than pointwise MSE against the true trajectory at each
+     step) instead of `horizon_weighted_latent_loss`, which by
+     construction rewards trajectory-tracking accuracy and has no direct
+     term rewarding SENSITIVITY to perturbations (the literal definition
+     of a positive Lyapunov exponent) at all.
+  3. Direct optimization of a proxy for the Lyapunov spectrum itself as
+     the PRIMARY Stage-2 objective (not an add-on regularizer term) --
+     inverts the current "MSE first, chaos as an afterthought penalty"
+     structure entirely.
