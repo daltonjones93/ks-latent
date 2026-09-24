@@ -1,4 +1,25 @@
 #!/bin/zsh
+# RESULT (2026-09-24): still badly over-chaotic and apparently unbounded
+# -- D_KY=74.93, n_positive=39/96, lambda1=0.00137. max|z| does not
+# settle onto any attractor: it climbs monotonically and unboundedly
+# across the whole 2000-step rollout (8.07 -> 1019.30, still rising at
+# the end, would likely have crossed the 10000 divergence cutoff given
+# more steps). Reconstruction is excellent (recon MSE 4.06e-5) -- this
+# is purely a standalone-dynamics problem, not a representation
+# problem. Third failure in a row on the SAME pairing (local_field
+# encoder + fully-GLOBAL mlp propagator), across three different
+# regularizer recipes (the undocumented 135-159 arc's own, Section
+# 140's, now Section 52's) -- points at something structural in pairing
+# a genuinely local encoder with a propagator that has zero
+# architectural respect for that locality (nothing bounds how much
+# energy a global MLP can pile into one direction over a long
+# autoregressive rollout, especially at d_latent=96). Superseded by
+# scripts/section212_ks_localfield_maskedmlp_section52_regs.sh
+# (--aux-backbone masked_mlp instead of mlp -- a genuinely LOCAL,
+# weight-shared, circular-band-masked propagator matching the
+# encoder's own spatial structure, user-directed: "use the masked mlp
+# for the next test... that setup seemed to work").
+#
 # User-directed 2026-09-23: "sure, do that. keep the regularizers the
 # same as section 52." -- after finding that NONE of the 19 historical
 # KS local_field checkpoints on disk (Sections 135-159) survive a
