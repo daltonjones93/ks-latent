@@ -1,16 +1,38 @@
 #!/bin/zsh
-# RESULT (2026-09-23): Stage 1 itself collapsed -- lambda1=-4.51e-05,
+# CORRECTED, same day: the run described below used --aux-backbone vit,
+# which was a MISREADING of the user's request. "Replace the encoder
+# and decoder with the ViT" means the AUTOENCODER (this codebase's
+# --encoder flag covers encoder+decoder together) -- it says nothing
+# about the PROPAGATOR, a separate --aux-backbone flag, which Section
+# 204's original (never-rescinded) request specified as "mlp". Caught
+# directly by the user ("wait I thought we were using the mlp as the
+# propagator?") after seeing the collapse result below. --aux-backbone
+# fixed to "mlp" (propagator stays plain MLP+history; only the
+# autoencoder becomes ViT) -- see scripts/section206_* for the corrected
+# rerun. Kept here, unmodified below, for provenance: this file's own
+# result is real (a ViT PROPAGATOR collapsing, consistent with this
+# project's established self-attention-collapse pattern) even though it
+# doesn't test what was actually asked for.
+#
+# RESULT (2026-09-23), --aux-backbone vit (not what was asked for --
+# see correction above): Stage 1 itself collapsed -- lambda1=-4.51e-05,
 # n_positive=0/8, D_KY=0.00 -- despite healthy reconstruction
 # (val_recon_final=0.0836, smooth monotonic descent, no collapse
-# plateau). User-directed "don't run stage 2 then" once this came in:
-# Stage 2 (where --w-spectrum-shape-self actually applies) was never
-# run -- warm-starting it from an already-collapsed propagator can't
-# test whether that regularizer prevents collapse. Points at the ViT
-# backbone itself (not the regularizer stack or the x+x' augmentation)
-# as the likely cause -- see docs/RESULTS.md's "Sections 204/205" entry
-# and docs/OPEN_QUESTIONS.md for the full writeup and the recommended
-# next step (finish Section 204's plain-MLP variant as the actual
-# controlled test).
+# plateau; also worse than every prior N=64 ViT run's ~0.0025-0.008,
+# most likely because the x' channel -- std~11.7 vs x's own std~2.8 --
+# is a rougher, harder-to-reconstruct signal than x alone, pooled into
+# one MSE with x, not because of d_latent alone: the 32->8 compression
+# ratio here (4x) is similar to the N=64 runs' 64->20 (3.2x)). User-
+# directed "don't run stage 2 then" once the collapse came in: Stage 2
+# (where --w-spectrum-shape-self actually applies) was never run --
+# warm-starting it from an already-collapsed propagator can't test
+# whether that regularizer prevents collapse. See
+# docs/RESULTS.md's "Sections 204/205" entry and docs/OPEN_QUESTIONS.md
+# for the full writeup (now superseded in its causal claim by the
+# correction above -- the collapse is consistent with, but was not
+# actually caused by testing, "ViT propagators collapse," since a
+# genuine mlp-propagator variant was never completed at this operating
+# point until Section 206).
 #
 # User-directed 2026-09-23: "kill 204, and replace the encoder and
 # decoder with the ViT. No attention mask needed please."
