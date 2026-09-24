@@ -1,4 +1,22 @@
 #!/bin/zsh
+# RESULT (2026-09-23): reconstruction fixed (val_recon_final=0.0044,
+# matching Section 201's 0.0028) but propagator chaos dropped ~5.5x:
+# lambda1=0.00327, n_positive=1/20, D_KY=2.19 -- vs Section 201's
+# D_KY=11.94 on the EXACT same recipe (x only). max|z| across 20 ICs
+# actually SHRINKS over the 2000-step rollout (2.66->4.47->...->1.93)
+# rather than sustaining; final-state pairwise spread tops out at 5.07
+# (vs 201's 264) -- the ensemble converges toward each other rather than
+# diverging chaotically. Not a full collapse (D_KY>0), but a real,
+# substantial regression. Working hypothesis (not yet confirmed): x' is
+# fully determined by x (no new information) but is a rougher, harder
+# physical-space rollout-reconstruction target for the aux propagator's
+# L_pred term, possibly pressuring the joint Stage-1 optimization toward
+# a duller/more-damped propagator that still reconstructs x' adequately.
+# Stage 2 deliberately NOT run against this checkpoint -- see
+# docs/RESULTS.md's "Section 207" entry and docs/OPEN_QUESTIONS.md for
+# the full writeup and the proposed follow-up (scope L_pred to x only,
+# not x', to isolate the hypothesis).
+#
 # User-directed 2026-09-23: "can you think of a way of augmenting 201
 # with x' that will work with the vit's assumptions. implement this and
 # run it."

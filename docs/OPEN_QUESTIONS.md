@@ -382,3 +382,26 @@ full finding and citations; unresolved items only, here:
   point -- Section 204's plain-MLP variant (which does not tokenize by
   patch and so may not share this specific failure mode) remains the
   other untried, cheaper thing to finish first.
+- **The channel fix above was built and tested (Section 207,
+  `ViTAutoencoderConfig.n_channels`) and DOES fix reconstruction, but
+  the propagator's chaos dropped ~5.5x anyway (D_KY=2.19 vs. Section
+  201's 11.94 on the exact same recipe, x only).** Not the
+  tokenization/positional-encoding bug diagnosed above -- reconstruction
+  itself converged as well as Section 201's own (`val_recon_final=
+  0.0044` vs. `0.0028`), so the channel-vs-block distinction is
+  confirmed fixed. The new, still-open question: does adding `x'`
+  (fully redundant with `x` -- it's an exact deterministic function,
+  `x'=l96_rhs(x,F)`, not independent information) somehow pressure the
+  JOINT Stage-1 optimization toward a duller, more-damped propagator
+  because `x'` is a harder physical-space rollout-reconstruction target
+  (rougher signal, larger std) for the auxiliary propagator's `L_pred`
+  term? Or is `d_latent=20` (tuned for Section 201's plain 64-dim input)
+  simply a worse fit for this augmented representation regardless of
+  mechanism? Not yet isolated -- see `docs/RESULTS.md`'s Section 207
+  entry for the full writeup and the proposed follow-up experiment
+  (scope `L_pred` to compare only against `x`, not `x'`, to isolate the
+  rollout-reconstruction-pressure hypothesis specifically). Stage 2 was
+  deliberately not run against this checkpoint (D_KY=2.19 is a worse
+  Stage-1 foundation than Section 201's 11.94) -- `--w-spectrum-shape-
+  self`'s actual test (per the original motivating question) remains
+  untested on a genuinely chaotic Stage-1 checkpoint.

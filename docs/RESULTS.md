@@ -1238,6 +1238,81 @@ sequence -- giving the encoder the site-alignment structurally instead
 of asking it to learn x/x' are "the same place, different quantity"
 from scratch.
 
+### Section 207: x/x' as ViT channels fixes reconstruction but propagator chaos drops sharply (2026-09-23)
+
+User-directed: "can you think of a way of augmenting 201 with x' that
+will work with the vit's assumptions. implement this and run it." Built
+`ViTAutoencoderConfig.n_channels` (`ks_latent/models/autoencoder_vit.py`,
+`ks_latent/config.py`) so `patch_size`/`token_window` stay in PHYSICAL
+SITE units and each token becomes `patch_size*n_channels` raw values
+(both channels of `patch_size` consecutive sites, interleaved) instead
+of one long flat sequence -- `n_tokens` shrinks back to exactly Section
+201's own count (8, at N=64/patch_size=8), keeping "adjacent token =
+adjacent physical site" true again. Paired with `lorenz96_dataset.
+generate_trajectory_dataset(derivative_layout="interleaved")`:
+`[x_0,x'_0,x_1,x'_1,...]` site-major/channel-minor, instead of the
+block-concatenated layout Sections 204-206 used. 5 new unit tests
+(`tests/unit/test_autoencoder_vit.py`), including a direct check that
+token 0 is exactly sites `0..patch_size-1`'s both channels interleaved,
+not a channel block. Full 705-test suite passes.
+
+Otherwise an EXACT copy of Section 201's recipe (L96 N=64, F=4.2,
+`--encoder vit --aux-backbone vit --mode history --n-history 6`,
+`pos_encoding=linear`, full attention, same Stage-1 regularizers) --
+the only changes are `--nx 128` (was 64; NX counts raw scalars =
+N*n_channels) and the new `--n-channels 2`.
+
+**Result: reconstruction is fixed, but propagator chaos is far weaker
+than Section 201's:**
+
+| | recon_final | lambda1 | n_positive | D_KY |
+|---|---|---|---|---|
+| Section 201 (x only) | 0.0028 | 0.0184 | 4/20 | 11.94 |
+| Section 207 (x+x' as channels) | 0.0044 | 0.0033 | 1/20 | **2.19** |
+
+Reconstruction converged as well as (arguably better than) Section 201's
+own curve -- confirming the channel-based fix genuinely resolves
+Sections 205/206's badly-converging reconstruction, unlike the
+concatenated-block layout. But the propagator's chaos dropped ~5.5x.
+The rollout trajectory itself shows this directly: `max|z|` across 20
+ICs actually SHRINKS over the 2000-step rollout (2.66 -> 4.47 -> ... ->
+1.93) rather than sustaining, and the final-state pairwise spread tops
+out at 5.07 (vs. Section 201's 264) -- the ensemble is converging
+toward each other, not diverging chaotically. Not a full collapse
+(D_KY=2.19 > 0, lambda1 still positive), but a substantial, real
+regression.
+
+**Working hypothesis, not yet confirmed**: `x'` is fully determined by
+`x` (`x'=l96_rhs(x,F)`, no independent information -- see the section
+header's own note that this augmentation adds no NEW degrees of
+freedom, just a different presentation of the same ones, unlike a
+genuine Takens embedding recovering degrees of freedom that were never
+directly observed). In Stage 1's joint loss, the auxiliary
+propagator's `L_pred` term is judged in PHYSICAL space against both `x`
+and `x'` now; `x'` is a rougher, higher-frequency signal (measured
+directly, Sections 204-206: std~6-12x larger than `x`'s own std),
+making it a harder rollout-reconstruction target. The fixed `d_latent=
+20` budget that gave Section 201 rich dynamics may be getting partly
+spent tracking `x'` faithfully at the expense of chaos: a duller,
+more-damped propagator still reconstructs short-horizon `x'` reasonably
+well, while a genuinely chaotic one would amplify rollout error on the
+harder-to-track derivative channel specifically. Not yet isolated from
+the alternative explanation that `d_latent=20` was tuned (Section 201)
+for a 64-dim raw input and may simply be a worse fit for this
+augmented/redundant representation regardless of the mechanism above.
+
+**Stage 2 deliberately not run against this checkpoint** (matching this
+arc's own "check chaos survives before running Stage 2" discipline,
+Section 194) -- D_KY=2.19 is a worse foundation than Section 201's
+11.94, not a better one, so testing `--w-spectrum-shape-self` (the
+original motivating question) on top of it would not be informative.
+**If this line resumes**: the natural follow-up is Section 201's exact
+recipe with x' as a channel but the propagator's own `L_pred`/rollout
+loss scoped to compare only against `x` (not `x'`) in physical space --
+isolating whether it's specifically the ROLLOUT-RECONSTRUCTION pressure
+on `x'` (this section's hypothesis) or something else about the
+augmented representation driving the chaos loss.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any
