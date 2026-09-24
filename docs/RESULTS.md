@@ -1426,6 +1426,25 @@ reframing was identified -- the more informative, lower-cost next step
 was running Stage 2 on Section 211's EXISTING checkpoint first, to
 test this hypothesis directly before building a new architecture.
 
+**Confirmed: Section 211's Stage 2 continuation (Section 52's exact
+schedule) genuinely works.** `D_KY=23.04, lambda1=0.0913, n_positive=
+13/96` -- squarely inside the true `[21,24]` target and comfortably
+under the `lambda1<=0.1` literature bound. `max|z|` is genuinely
+bounded across the full 2000-step standalone rollout (9.1 -> 9.65 ->
+10.0 -> 9.4 -> 9.3 -> 9.7 -> 9.3, oscillating tightly, never
+diverging) -- a real, settled attractor. Combined with Stage 1's
+excellent reconstruction (recon MSE `4.06e-5`, unchanged by Stage 2
+since the encoder is frozen), **this is the first genuinely validated
+local_field checkpoint in this entire investigation** -- a real
+spatial latent FIELD (`n_sites=32`, `local_channels=3`, `d_latent=96`,
+site-major flattened, gauge-anchored channel 0) with both accurate
+reconstruction and bounded, target-matching chaos, confirmed with the
+same rigor that caught every one of the 19 historical checkpoints'
+problems. This is the foundation for Part 4.3's actual DA localization
+experiment (Stage 0 infrastructure already built --
+`ks_latent/da/localization.py`, `scripts/run_da_pff.py --localizer
+gaspari_cohn`).
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

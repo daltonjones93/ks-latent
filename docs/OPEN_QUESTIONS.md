@@ -446,3 +446,26 @@ full finding and citations; unresolved items only, here:
      the PRIMARY Stage-2 objective (not an add-on regularizer term) --
      inverts the current "MSE first, chaos as an afterthought penalty"
      structure entirely.
+- **RESOLVED (2026-09-24): the KS local_field checkpoint audit above now
+  has a genuinely validated success.** Section 211 (local_field +
+  global `mlp` propagator, Section 52's regularizer recipe) was badly
+  over-chaotic/apparently-unbounded at Stage 1 alone (`D_KY=74.93`).
+  Investigating whether this indicated a real code regression since
+  Section 52 (the user: "why the heck would section 52 have worked and
+  now it doesn't? I find that concerning") found instead that Section
+  52's own Stage 1 was almost certainly ALSO this over-chaotic all
+  along -- nobody had ever run a standalone 2000-step rollout on a
+  Stage-1-only checkpoint before this investigation, only on Stage-2
+  checkpoints. Running Stage 2 (Section 52's exact schedule) on BOTH
+  Section 213 (the Section 52 rerun) and Section 211 (local_field)
+  reproduced genuinely bounded, target-matching chaos in both cases:
+  Section 213 `D_KY=21.55` (vs. historical `21.42`), Section 211
+  `D_KY=23.04` -- both with `max|z|` genuinely bounded across the full
+  standalone rollout, not just a plausible summary number. **This is
+  the first validated local_field checkpoint in the whole investigation**
+  and is the foundation to build Part 4.3's actual DA localization
+  experiment (Stage 1 SEC baseline sweep, Stage 2 Gaspari-Cohn sweep)
+  on. `--w-jacobian-bandedness` (the new D3-based loss, Section 214)
+  was built but not yet tested against this checkpoint or a fresh
+  training run -- still an open, cheap thing to try if a future
+  local_field attempt needs it.
