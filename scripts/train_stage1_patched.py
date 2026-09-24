@@ -1475,6 +1475,23 @@ def main() -> None:
         "--pde-energy-floor-warmup-epochs's own help text for why.",
     )
     parser.add_argument(
+        "--w-prop-magnitude-ceiling", type=float, default=None,
+        help="Override Stage1TrainingConfig.w_prop_magnitude_ceiling (default 0.0, off). "
+        "User-directed (2026-09-24, Section 218: 'I think there's hope for masked_mlp... we "
+        "need to bound the growth of the propagator during stage 1'). Direct response to "
+        "Section 217's masked_mlp standalone rollout diverging to max|z|~1e30: "
+        "ks_latent.training.losses.propagator_rollout_magnitude_ceiling_loss ceilings the raw "
+        "magnitude of aux's own unsupervised rollout -- shares --w-prop-energy-floor's "
+        "rollout (same ramped horizon, same detached starting state) rather than computing a "
+        "second one when both are active.",
+    )
+    parser.add_argument(
+        "--prop-magnitude-ceiling-value", type=float, default=15.0,
+        help="--w-prop-magnitude-ceiling only. Stage1TrainingConfig.prop_magnitude_ceiling_value "
+        "(default 15.0, based on this project's own measured max|z| scale for genuinely bounded "
+        "checkpoints, ~9-10 -- not independently tuned).",
+    )
+    parser.add_argument(
         "--pde-K", type=int, default=None,
         help="--pde-distill only. pde_head's self-FFT truncation (AuxPropagatorConfig."
         "spectral_K under backbone='spectral_pde_raw' -- an internal parameter of "
@@ -2386,6 +2403,12 @@ def main() -> None:
         if args.w_prop_energy_floor is not None:
             smoke_kwargs["w_prop_energy_floor"] = args.w_prop_energy_floor
             smoke_kwargs["prop_energy_floor_gamma"] = args.prop_energy_floor_gamma
+        if args.w_prop_magnitude_ceiling is not None:
+            smoke_kwargs["w_prop_magnitude_ceiling"] = args.w_prop_magnitude_ceiling
+            smoke_kwargs["prop_magnitude_ceiling_value"] = args.prop_magnitude_ceiling_value
+        if args.w_prop_energy_floor is not None or args.w_prop_magnitude_ceiling is not None:
+            # Shared rollout curriculum -- see Stage1TrainingConfig.w_prop_magnitude_ceiling's
+            # docstring for why the floor and ceiling terms reuse the same ramp fields.
             smoke_kwargs["prop_energy_floor_rollout_k"] = args.prop_energy_floor_rollout_k
             smoke_kwargs["prop_energy_floor_warmup_epochs"] = (
                 args.prop_energy_floor_warmup_epochs
@@ -2814,6 +2837,10 @@ def main() -> None:
         if args.w_prop_energy_floor is not None:
             stage1_kwargs["w_prop_energy_floor"] = args.w_prop_energy_floor
             stage1_kwargs["prop_energy_floor_gamma"] = args.prop_energy_floor_gamma
+        if args.w_prop_magnitude_ceiling is not None:
+            stage1_kwargs["w_prop_magnitude_ceiling"] = args.w_prop_magnitude_ceiling
+            stage1_kwargs["prop_magnitude_ceiling_value"] = args.prop_magnitude_ceiling_value
+        if args.w_prop_energy_floor is not None or args.w_prop_magnitude_ceiling is not None:
             stage1_kwargs["prop_energy_floor_rollout_k"] = args.prop_energy_floor_rollout_k
             stage1_kwargs["prop_energy_floor_warmup_epochs"] = (
                 args.prop_energy_floor_warmup_epochs

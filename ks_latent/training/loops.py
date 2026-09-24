@@ -42,6 +42,7 @@ from ks_latent.training.losses import (
     reference_mode_energy,
     reference_temporal_separation,
     spatial_coherence_loss,
+    propagator_rollout_magnitude_ceiling_loss,
     spatial_energy_floor_loss,
     spectral_shape_floor_loss,
     temporal_expansion_floor_loss,
@@ -515,7 +516,7 @@ def train_stage1(
         )
         k_prop_energy_now = (
             k_curriculum(epoch, 1, cfg.prop_energy_floor_rollout_k, cfg.prop_energy_floor_warmup_epochs)
-            if cfg.w_prop_energy_floor > 0
+            if cfg.w_prop_energy_floor > 0 or cfg.w_prop_magnitude_ceiling > 0
             else 0
         )
         batches = index_shuffle_batches(window_index.shape[0], cfg.batch_size)
@@ -594,15 +595,18 @@ def train_stage1(
                         z, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
                     )
                     loss = loss + w_spatial_now * l_spatial
-                if cfg.w_prop_energy_floor > 0:
-                    # See Stage1TrainingConfig.w_prop_energy_floor's
-                    # docstring -- UNSUPERVISED (no real target beyond the
-                    # starting state), applied to aux ITSELF (gradient
-                    # reaches aux's own parameters fully; the starting
-                    # state is detached so the encoder is not pulled by
-                    # this term). k_prop_energy_now is the per-epoch
-                    # RAMPED horizon (prop_energy_floor_warmup_epochs's
-                    # docstring explains why the ramp is not optional).
+                if cfg.w_prop_energy_floor > 0 or cfg.w_prop_magnitude_ceiling > 0:
+                    # See Stage1TrainingConfig.w_prop_energy_floor's/
+                    # w_prop_magnitude_ceiling's docstrings -- UNSUPERVISED
+                    # (no real target beyond the starting state), applied
+                    # to aux ITSELF (gradient reaches aux's own parameters
+                    # fully; the starting state is detached so the encoder
+                    # is not pulled by this term). k_prop_energy_now is the
+                    # per-epoch RAMPED horizon (prop_energy_floor_warmup_
+                    # epochs's docstring explains why the ramp is not
+                    # optional). The SAME rollout is shared between the
+                    # floor and ceiling terms (computed once, not twice)
+                    # whenever either is active.
                     if aux.mode == "history":
                         e_hist_prop = z_hist_in.detach()
                         z_prop_energy_roll = aux.rollout_history(e_hist_prop, k_prop_energy_now)
@@ -610,21 +614,26 @@ def train_stage1(
                         e_start_prop = z_curr_in.detach()
                         z_prop_energy_roll = aux.rollout(e_start_prop, e_start_prop, k_prop_energy_now)
                     if torch.isfinite(z_prop_energy_roll).all():
-                        l_prop_energy_floor = spatial_energy_floor_loss(
-                            z_prop_energy_roll.reshape(-1, z_prop_energy_roll.shape[-1]),
-                            cfg.prop_energy_floor_gamma,
-                        )
-                        loss = loss + cfg.w_prop_energy_floor * l_prop_energy_floor
+                        z_prop_energy_flat = z_prop_energy_roll.reshape(-1, z_prop_energy_roll.shape[-1])
+                        if cfg.w_prop_energy_floor > 0:
+                            l_prop_energy_floor = spatial_energy_floor_loss(
+                                z_prop_energy_flat, cfg.prop_energy_floor_gamma,
+                            )
+                            loss = loss + cfg.w_prop_energy_floor * l_prop_energy_floor
+                        if cfg.w_prop_magnitude_ceiling > 0:
+                            l_prop_magnitude_ceiling = propagator_rollout_magnitude_ceiling_loss(
+                                z_prop_energy_flat, cfg.prop_magnitude_ceiling_value,
+                            )
+                            loss = loss + cfg.w_prop_magnitude_ceiling * l_prop_magnitude_ceiling
                     else:
                         # Same reasoning as w_pde_energy_floor's identical
                         # guard (Section 170's own postmortem) -- skip this
                         # batch's contribution rather than let a transient
                         # explosion poison the whole loss.
                         print(
-                            f"  [stage1] WARNING: aux energy-floor rollout produced "
-                            f"non-finite values at k_prop_energy_now={k_prop_energy_now} "
-                            f"(epoch {epoch}) -- skipping this batch's prop-energy-floor "
-                            f"contribution.",
+                            f"  [stage1] WARNING: aux energy-floor/magnitude-ceiling rollout "
+                            f"produced non-finite values at k_prop_energy_now={k_prop_energy_now} "
+                            f"(epoch {epoch}) -- skipping this batch's contribution.",
                             flush=True,
                         )
                         l_prop_energy_floor = torch.zeros((), device=z_prop_energy_roll.device)
@@ -1645,7 +1654,7 @@ def train_stage2(
         )
         k_prop_energy_now = (
             k_curriculum(epoch, 1, cfg.prop_energy_floor_rollout_k, cfg.prop_energy_floor_warmup_epochs)
-            if cfg.w_prop_energy_floor > 0
+            if cfg.w_prop_energy_floor > 0 or cfg.w_prop_magnitude_ceiling > 0
             else 0
         )
 
@@ -1692,17 +1701,19 @@ def train_stage2(
                     # mode: Var -> 0 as different ICs converge to the same point).
                     _, l_var = decorr_var_loss(z_pred.reshape(-1, d), var_target=varmatch_target)
                     loss = loss + cfg.w_varmatch * l_var
-                if cfg.w_prop_energy_floor > 0:
-                    # See Stage1TrainingConfig.w_prop_energy_floor's
-                    # docstring -- UNSUPERVISED (no real target, no
-                    # window-size constraint), applied to the propagator
-                    # ITSELF via its own ramped (k_prop_energy_now)
-                    # autoregressive rollout from a real detached starting
-                    # state. Unlike w_varmatch above (bounded by k_now,
-                    # i.e. by k_max -- found empirically, Sections 169/171,
-                    # to be blind to a collapse rate too slow to show up
-                    # within that horizon), this term's horizon is
-                    # independent of k_now/k_max entirely.
+                if cfg.w_prop_energy_floor > 0 or cfg.w_prop_magnitude_ceiling > 0:
+                    # See Stage1TrainingConfig.w_prop_energy_floor's/
+                    # w_prop_magnitude_ceiling's docstrings -- UNSUPERVISED
+                    # (no real target, no window-size constraint), applied
+                    # to the propagator ITSELF via its own ramped
+                    # (k_prop_energy_now) autoregressive rollout from a
+                    # real detached starting state. Unlike w_varmatch above
+                    # (bounded by k_now, i.e. by k_max -- found empirically,
+                    # Sections 169/171, to be blind to a collapse rate too
+                    # slow to show up within that horizon), this term's
+                    # horizon is independent of k_now/k_max entirely. The
+                    # SAME rollout is shared between the floor and ceiling
+                    # terms whenever either is active.
                     if propagator.mode == "history":
                         e_hist_prop = windows[:, :n_hist].detach()
                         z_prop_energy_roll = propagator.rollout_history(e_hist_prop, k_prop_energy_now)
@@ -1710,18 +1721,24 @@ def train_stage2(
                         e_start_prop = windows[:, n_hist - 1].detach()
                         z_prop_energy_roll = propagator.rollout(e_start_prop, e_start_prop, k_prop_energy_now)
                     if torch.isfinite(z_prop_energy_roll).all():
-                        l_prop_energy_floor = spatial_energy_floor_loss(
-                            z_prop_energy_roll.reshape(-1, z_prop_energy_roll.shape[-1]),
-                            cfg.prop_energy_floor_gamma,
-                        )
-                        loss = loss + cfg.w_prop_energy_floor * l_prop_energy_floor
+                        z_prop_energy_flat = z_prop_energy_roll.reshape(-1, z_prop_energy_roll.shape[-1])
+                        if cfg.w_prop_energy_floor > 0:
+                            l_prop_energy_floor = spatial_energy_floor_loss(
+                                z_prop_energy_flat, cfg.prop_energy_floor_gamma,
+                            )
+                            loss = loss + cfg.w_prop_energy_floor * l_prop_energy_floor
+                        if cfg.w_prop_magnitude_ceiling > 0:
+                            l_prop_magnitude_ceiling = propagator_rollout_magnitude_ceiling_loss(
+                                z_prop_energy_flat, cfg.prop_magnitude_ceiling_value,
+                            )
+                            loss = loss + cfg.w_prop_magnitude_ceiling * l_prop_magnitude_ceiling
                     else:
                         # Same reasoning as w_pde_energy_floor's identical
                         # guard (Section 170's own postmortem).
                         print(
-                            f"  [stage2] WARNING: propagator energy-floor rollout produced "
-                            f"non-finite values at k_prop_energy_now={k_prop_energy_now} "
-                            f"(epoch {epoch}) -- skipping this batch's prop-energy-floor "
+                            f"  [stage2] WARNING: propagator energy-floor/magnitude-ceiling "
+                            f"rollout produced non-finite values at k_prop_energy_now="
+                            f"{k_prop_energy_now} (epoch {epoch}) -- skipping this batch's "
                             f"contribution.",
                             flush=True,
                         )

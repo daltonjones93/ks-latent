@@ -134,6 +134,46 @@ def spatial_energy_floor_loss(z: torch.Tensor, gamma: float) -> torch.Tensor:
     return torch.relu(gamma - spatial_std).pow(2).mean()
 
 
+def propagator_rollout_magnitude_ceiling_loss(z: torch.Tensor, ceiling: float) -> torch.Tensor:
+    """PER-SAMPLE, per-step magnitude-CEILING anti-blowup regularizer
+    (added 2026-09-24, Section 218, user-directed: "I think there's hope
+    for masked_mlp. I just think we need to bound the growth of the
+    propagator during stage 1"). `L = mean(relu(max|z| - ceiling)^2)`,
+    where `max|z| = z.abs().amax(dim=-1)` is EACH rolled-out state's own
+    peak magnitude across the full latent vector -- the EXACT statistic
+    (`max|z|` across all ICs at each rollout step) this project's own
+    standalone-stability diagnostic has used throughout this
+    investigation to characterize blowup (Sections 211/215/216/217),
+    now turned into a training-time loss rather than only a post-hoc
+    measurement.
+
+    Direct motivation: Section 217's `masked_mlp` propagator diverged to
+    `max|z|~1e30` over a standalone rollout, with nothing in Stage 1's
+    objective ever penalizing that -- `w_prop_energy_floor`
+    (`spatial_energy_floor_loss`) already rolls the aux propagator
+    forward unsupervised during Stage 1 for exactly this kind of
+    self-check, but only FLOORS a different quantity (spread ACROSS the
+    ring, against collapse-to-uniform); nothing ceilings the raw
+    magnitude against runaway growth. This is that missing ceiling,
+    meant to share `w_prop_energy_floor`'s own rollout (same ramped
+    horizon, same detached real starting state, same graceful
+    non-finite handling) rather than duplicate the (expensive,
+    autoregressive) rollout computation -- see `Stage1TrainingConfig.
+    w_prop_magnitude_ceiling`'s docstring for the exact wiring.
+
+    Same one-sided hinge construction as every other floor/ceiling in
+    this module (pays nothing once magnitude is already `<= ceiling`,
+    so it never fights the natural, bounded-but-nonzero scale a
+    genuinely chaotic trajectory needs -- only penalizes exceeding it).
+    Applied to whatever rollout tensor the caller passes (shape
+    `(..., d_latent)`, reduced over the last dim; callers reshape a
+    `(B, k, d)` unsupervised aux-propagator rollout to `(B*k, d)` first,
+    same convention as `spatial_energy_floor_loss`, so every step of the
+    rollout is penalized, not just the final one)."""
+    magnitude = z.abs().amax(dim=-1)
+    return torch.relu(magnitude - ceiling).pow(2).mean()
+
+
 def logdet_barrier_loss(z: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
     """Full-covariance log-det anti-collapse regularizer (added 2026-08-31,
     user-directed -- Phase 2 architecture doc Section 35 option 3b, "more

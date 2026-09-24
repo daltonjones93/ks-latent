@@ -3731,6 +3731,34 @@ class Stage1TrainingConfig:
     prop_energy_floor_gamma: float = 0.4
     prop_energy_floor_rollout_k: int = 30
     prop_energy_floor_warmup_epochs: int = 0
+    # `w_prop_magnitude_ceiling` (added 2026-09-24, Section 218, user-
+    # directed: "I still think there's hope for masked_mlp. I just think
+    # we need to bound the growth of the propagator during stage 1... so
+    # the encoder can try to compensate to avoid this kind of blow up").
+    # Direct response to Section 217's finding: `--aux-backbone
+    # masked_mlp`'s standalone rollout diverged to `max|z|~1e30` with
+    # NOTHING in Stage 1's own objective ever penalizing that -- `w_prop_
+    # energy_floor` above already rolls `aux` forward unsupervised for
+    # exactly this kind of self-check, but only FLOORS a different
+    # quantity (spread across the ring, against collapse); nothing
+    # ceilings the raw magnitude against runaway growth. This is that
+    # missing ceiling: `ks_latent.training.losses.propagator_rollout_
+    # magnitude_ceiling_loss` (`relu(max|z| - ceiling)^2`, the exact
+    # statistic this project's own standalone-stability diagnostic has
+    # used throughout this investigation) applied to the SAME rollout
+    # `w_prop_energy_floor` already computes when EITHER term is active
+    # (`ks_latent.training.loops.train_stage1`'s own wiring shares the
+    # one autoregressive rollout between both losses, rather than
+    # computing it twice) -- same ramped horizon (`prop_energy_floor_
+    # rollout_k`/`prop_energy_floor_warmup_epochs`, reused rather than
+    # duplicated), same detached-starting-state convention (gradient
+    # reaches `aux`'s own parameters, not the encoder). OFF by default
+    # (0.0) -- genuinely new, untested at scale; `ceiling` default
+    # (15.0) is a first attempt based on this project's own measured
+    # `max|z|` scale for genuinely bounded checkpoints (Sections 211/216
+    # settle around `~9-10`), not independently tuned.
+    w_prop_magnitude_ceiling: float = 0.0
+    prop_magnitude_ceiling_value: float = 15.0
     # `stable_linear_lr_factor` (added 2026-09-14, Section 174, user-
     # directed: "we can't make huge steps in nu, otherwise the dynamics
     # will change pretty drastically"): multiplies `lr` for exactly the
@@ -4284,6 +4312,11 @@ class Stage2TrainingConfig:
     prop_energy_floor_gamma: float = 0.4
     prop_energy_floor_rollout_k: int = 30
     prop_energy_floor_warmup_epochs: int = 0
+    # See `Stage1TrainingConfig.w_prop_magnitude_ceiling`'s docstring for
+    # the full rationale (Section 218) -- identical mechanism here,
+    # sharing Stage 2's own `w_prop_energy_floor` rollout the same way.
+    w_prop_magnitude_ceiling: float = 0.0
+    prop_magnitude_ceiling_value: float = 15.0
     # See `Stage1TrainingConfig.stable_linear_lr_factor`'s docstring for
     # the full rationale -- identical mechanism here, applied to
     # `propagator.stable_linear_raw_parameters()` (Stage 2's own primary
