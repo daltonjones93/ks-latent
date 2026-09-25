@@ -161,8 +161,8 @@ def main() -> None:
         "--backbone",
         choices=[
             "mlp", "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
-            "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn",
-            "spectral_pde",
+            "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
+            "spectral_pde", "spectral_pde_raw",
         ], default="mlp",
         help="Propagator architecture (brief §5.2 addendum). 'mlp' (default) = "
         "the brief's residual-MLP body. 'transformer' = tokenized self-attention "
@@ -656,6 +656,56 @@ def main() -> None:
         "--jacobian-diagonal-bound-n-samples", type=int, default=None,
         help="--w-jacobian-diagonal-bound only. Override Stage2TrainingConfig."
         "jacobian_diagonal_bound_n_samples (default 32).",
+    )
+    parser.add_argument(
+        "--w-multistep-growth-ceiling", type=float, default=None,
+        help="mode=markovian only. Override Stage2TrainingConfig.w_multistep_growth_ceiling "
+        "(default 0.0, off). Section 219 companion to --w-jacobian-bandedness/--w-jacobian-"
+        "diagonal-bound (ks_latent.training.losses.propagator_multistep_growth_ceiling_loss): "
+        "one-sided ceiling on the composed k-step Jacobian's top singular value, evaluated "
+        "directly on propagator.step_one, same convention as --w-jacobian-bandedness.",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-k", type=int, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage2TrainingConfig."
+        "multistep_growth_ceiling_k (default 10).",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-value", type=float, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage2TrainingConfig."
+        "multistep_growth_ceiling_value (default 150.0, Section 216-calibrated).",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-n-samples", type=int, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage2TrainingConfig."
+        "multistep_growth_ceiling_n_samples (default 16).",
+    )
+    parser.add_argument(
+        "--w-multistep-growth-barrier", type=float, default=None,
+        help="mode=markovian only. Override Stage2TrainingConfig.w_multistep_growth_barrier "
+        "(default 0.0, off). Section 220 safeguarded log-barrier companion to "
+        "--w-multistep-growth-ceiling (ks_latent.training.losses.propagator_multistep_"
+        "growth_barrier_loss), evaluated directly on propagator.step_one.",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-k", type=int, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage2TrainingConfig."
+        "multistep_growth_barrier_k (default 10).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-ceiling", type=float, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage2TrainingConfig."
+        "multistep_growth_barrier_ceiling (default 75.0).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-epsilon", type=float, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage2TrainingConfig."
+        "multistep_growth_barrier_epsilon (default None -> 0.05*ceiling).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-n-samples", type=int, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage2TrainingConfig."
+        "multistep_growth_barrier_n_samples (default 16).",
     )
     parser.add_argument(
         "--w-spectrum-shape-self", type=float, default=None,
@@ -1323,6 +1373,24 @@ def main() -> None:
             full_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
         if args.jacobian_diagonal_bound_n_samples is not None:
             full_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
+        if args.w_multistep_growth_ceiling is not None:
+            full_kwargs["w_multistep_growth_ceiling"] = args.w_multistep_growth_ceiling
+        if args.multistep_growth_ceiling_k is not None:
+            full_kwargs["multistep_growth_ceiling_k"] = args.multistep_growth_ceiling_k
+        if args.multistep_growth_ceiling_value is not None:
+            full_kwargs["multistep_growth_ceiling_value"] = args.multistep_growth_ceiling_value
+        if args.multistep_growth_ceiling_n_samples is not None:
+            full_kwargs["multistep_growth_ceiling_n_samples"] = args.multistep_growth_ceiling_n_samples
+        if args.w_multistep_growth_barrier is not None:
+            full_kwargs["w_multistep_growth_barrier"] = args.w_multistep_growth_barrier
+        if args.multistep_growth_barrier_k is not None:
+            full_kwargs["multistep_growth_barrier_k"] = args.multistep_growth_barrier_k
+        if args.multistep_growth_barrier_ceiling is not None:
+            full_kwargs["multistep_growth_barrier_ceiling"] = args.multistep_growth_barrier_ceiling
+        if args.multistep_growth_barrier_epsilon is not None:
+            full_kwargs["multistep_growth_barrier_epsilon"] = args.multistep_growth_barrier_epsilon
+        if args.multistep_growth_barrier_n_samples is not None:
+            full_kwargs["multistep_growth_barrier_n_samples"] = args.multistep_growth_barrier_n_samples
         if args.w_spectrum_shape_self is not None:
             full_kwargs["w_spectrum_shape_self"] = args.w_spectrum_shape_self
         if args.spectrum_shape_self_rollout_k is not None:

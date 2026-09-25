@@ -86,6 +86,74 @@ def load_autoencoder_checkpoint(path, device: str | torch.device = "cpu"):
     return ae, ae_cfg, ckpt
 
 
+def load_autoencoder_checkpoint_resized(
+    path, new_n_sites: int, new_NX: int, device: str | torch.device = "cpu",
+):
+    """Phase F2/F3 L-transfer (`docs/steps_4-3.md`, added 2026-09-25,
+    user-directed: "run Phase F and run a larger L without retraining").
+    Loads a `local_field` checkpoint's TRAINED WEIGHTS into a freshly
+    constructed model at a DIFFERENT `n_sites`/`NX` -- this is the literal
+    mechanism the L-transfer claim rests on, not a new architecture.
+
+    Only valid for `encoder_kind == "local_field"` (raises otherwise --
+    no other architecture in this codebase has size-independent weight
+    shapes). Every other `LocalFieldAutoencoderConfig` field
+    (`local_channels`, `site_mix_radius`, `n_site_mix_layers`, `hidden`)
+    is carried over UNCHANGED from the checkpoint -- only `n_sites`/`NX`
+    differ.
+
+    **Why this works with a plain `load_state_dict(strict=True)` and no
+    reshaping/interpolation of any parameter**: every learned layer in
+    `KSAutoencoderLocalField` is either a `Conv1d`/`ConvTranspose1d`
+    whose kernel width is `patch_size` (`enc_patchify`/`dec_unpatchify`)
+    or `2*site_mix_radius+1` (`enc_mix`/`dec_mix`), or a `1x1` conv
+    (`enc_out`/`dec_in`) -- NONE of these shapes depend on `n_sites` or
+    `NX` at all, only on `patch_size` (`= NX/n_sites`, held fixed by
+    construction here -- see below), `site_mix_radius`, and `hidden`.
+    Verified directly before this function was written: loading Section
+    224's exact trained `state_dict` into a `n_sites=32, NX=512` model
+    (double the trained `n_sites=16, NX=256`) succeeds with zero missing
+    or unexpected keys.
+
+    **Caller's responsibility, not checked here beyond the assertion
+    below**: `new_NX / new_n_sites` MUST equal the checkpoint's own
+    trained `patch_size` (`NX/n_sites`) for the loaded conv weights to
+    mean the same thing physically -- e.g. doubling `L` while holding
+    `dx = L/NX` fixed doubles `NX` and (since `patch_size` stays fixed)
+    doubles `n_sites` too, both by the SAME factor. Passing an
+    `new_NX`/`new_n_sites` pair with a different `patch_size` would still
+    load (shapes still match) but would silently change what the
+    patchify convolution sees per site -- not a genuine L-transfer test.
+    """
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    encoder_kind = ckpt.get("encoder_kind", "transformer")
+    if encoder_kind != "local_field":
+        raise ValueError(
+            f"load_autoencoder_checkpoint_resized only supports encoder_kind='local_field' "
+            f"(size-independent weight shapes) -- got {encoder_kind!r}"
+        )
+    old_cfg = ckpt["ae_config"]
+    old_patch_size = old_cfg.NX // old_cfg.n_sites
+    new_patch_size = new_NX // new_n_sites
+    if new_patch_size != old_patch_size:
+        raise ValueError(
+            f"new_NX/new_n_sites={new_NX}/{new_n_sites}={new_patch_size} must equal the "
+            f"checkpoint's own trained patch_size={old_patch_size} ({old_cfg.NX}/{old_cfg.n_sites}) "
+            "for this to be a genuine L-transfer (same physical content per patchify site) -- "
+            "got a different patch_size, which would silently change what each site sees."
+        )
+    from ks_latent.config import LocalFieldAutoencoderConfig
+    new_cfg = LocalFieldAutoencoderConfig(
+        NX=new_NX, n_sites=new_n_sites, local_channels=old_cfg.local_channels,
+        site_mix_radius=old_cfg.site_mix_radius, n_site_mix_layers=old_cfg.n_site_mix_layers,
+        hidden=old_cfg.hidden,
+    )
+    ae = KSAutoencoderLocalField(new_cfg)
+    ae.load_state_dict(ckpt["ae_state_dict"], strict=True)
+    ae = ae.to(device)
+    return ae, new_cfg, ckpt
+
+
 def build_propagator_from_config(prop_cfg):
     """Construct the propagator class matching `prop_cfg`'s type (added
     2026-08-30, same bug class `load_autoencoder_checkpoint` above was
@@ -115,3 +183,58 @@ def load_propagator_checkpoint(path, device: str | torch.device = "cpu"):
     prop.load_state_dict(ckpt["prop_state_dict"])
     prop = prop.to(device)
     return prop, prop_cfg, ckpt
+
+
+def load_propagator_checkpoint_resized(
+    path, new_d_latent: int, new_n_tokens: int, device: str | torch.device = "cpu",
+):
+    """Phase F2/F3 L-transfer companion to `load_autoencoder_checkpoint_
+    resized` (added 2026-09-25) -- loads a `backbone="local_mlp"`
+    propagator's trained weights into a freshly constructed model at a
+    different `d_latent`/`n_tokens`.
+
+    Only `backbone="local_mlp"` is supported (raises otherwise): its
+    layers (`token_embed`/`token_unembed`: `Linear(chunk_size,
+    token_d_model)`/`Linear(token_d_model, chunk_size)`; each
+    `_LocalMixerBlock`'s `Conv1d(token_d_model, token_d_model,
+    kernel=2*attn_window+1)`) all have shapes depending on `chunk_size
+    (= d_latent/n_tokens)`, `token_d_model`, and `attn_window` -- NONE on
+    `n_tokens` itself. Verified directly before this function was
+    written: Section 224's exact trained `state_dict` loads with zero
+    missing/unexpected keys into a `d_latent=96, n_tokens=32` model
+    (double the trained `d_latent=48, n_tokens=16`). `masked_mlp`/
+    `masked_mlp_expand`/`mlp` do NOT have this property (their layers are
+    masked or plain DENSE matrices tied to `d_latent` -- see
+    `docs/RESULTS.md`'s Section 221 writeup for the direct parameter-
+    count measurement that ruled them out) and are explicitly rejected
+    here rather than silently producing a shape-mismatch crash deeper in
+    `load_state_dict`.
+
+    **Caller's responsibility**: `new_d_latent/new_n_tokens` MUST equal
+    the checkpoint's own trained `chunk_size` (`d_latent/n_tokens`), same
+    reasoning as `load_autoencoder_checkpoint_resized`'s `patch_size`
+    check -- `d_latent` should scale with `n_sites` (hence with the
+    autoencoder's own `new_n_sites`) at a FIXED `local_channels`, so
+    `new_n_tokens` should equal the autoencoder's own `new_n_sites`."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    old_cfg = ckpt["prop_config"]
+    if getattr(old_cfg, "backbone", None) != "local_mlp":
+        raise ValueError(
+            f"load_propagator_checkpoint_resized only supports backbone='local_mlp' "
+            f"(verified size-independent weight shapes) -- got {getattr(old_cfg, 'backbone', None)!r}. "
+            "masked_mlp/masked_mlp_expand/mlp have layers tied to d_latent and cannot be resized."
+        )
+    old_chunk_size = old_cfg.d_latent // old_cfg.n_tokens
+    new_chunk_size = new_d_latent // new_n_tokens
+    if new_chunk_size != old_chunk_size:
+        raise ValueError(
+            f"new_d_latent/new_n_tokens={new_d_latent}/{new_n_tokens}={new_chunk_size} must equal "
+            f"the checkpoint's own trained chunk_size={old_chunk_size} "
+            f"({old_cfg.d_latent}/{old_cfg.n_tokens}) for this to be a genuine L-transfer."
+        )
+    import dataclasses
+    new_cfg = dataclasses.replace(old_cfg, d_latent=new_d_latent, n_tokens=new_n_tokens)
+    prop = build_propagator_from_config(new_cfg)
+    prop.load_state_dict(ckpt["prop_state_dict"], strict=True)
+    prop = prop.to(device)
+    return prop, new_cfg, ckpt

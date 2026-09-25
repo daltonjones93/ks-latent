@@ -1028,7 +1028,7 @@ class ViTAutoencoderConfig:
 _VALID_PROPAGATOR_MODES = ("two_step", "markovian", "history")
 _VALID_PROPAGATOR_BACKBONES = (
     "mlp", "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
-    "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn",
+    "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
     "spectral_pde", "spectral_pde_raw",
 )
 
@@ -1040,7 +1040,7 @@ def _validate_propagator_mode_backbone(mode: str, backbone: str) -> None:
         raise ValueError(f"backbone must be one of {_VALID_PROPAGATOR_BACKBONES}, got {backbone!r}")
     if mode == "two_step" and backbone in (
         "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
-        "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn",
+        "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
         "spectral_pde", "spectral_pde_raw",
     ):
         raise ValueError(
@@ -1804,6 +1804,26 @@ class AuxPropagatorConfig:
     # middle layer. Default `3` matches the request this backbone was built
     # for exactly.
     masked_mlp_expand_factor: int = 3
+    # "site_conv" backbone only (added 2026-09-24, Section 222, user-
+    # directed: "could we use a model like the encoder from 221 as a
+    # propagator?"). See `ks_latent.models.propagator._SiteConvDeltaBody`'s
+    # docstring for the full architecture -- reuses `KSAutoencoderLocalField`'s
+    # own circular-Conv1d site-mixing design (mirroring `dec_in`/`enc_mix`/
+    # `dec_mix`) as a `z -> z` map instead of that encoder's `u -> z`
+    # compression. `attn_window` (reused) is the site-mixing radius, same
+    # convention as `local_mlp`/`masked_mlp`/`node`. `site_conv_n_sites`/
+    # `site_conv_local_channels` MUST match the paired `local_field`
+    # encoder's own `n_sites`/`local_channels` exactly (`d_latent ==
+    # n_sites * local_channels`, checked below). Defaults
+    # (`n_sites=32, local_channels=3, hidden=32, n_layers=3`) match
+    # `LocalFieldAutoencoderConfig`'s own defaults -- reusing parameters
+    # already validated by the encoder's own reconstruction quality,
+    # rather than guessing fresh ones for a first attempt at this
+    # backbone as a dynamics model.
+    site_conv_n_sites: int = 32
+    site_conv_local_channels: int = 3
+    site_conv_hidden: int = 32
+    site_conv_n_layers: int = 3
 
     def __post_init__(self):
         _validate_propagator_mode_backbone(self.mode, self.backbone)
@@ -1832,6 +1852,19 @@ class AuxPropagatorConfig:
                 "backbone='local_mlp' requires attn_window to be set (its local-conv kernel "
                 "radius) -- there is no 'global local_mlp'; use 'mlp' or 'fno_vit' for that."
             )
+        if self.backbone == "site_conv":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='site_conv' requires attn_window to be set (its circular site-"
+                    "mixing radius) -- there is no 'global site_conv'."
+                )
+            if self.d_latent != self.site_conv_n_sites * self.site_conv_local_channels:
+                raise ValueError(
+                    f"backbone='site_conv' requires d_latent == site_conv_n_sites * "
+                    f"site_conv_local_channels (got d_latent={self.d_latent!r}, "
+                    f"site_conv_n_sites={self.site_conv_n_sites!r}, "
+                    f"site_conv_local_channels={self.site_conv_local_channels!r})"
+                )
         if self.backbone == "spectral_pde":
             if self.spectral_K is None or self.spectral_N_w is None:
                 raise ValueError(
@@ -2693,6 +2726,15 @@ class PropagatorConfig:
     # middle layer. Default `3` matches the request this backbone was built
     # for exactly.
     masked_mlp_expand_factor: int = 3
+    # "site_conv" backbone only -- see AuxPropagatorConfig.site_conv_n_sites's
+    # docstring and `ks_latent.models.propagator._SiteConvDeltaBody`'s
+    # docstring for the full mechanism. Defaults match
+    # `LocalFieldAutoencoderConfig`'s own (`n_sites=32, local_channels=3,
+    # hidden=32, n_layers=3`).
+    site_conv_n_sites: int = 32
+    site_conv_local_channels: int = 3
+    site_conv_hidden: int = 32
+    site_conv_n_layers: int = 3
 
     def __post_init__(self):
         _validate_propagator_mode_backbone(self.mode, self.backbone)
@@ -2729,6 +2771,19 @@ class PropagatorConfig:
                 "backbone='node' requires attn_window to be set (its local vector field's "
                 "conv kernel radius) -- there is no 'global node'; use 'mlp' or 'fno_vit' for that."
             )
+        if self.backbone == "site_conv":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='site_conv' requires attn_window to be set (its circular site-"
+                    "mixing radius) -- there is no 'global site_conv'."
+                )
+            if self.d_latent != self.site_conv_n_sites * self.site_conv_local_channels:
+                raise ValueError(
+                    f"backbone='site_conv' requires d_latent == site_conv_n_sites * "
+                    f"site_conv_local_channels (got d_latent={self.d_latent!r}, "
+                    f"site_conv_n_sites={self.site_conv_n_sites!r}, "
+                    f"site_conv_local_channels={self.site_conv_local_channels!r})"
+                )
         if self.backbone == "masked_mlp_wide" and self.attn_window is None:
             raise ValueError(
                 "backbone='masked_mlp_wide' requires attn_window to be set (its "
@@ -3026,6 +3081,51 @@ class Stage1TrainingConfig:
     w_jacobian_diagonal_bound: float = 0.0
     jacobian_diagonal_bound_ceiling: float = 1.5
     jacobian_diagonal_bound_n_samples: int = 32
+    # `w_multistep_growth_ceiling` (added 2026-09-24, Section 219, user-
+    # directed follow-up to Section 218's `w_prop_magnitude_ceiling`
+    # (which delayed but did not fix `masked_mlp`'s divergence): "try not
+    # to clamp too hard to preserve the chaotic dynamics ... another way
+    # to do this is just make sure the longer term jacobian after 10
+    # steps doesn't expand too much." See `ks_latent.training.losses.
+    # propagator_multistep_growth_ceiling_loss`'s docstring for the full
+    # mechanism, why this targets the actual local growth MECHANISM
+    # (composed-k-step-Jacobian top singular value) instead of the raw
+    # rollout magnitude `w_prop_magnitude_ceiling` penalizes reactively,
+    # and the Section 216 empirical calibration behind the default
+    # `ceiling=150.0` (roughly 2.3x that known-good checkpoint's own
+    # observed max at k=10, so genuine chaotic variation below that scale
+    # is never penalized). `k=10` matches the user's own suggested
+    # horizon. Evaluated on `aux.step_one`/`propagator.step_one`, same
+    # `mode="markovian"`-only, once-per-epoch/expensive-Jacobian
+    # convention as `w_jacobian_bandedness`/`w_jacobian_diagonal_bound` --
+    # `n_samples` defaults lower (16 vs 32) since composing k steps before
+    # the Jacobian call is k times more expensive per sample. OFF by
+    # default (0.0) -- genuinely new, first real attempt.
+    w_multistep_growth_ceiling: float = 0.0
+    multistep_growth_ceiling_k: int = 10
+    multistep_growth_ceiling_value: float = 150.0
+    multistep_growth_ceiling_n_samples: int = 16
+    # `w_multistep_growth_barrier` (added 2026-09-24, Section 220, user-
+    # directed after Section 219's squared-hinge ceiling still let
+    # `masked_mlp` diverge FASTER than Section 218's baseline: "lower the
+    # 150 bound and penalize this differently. instead of using mse, use
+    # some kind of -log loss such that there is a boundary at wherever we
+    # want to bound the jacobian"). Same composed-k-step-Jacobian
+    # quantity as `w_multistep_growth_ceiling`, but a safeguarded
+    # log-barrier penalty shape instead of a squared hinge -- see
+    # `ks_latent.training.losses.propagator_multistep_growth_barrier_
+    # loss`'s docstring for the full mechanism (repels approach toward
+    # `ceiling`, not just reacts to crossing it) and why `ceiling`
+    # should be set tighter here than the hinge version's own default.
+    # `ceiling=75.0` (~1.13x Section 216's own observed composed-10-step
+    # max of 66.4, tighter than the hinge version's 150.0 since a barrier
+    # need not carry the same headroom). OFF by default (0.0) --
+    # genuinely new, first real attempt.
+    w_multistep_growth_barrier: float = 0.0
+    multistep_growth_barrier_k: int = 10
+    multistep_growth_barrier_ceiling: float = 75.0
+    multistep_growth_barrier_epsilon: float | None = None
+    multistep_growth_barrier_n_samples: int = 16
     # Two anti-collapse regularizers (added 2026-08-31, user-directed --
     # Phase 2 architecture doc Section 35/38, options 3a/3b): both OFF by
     # default (0.0). `ks_latent.training.losses.variance_floor_loss`
@@ -4008,6 +4108,30 @@ class Stage2TrainingConfig:
     w_jacobian_diagonal_bound: float = 0.0
     jacobian_diagonal_bound_ceiling: float = 1.5
     jacobian_diagonal_bound_n_samples: int = 32
+    # Stage-2 analogue of Stage1TrainingConfig.w_multistep_growth_ceiling
+    # -- see that field's docstring and `ks_latent.training.losses.
+    # propagator_multistep_growth_ceiling_loss`'s docstring for the full
+    # mechanism and Section 216 empirical calibration. Evaluated directly
+    # on `propagator.step_one` using real, UNNOISED encoded states, same
+    # convention as this file's own `w_jacobian_bandedness`/`w_jacobian_
+    # diagonal_bound`. `mode="markovian"` only. OFF by default (0.0).
+    w_multistep_growth_ceiling: float = 0.0
+    multistep_growth_ceiling_k: int = 10
+    multistep_growth_ceiling_value: float = 150.0
+    multistep_growth_ceiling_n_samples: int = 16
+    # Stage-2 analogue of Stage1TrainingConfig.w_multistep_growth_barrier
+    # -- see that field's docstring and `ks_latent.training.losses.
+    # propagator_multistep_growth_barrier_loss`'s docstring for the full
+    # mechanism (Section 220: safeguarded log-barrier on the composed
+    # k-step Jacobian's top singular value). Evaluated directly on
+    # `propagator.step_one` using real, UNNOISED encoded states, same
+    # convention as this file's own `w_jacobian_bandedness`. `mode=
+    # "markovian"` only. OFF by default (0.0).
+    w_multistep_growth_barrier: float = 0.0
+    multistep_growth_barrier_k: int = 10
+    multistep_growth_barrier_ceiling: float = 75.0
+    multistep_growth_barrier_epsilon: float | None = None
+    multistep_growth_barrier_n_samples: int = 16
     # `encoder_kind="spectral_field"`/`backbone="spectral_pde"` only (added
     # 2026-09-08, docs/sine_transform_pde_plan.md, user-directed after
     # visualizing Section 104's D_KY=22 result: "it seems like the next

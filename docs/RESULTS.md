@@ -1565,6 +1565,601 @@ of any D3 loss -- means Phase F needs a genuinely stable
 translation-equivariant propagator found first, not just a reuse of
 this exact configuration.
 
+### Section 218: bounding propagator growth + longer Stage-1 rollout delays but does not fix `masked_mlp`'s divergence (2026-09-24)
+
+User-directed: "weird. I still think there's hope for masked_mlp. I
+just think we need to bound the growth of the propagator during stage
+1 and we need more rollout of the propagator in stage 1, so the
+encoder can try to compensate to avoid this kind of blow up." Two new
+levers, both implemented and combined: (1) `--w-prop-magnitude-ceiling`
+(new `propagator_rollout_magnitude_ceiling_loss`, ceiling=15.0 -- this
+project's own measured bounded-checkpoint scale), which ceilings the
+raw `max|z|` of the aux propagator's own unsupervised rollout during
+Stage 1 (gradient reaches only the aux propagator's own parameters,
+not the encoder); (2) `--multistep --k-pred-max 8`, ramping the aux
+propagator's `L_pred` rollout horizon from 2 to 8 steps (gradient DOES
+reach the encoder here, since `L_pred` decodes back to physical space).
+Otherwise identical to Section 217 (`local_field` + `masked_mlp`,
+`attn_window=18`, no D3 loss).
+
+**Stage 1 still diverged, and the raw D3 number was actively
+misleading.** `max|z|` reached `497` by t=100 (faster than 217's more
+gradual climb) and `nan` by t=1500. Raw bandedness was the highest
+ever measured (`0.6916`) -- but `p_value=1.0`, i.e. *less* banded than
+essentially every random permutation. Under dynamics spanning `10^0`
+to `10^30`, the measured Jacobian is dominated by numerical blow-up
+artifacts, not genuine structure, which corrupts the null-distribution
+comparison entirely. **Lesson recorded for future diagnostic use: a
+high raw bandedness score is meaningless without checking its p-value,
+especially on a checkpoint that isn't already known to be bounded.**
+
+**Stage 2 showed real, partial improvement over 217, but still could
+not produce a usable checkpoint.** Held genuinely bounded near the
+project's own target scale (`max|z|` 11.0 -> 17.2) through t=300 --
+versus Section 217's Stage 2, which was already unraveling by that
+point and hit NaN by step ~350. This time the runaway is slower:
+`max|z|` climbs to `616` by t=600, `3.0e5` by t=1000, and `2.0e11` by
+t=1999. The direct Lyapunov computation still fails (reference
+trajectory escapes the bound). D3 bandedness = `0.3661`, `p=0.0000` --
+genuinely significant, and the highest *significant* D3 of any
+Stage-2-validated checkpoint this session (211: 0.1883; 216: 0.2146;
+217: 0.2970 but on an already-NaN'd checkpoint) -- but again on a
+checkpoint that ultimately diverges and cannot be considered validated.
+
+**Verdict: three independent regularizer attempts at stabilizing
+`masked_mlp` (215's bandedness loss, 216's diagonal-bound, 218's
+magnitude-ceiling + multistep) have now all failed to produce a stable
+standalone rollout.** Each failed differently -- 215 made Stage-1-only
+chaos worse, 216 had no effect on divergence despite perfect ceiling
+compliance, 218 delayed divergence onset and pushed D3 higher but
+still ultimately diverged -- but none crossed the bar Section 211/216
+already cleared with no special-casing. Combined with all 8 historical
+`masked_mlp_expand` checkpoints also diverging, this is now treated as
+a real architectural instability in the `masked_mlp` family, not
+something fixable with a loss term alone. `masked_mlp` is dropped as a
+propagator candidate; Section 216 (global `mlp`) remains the frozen
+`LOCAL_AE`/`LOCAL_PROP`, and Phase F of `docs/steps_4-3.md`
+(L-transfer) will need `local_mlp`/`cnn`/`node` instead.
+
+### Phase B (`docs/steps_4-3.md`): DA pipeline sanity check reveals a real asymmetry between the global and local checkpoints (2026-09-24)
+
+Before trusting any `N_ens` sweep (Phase C/D), swept `--n-prop-steps`
+(and, for the local checkpoint, `--n-ensemble` too) with
+`--localizer none` on both frozen checkpoints (`GLOBAL_AE`/`GLOBAL_PROP`
+= Section 213, `LOCAL_AE`/`LOCAL_PROP` = Section 216) to confirm the
+PFF pipeline produces a sane, bounded DA effect before spending compute
+on the real sweeps.
+
+**`GLOBAL_AE`/`GLOBAL_PROP` (`d_latent=44`): clean pass.** At
+`n_ensemble=32`, `n_prop_steps=5` gives `calibration_spread_over_rmse
+=0.42` and `skill_free_over_da=2.73` -- both bars cleared easily.
+Larger `n_prop_steps` (8, 12) only hurts skill as `rmse_free` saturates
+near the attractor's natural scale.
+
+**`LOCAL_AE`/`LOCAL_PROP` (`d_latent=96`): needs a much bigger ensemble
+for even a modest effect, and never matches the global checkpoint's
+margin.** At `n_ensemble=32` (matching the global setting), skill was
+1.0-1.4x and at `n_prop_steps=5` DA actively made things WORSE
+(`skill=0.44`). Swept `n_ensemble` in `{32,64,128,256}` x
+`n_prop_steps` in `{1,3,5,6,8}` (11 runs total). Best point:
+`n_ensemble=128, n_prop_steps=6` -- `calibration=0.43` (in range),
+`skill=1.64` (real, but below the `>2` bar the global checkpoint
+cleared). Notably NOT monotonic in ensemble size: `n_ensemble=64` was
+inconsistent between nearby settings (1.47x at nps=5, 0.51x at nps=6),
+and `n_ensemble=256` at nps=5 collapsed catastrophically (0.28x)
+despite being twice the ensemble size that worked at 128 -- ruling out
+"just use a bigger ensemble" as a clean fix.
+
+**Read carefully: this is not (yet) a failure of the local-field
+approach -- it is the expected shape of the problem Part 4.3 exists to
+solve.** The local checkpoint's raw latent dimension (`d=96`) is more
+than double the global one's (`d=44`), so an UNlocalized ensemble
+filter needing a much larger `N_ens` to even approximate a well-
+conditioned prior covariance is exactly the failure mode Gaspari-Cohn
+localization (Phase D) is supposed to fix -- and exactly why the
+pre-registered decision rule requires beating SEC, not just beating
+`--localizer none`. Chosen operating points
+(`n_ensemble=32/n_prop_steps=5` global; `n_ensemble=128/n_prop_steps=6`
+local) are now fixed inputs to Phase C/D's `N_ens` sweeps, per
+`docs/steps_4-3.md` Phase B3.
+
+### Section 219: narrowing attn_window + a composed-10-step-Jacobian growth ceiling still fails, and fails faster than Section 218 (2026-09-24)
+
+User-directed follow-up, after Section 218's partial-but-incomplete
+result: "any ideas to make the masked mlp work?" -> proposed spectral
+normalization (already exists as `nonexpansive`, but judged too hard a
+per-layer clamp -- would force the whole map non-expansive, i.e. zero
+tolerance for any local chaotic stretching at all) or narrowing
+`attn_window` as a cheap complementary lever. User's actual direction:
+"try not to clamp too hard to preserve the chaotic dynamics (another
+way to do this is just make sure the longer term jacobian after 10
+steps doesn't expand too much.) Do this in conjunction with narrowing
+attn_window."
+
+Two new levers, REPLACING Section 218's raw-magnitude rollout ceiling:
+(1) new `propagator_multistep_growth_ceiling_loss` -- a ONE-SIDED
+ceiling on the composed 10-step Jacobian's top singular value (`d
+z_{n+10}/d z_n`'s worst-case amplification factor), evaluated at real
+encoded states rather than a drifting rollout, so it can apply
+pressure before a trajectory gets large enough for a magnitude ceiling
+to notice. Calibrated directly against Section 216 (the frozen,
+genuinely bounded checkpoint): composed 10-step top singular value at
+100 real states has median 28.6, p95 54.1, max 66.4 -- default
+ceiling=150.0 sits ~2.3x above that observed max, so genuine chaotic
+variation at a known-good checkpoint's own scale should rarely be
+penalized. (2) `--attn-window 9` (down from 217/218's 18) --
+`attn_window` is a radius in raw `d_latent=96` INDEX units for
+`masked_mlp`'s circular-band mask, roughly `window/local_channels`
+sites; 18 -> ~6 sites, 9 -> ~3 sites, matching this project's own
+correlation-length-based receptive-field reasoning (~2.85 sites at
+this `n_sites`/`L`). `--multistep --k-pred-max 8` kept from 218
+(independent mechanism, not implicated in either prior failure).
+
+**Result: still diverges, and Stage 2 failed FASTER than Section
+218's did.** Stage 1: `max|z|` already `248.6` by t=50, `26,169` by
+t=100, NaN by t=1000 -- faster onset than 217's or 218's own Stage-1
+divergence. Stage 2: NaN by step 254 (`first non-finite step: 254`) --
+noticeably earlier than 218's Stage 2, which held bounded through
+t=300 and only diverged between t=600-1000.
+
+**D3 bandedness kept climbing -- now the highest yet at both stages
+(Stage 1: `0.7661`, p=0.0000, genuinely significant this time, unlike
+218's spurious `p=1.0`; Stage 2: `0.4052`, p=0.0000) -- but stability
+kept getting WORSE, not better, across the same sequence.** Full
+trend across all four `masked_mlp` attempts (Stage-2 D3, all
+significant except noted): 217 `0.2970`/NaN by ~350; 218
+`0.3661`/NaN by ~600-1000; 219 `0.4052`/NaN by 254. Narrowing the
+architectural window (which mechanically forces MORE structural
+bandedness, independent of any loss) combined with a growth ceiling
+did not break this pattern -- if anything, constraining the map to be
+more local while also penalizing net growth seems to concentrate
+whatever instability remains into a faster blowup, echoing Section
+215/216's original finding for the global-`mlp` case (pure bandedness
+pressure, with nothing controlling per-site magnitude, makes things
+worse) -- except here a magnitude-style control (the growth ceiling)
+WAS present and still didn't prevent it.
+
+**Verdict: four independent, differently-motivated stabilization
+attempts on `masked_mlp` (215-style bandedness, 216-style diagonal
+control transplanted conceptually, 218's magnitude-ceiling +
+multistep, 219's growth-ceiling + narrowed window) have now all
+failed, each producing HIGHER bandedness and WORSE-or-equal stability
+than the last.** Combined with all 8 historical `masked_mlp_expand`
+checkpoints also diverging, this is treated as conclusive: `masked_mlp`
+is not salvageable via loss-shaping or window-narrowing alone, and
+further attempts in this same family are not recommended without a
+genuinely different mechanism (e.g. a hard per-layer spectral-norm
+clamp via the existing but much stricter `nonexpansive` flag, at the
+cost of suppressing real local chaos -- not yet tried, and judged
+likely too restrictive on its own priors). Section 216 (global `mlp`)
+remains the frozen `LOCAL_AE`/`LOCAL_PROP`; Phase F's L-transfer
+candidate list is `local_mlp`/`cnn`/`node`, not any `masked_mlp`
+variant.
+
+### Section 221: `masked_mlp_expand` at site radius 4 FINALLY produces a genuinely validated, translation-equivariant local propagator (2026-09-24)
+
+After Section 220's mixed result, user asked what `attn_window` was set
+to, then: "right, so let's expand the physical site radius to 4, let's
+use the other masked mlp that expands in the second layer, and let's
+try running 211 again. please leave the log penalty out of phase 2" --
+i.e. `--aux-backbone masked_mlp_expand` (Section 128's three-layer
+expand/stay-wide/contract variant, distinct from the plain
+dimension-preserving `masked_mlp` tried in 217-220), `--attn-window 4`
+(verified empirically via a direct Jacobian receptive-field measurement
+to be a CLEAN 1:1 site-radius mapping for this backbone specifically --
+unlike plain `masked_mlp`, where `window = 3 * site_radius` via the
+`local_channels=3` scaling), Section 211/217's plain baseline
+regularizers, `--w-multistep-growth-barrier` kept in STAGE 1 ONLY
+(k=10, ceiling=75.0 -- Section 220's log-barrier loss, which produced
+the calmest Stage-1 trajectory of any prior masked_mlp attempt),
+DROPPED from Stage 2 (Section 220 found it caused catastrophic
+Stage-2 instability there).
+
+**Stage 1 still diverged** (`max|z|` `147` by t=100, astronomical by
+t=1999, D3=`0.7579`/p=0.0000 -- structurally significant but on a
+diverging checkpoint) -- consistent with every masked_mlp Stage-1
+result this session.
+
+**Stage 2, unlike every `masked_mlp`/`masked_mlp_expand` attempt
+before it, converged to a genuinely bounded, validated checkpoint.**
+`max|z|` stayed in a tight `8.8-9.6` band across the ENTIRE 2000-step
+standalone rollout (t=0 through t=1999) -- no drift, no blowup. The
+direct Lyapunov computation SUCCEEDED for the first time on any
+`masked_mlp`-family checkpoint: `lambda1=0.0911`, `n_positive=13/96`,
+**`D_KY=22.68`** -- squarely inside the `[21,24]` replication target.
+`best_val_kmax_mse=0.255` during training (worse than 211/216's
+`0.02-0.09`, comparable to Section 217's own troubled `0.34`, but with
+occasional large loss spikes during Stage 2 -- e.g. epoch 273:
+loss=1435 -- that did not corrupt the best-checkpoint tracking or the
+final standalone result).
+
+**D3 bandedness = `0.3916`, p=0.0000 -- the highest of any VALIDATED
+(non-diverging) checkpoint this entire investigation**, beating
+Section 216's `0.2146` and Section 211's `0.1883` by a wide margin,
+while also being the first `masked_mlp`-family checkpoint to actually
+reach a bounded attractor.
+
+**Correction (2026-09-24, caught the same day while discussing Section
+222): `masked_mlp_expand` does NOT satisfy Phase F's L-transfer
+requirement -- an earlier version of this entry claimed otherwise and
+was wrong.** `masked_mlp`/`masked_mlp_expand`'s layers are
+`MaskedLinear`/`MaskedLinearRect` -- a fixed-size DENSE matrix with a
+mask zeroing far-apart entries, not a real weight-shared convolution.
+The mask restricts WHICH entries can be nonzero; it does not tie
+different (i,j) pairs at the same relative offset to a SHARED
+parameter the way a genuine conv kernel does. Verified directly:
+`masked_mlp_expand`'s total parameter count QUADRUPLES from 138,912 to
+554,304 when `n_sites` doubles (32->64, same `attn_window`/
+`expand_factor`) -- its weight tensors are tied to `d_latent`, exactly
+the same limitation Section 216's global `mlp` has. A checkpoint
+trained at `L=100` cannot even be LOADED at `L=200` (wrong shape). So
+Section 221 is a strong candidate for Phase A alone (best D3 of any
+validated checkpoint), but does NOT resolve Phase F's blocking gap --
+`local_mlp`/`cnn`/`site_conv` (genuine `Conv1d`-based backbones, whose
+parameter count is verified identical regardless of `n_sites`) remain
+the only real L-transfer candidates.
+
+**Open methodological note:** five straight `masked_mlp`/
+`masked_mlp_expand` attempts (217-221) all showed genuinely significant
+D3 bandedness even while mostly diverging, and this is the SIXTH
+attempt (counting 215/216's global-`mlp` bandedness work) where higher
+architectural/regularizer-driven locality correlated with the run that
+finally stabilized -- suggestive, but not by itself a controlled
+comparison (site radius, backbone family, and the Stage-1 growth
+barrier all changed together between 220 and 221). Worth isolating
+which change mattered most if this checkpoint gets used seriously.
+
+### Section 222/223: `site_conv` and `local_mlp` -- a new backbone reusing the encoder's own architecture, and the FIRST checkpoint to satisfy Phase A and Phase F's L-transfer requirement at once (2026-09-24)
+
+User: "could we use a model like the encoder from 221 as a propagator?
+I've never thought of trying that." Built `backbone="site_conv"`
+(`_SiteConvDeltaBody`, `ks_latent/models/propagator.py`): reuses
+`KSAutoencoderLocalField`'s own circular-`Conv1d` site-mixing design
+almost verbatim (1x1 conv `local_channels->H`, `n_layers` circular
+convs mixing across SITES, 1x1 conv `H->local_channels`, `bias=False`
+on the output projection -- deliberately matching the encoder's own
+documented fix for uncontrolled mean drift) as a dimension-preserving
+`z->z` map, instead of a masked dense layer (`masked_mlp*`) or a
+flat-sequence conv (the existing, untried `backbone="cnn"`). `H=32`,
+`n_layers=3`, radius (reuses `attn_window`) default to
+`LocalFieldAutoencoderConfig`'s own already-validated values. 11 new
+unit tests (shape, identity-at-init, no-bias, receptive field via
+direct Jacobian measurement, circular wraparound, config validation)
+all pass; found and fixed a real pre-existing bug along the way
+(`train_stage1_patched.py`'s `--aux-backbone` choices list was missing
+`node`/`cnn` entirely -- unreachable via CLI despite existing in the
+model code; `train_stage2_patched.py`'s `--backbone` list was missing
+`spectral_pde_raw`).
+
+**Section 222 (`site_conv`, clean Section 211/217 baseline recipe --
+no D3 loss, no growth barrier, plain k_pred=2): Stage 2 converged
+beautifully (`best_val_kmax_mse=0.076`, among the best Stage-2 numbers
+this session) and the standalone rollout stayed genuinely bounded for
+600 steps** (`max|z|` `5.2-6.8`) **before diverging catastrophically
+between t=600 and t=1000** (`1.8e31`), NaN by t=1500. D3=`0.284`
+(p=0.0000, beats Section 216's `0.2146`). Not a validated checkpoint
+under this project's 2000-step standard, but the best short/medium-
+horizon behavior of any weight-shared candidate tried -- a real
+candidate for direct DA testing (short `n_prop_steps`) given the
+"DA only needs a few-step forecast" reframing discussed the same day
+(see below).
+
+User: "weird. can we try the setup from 222 with the local mlp too?
+just for fun" -- same clean-baseline recipe, `backbone="local_mlp"`
+(pre-existing, never previously validated), `--aux-n-tokens 32`
+(=`n_sites`, aligning tokens exactly with the encoder's own sites,
+`chunk_size=3=local_channels`), `--attn-window 3`. Verified empirically
+(not assumed) that `train_stage1_patched.py`'s `--profile full` path
+hardcodes `token_n_layers=2` for the aux/full propagator (a pre-
+existing, not-CLI-exposed constant), so the effective receptive field
+is `token_n_layers * attn_window = 2*3 = 6` sites -- matched to Section
+222's own `n_layers*radius = 3*2 = 6`, confirmed via a direct Jacobian
+receptive-field measurement before launch.
+
+**Section 223 (`local_mlp`): SUCCESS on every axis measured.** Stage 1
+ALONE stayed bounded across the full 2000-step rollout (`max|z|`
+`4.8-6.2`) -- the first time any local-field propagator's Stage-1-only
+checkpoint has stayed bounded long enough for the Lyapunov computation
+to even succeed this session (`D_KY=16.40`, below target but genuinely
+computable). **Stage 2 stayed bounded the ENTIRE 2000 steps**
+(`max|z|` `7.0-7.9`), `lambda1=0.101`, `n_positive=13/96`,
+**`D_KY=22.66`** -- squarely inside `[21,24]`. `best_val_kmax_mse
+=0.042`, in the same range as 211/216's own best numbers. D3=`0.309`
+(p=0.0000), beating Section 216's `0.2146`.
+
+**Verified structurally L-transferable** (same check applied to
+Section 221's `masked_mlp_expand`, which FAILED it): total parameter
+count is IDENTICAL (31,651 = 31,651) at `n_sites=32` vs. `n_sites=64`
+(`n_tokens` scaled with `n_sites`, `chunk_size` held fixed) -- a
+genuine weight-shared `Conv1d`-based architecture, not a masked dense
+matrix.
+
+**This is the first checkpoint this entire investigation to satisfy
+BOTH Phase A (bounded, `D_KY` in range, competitive D3) AND Phase F's
+structural L-transfer requirement AT ONCE, with no compromise between
+the two.** Candidate to become the new frozen `LOCAL_AE`/`LOCAL_PROP`
+AND `TRANSFER_PROP` simultaneously, pending full Gate 3/4 verification
+(only the lighter D3-only check has been run) and the actual F2/F3
+L-transfer tests (run at a larger `L` with zero retraining -- not yet
+attempted for any candidate).
+
+### Section 224: `d_latent=48` (n_sites=16, local_channels=3) beats `d_latent=96` on every axis measured (2026-09-24/25)
+
+After explaining why `local_field`'s `d_latent=96` isn't trying to match
+the global-vector design's `44` (it's sized from a LOCAL dof-density
+argument -- `dof/site ~= 0.226*h`, `h=L/n_sites` -- not the global
+attractor dimension), user asked "tell me if you think it might work
+for d_latent=50," then "run 224 with d_latent=48" (50 isn't reachable:
+`NX=256=2^8` forces `n_sites` to be a power of 2, so no integer
+`local_channels` gives exactly 50 -- `48` = `n_sites=16, local_channels=3`
+is the nearest clean value). Otherwise an exact repeat of Section 223's
+recipe (`local_mlp` propagator, tokens aligned to sites, `--attn-window
+3` kept unchanged in SITE units -- so now a larger fraction of a smaller
+ring / wider physical extent than in 223, not compensated for
+deliberately, to keep this a single-variable `d_latent` test).
+
+**Result: `d_latent=48` matched or beat `d_latent=96` on every metric.**
+Stage 1 ALONE bounded even more tightly than 223's (`max|z|` `4.5->7.7`,
+plateaus, vs. 223's own `4.8-6.2`), `D_KY=10.47` (below target but
+genuinely bounded/computable). **Stage 2 bounded across the FULL
+2000-step rollout in an even tighter band** (`max|z|` `4.0-4.7`, vs.
+223's `7.0-9.1`), `lambda1=0.088`, `n_positive=12/48`, `D_KY=22.14`
+(in `[21,24]`, comparable to 223's `22.66`). `best_val_kmax_mse
+=0.0161` -- BETTER than 223's own `0.042`, the best Stage-2 training
+convergence of any local-field checkpoint this session. D3
+bandedness=`0.4313` (p=0.0000) -- HIGHER than 223's `0.3091`, the
+highest of any validated (non-diverging) checkpoint this entire
+investigation.
+
+**Reading:** halving `d_latent` (96->48) did not starve the model of
+capacity -- `n_positive` stayed almost identical (12/48 vs 13/96,
+i.e. nearly the same EFFECTIVE chaotic dimensionality), just packed
+into half the raw coordinates, and every measured quality signal
+improved. This suggests `d_latent=96` carried more redundant/slack
+coordinate budget than the dynamics actually needed, and a tighter
+budget may have forced a less collapsible, more efficiently-used
+representation rather than hurting it. Not yet known how far this
+trend continues -- worth testing progressively smaller `d_latent`
+(e.g. `n_sites=16/local_channels=2=32`, approaching the brief's own
+`dof/site` floor more closely) to find where quality actually starts
+to degrade, rather than assuming `48` is already the efficient
+frontier.
+
+### Phase A/B re-verification with Section 224 as the frozen `LOCAL_AE`/`LOCAL_PROP`/`TRANSFER_PROP` (2026-09-25)
+
+`LOCAL_AE`/`LOCAL_PROP` formally reset from Section 216 to **Section
+224** (`local_field`, `n_sites=16, local_channels=3, d_latent=48` +
+`local_mlp` propagator) -- see Section 224's own writeup above for the
+full comparison against 216/223. Also serves as `TRANSFER_PROP` for
+Phase F, since `local_mlp` is verified structurally L-transferable.
+
+Re-ran Phase B2's DA sanity check (Section 216's original numbers are
+now historical, not operative). **Section 224 DAs decisively better
+than Section 216 ever did, even without any localization**:
+`n_ensemble=64, n_prop_steps=3` gives `calibration_spread_over_rmse
+=0.467` (in the `[0.4,1.5]` target) and `skill_free_over_da=3.27` --
+clears both bars cleanly, and actually BEATS `GLOBAL_AE`/`GLOBAL_PROP`'s
+own best result (`skill=2.73`). Compare Section 216's best-ever result
+under the same test: `skill=1.64`, never clearing the `>2` bar at any
+ensemble size tried. Chosen operating point for Phase C/D:
+`n_ensemble=64, n_prop_steps=3`.
+
+### Part 4.3 Phases C/D/E: the actual decision-rule experiment, run for the first time (2026-09-25)
+
+With `GLOBAL_AE`/`GLOBAL_PROP` (Section 213) and the newly-frozen
+`LOCAL_AE`/`LOCAL_PROP` (Section 224) both validated and DA-sanity-
+checked, ran the actual Part 4.3 experiment: Phase 7's SEC baseline
+(never run before this session) and Phase 13's core Gaspari-Cohn
+sweep, then applied the pre-registered decision rule.
+
+**Infrastructure built:** `scripts/run_da_ensemble_sweep.py` (Phase
+C1) -- loops `run_da_pff.py` over `--n-ensemble` x `--localizer`,
+collecting results into one CSV; records a per-combination `FAILED`
+row (with the error message) rather than aborting the whole sweep or
+silently dropping it, when an individual run crashes (a genuinely
+singular ensemble covariance at very small `N_ens` is itself an
+informative result, not a harness bug). `scripts/check_4_3_decision_
+rule.py` (Phase E1) -- mechanically applies `rmse_gaspari_cohn[N] <=
+rmse_sec[N]` per `N_ens`, printing PASS/FAIL/SKIPPED per row, not just
+one overall verdict; 8 unit tests (all-pass, all-fail, mixed,
+exact-tie-counts-as-pass, failed-run-skipped, CSV round-trip) pass
+before being trusted on real data, per that phase's own explicit
+requirement.
+
+**Phase D1 (one-cycle taper sanity check):** confirmed directly on
+Section 224's own real forecast covariance -- at every `gc_c` tested,
+far-apart site pairs (circular site distance beyond the support radius
+`2*gc_c`) are EXACTLY zero after tapering (not just small), near
+pairs retain real covariance structure (`max~0.0144`).
+
+**Phase D2 (radius selection):** swept `gc_c` in `{1.0,1.5,2.0,3.0,4.0,5.0}`
+at `n_ensemble=64`. Cross-checked against Phase 2's own measured
+light-cone bound (`docs.RESULTS.md`'s Gate 2 entry): at `dt_snap=1.0`
+(stride 20), the light-cone term is negligible (~0.2 sites) versus the
+encoder/propagator's own receptive field (6 sites), so
+`minimum_localization_radius = 6` sites, requiring `gc_c >= 3.0`
+(support radius `2*gc_c >= 6`). This matched the empirical result
+cleanly: `gc_c in {3.0,4.0,5.0}` (at or above the theoretical floor)
+all clearly beat the no-localization baseline; `gc_c=1.0` (well below
+the floor) did not. Chose `gc_c=3.0` -- the theoretical floor exactly,
+and the best raw RMSE improvement.
+
+**Phase C2 (SEC sweep on GLOBAL, Section 213) and D3 (Gaspari-Cohn
+sweep on LOCAL, Section 224):** both run over
+`N_ens in {8,16,32,64,128,256}`, same `n_prop_steps=5` (Phase C's own
+chosen value, used for both to keep the cross-comparison fair) and
+`n_cycles=40`. Full tables in
+`artifacts/da_sweep_phaseC2_global.csv`/`artifacts/da_sweep_
+phaseD3_local224.csv`; plotted in
+`docs/figures/phase4_3_decision_rule_sweep.png`.
+
+| N_ens | GLOBAL, none | GLOBAL+SEC | LOCAL(224), none | LOCAL(224)+GC(3.0) |
+|---|---|---|---|---|
+| 8 | 2.550 | 0.506 | 1.649 | 0.530 |
+| 16 | 1.663 | 0.422 | 1.506 | 0.435 |
+| 32 | 0.442 | 0.372 | 0.772 | 0.421 |
+| 64 | 0.354 | 0.342 | 0.448 | 0.406 |
+| 128 | 0.346 | 0.329 | 0.406 | 0.405 |
+| 256 | 0.330 | 0.330 | 0.377 | 0.405 |
+
+**Phase E1 (decision rule applied mechanically): 0 PASS, 6 FAIL --
+local-field + Gaspari-Cohn does NOT beat SEC on the global latent at
+any tested ensemble size.** SEC's `rmse_da` is consistently 5-25%
+lower than Gaspari-Cohn's across the whole sweep, and the gap widens
+at large `N_ens` (SEC keeps improving toward `0.33`; Gaspari-Cohn
+plateaus around `0.40-0.41`, and is actually slightly WORSE than
+no-localization at `N_ens=256` -- over-tapering once the ensemble is
+already large enough to estimate `B` well without help).
+
+**This is a negative result under the strict pre-registered rule, but
+not an uninformative one, per Part 4.3's own pre-registered framing:**
+
+1. **Gaspari-Cohn genuinely helps the local latent over no
+   localization** -- dramatically at small `N_ens` (`N=8`: `1.649 ->
+   0.530`; `N=32`: `0.772 -> 0.421`), confirming the localization
+   mechanism itself works correctly (matches Phase D1's direct taper
+   check) and is not simply inert.
+2. **SEC is just a strong baseline here, as pre-registered it should
+   be** -- the whole point of testing against SEC rather than
+   no-localization was that SEC is a real, competitive method
+   (Anderson 2012), not a strawman; this result is exactly what makes
+   a future PASS (if one is ever found, e.g. at a different `gc_c`,
+   `N_prop_steps`, or observation density) credible rather than
+   trivial.
+3. **The L-transfer property remains the sole surviving argument for
+   the local-field approach** -- exactly as Part 4.3's own text
+   anticipated for a negative result here. Section 224/`local_mlp` is
+   already verified structurally L-transferable (identical parameter
+   count at `n_sites=32` vs `64`); SEC is fit to one training
+   distribution and cannot transfer at all, and the global `mlp`
+   cannot even be loaded at a different `d_latent`. Phase F's F2/F3
+   tests (actually running at a larger `L` with zero retraining) are
+   what would make this argument concrete rather than structural.
+
+**Not yet tried, real candidates for a follow-up before treating this
+as final:** a different `n_prop_steps` (5 was Phase C's own choice for
+the global checkpoint, not independently re-optimized for the
+comparison), a finer `gc_c` sweep between 2.0 and 4.0, and whether
+`gc_c` should itself vary with `N_ens` (SEC's own table is explicitly
+`N_ens`-specific; a single fixed Gaspari-Cohn radius across the whole
+sweep is a simpler but not obviously optimal choice).
+
+### Phase F2: L-transfer confirmed, zero retraining, at both 2x and 4x domain size (2026-09-25)
+
+User: "yes, please try phase F and run a larger L without retraining.
+Make certain that if L gets larger, the number of samples gets larger
+though so the effective sample width remains the same." Confirmed the
+mechanism precisely before implementing: `patch_size = NX/n_sites` is
+the number of RAW GRID POINTS each site's patchify convolution
+consumes, and that layer's weights only mean the same thing physically
+if `patch_size` stays fixed -- so `NX` must scale with `L` to hold
+`dx=L/NX` fixed, which (since `patch_size` is held fixed) forces
+`n_sites` to scale by the same factor automatically. Doubling `L`:
+`NX` 256->512, `n_sites` 16->32, `d_latent` 48->96, all falling out of
+one constraint, not three independent choices.
+
+**Built `load_autoencoder_checkpoint_resized`/`load_propagator_
+checkpoint_resized`** (`ks_latent/models/__init__.py`) -- loads a
+`local_field`/`local_mlp` checkpoint's TRAINED weights into a freshly
+constructed model at a different `n_sites`/`NX`/`d_latent`/`n_tokens`,
+raising clearly if the checkpoint's own architecture doesn't have
+size-independent weight shapes (`masked_mlp`/`masked_mlp_expand`/`mlp`
+explicitly rejected -- their layers are tied to `d_latent`, confirmed
+in Section 221's own writeup) or if the caller's requested resize
+doesn't hold `patch_size`/`chunk_size` fixed. Verified directly before
+either function was written: Section 224's exact trained `state_dict`
+loads with ZERO missing/unexpected keys into both a `2x` and `4x`
+larger model. 8 new unit tests (weight-value transfer, not just shape;
+forward pass at the new size; both rejection cases) pass.
+
+**`scripts/run_ltransfer_test.py` (Phase F2): ran the resized model
+in pure free-running forecast mode at `L=200` (2x) and `L=400` (4x),
+zero retraining, against fresh KS ground truth generated at each new
+`L`/`NX`.**
+
+| | `L=100` (trained) | `L=200` (2x, zero retraining) | `L=400` (4x, zero retraining) |
+|---|---|---|---|
+| `NX`/`n_sites`/`d_latent` | 256/16/48 | 512/32/96 | 1024/64/192 |
+| decoded rollout | -- | finite, bounded (`max\|u\|=2.62` vs true `3.35`) | finite, bounded (`max\|u\|=2.87` vs true `3.47`) |
+| energy spectrum peak `k` | -- | true=0.660, model=0.660 (**exact match**) | true=0.675, model=0.691 (~2% apart) |
+| `D_KY` | 22.14 | 44.61 | 89.13 |
+| `D_KY/L` | 0.2214 | **0.2231** | **0.2228** |
+
+Both `D_KY/L` ratios at the transferred sizes land almost exactly on
+the trained model's own `0.2214` -- and all three are close to the
+TRUE KS extensivity constant (`~0.226`). The decoded rollout stays
+bounded and the energy spectrum peaks near the correct, L-independent
+wavenumber (`k~1/sqrt(2)~0.707`) at both transfer sizes. **This is a
+clean, quantitative confirmation of genuine L-transfer**: the same
+weights, trained only at `L=100`, correctly reproduce KS's extensive
+scaling law at 2x and 4x the trained domain size, with zero
+retraining. Per Part 4.3's own framing, this is the result neither the
+global `mlp` (Section 213, cannot even be loaded at a different
+`d_latent`) nor SEC (fit to one training distribution) can produce at
+all -- the practically-unique contribution of the local-field approach,
+now demonstrated rather than only structurally argued.
+
+### Phase F3: localized DA at L=200, zero retraining -- localization becomes NECESSARY, not just helpful, as the domain grows (2026-09-25)
+
+`scripts/run_da_pff_ltransfer.py` (reuses `run_da_pff.py`'s own
+`CycleConfig`/`run_da_experiment`/taper machinery, swaps in the resized
+loaders) -- ran full DA cycling at `L=200` with `LOCAL_AE`/
+`TRANSFER_PROP` (Section 224), zero retraining, `n_ensemble=64`
+(UNCHANGED from the `L=100` operating point -- the whole point of the
+test), `n_prop_steps=5`, `--obs-stride` scaled `8->16` to hold physical
+observation density fixed (same `dx`-preserving principle as
+`n_sites`/`NX`).
+
+| | no localization | Gaspari-Cohn (`gc_c=3.0`) |
+|---|---|---|
+| `rmse_da` | 1.652 | **0.812** |
+| `skill_free_over_da` | **0.69 (DA actively HURTS)** | **1.34** |
+| `calibration_spread_over_rmse` | 0.18 | 0.81 |
+
+**At `L=200`, with the SAME `n_ensemble=64` that worked fine at
+`L=100` (`docs/RESULTS.md`'s Phase A/B entry: `skill=3.27`), unlocalized
+DA actively breaks** (`skill=0.69`, worse than just running the model
+free) **-- the raw latent dimension doubled to 96 along with `L`, so a
+fixed ensemble size is now badly underdetermined for the full
+covariance.** Gaspari-Cohn localization -- the SAME `gc_c=3.0` chosen
+at `L=100` (valid unchanged, since `h=L/n_sites` is held fixed by the
+transfer itself) -- rescues this back to real positive skill, more
+than doubling the RMSE improvement over no localization. **This is
+`docs/LITERATURE_REVIEW_AND_FINDINGS.md` Part 4.3's central claim
+demonstrated directly: required ensemble size scales with LOCAL
+dimension, not the (now-doubled) global one, and localization's value
+GROWS as the domain grows** -- exactly the ensemble-size-scaling
+argument the whole proposal was built around, now shown at a domain
+size the checkpoint was never trained on.
+
+**Confirmed directly (not just architecturally asserted) that
+`GLOBAL_AE`/`GLOBAL_PROP` cannot even be evaluated at `L=200`:**
+feeding a correctly-resolved `L=200` sample (`NX=512`, same `dx` as
+training) into Section 213's fixed-`d_latent=44` encoder raises an
+immediate shape-mismatch (`"size of tensor a (64) must match size of
+tensor b (32)"`) -- no amount of retraining-free adaptation is
+possible, confirming the contrast Part 4.3 frames as the actual
+headline result (one method transfers, the other structurally cannot).
+SEC is fit to one `N_ens`-specific empirical table at one training
+distribution and has no mechanism to transfer either (not separately
+re-tested; the mechanism itself has no size-dependent inputs to even
+attempt at a new size).
+
+**Gap found along the way, not yet fixed:** `scripts/run_da_pff.py`'s
+own `--L` flag does NOT actually change the checkpoint's input size
+(that's fixed by the checkpoint's own trained `NX`) -- passing `--L
+200` with a checkpoint trained at `NX=256` silently generates ground
+truth at the WRONG resolution (`dx=200/256~=0.78` instead of the
+trained `0.39`) rather than raising, since the array shape still
+happens to match. This is a real "fail loudly" gap (brief ground rule
+2) -- anyone using `--L` on `run_da_pff.py` directly (not through this
+Phase F script, which handles `NX` correctly) without also reasoning
+about `NX` could silently get a physically-wrong comparison. Flagged
+here for a future fix (e.g. `run_da_pff.py` could assert `L/NX` matches
+the checkpoint's own trained ratio unless an explicit override flag is
+passed); not fixed now since it didn't block this test (a dedicated,
+correct script was used instead).
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

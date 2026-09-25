@@ -1027,6 +1027,182 @@ def propagator_multistep_spectrum_shape_loss(
     return l_expand + l_contract
 
 
+def propagator_multistep_growth_ceiling_loss(
+    step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor, k: int, ceiling: float,
+) -> torch.Tensor:
+    """Added 2026-09-24, Section 219, user-directed follow-up to Section
+    218's `propagator_rollout_magnitude_ceiling_loss` (which ceilinged the
+    raw autoregressive rollout magnitude and only delayed, not fixed,
+    `masked_mlp`'s divergence -- see `docs/RESULTS.md`'s Section 218
+    writeup): "try not to clamp too hard to preserve the chaotic dynamics
+    ... another way to do this is just make sure the longer term jacobian
+    after 10 steps doesn't expand too much."
+
+    Reuses `propagator_multistep_spectrum_shape_loss`'s own composed-`k`-
+    step-Jacobian machinery (`step_fn` chained `k` times, then
+    differentiated once via `_propagator_step_jacobian_singular_values`)
+    but is deliberately a SIMPLER, ONE-SIDED ceiling on just the top
+    singular value, not that function's two-sided match toward
+    `expand_target**k`/`contract_floor**k` for a whole top/bottom split.
+    The distinction matters for exactly the "don't clamp too hard" request:
+    a two-sided match actively fights genuine local expansion below its
+    own target (it penalizes a k-step top singular value for being too
+    SMALL as much as too LARGE), which is a real constraint on the
+    magnitude of chaos, not just a runaway-growth guard. This loss pays
+    nothing at all as long as the composed-`k`-step top singular value
+    stays under `ceiling` -- same one-sided hinge convention as every
+    other floor/ceiling in this module (`propagator_rollout_magnitude_
+    ceiling_loss`, `propagator_jacobian_diagonal_bound_loss`) -- so a
+    trajectory that expands anywhere up to `ceiling` over `k` steps is
+    never penalized, preserving whatever positive-Lyapunov-exponent
+    structure the true dynamics have below that point.
+
+    Why the COMPOSED k-step Jacobian instead of the raw rollout magnitude
+    Section 218 penalized: the rollout ceiling only sees `max|z|` AFTER it
+    has already grown large -- a purely reactive signal, and one whose
+    gradient (through `.abs().amax()`) only touches the single
+    currently-largest entry at each step (the same non-smooth-subgradient
+    property noted in this project's own `test_losses_prop_magnitude_
+    ceiling.py`). The composed Jacobian is the actual LOCAL MECHANISM of
+    growth -- `d z_{n+k}/d z_n`'s top singular value IS the worst-case
+    amplification factor for a small perturbation over the next `k` steps,
+    checked at every real state in the training data (not just states the
+    aux propagator's own drifting, possibly-already-bad rollout happens to
+    reach) -- so it can apply pressure before a trajectory ever gets large
+    enough for the rollout ceiling to notice, and its gradient is smooth
+    (`svdvals` is differentiable almost everywhere, not just at one
+    argmax entry per step).
+
+    `k=10` (the user's own suggested horizon) empirically calibrated
+    against Section 216 (the frozen, GENUINELY BOUNDED `LOCAL_AE`/
+    `LOCAL_PROP` checkpoint, global `mlp` backbone): the composed 10-step
+    top singular value at 100 real encoded states spread across multiple
+    held-out trajectories and times has median `28.6`, p95 `54.1`, max
+    `66.4` -- i.e. even a checkpoint this project has independently
+    validated as bounded shows real, sample-dependent finite-time
+    variation in this quantity, confirming the one-sided/no-floor
+    construction above is the right choice (a tight two-sided target here
+    would fight that legitimate variation). `ceiling=150.0` (roughly
+    2.3x Section 216's own observed max) is calibrated FROM that
+    measurement, not asserted independently -- generous enough that it
+    should rarely if ever fire on dynamics resembling Section 216's own
+    already-healthy attractor, while still being low enough to catch
+    genuinely runaway composed growth long before a rollout reaches
+    `masked_mlp`'s historically observed blowup scale (Section 217/218:
+    `max|z|` in the `1e2`-`1e30` range within a few hundred steps).
+
+    `step_fn`: a single-step markovian map `(B, d) -> (B, d)` (e.g.
+    `aux.step_one`); `z`: `(B, d)` real encoded states to evaluate at (a
+    small subsample -- composing `k` steps before the single Jacobian call
+    is `k`x more expensive per sample than the one-step Jacobian losses in
+    this module, same cost note as `propagator_multistep_spectrum_shape_
+    loss`). Same once-per-epoch cadence convention as every other
+    Jacobian-based regularizer here."""
+
+    def step_k(z_in: torch.Tensor) -> torch.Tensor:
+        out = z_in
+        for _ in range(k):
+            out = step_fn(out)
+        return out
+
+    sv = _propagator_step_jacobian_singular_values(step_k, z)  # (B, d), descending
+    top = sv[:, 0]
+    return F.relu(top - ceiling).pow(2).mean()
+
+
+def propagator_multistep_growth_barrier_loss(
+    step_fn: Callable[[torch.Tensor], torch.Tensor],
+    z: torch.Tensor,
+    k: int,
+    ceiling: float,
+    epsilon: float | None = None,
+) -> torch.Tensor:
+    """Added 2026-09-24, Section 220, user-directed after Section 219's
+    result (the squared-hinge ceiling above, even combined with a
+    narrowed `attn_window`, still let `masked_mlp` diverge FASTER than
+    Section 218's unconstrained baseline -- see `docs/RESULTS.md`'s
+    Section 219 writeup): "lower the 150 bound and penalize this
+    differently. instead of using mse, use some kind of -log loss such
+    that there is a boundary at wherever we want to bound the jacobian."
+
+    Same underlying quantity as `propagator_multistep_growth_ceiling_
+    loss` (the composed `k`-step Jacobian's top singular value, via
+    `_propagator_step_jacobian_singular_values` on a `k`-times-chained
+    `step_fn`) but a fundamentally different PENALTY SHAPE, which is the
+    actual point of this function existing separately rather than just
+    changing that one's formula in place: the squared hinge
+    `relu(top-ceiling)^2` has EXACTLY ZERO gradient anywhere below
+    `ceiling` -- it does nothing at all to discourage the composed growth
+    from approaching the boundary, only reacts once it has already been
+    crossed. A log-barrier instead grows toward infinity as `top`
+    approaches `ceiling` FROM BELOW, so gradient pressure increases the
+    closer training gets to the boundary, long before it is ever crossed
+    -- the literal interior-point-method meaning of "boundary" the user
+    asked for, not a reactive penalty.
+
+    A PURE log-barrier (`-log(ceiling - top)`) is only defined while
+    `top < ceiling` and returns `-inf`/`nan` the instant an SGD step
+    pushes `top` past it -- a real risk here, since nothing guarantees
+    strict feasibility every step (unlike classical interior-point
+    optimization, which uses a feasible-descent line search this
+    project's plain Adam/SGD training loop does not have). This
+    implements the standard SAFEGUARDED extension (see e.g. Usman et al.
+    2019 "Log-Barrier Constrained CNNs" for the same construction applied
+    to a deep-learning training loop): for `margin = ceiling - top >
+    epsilon`, use the true barrier `-log(margin)`; for `margin <=
+    epsilon` (including `margin < 0`, i.e. already past the ceiling),
+    switch to the LINEAR extrapolation of the barrier's own tangent line
+    at `margin=epsilon` -- `-log(epsilon) + (epsilon - margin) / epsilon`.
+    This is chosen, not an arbitrary fallback, to make the two pieces
+    C1-continuous (equal value AND equal derivative, `-1/epsilon`, at the
+    switch point) -- verified directly in this module's own tests -- so
+    there is no discontinuous jump in the loss or its gradient as
+    training crosses back and forth over the switch, and the penalty
+    remains finite and still strictly repulsive (constant negative
+    gradient w.r.t. margin, i.e. still pushing `top` back down) no matter
+    how far `top` has overshot `ceiling`. `epsilon` defaults to `0.05 *
+    ceiling` (a 5% safeguard band) if not given.
+
+    `top`'s log() argument is separately clamped to `>= epsilon` (via
+    `.clamp_min`) BEFORE the `torch.where` select, not just relying on
+    `torch.where` to route around the bad branch -- `torch.where`
+    backpropagates through BOTH branches regardless of which one is
+    selected per-element, so an unclamped `-log(margin)` with `margin <=
+    0` present anywhere in the batch would poison the gradient with `nan`
+    even for samples that took the other (linear) branch. This is the
+    same category of gotcha `logdet_barrier_loss`'s own `eps`-regularized
+    `slogdet` guards against, applied here to `torch.where` specifically
+    rather than to a matrix decomposition.
+
+    `ceiling` should be set TIGHTER than `propagator_multistep_growth_
+    ceiling_loss`'s own default now that the penalty shape itself repels
+    approach rather than only reacting to violation -- see that function's
+    docstring for the Section 216 calibration data (composed 10-step top
+    singular value on a known-good checkpoint: median 28.6, p95 54.1, max
+    66.4) this project's own callers should set `ceiling` from.
+
+    `step_fn`/`z`/`k`: same meaning and cost profile as `propagator_
+    multistep_growth_ceiling_loss` -- see that docstring."""
+
+    def step_k(z_in: torch.Tensor) -> torch.Tensor:
+        out = z_in
+        for _ in range(k):
+            out = step_fn(out)
+        return out
+
+    if epsilon is None:
+        epsilon = 0.05 * ceiling
+
+    sv = _propagator_step_jacobian_singular_values(step_k, z)  # (B, d), descending
+    top = sv[:, 0]
+    margin = ceiling - top
+    log_branch = -torch.log(margin.clamp_min(epsilon))
+    linear_branch = -torch.log(torch.as_tensor(epsilon, dtype=margin.dtype, device=margin.device)) \
+        + (epsilon - margin) / epsilon
+    per_sample = torch.where(margin > epsilon, log_branch, linear_branch)
+    return per_sample.mean()
+
+
 def propagator_graded_spectrum_shape_loss(
     step_fn: Callable[[torch.Tensor], torch.Tensor],
     z: torch.Tensor,

@@ -374,6 +374,91 @@ class _CNNDeltaBody(nn.Module):
         return self.output_proj(x).squeeze(-1)  # (B, d_latent)
 
 
+class _SiteConvDeltaBody(nn.Module):
+    """`backbone="site_conv"` (added 2026-09-24, Section 222, user-
+    directed: "could we use a model like the encoder from 221 as a
+    propagator? I've never thought of trying that"). Reuses
+    `KSAutoencoderLocalField`'s own circular-`Conv1d` site-mixing design
+    (`ks_latent/models/autoencoder_local_field.py`) almost verbatim, but
+    as a DIMENSION-PRESERVING `z -> z` map instead of that encoder's
+    `u (NX) -> z (n_sites*local_channels)` compression: `z` is reshaped
+    to its native `(n_sites, local_channels)` field (site-major, matching
+    `KSAutoencoderLocalField`'s own flattening convention exactly), a
+    `1x1 Conv1d` projects `local_channels -> hidden` (mirroring the
+    encoder's own `dec_in`), `n_layers` circular `Conv1d(hidden, hidden,
+    kernel_size=2*radius+1, padding=radius, padding_mode='circular')` +
+    GELU mix ACROSS SITES (mirroring `enc_mix`/`dec_mix` exactly -- plain
+    sequential GELU convs, no residual skip, matching that architecture's
+    own already-validated design rather than adding an unrequested
+    change), and a final `1x1 Conv1d(hidden, local_channels, bias=False)`
+    projects back down, zero-initialized for this backbone's
+    identity-at-init property.
+
+    Unlike the existing `backbone="cnn"` (`_CNNDeltaBody`), which
+    convolves over the RAW `d_latent` index as one flat sequence with an
+    embedded `hidden` width unrelated to any site structure, this
+    backbone is built specifically for a `local_field`-encoded latent: it
+    reshapes `z` into its TRUE `(n_sites, local_channels)` grid first and
+    only mixes across the SITE axis, treating `local_channels` the same
+    way the encoder treats its own per-site channel count -- i.e. this is
+    the encoder's own architecture, reused as a dynamics model on the
+    space it already knows how to represent, not a generic conv over an
+    arbitrary flat vector.
+
+    `bias=False` on the final projection (added deliberately, not an
+    oversight): `KSAutoencoderLocalField.enc_out` had exactly this same
+    `bias=False` fix applied for a documented reason (see that class's
+    own docstring) -- an unconstrained per-channel additive bias in a
+    convolutional output layer is otherwise free to drift to an arbitrary
+    constant offset during training, since none of this project's usual
+    anti-collapse losses (`w_var`/`w_logdet`/`w_decorr`) constrain the
+    MEAN of `z`, and a site-major-periodic offset pattern aliases onto a
+    single spurious self-FFT mode (`KSAutoencoderLocalField`'s own
+    docstring has the full measured finding). Applying the same fix here
+    preemptively avoids re-discovering that failure mode a second time in
+    a structurally identical architecture.
+
+    `radius` (reuses `attn_window`, same convention as `local_mlp`/
+    `masked_mlp`/`node`) and `n_layers`/`hidden` (`site_conv_n_layers`/
+    `site_conv_hidden`) default to `LocalFieldAutoencoderConfig`'s OWN
+    defaults (`site_mix_radius=2`, `n_site_mix_layers=3`, `hidden=32`) --
+    not independently tuned, deliberately reusing parameters already
+    validated (by the encoder's own reconstruction quality) rather than
+    guessing fresh ones for an architecture being tried as a propagator
+    for the first time. `n_sites`/`local_channels` (`site_conv_n_sites`/
+    `site_conv_local_channels`) MUST match the `local_field` encoder this
+    propagator is paired with exactly (`d_latent == n_sites *
+    local_channels`, checked in `PropagatorConfig.__post_init__`) -- this
+    backbone has no meaning for a non-spatially-organized latent."""
+
+    def __init__(
+        self, n_sites: int, local_channels: int, hidden: int, n_layers: int, radius: int, zero_init: bool,
+    ):
+        super().__init__()
+        self.n_sites = n_sites
+        self.local_channels = local_channels
+        self.proj_in = nn.Conv1d(local_channels, hidden, kernel_size=1)
+        self.mix = nn.ModuleList(
+            [
+                nn.Conv1d(hidden, hidden, kernel_size=2 * radius + 1, padding=radius, padding_mode="circular")
+                for _ in range(n_layers)
+            ]
+        )
+        self.proj_out = nn.Conv1d(hidden, local_channels, kernel_size=1, bias=False)
+        if zero_init:
+            nn.init.zeros_(self.proj_out.weight)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        x = z.reshape(B, self.n_sites, self.local_channels).transpose(1, 2)  # (B, local_channels, n_sites)
+        h = F.gelu(self.proj_in(x))
+        for conv in self.mix:
+            h = F.gelu(conv(h))
+        delta = self.proj_out(h)  # (B, local_channels, n_sites)
+        return delta.transpose(1, 2).reshape(B, self.n_sites * self.local_channels)
+
+
 def _circular_band_mask(dim: int, window: int | None) -> torch.Tensor | None:
     """`(dim, dim)` 0/1 mask, `1` where circular index distance `<= window`,
     else `0`. `None` (fully dense, no restriction) if `window is None`."""
@@ -3645,6 +3730,14 @@ class LatentPropagator(nn.Module):
                 self.body = _CNNDeltaBody(
                     d, cfg.hidden, cfg.n_blocks, cfg.cnn_kernel_size, cfg.dropout, cfg.zero_init
                 )
+            elif cfg.backbone == "site_conv":
+                # _validate_propagator_mode_backbone/__post_init__ already
+                # enforce attn_window is not None and d == site_conv_n_sites
+                # * site_conv_local_channels for this backbone.
+                self.body = _SiteConvDeltaBody(
+                    cfg.site_conv_n_sites, cfg.site_conv_local_channels, cfg.site_conv_hidden,
+                    cfg.site_conv_n_layers, cfg.attn_window, cfg.zero_init,
+                )
             elif cfg.backbone == "fourier_mlp":
                 # n_history=1 (not cfg.n_history, which is meaningless here --
                 # see PropagatorConfig's docstring): a single current state,
@@ -3922,6 +4015,8 @@ def aux_cfg_to_propagator_cfg(cfg: AuxPropagatorConfig) -> PropagatorConfig:
         spectral_burgers_kernel_A_init=cfg.spectral_burgers_kernel_A_init,
         spectral_burgers_beta_init=cfg.spectral_burgers_beta_init,
         masked_mlp_expand_factor=cfg.masked_mlp_expand_factor,
+        site_conv_n_sites=cfg.site_conv_n_sites, site_conv_local_channels=cfg.site_conv_local_channels,
+        site_conv_hidden=cfg.site_conv_hidden, site_conv_n_layers=cfg.site_conv_n_layers,
     )
 
 

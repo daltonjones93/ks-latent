@@ -36,6 +36,8 @@ from ks_latent.training.losses import (
     propagator_jacobian_bandedness_loss,
     propagator_jacobian_diagonal_bound_loss,
     propagator_multistep_spectrum_shape_loss,
+    propagator_multistep_growth_ceiling_loss,
+    propagator_multistep_growth_barrier_loss,
     propagator_local_expansion_floor_loss,
     propagator_spectrum_shape_loss,
     reconstruction_loss,
@@ -537,6 +539,8 @@ def train_stage1(
         spectrum_shape_multistep_applied_this_epoch = False
         jacobian_bandedness_applied_this_epoch = False
         jacobian_diagonal_bound_applied_this_epoch = False
+        multistep_growth_ceiling_applied_this_epoch = False
+        multistep_growth_barrier_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -1060,6 +1064,52 @@ def train_stage1(
                     aux.step_one, z_sample, ceiling=cfg.jacobian_diagonal_bound_ceiling,
                 )
                 loss = loss + cfg.w_jacobian_diagonal_bound * l_jacobian_diagonal_bound
+
+            if (
+                cfg.w_multistep_growth_ceiling > 0
+                and not multistep_growth_ceiling_applied_this_epoch
+                and aux.mode == "markovian"
+            ):
+                # See Stage1TrainingConfig.w_multistep_growth_ceiling's
+                # docstring -- one-sided ceiling on the composed k-step
+                # Jacobian's top singular value (Section 219), the actual
+                # local growth MECHANISM, rather than the raw rollout
+                # magnitude w_prop_magnitude_ceiling ceilings reactively.
+                # Same once-per-epoch convention; independent sample draw
+                # from the other Jacobian-based losses' own (simplicity
+                # over micro-optimization, established precedent).
+                multistep_growth_ceiling_applied_this_epoch = True
+                n_sample = min(cfg.multistep_growth_ceiling_n_samples, z.shape[0])
+                sample_idx = torch.randperm(z.shape[0], device=device)[:n_sample]
+                z_sample = z[sample_idx].float()
+                l_multistep_growth_ceiling = propagator_multistep_growth_ceiling_loss(
+                    aux.step_one, z_sample,
+                    k=cfg.multistep_growth_ceiling_k, ceiling=cfg.multistep_growth_ceiling_value,
+                )
+                loss = loss + cfg.w_multistep_growth_ceiling * l_multistep_growth_ceiling
+
+            if (
+                cfg.w_multistep_growth_barrier > 0
+                and not multistep_growth_barrier_applied_this_epoch
+                and aux.mode == "markovian"
+            ):
+                # See Stage1TrainingConfig.w_multistep_growth_barrier's
+                # docstring -- safeguarded log-barrier alternative to
+                # w_multistep_growth_ceiling's squared hinge (Section
+                # 220): repels the composed k-step Jacobian's top
+                # singular value from ever approaching `ceiling`, rather
+                # than only reacting once it's crossed. Same once-per-
+                # epoch convention; independent sample draw.
+                multistep_growth_barrier_applied_this_epoch = True
+                n_sample = min(cfg.multistep_growth_barrier_n_samples, z.shape[0])
+                sample_idx = torch.randperm(z.shape[0], device=device)[:n_sample]
+                z_sample = z[sample_idx].float()
+                l_multistep_growth_barrier = propagator_multistep_growth_barrier_loss(
+                    aux.step_one, z_sample,
+                    k=cfg.multistep_growth_barrier_k, ceiling=cfg.multistep_growth_barrier_ceiling,
+                    epsilon=cfg.multistep_growth_barrier_epsilon,
+                )
+                loss = loss + cfg.w_multistep_growth_barrier * l_multistep_growth_barrier
 
             if (
                 cfg.w_spectrum_shape_graded > 0
@@ -1676,6 +1726,8 @@ def train_stage2(
         spectrum_shape_multistep_applied_this_epoch = False
         jacobian_bandedness_applied_this_epoch = False
         jacobian_diagonal_bound_applied_this_epoch = False
+        multistep_growth_ceiling_applied_this_epoch = False
+        multistep_growth_barrier_applied_this_epoch = False
         pde_spectrum_shape_applied_this_epoch = False
         pde_spectrum_shape_multistep_applied_this_epoch = False
         pde_spectrum_shape_self_applied_this_epoch = False
@@ -2076,6 +2128,49 @@ def train_stage2(
                     propagator.step_one, z_sample, ceiling=cfg.jacobian_diagonal_bound_ceiling,
                 )
                 loss = loss + cfg.w_jacobian_diagonal_bound * l_jacobian_diagonal_bound
+
+            if (
+                cfg.w_multistep_growth_ceiling > 0
+                and not multistep_growth_ceiling_applied_this_epoch
+                and propagator.mode == "markovian"
+                and not freeze_propagator
+            ):
+                # See Stage2TrainingConfig.w_multistep_growth_ceiling's
+                # docstring -- companion to w_jacobian_bandedness/
+                # w_jacobian_diagonal_bound (Section 219), evaluated
+                # directly on propagator.step_one, same convention.
+                multistep_growth_ceiling_applied_this_epoch = True
+                z_pool = windows.reshape(-1, d)
+                n_sample = min(cfg.multistep_growth_ceiling_n_samples, z_pool.shape[0])
+                sample_idx = torch.randperm(z_pool.shape[0], device=device)[:n_sample]
+                z_sample = z_pool[sample_idx].float()
+                l_multistep_growth_ceiling = propagator_multistep_growth_ceiling_loss(
+                    propagator.step_one, z_sample,
+                    k=cfg.multistep_growth_ceiling_k, ceiling=cfg.multistep_growth_ceiling_value,
+                )
+                loss = loss + cfg.w_multistep_growth_ceiling * l_multistep_growth_ceiling
+
+            if (
+                cfg.w_multistep_growth_barrier > 0
+                and not multistep_growth_barrier_applied_this_epoch
+                and propagator.mode == "markovian"
+                and not freeze_propagator
+            ):
+                # See Stage2TrainingConfig.w_multistep_growth_barrier's
+                # docstring -- companion to w_multistep_growth_ceiling
+                # (Section 220's safeguarded log-barrier), evaluated
+                # directly on propagator.step_one, same convention.
+                multistep_growth_barrier_applied_this_epoch = True
+                z_pool = windows.reshape(-1, d)
+                n_sample = min(cfg.multistep_growth_barrier_n_samples, z_pool.shape[0])
+                sample_idx = torch.randperm(z_pool.shape[0], device=device)[:n_sample]
+                z_sample = z_pool[sample_idx].float()
+                l_multistep_growth_barrier = propagator_multistep_growth_barrier_loss(
+                    propagator.step_one, z_sample,
+                    k=cfg.multistep_growth_barrier_k, ceiling=cfg.multistep_growth_barrier_ceiling,
+                    epsilon=cfg.multistep_growth_barrier_epsilon,
+                )
+                loss = loss + cfg.w_multistep_growth_barrier * l_multistep_growth_barrier
 
             if (
                 cfg.w_spectrum_shape_self > 0

@@ -507,6 +507,72 @@ def main() -> None:
         "jacobian_diagonal_bound_n_samples (default 32).",
     )
     parser.add_argument(
+        "--w-multistep-growth-ceiling", type=float, default=None,
+        help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
+        "w_multistep_growth_ceiling (default 0.0, off). User-directed (2026-09-24, Section 219, "
+        "follow-up to --w-prop-magnitude-ceiling's Section 218 result: 'try not to clamp too "
+        "hard to preserve the chaotic dynamics ... another way to do this is just make sure "
+        "the longer term jacobian after 10 steps doesn't expand too much'). One-sided ceiling "
+        "on the composed k-step Jacobian's top singular value (ks_latent.training.losses."
+        "propagator_multistep_growth_ceiling_loss) -- the actual local growth MECHANISM, "
+        "targeted before a rollout gets large enough for --w-prop-magnitude-ceiling to notice. "
+        "Same expensive/once-per-epoch convention as --w-jacobian-bandedness.",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-k", type=int, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage1TrainingConfig."
+        "multistep_growth_ceiling_k (default 10, the user's own suggested horizon).",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-value", type=float, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage1TrainingConfig."
+        "multistep_growth_ceiling_value (default 150.0, calibrated against Section 216's own "
+        "composed-10-step top singular value -- median 28.6, p95 54.1, max 66.4 over 100 real "
+        "encoded states -- so genuine chaotic variation on a known-good checkpoint's scale is "
+        "never penalized).",
+    )
+    parser.add_argument(
+        "--multistep-growth-ceiling-n-samples", type=int, default=None,
+        help="--w-multistep-growth-ceiling only. Override Stage1TrainingConfig."
+        "multistep_growth_ceiling_n_samples (default 16, lower than the one-step Jacobian "
+        "losses' 32 since composing k steps is k times more expensive per sample).",
+    )
+    parser.add_argument(
+        "--w-multistep-growth-barrier", type=float, default=None,
+        help="mode=markovian only. Override Stage1TrainingConfig.w_multistep_growth_barrier "
+        "(default 0.0, off). User-directed (2026-09-24, Section 220, after --w-multistep-"
+        "growth-ceiling's squared hinge still let masked_mlp diverge faster than the "
+        "unconstrained baseline: 'lower the 150 bound and penalize this differently. "
+        "instead of using mse, use some kind of -log loss such that there is a boundary at "
+        "wherever we want to bound the jacobian'). Safeguarded log-barrier (ks_latent."
+        "training.losses.propagator_multistep_growth_barrier_loss) on the same composed "
+        "k-step Jacobian top singular value -- repels approach toward the ceiling instead "
+        "of only reacting once crossed.",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-k", type=int, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage1TrainingConfig."
+        "multistep_growth_barrier_k (default 10).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-ceiling", type=float, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage1TrainingConfig."
+        "multistep_growth_barrier_ceiling (default 75.0, ~1.13x Section 216's own observed "
+        "composed-10-step max of 66.4 -- tighter than --w-multistep-growth-ceiling's own "
+        "150.0 default since a barrier need not carry the same headroom).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-epsilon", type=float, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage1TrainingConfig."
+        "multistep_growth_barrier_epsilon (default None -> 0.05*ceiling, the safeguard "
+        "band width where the log-barrier switches to its linear extrapolation).",
+    )
+    parser.add_argument(
+        "--multistep-growth-barrier-n-samples", type=int, default=None,
+        help="--w-multistep-growth-barrier only. Override Stage1TrainingConfig."
+        "multistep_growth_barrier_n_samples (default 16).",
+    )
+    parser.add_argument(
         "--w-spectrum-shape-graded", type=float, default=None,
         help="mode=markovian only (any backbone). Override Stage1TrainingConfig."
         "w_spectrum_shape_graded (default 0.0, off). User-directed (2026-09-10, Section 134, "
@@ -827,8 +893,8 @@ def main() -> None:
         "--aux-backbone",
         choices=[
             "mlp", "transformer", "vit", "fno_vit", "fourier_mlp", "local_mlp",
-            "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "spectral_pde",
-            "spectral_pde_raw",
+            "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
+            "spectral_pde", "spectral_pde_raw",
         ],
         default="mlp",
         help="Backbone of the auxiliary propagator used only for Stage-1's "
@@ -1664,6 +1730,32 @@ def main() -> None:
         "expand_factor).",
     )
     parser.add_argument(
+        "--site-conv-n-sites", type=int, default=32,
+        help="--aux-backbone site_conv only. AuxPropagatorConfig.site_conv_n_sites "
+        "(default 32, matching LocalFieldAutoencoderConfig's own n_sites) -- MUST match "
+        "the paired local_field encoder's own n_sites exactly.",
+    )
+    parser.add_argument(
+        "--site-conv-local-channels", type=int, default=3,
+        help="--aux-backbone site_conv only. AuxPropagatorConfig.site_conv_local_channels "
+        "(default 3, matching LocalFieldAutoencoderConfig's own local_channels) -- MUST match "
+        "the paired local_field encoder's own local_channels exactly.",
+    )
+    parser.add_argument(
+        "--site-conv-hidden", type=int, default=32,
+        help="--aux-backbone site_conv only. AuxPropagatorConfig.site_conv_hidden "
+        "(default 32, matching LocalFieldAutoencoderConfig's own hidden) -- the per-site "
+        "working width of the circular-conv mixing stack (see ks_latent.models.propagator."
+        "_SiteConvDeltaBody's docstring).",
+    )
+    parser.add_argument(
+        "--site-conv-n-layers", type=int, default=3,
+        help="--aux-backbone site_conv only. AuxPropagatorConfig.site_conv_n_layers "
+        "(default 3, matching LocalFieldAutoencoderConfig's own n_site_mix_layers) -- number "
+        "of stacked circular-conv mixing layers. Use --attn-window for the mixing radius "
+        "(reused, same convention as local_mlp/masked_mlp/node).",
+    )
+    parser.add_argument(
         "--attn-window", type=int, default=None,
         help="Restrict attention to +-attn_window ring-neighbours (circular "
         "distance, non-causal), instead of full attention. Applies to "
@@ -2232,6 +2324,8 @@ def main() -> None:
             fno_modes=args.aux_fno_modes, fno_n_layers=args.aux_fno_n_layers,
             fourier_ifft_readout=args.prop_fourier_ifft, nonexpansive=args.prop_nonexpansive,
             masked_mlp_expand_factor=args.masked_mlp_expand_factor,
+            site_conv_n_sites=args.site_conv_n_sites, site_conv_local_channels=args.site_conv_local_channels,
+            site_conv_hidden=args.site_conv_hidden, site_conv_n_layers=args.site_conv_n_layers,
             **aux_spectral_kwargs,
         )
         smoke_kwargs = {
@@ -2303,6 +2397,24 @@ def main() -> None:
             smoke_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
         if args.jacobian_diagonal_bound_n_samples is not None:
             smoke_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
+        if args.w_multistep_growth_ceiling is not None:
+            smoke_kwargs["w_multistep_growth_ceiling"] = args.w_multistep_growth_ceiling
+        if args.multistep_growth_ceiling_k is not None:
+            smoke_kwargs["multistep_growth_ceiling_k"] = args.multistep_growth_ceiling_k
+        if args.multistep_growth_ceiling_value is not None:
+            smoke_kwargs["multistep_growth_ceiling_value"] = args.multistep_growth_ceiling_value
+        if args.multistep_growth_ceiling_n_samples is not None:
+            smoke_kwargs["multistep_growth_ceiling_n_samples"] = args.multistep_growth_ceiling_n_samples
+        if args.w_multistep_growth_barrier is not None:
+            smoke_kwargs["w_multistep_growth_barrier"] = args.w_multistep_growth_barrier
+        if args.multistep_growth_barrier_k is not None:
+            smoke_kwargs["multistep_growth_barrier_k"] = args.multistep_growth_barrier_k
+        if args.multistep_growth_barrier_ceiling is not None:
+            smoke_kwargs["multistep_growth_barrier_ceiling"] = args.multistep_growth_barrier_ceiling
+        if args.multistep_growth_barrier_epsilon is not None:
+            smoke_kwargs["multistep_growth_barrier_epsilon"] = args.multistep_growth_barrier_epsilon
+        if args.multistep_growth_barrier_n_samples is not None:
+            smoke_kwargs["multistep_growth_barrier_n_samples"] = args.multistep_growth_barrier_n_samples
         if args.w_spectrum_shape_graded is not None:
             smoke_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:
@@ -2658,6 +2770,8 @@ def main() -> None:
             fno_modes=args.aux_fno_modes, fno_n_layers=args.aux_fno_n_layers,
             fourier_ifft_readout=args.prop_fourier_ifft, nonexpansive=args.prop_nonexpansive,
             masked_mlp_expand_factor=args.masked_mlp_expand_factor,
+            site_conv_n_sites=args.site_conv_n_sites, site_conv_local_channels=args.site_conv_local_channels,
+            site_conv_hidden=args.site_conv_hidden, site_conv_n_layers=args.site_conv_n_layers,
             **aux_spectral_kwargs,
         )
         k_pred_max = args.k_pred_max if args.k_pred_max is not None else (8 if args.multistep else 0)
@@ -2737,6 +2851,24 @@ def main() -> None:
             stage1_kwargs["jacobian_diagonal_bound_ceiling"] = args.jacobian_diagonal_bound_ceiling
         if args.jacobian_diagonal_bound_n_samples is not None:
             stage1_kwargs["jacobian_diagonal_bound_n_samples"] = args.jacobian_diagonal_bound_n_samples
+        if args.w_multistep_growth_ceiling is not None:
+            stage1_kwargs["w_multistep_growth_ceiling"] = args.w_multistep_growth_ceiling
+        if args.multistep_growth_ceiling_k is not None:
+            stage1_kwargs["multistep_growth_ceiling_k"] = args.multistep_growth_ceiling_k
+        if args.multistep_growth_ceiling_value is not None:
+            stage1_kwargs["multistep_growth_ceiling_value"] = args.multistep_growth_ceiling_value
+        if args.multistep_growth_ceiling_n_samples is not None:
+            stage1_kwargs["multistep_growth_ceiling_n_samples"] = args.multistep_growth_ceiling_n_samples
+        if args.w_multistep_growth_barrier is not None:
+            stage1_kwargs["w_multistep_growth_barrier"] = args.w_multistep_growth_barrier
+        if args.multistep_growth_barrier_k is not None:
+            stage1_kwargs["multistep_growth_barrier_k"] = args.multistep_growth_barrier_k
+        if args.multistep_growth_barrier_ceiling is not None:
+            stage1_kwargs["multistep_growth_barrier_ceiling"] = args.multistep_growth_barrier_ceiling
+        if args.multistep_growth_barrier_epsilon is not None:
+            stage1_kwargs["multistep_growth_barrier_epsilon"] = args.multistep_growth_barrier_epsilon
+        if args.multistep_growth_barrier_n_samples is not None:
+            stage1_kwargs["multistep_growth_barrier_n_samples"] = args.multistep_growth_barrier_n_samples
         if args.w_spectrum_shape_graded is not None:
             stage1_kwargs["w_spectrum_shape_graded"] = args.w_spectrum_shape_graded
         if args.spectrum_shape_graded_reference_path is not None:
