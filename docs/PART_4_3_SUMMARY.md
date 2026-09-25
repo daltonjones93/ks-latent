@@ -223,3 +223,20 @@ multi-step research program on its own (validate RBC's chaotic
 attractor → build the 2D local-field encoder/decoder → remeasure the
 light-cone bound → rerun this session's Phase A–F arc), not an
 extension of the current KS result.
+
+## New, unplanned finding: a local closure law fits Section 224's latent much better
+
+Tested directly (`docs/RESULTS.md`): a shared, translation-invariant
+quadratic (degree-2 polynomial) stencil regression — the brief's own
+Phase 11 idea, never previously implemented — recovers **90% of
+Section 224's one-step latent dynamics using barely a third of its
+ring**, and even at FULL global width still only recovers **82% of
+Section 216's** dynamics. That's not a window-size artifact (both
+numbers are at global width) — 224's dynamics are genuinely better
+described by a compact, interpretable, low-order local polynomial law,
+not merely easier to fit within a restricted window. A few hundred
+shared polynomial coefficients recovering 90% of a trained neural
+propagator's own dynamics is, on its own, a promising and previously
+untried direction — worth a real symbolic-regression pass (SINDy-style
+sparse selection, not just Ridge) to see whether it collapses further
+to a small, human-readable set of terms comparable to KS's own PDE.

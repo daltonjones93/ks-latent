@@ -2160,6 +2160,63 @@ the checkpoint's own trained ratio unless an explicit override flag is
 passed); not fixed now since it didn't block this test (a dedicated,
 correct script was used instead).
 
+### Phase 11 (never previously implemented): a local quadratic stencil closure fits Section 224's latent much better than Section 216's (2026-09-25)
+
+User: "do you think we would be able to fit a pde more easily to the
+latent space of 224 since it's highly localized? please try this and
+report on the results." Neither `ks_latent/discovery/stencil.py` nor
+`pde_find.py` (brief Phases 8/11) had ever actually been built in this
+codebase -- genuinely new territory, not a rerun.
+
+**`scripts/fit_local_stencil_pde.py`**: a shared, translation-invariant
+Ridge regression -- the literal Phase 11 "stencil propagator" idea
+(`z_j_dot = F(z_{j-w},...,z_j,...,z_{j+w})`, same law at every site) --
+predicting each site's next-step latent delta from a circular window
+of `2w+1` neighboring sites' current state, pooled across all
+sites/times/trajectories. Plain linear features were far too weak
+(R^2~0.03 even at full width, confirming the closure genuinely needs
+nonlinearity, not just locality); degree-2 polynomial features (KS's
+own nonlinearity is the quadratic advective term `u*u_x`) is where the
+real signal appeared.
+
+**Result, comparing Section 224 (`d_latent=48`, `n_sites=16`,
+D3=0.43) against Section 216 (`d_latent=96`, `n_sites=32`, D3=0.21) --
+same methodology, same dataset:**
+
+| stencil half-width `w` (sites) | 224 val R^2 | 216 val R^2 |
+|---|---|---|
+| 0 (own site only) | 0.152 | 0.264 |
+| 1 | 0.578 | 0.569 |
+| 2 | 0.816 | 0.702 |
+| 3 | 0.882 | 0.762 |
+| 4 | 0.900 | 0.793 |
+| 6 | 0.904 | -- |
+| 8 (=full ring for 224) | 0.903 | 0.819 |
+| 16 (=full ring for 216) | -- | 0.817 |
+
+**Even at FULL global width (every site sees every other site, no
+windowing restriction at all), a local quadratic closure law explains
+90.3% of Section 224's one-step latent dynamics but only 81.7% of
+Section 216's** -- a real ~8-point gap in explainable variance that
+has nothing to do with window size once both are already global. And
+224 reaches essentially its own ceiling (~90%) using barely a third of
+its ring (`w=3`, 7/16 sites), while 216 never gets there even using
+all 32 sites. (Caveat noted for completeness: at very SHORT physical
+radius, 216 is actually slightly better -- `216`'s finer site spacing,
+`h=3.13` vs `224`'s `h=6.25`, gives it a modest short-range edge before
+224 pulls decisively ahead past `~12` physical units.)
+
+**Reading**: this is a stronger and more precise result than "224 just
+needs a smaller stencil" -- 224's dynamics are genuinely better
+described by a compact, local, low-order polynomial closure law, not
+merely easier to fit within a restricted window. This is consistent
+with, and adds real evidence beyond, the D3 bandedness gap (0.43 vs
+0.21) that originally motivated the question. A genuinely interpretable
+PDE-like closure (a few hundred polynomial coefficients, shared across
+all sites) recovering 90% of a neural propagator's own dynamics is a
+promising, previously-untried direction -- see `docs/PART_4_3_SUMMARY.md`
+for next-step framing.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any
