@@ -2217,6 +2217,60 @@ all sites) recovering 90% of a neural propagator's own dynamics is a
 promising, previously-untried direction -- see `docs/PART_4_3_SUMMARY.md`
 for next-step framing.
 
+### SINDy-style sparse selection on Section 224's local closure: real compression, but not a hand-readable PDE (2026-09-25)
+
+Direct follow-up to the stencil-regression finding above. User: "how
+much would it take to test the SINDy-style sparse selection for the
+latent space of 224 to see if it collapses to a small human-readable
+set of terms? if it isn't too bad, can you try this now."
+
+`scripts/sindy_local_closure.py`: reuses `fit_local_stencil_pde.py`'s
+data pipeline, swaps dense Ridge for `pysindy.optimizers.STLSQ` over a
+NAMED degree-2 polynomial library (`z[-1,c1]*z[+1,c0]`, not an opaque
+coefficient vector) at `width=3` (7 sites, `252` candidate terms).
+Target: channel 0's own delta specifically -- the one physically-
+anchored, non-learned channel (the local average of `u`), the single
+most interpretable thing to look for a compact closure in. Per the
+brief's own Phase 8 guidance ("use ensemble/bootstrap SINDy and report
+per-term selection probabilities, not a single sparse fit"): 20
+bootstrap resamples (30% of pooled rows each) at a chosen threshold,
+reporting each term's selection frequency, not one point estimate.
+
+**Sparsity path** (threshold -> active terms -> held-out R^2 on channel
+0's delta): `0` (dense) `-> 252 -> 0.929`; `0.008 -> 91 -> 0.876`;
+`0.014 -> 53 -> 0.749`; `0.02 -> 24 -> 0.501`; `0.05 -> 2 -> 0.126`.
+**No sweet spot with both few terms and strong fit** -- there is a
+real cliff between `~50` terms (still explaining most of the variance)
+and a genuine handful (which collapses to near-useless, `R^2=0.13` at
+2 terms).
+
+**Bootstrap-robust set at threshold=0.014: 49 of 252 terms selected in
+>=80% of resamples.** Not a hand-readable equation -- meaningfully
+short of what "collapses to a small human-readable set of terms" would
+mean (compare the true KS PDE's 4 terms). What IS real: a genuine ~5x
+compression (252->49-53) that retains most of the achievable local fit,
+so the dynamics are neither maximally dense nor trivially sparse.
+
+**Mechanistically informative finding, independent of the "is it
+small" verdict**: most of the robustly-selected terms couple channel
+0 (the physically-anchored local mean) to channels 1/2 (the LEARNED,
+non-physical hidden channels) at nearby sites, not to other sites' own
+channel-0 values. Consistent with the original motivation for
+`local_channels > 1` in this project's own design (`CLAUDE.md`'s
+Phase 10 rationale): a bare coarse-grained physical field is not
+closed on its own (real Mori-Zwanzig memory from what coarse-graining
+discards), and the learned hidden channels are doing real,
+load-bearing work restoring that closure -- which is exactly why a
+compact closure purely in terms of the physical mean was never going
+to reduce to a handful of terms; the hidden channels' own dynamics are
+where the "extra" structure needed for Markovianity actually lives.
+
+**Time/effort note** (the actual question asked): tractable, as
+estimated -- reused the existing stencil-regression data pipeline
+almost entirely, added STLSQ + named feature library + bootstrap in
+one new script, total wall time (implementation + all runs) well under
+an hour.
+
 ### Literature context (2026-09-23)
 
 User question: "is there any hope for our approach? has there been any

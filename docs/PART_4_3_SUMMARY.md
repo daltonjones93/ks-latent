@@ -234,9 +234,20 @@ ring**, and even at FULL global width still only recovers **82% of
 Section 216's** dynamics. That's not a window-size artifact (both
 numbers are at global width) — 224's dynamics are genuinely better
 described by a compact, interpretable, low-order local polynomial law,
-not merely easier to fit within a restricted window. A few hundred
-shared polynomial coefficients recovering 90% of a trained neural
-propagator's own dynamics is, on its own, a promising and previously
-untried direction — worth a real symbolic-regression pass (SINDy-style
-sparse selection, not just Ridge) to see whether it collapses further
-to a small, human-readable set of terms comparable to KS's own PDE.
+not merely easier to fit within a restricted window.
+
+**Follow-up, same day: does it collapse further to a small,
+human-readable set of terms (real SINDy-style sparse selection, not
+just dense Ridge)? Tried it — answer is no, not to something you'd
+call small.** Bootstrap-stable sparse selection (STLSQ, 20 resamples)
+finds a real ~5x compression (252 candidate terms → 49 robustly
+selected) that keeps most of the achievable fit, but there's a hard
+cliff below that: push further and R² collapses fast (2 terms only
+explains 13% of variance). Not a napkin equation like KS's own 4-term
+PDE. The informative part is mechanistic, not the term count: the
+surviving terms mostly couple the one physically-anchored channel to
+the *learned* hidden channels at nearby sites, not to other sites' own
+physical values — i.e. the hidden channels are doing real, load-bearing
+memory-restoring work, which is exactly why a bare physical-field
+closure was never going to be a handful of terms. Real finding, just
+not the "here's the equation" result.
