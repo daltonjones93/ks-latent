@@ -70,6 +70,63 @@ def _circular_site_distance(n_sites: int) -> torch.Tensor:
     return torch.minimum(diff, n_sites - diff).to(torch.float64)
 
 
+def _circular_lattice_distance_2d(n_sites_x: int, n_sites_y: int) -> torch.Tensor:
+    """`(P, P)` matrix of 2D periodic (toroidal) Euclidean site distance,
+    `P = n_sites_x * n_sites_y`, for a SITE-MAJOR flattening with `x`
+    outer and `y` inner (`site_x(i) = i // n_sites_y`, `site_y(i) = i %
+    n_sites_y` -- the ordering `KSAutoencoderLocalField2D.encode` actually
+    produces before the channel dimension is folded in, confirmed by
+    reading its `z_field.permute(0, 2, 3, 1).reshape(B, Px * Py * c)`
+    directly: `Px` is the outer reshape dimension). Distance in SITE
+    units, circular (not linear) in each axis independently, then
+    combined via the ordinary Euclidean norm -- isotropic localization,
+    appropriate for 2D KS/Kolmogorov's own isotropic (or, for Kolmogorov,
+    the locally-isotropic small-scale) spatial structure."""
+    P = n_sites_x * n_sites_y
+    idx = torch.arange(P)
+    site_x = idx // n_sites_y
+    site_y = idx % n_sites_y
+    dx = (site_x.unsqueeze(0) - site_x.unsqueeze(1)).abs()
+    dx = torch.minimum(dx, n_sites_x - dx)
+    dy = (site_y.unsqueeze(0) - site_y.unsqueeze(1)).abs()
+    dy = torch.minimum(dy, n_sites_y - dy)
+    return torch.sqrt((dx**2 + dy**2).to(torch.float64))
+
+
+def build_latent_taper_matrix_2d(n_sites_x: int, n_sites_y: int, channels: int, c: float) -> torch.Tensor:
+    """2D analogue of `build_latent_taper_matrix`, for a local latent
+    FIELD on a 2D site grid (`KSAutoencoderLocalField2D`,
+    `(P, channels)`, `P = n_sites_x * n_sites_y`, flattened site-major
+    with `x` outer, `y` inner, channel innermost -- see
+    `_circular_lattice_distance_2d`'s docstring for the exact convention,
+    confirmed against the encoder's own flatten line). `c` (the
+    Gaspari-Cohn half-width, support radius `2c`) is in SITE units,
+    Euclidean 2D distance -- e.g. `c=2` reaches zero at 2D (toroidal)
+    distance `4`. Returns `(P*channels, P*channels)`; every channel pair
+    at a given site-pair shares the identical taper weight (channel
+    identity does not affect physical distance), diagonal exactly `1.0`.
+
+    Why this is the needed piece for 2D latent DA (brief §15/Phase 13,
+    `docs/ks_local_field_ltransfer.tex` sec:consolidation Phase 4): the
+    1D `build_latent_taper_matrix` assumes a 1D ring of sites and cannot
+    express 2D (toroidal) distance; this function is what
+    `ks_latent.da.cycling.run_da_experiment`'s `localize_fn` needs for
+    any 2D local-field model (2D KS, Kolmogorov) deployed -- at native
+    size or transferred to a larger domain via
+    `ks_latent.models.load_autoencoder_checkpoint_resized_2d` -- since
+    `n_sites_x`/`n_sites_y` change with transfer and the taper must be
+    rebuilt at the deployed size, exactly as the 1D version already is
+    in `scripts/run_da_pff_ltransfer.py`."""
+    if n_sites_x < 1 or n_sites_y < 1 or channels < 1:
+        raise ValueError(
+            f"n_sites_x, n_sites_y and channels must be >= 1, got "
+            f"n_sites_x={n_sites_x!r}, n_sites_y={n_sites_y!r}, channels={channels!r}"
+        )
+    site_dist = _circular_lattice_distance_2d(n_sites_x, n_sites_y)
+    site_taper = gaspari_cohn_taper(site_dist, c)
+    return site_taper.repeat_interleave(channels, dim=0).repeat_interleave(channels, dim=1)
+
+
 def build_latent_taper_matrix(n_sites: int, channels: int, c: float) -> torch.Tensor:
     """`(n_sites*channels, n_sites*channels)` Gaspari-Cohn taper for a
     local latent field flattened SITE-MAJOR (`site(i) = i // channels`),

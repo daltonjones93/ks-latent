@@ -153,3 +153,91 @@ def test_cycle_config_localize_fn_flows_through_to_pff():
     result_no_taper = run(None)
     result_tapered = run(localize_fn)
     assert not torch.allclose(result_no_taper.z_da_mean, result_tapered.z_da_mean)
+
+
+@pytest.mark.integration
+def test_cycling_dispatches_letkf_local2d_and_beats_free_run():
+    """`CycleConfig.method="letkf_local2d"` (T2,
+    docs/ks_local_field_ltransfer.tex sec:c19_da_hypotheses) end to end
+    through `run_da_experiment`: a block-diagonal decoder (one pixel per
+    site, `KSAutoencoderLocalField2D`'s zero-decoder-reach structure),
+    four sites in a 2x2 grid, each fully observed. Not a tight numerical
+    bound (that's `tests/unit/test_letkf_local.py`'s job) -- just that
+    the dispatch wiring works and the resulting filter still does its
+    one job, beating the free run on a mildly unstable linear system,
+    exactly like `test_da_beats_free_run_on_mildly_unstable_linear_system`
+    does for the other two methods."""
+    from ks_latent.da.jacobian_coloring import obs_site_map_2d
+
+    torch.manual_seed(0)
+    n_sites_x, n_sites_y, channels = 2, 2, 2
+    n_sites = n_sites_x * n_sites_y
+    d, NX, N = n_sites * channels, n_sites, 60
+    H = torch.zeros(NX, d)
+    for s in range(n_sites):
+        H[s, s * channels:(s + 1) * channels] = torch.randn(channels) * 0.5
+    H_pinv = torch.linalg.pinv(H)
+
+    def decoder(Z):
+        return Z @ H.T
+
+    def encoder(U):
+        return U @ H_pinv.T
+
+    def obs_operator_phys(u):
+        return u  # every site/pixel observed (NX == n_sites here)
+
+    site_of_obs = obs_site_map_2d(n_sites_x, n_sites_y, n_sites_x, n_sites_y, 1, 1)
+    assert torch.equal(site_of_obs, torch.arange(n_sites, dtype=torch.int64))
+
+    prop = _LinearExpandingPropagator(d, growth=1.03)
+    n_prop_steps, n_cycles = 4, 6
+    T = n_prop_steps * n_cycles
+    z_true0 = torch.randn(d) * 0.3
+    z_true = [z_true0]
+    for _ in range(T):
+        z_true.append((z_true[-1].unsqueeze(0) @ prop.A.T).squeeze(0))
+    z_true = torch.stack(z_true, dim=0)
+    truth_traj = decoder(z_true)
+
+    rng = torch.Generator().manual_seed(2)
+    ic_bias = 0.15 * torch.randn(d, generator=rng)
+    z0_ensemble = z_true0 + ic_bias + 0.05 * torch.randn(N, d, generator=rng)
+    z_minus1_ensemble = z0_ensemble.clone()
+
+    cfg = CycleConfig(
+        n_prop_steps=n_prop_steps, n_cycles=n_cycles, n_ensemble=N,
+        model_noise_std=0.0, obs_noise_std=0.05, seed=3,
+        method="letkf_local2d",
+        site_of_obs=site_of_obs, n_sites_x=n_sites_x, n_sites_y=n_sites_y,
+        local_channels=channels, gc_c_local=5.0,
+    )
+    result = run_da_experiment(
+        prop, decoder, encoder, obs_operator_phys, truth_traj,
+        z0_ensemble, z_minus1_ensemble, cfg,
+    )
+    assert result.rmse_da.mean() < result.rmse_free.mean()
+
+
+def test_cycling_letkf_local2d_raises_on_missing_required_fields():
+    """`method="letkf_local2d"` without the five required fields set
+    should fail loudly (ground rule 2), not silently fall back to some
+    default geometry."""
+    torch.manual_seed(0)
+    d, NX, N = 3, 12, 20
+    W = torch.randn(NX, d) * 0.5
+    W_pinv = torch.linalg.pinv(W)
+    prop = _LinearExpandingPropagator(d, growth=1.0)
+    truth_traj = torch.randn(20, NX)
+    z0_ensemble = torch.randn(N, d)
+    z_minus1_ensemble = z0_ensemble.clone()
+
+    cfg = CycleConfig(
+        n_prop_steps=2, n_cycles=2, n_ensemble=N,
+        method="letkf_local2d",  # none of the required fields set
+    )
+    with pytest.raises(ValueError, match="letkf_local2d"):
+        run_da_experiment(
+            prop, lambda Z: Z @ W.T, lambda U: U @ W_pinv.T, lambda u: u[::2],
+            truth_traj, z0_ensemble, z_minus1_ensemble, cfg,
+        )

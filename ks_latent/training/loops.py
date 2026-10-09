@@ -24,6 +24,7 @@ from ks_latent.models.propagator import AuxPropagator, LatentPropagator, _polyno
 from ks_latent.models.spectral_field import decode_from_spectrum, encode_to_spectrum
 from ks_latent.training.data import gather_windows, index_shuffle_batches, make_window_index, roll_batch
 from ks_latent.training.losses import (
+    blockwise_spatial_coherence_loss,
     decorr_var_loss,
     horizon_weighted_latent_loss,
     horizon_weights,
@@ -595,8 +596,16 @@ def train_stage1(
                     # See ks_latent.training.losses.spatial_coherence_loss's
                     # docstring for the RegConfig.lambda_z precedent/risk this
                     # carries -- off by default (cfg.w_spatial == 0).
-                    l_spatial = spatial_coherence_loss(
-                        z, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
+                    # `cfg.spatial_blocks` (default None, unchanged behavior):
+                    # see blockwise_spatial_coherence_loss's docstring --
+                    # avoids scoring a multiscale latent's block-boundary
+                    # indices as if they were spatially adjacent.
+                    l_spatial = (
+                        blockwise_spatial_coherence_loss(
+                            z, cfg.spatial_blocks, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
+                        )
+                        if cfg.spatial_blocks is not None
+                        else spatial_coherence_loss(z, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed)
                     )
                     loss = loss + w_spatial_now * l_spatial
                 if cfg.w_prop_energy_floor > 0 or cfg.w_prop_magnitude_ceiling > 0:
@@ -1807,10 +1816,19 @@ def train_stage2(
                         loss = loss + cfg.w_kernel_unstable_floor * l_kernel_unstable
                 if cfg.w_spatial > 0:
                     # Stage-2 analogue of Stage1TrainingConfig.w_spatial -- see
-                    # Stage2TrainingConfig.w_spatial's docstring.
-                    l_spatial = spatial_coherence_loss(
-                    z_pred.reshape(-1, d), bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
-                )
+                    # Stage2TrainingConfig.w_spatial's docstring. cfg.spatial_blocks:
+                    # see Stage1's own call site / blockwise_spatial_coherence_loss's
+                    # docstring.
+                    z_pred_flat = z_pred.reshape(-1, d)
+                    l_spatial = (
+                        blockwise_spatial_coherence_loss(
+                            z_pred_flat, cfg.spatial_blocks, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
+                        )
+                        if cfg.spatial_blocks is not None
+                        else spatial_coherence_loss(
+                            z_pred_flat, bandwidth=cfg.spatial_bandwidth, signed=cfg.spatial_signed
+                        )
+                    )
                     loss = loss + cfg.w_spatial * l_spatial
                 if cfg.w_lowpass_rollout > 0:
                     # See Stage2TrainingConfig.w_lowpass_rollout's docstring --

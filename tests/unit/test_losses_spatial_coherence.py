@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import torch
 
-from ks_latent.training.losses import spatial_coherence_loss
+import pytest
+
+from ks_latent.training.losses import blockwise_spatial_coherence_loss, spatial_coherence_loss
 
 
 def _ring_correlated_batch(d: int, n: int, rho: float, noise_std: float, generator: torch.Generator) -> torch.Tensor:
@@ -137,3 +139,52 @@ def test_signed_true_handles_small_batch_without_nan():
     assert torch.isfinite(loss)
     loss.backward()
     assert torch.isfinite(z.grad).all()
+
+
+def test_blockwise_single_block_matches_plain_loss():
+    torch.manual_seed(9)
+    z = torch.randn(50, 20)
+    plain = spatial_coherence_loss(z, bandwidth=3.0, signed=False)
+    blockwise = blockwise_spatial_coherence_loss(z, blocks=[20], bandwidth=3.0, signed=False)
+    assert torch.allclose(plain, blockwise, atol=1e-6)
+
+
+def test_blockwise_mismatched_sizes_raises():
+    z = torch.randn(10, 20)
+    with pytest.raises(ValueError, match="must sum to"):
+        blockwise_spatial_coherence_loss(z, blocks=[10, 5])
+
+
+def test_blockwise_ignores_cross_block_boundary_correlation():
+    """A correlation planted ONLY across a block boundary (last channel
+    of block 1 with first channel of block 2) must NOT move the
+    blockwise loss (each block is its own closed ring, so those two
+    indices never appear in the same ring together), even though a
+    naive full-vector `spatial_coherence_loss` call DOES pick it up
+    (those two indices are adjacent -- distance 1 -- in the flat
+    vector). Compares each method against ITSELF with/without the
+    injected correlation, rather than cross-comparing plain vs.
+    blockwise absolute values directly -- those aren't on the same
+    scale to begin with (a 12-dim ring and two 6-dim rings have
+    different noise floors under the same fixed bandwidth)."""
+    torch.manual_seed(10)
+    n, d1, d2 = 500, 6, 6
+    base = torch.randn(n, d1 + d2)
+    z_indep = base.clone()
+    shared = torch.randn(n)
+    z_corr = base.clone()
+    z_corr[:, d1 - 1] = shared + 0.01 * torch.randn(n)
+    z_corr[:, d1] = shared + 0.01 * torch.randn(n)
+
+    plain_indep = spatial_coherence_loss(z_indep, bandwidth=3.0, signed=False)
+    plain_corr = spatial_coherence_loss(z_corr, bandwidth=3.0, signed=False)
+    block_indep = blockwise_spatial_coherence_loss(z_indep, blocks=[d1, d2], bandwidth=3.0, signed=False)
+    block_corr = blockwise_spatial_coherence_loss(z_corr, blocks=[d1, d2], bandwidth=3.0, signed=False)
+
+    plain_shift = (plain_corr - plain_indep).abs().item()
+    block_shift = (block_corr - block_indep).abs().item()
+    # The plain (full-vector) loss moves substantially once the boundary
+    # correlation is injected; the blockwise loss barely moves at all.
+    assert plain_shift > 0.05
+    assert block_shift < 0.05
+    assert plain_shift > 3 * block_shift

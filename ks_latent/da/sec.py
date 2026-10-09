@@ -110,6 +110,27 @@ def sec_localize_covariance(B: torch.Tensor, table: SECTable) -> torch.Tensor:
     return corrected_t * (std.unsqueeze(0) * std.unsqueeze(1))
 
 
+def sec_localize_covariance_psd(B: torch.Tensor, table: SECTable, floor_rel: float = 1e-10) -> torch.Tensor:
+    """Task D3(i): `sec_localize_covariance` followed by projection onto the positive
+    semidefinite cone. The elementwise SEC correction of a valid covariance is in general
+    indefinite (each entry is corrected independently, so the result need not be a Gram
+    matrix); a filter that inverts or factorizes it can then fail. Eigenvalues below
+    `floor_rel * max eigenvalue` are raised to that floor (eigh in float64), which keeps the
+    matrix invertible for the PFF's `B^{-1}`. When the corrected matrix is already PSD with
+    eigenvalues above the floor this returns it unchanged up to round-off."""
+    C = sec_localize_covariance(B, table).to(torch.float64)
+    C = 0.5 * (C + C.T)
+    evals, evecs = torch.linalg.eigh(C)
+    floor = floor_rel * float(evals.max().clamp_min(1e-300))
+    evals = evals.clamp_min(floor)
+    return ((evecs * evals) @ evecs.T).to(B.dtype)
+
+
+def make_sec_psd_localizer(table: SECTable) -> Callable[[torch.Tensor], torch.Tensor]:
+    """`localize_fn` for task D3(i)."""
+    return lambda B: sec_localize_covariance_psd(B, table)
+
+
 def fixed_empirical_taper(archive: torch.Tensor) -> torch.Tensor:
     """A fixed `(d, d)` taper from a *large* reference archive of latent
     points: the archive's own correlation-matrix magnitude, used directly

@@ -126,3 +126,81 @@ def test_apply_fixed_taper_reuses_sec_mechanism_correctly():
     B = torch.ones(4, 4, dtype=torch.float64)
     localized = apply_fixed_taper(B, taper)
     assert torch.allclose(localized, taper)
+
+
+# --- 2D (build_latent_taper_matrix_2d) -------------------------------------
+
+from ks_latent.da.localization import build_latent_taper_matrix_2d  # noqa: E402
+
+
+def test_taper_matrix_2d_shape_and_diagonal():
+    nsx, nsy, channels = 4, 5, 3
+    taper = build_latent_taper_matrix_2d(nsx, nsy, channels, c=2.0)
+    d = nsx * nsy * channels
+    assert taper.shape == (d, d)
+    assert torch.allclose(torch.diagonal(taper), torch.ones(d, dtype=torch.float64))
+
+
+def test_taper_matrix_2d_symmetric_and_psd():
+    taper = build_latent_taper_matrix_2d(6, 5, 2, c=1.5)
+    assert torch.allclose(taper, taper.T)
+    eigvals = torch.linalg.eigvalsh(taper)
+    assert eigvals.min().item() > -1e-8
+
+
+def test_taper_matrix_2d_matches_1d_when_ny_is_1():
+    """n_sites_y=1 collapses the 2D lattice to a 1D ring; the result must
+    agree EXACTLY with the 1D taper (same circular distance, same GC
+    function) -- the 1D case is the n_sites_y=1 special case of the 2D
+    one, not just a similar-looking construction."""
+    from ks_latent.da.localization import build_latent_taper_matrix
+    nsx, channels, c = 8, 2, 1.7
+    taper_2d = build_latent_taper_matrix_2d(nsx, 1, channels, c)
+    taper_1d = build_latent_taper_matrix(nsx, channels, c)
+    assert torch.allclose(taper_2d, taper_1d)
+
+
+def test_taper_matrix_2d_respects_site_major_flattening():
+    """Site (0,0) occupies flat indices [0, channels); site (0,1)
+    (y-neighbour) occupies the NEXT `channels` indices (y is the inner
+    reshape dimension) -- directly verifies the flatten convention
+    against KSAutoencoderLocalField2D.encode's own
+    `.permute(0,2,3,1).reshape(...)` line, not merely against this
+    module's own re-derivation of it."""
+    nsx, nsy, channels, c = 3, 4, 2, 1.0
+    taper = build_latent_taper_matrix_2d(nsx, nsy, channels, c)
+    site00 = [0, 1]  # channels of site_x=0, site_y=0
+    site01 = [2, 3]  # channels of site_x=0, site_y=1 (adjacent in y, flat offset = channels)
+    expected = gaspari_cohn_taper(torch.tensor(1.0, dtype=torch.float64), c).item()
+    for i in site00:
+        for j in site01:
+            assert taper[i, j].item() == pytest.approx(expected)
+
+
+def test_taper_matrix_2d_is_toroidal_in_both_axes():
+    """Site (0,0) and site (nsx-1, 0) must be circular x-neighbours
+    (distance 1, not nsx-1); likewise site (0,0) and site (0, nsy-1) in y
+    -- both axes are periodic (both 2D KS and Kolmogorov are periodic
+    domains in x and y)."""
+    nsx, nsy, channels, c = 6, 5, 1, 2.0
+    taper = build_latent_taper_matrix_2d(nsx, nsy, channels, c)
+    flat = lambda sx, sy: sx * nsy + sy  # noqa: E731
+    expected = gaspari_cohn_taper(torch.tensor(1.0, dtype=torch.float64), c).item()
+    assert taper[flat(0, 0), flat(nsx - 1, 0)].item() == pytest.approx(expected)
+    assert taper[flat(0, 0), flat(0, nsy - 1)].item() == pytest.approx(expected)
+
+
+def test_taper_matrix_2d_diagonal_distance_is_euclidean():
+    """A site one step away in BOTH x and y should be tapered at
+    Euclidean distance sqrt(2), not Chebyshev/Manhattan distance 1 or 2
+    -- this is what makes the localization isotropic."""
+    nsx, nsy, channels, c = 5, 5, 1, 3.0
+    taper = build_latent_taper_matrix_2d(nsx, nsy, channels, c)
+    flat = lambda sx, sy: sx * nsy + sy  # noqa: E731
+    expected = gaspari_cohn_taper(torch.tensor(2.0**0.5, dtype=torch.float64), c).item()
+    assert taper[flat(0, 0), flat(1, 1)].item() == pytest.approx(expected, abs=1e-10)
+
+
+def test_taper_matrix_2d_raises_on_bad_args():
+    with pytest.raises(ValueError, match="must be >= 1"):
+        build_latent_taper_matrix_2d(0, 4, 2, c=1.0)

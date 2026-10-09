@@ -15,4 +15,4 @@ def per_dim_rmse(error: torch.Tensor) -> float:
     `(..., d)` batch (returns the mean over the batch)."""
     d = error.shape[-1]
     norm = error.norm(dim=-1)
-    return float((norm / d**0.5).mean())
+    return float((norm / d**0.5).mean().detach())

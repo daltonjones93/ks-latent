@@ -459,6 +459,55 @@ class _SiteConvDeltaBody(nn.Module):
         return delta.transpose(1, 2).reshape(B, self.n_sites * self.local_channels)
 
 
+class _SiteConv2DDeltaBody(nn.Module):
+    """`backbone="site_conv_2d"` (added 2026-09-28, `docs/
+    ks_local_field_ltransfer.tex` "Staged next steps" Step 1) -- 2D
+    generalization of `_SiteConvDeltaBody`, reusing
+    `KSAutoencoderLocalField2D`'s own circular-`Conv2d` site-mixing
+    design as a dimension-preserving `z -> z` map, exactly the same
+    precedent Section 222/223 established for 1D (this backbone reuses
+    the paired encoder's OWN architecture as the dynamics model, rather
+    than a generic conv over an arbitrary flat sequence). `z` is
+    reshaped to its native `(n_sites_x, n_sites_y, local_channels)`
+    field (site-major, matching `KSAutoencoderLocalField2D`'s own
+    flattening exactly), `1x1 Conv2d` in/out projections, `n_layers`
+    circular `Conv2d(hidden, hidden, kernel_size=2*radius+1, padding=
+    radius, padding_mode='circular')` + GELU mixing across BOTH site
+    axes (periodic in both, matching the 2D KS domain), zero-initialized
+    output projection (no bias, same `KSAutoencoderLocalField`-precedent
+    fix against constant-offset drift)."""
+
+    def __init__(
+        self, n_sites_x: int, n_sites_y: int, local_channels: int,
+        hidden: int, n_layers: int, radius: int, zero_init: bool,
+    ):
+        super().__init__()
+        self.n_sites_x = n_sites_x
+        self.n_sites_y = n_sites_y
+        self.local_channels = local_channels
+        self.proj_in = nn.Conv2d(local_channels, hidden, kernel_size=1)
+        self.mix = nn.ModuleList(
+            [
+                nn.Conv2d(hidden, hidden, kernel_size=2 * radius + 1, padding=radius, padding_mode="circular")
+                for _ in range(n_layers)
+            ]
+        )
+        self.proj_out = nn.Conv2d(hidden, local_channels, kernel_size=1, bias=False)
+        if zero_init:
+            nn.init.zeros_(self.proj_out.weight)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites_x*n_sites_y*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        x = z.reshape(B, Px, Py, c).permute(0, 3, 1, 2)  # (B, c, Px, Py)
+        h = F.gelu(self.proj_in(x))
+        for conv in self.mix:
+            h = F.gelu(conv(h))
+        delta = self.proj_out(h)  # (B, c, Px, Py)
+        return delta.permute(0, 2, 3, 1).reshape(B, Px * Py * c)
+
+
 def _circular_band_mask(dim: int, window: int | None) -> torch.Tensor | None:
     """`(dim, dim)` 0/1 mask, `1` where circular index distance `<= window`,
     else `0`. `None` (fully dense, no restriction) if `window is None`."""
@@ -875,6 +924,502 @@ class _LocalMLPDeltaBody(nn.Module):
         h = self.norm(h)
         delta = self.token_unembed(h)
         return delta.reshape(B, self.n_tokens * self.chunk_size)
+
+
+class _MultiscaleLocalMLPDeltaBody(nn.Module):
+    """`backbone="multiscale_local_mlp"` (added 2026-09-28, user-directed:
+    combine Section 224's `local_mlp` propagator with the multiscale
+    latent idea in `docs/spatially_structured_latent_DA_FMM_research_
+    idea.md` -- see `AuxPropagatorConfig`'s own docstring for the full
+    design rationale).
+
+    Three independent `_LocalMLPDeltaBody` instances (fine/regional/
+    global), each an UNMODIFIED instantiation of the exact class Section
+    224's own propagator uses -- same weight-shared, windowed, NO-softmax
+    linear mixer, applied separately within each scale's own block of the
+    concatenated latent. Deliberately NO cross-scale coupling in this
+    first version: the encoder/decoder's own cross-scale coupling
+    (through joint reconstruction) is what keeps the scales consistent
+    under training; whether the DYNAMICS also need explicit cross-scale
+    terms is exactly the kind of question a first trained checkpoint can
+    answer (if per-scale rollout diagnostics show the scales drifting
+    inconsistently, that is the signal to add them -- not assumed away
+    up front)."""
+
+    def __init__(
+        self,
+        fine_n_sites: int, fine_channels: int, fine_window: int,
+        regional_n_sites: int, regional_channels: int, regional_window: int,
+        global_channels: int,
+        token_d_model: int, n_layers: int, mlp_ratio: int, dropout: float, zero_init: bool,
+    ):
+        super().__init__()
+        self.d_fine = fine_n_sites * fine_channels
+        self.d_regional = regional_n_sites * regional_channels
+        self.d_global = global_channels
+        self.fine_body = _LocalMLPDeltaBody(
+            self.d_fine, fine_n_sites, token_d_model, n_layers, mlp_ratio, fine_window, dropout, zero_init,
+        )
+        self.regional_body = _LocalMLPDeltaBody(
+            self.d_regional, regional_n_sites, token_d_model, n_layers, mlp_ratio, regional_window, dropout, zero_init,
+        )
+        # Global: a single "site" has no spatial neighbors to convolve
+        # over at all, so a plain dense residual MLP (MLPDeltaBody, the
+        # same body backbone="mlp" uses) is both the architecturally
+        # correct choice AND sidesteps a real MPS Metal backward-kernel
+        # bug found empirically while building this (2026-09-28):
+        # `_LocalMLPDeltaBody`'s circular Conv1d, called on a
+        # sequence-length-1 token axis inside a multi-step rollout under
+        # bfloat16 autocast, crashes MPS with "Weights tensor and
+        # ndArray input channel mismatch" during backward specifically
+        # (forward-only, and CPU either way, both work fine -- isolated
+        # by testing each scale's body independently before this fix).
+        self.global_body = MLPDeltaBody(
+            self.d_global, self.d_global, token_d_model, n_layers, dropout, zero_init,
+        )
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        z_fine = z[:, : self.d_fine]
+        z_regional = z[:, self.d_fine : self.d_fine + self.d_regional]
+        z_global = z[:, self.d_fine + self.d_regional :]
+        delta_fine = self.fine_body(z_fine)
+        delta_regional = self.regional_body(z_regional)
+        delta_global = self.global_body(z_global)
+        return torch.cat([delta_fine, delta_regional, delta_global], dim=1)
+
+
+class _LocalMixerBlock2D(nn.Module):
+    """2D generalization of `_LocalMixerBlock` (added 2026-09-28,
+    `docs/ks_local_field_ltransfer.tex` "Staged next steps" Step 1,
+    user-directed: "build [the actual 2D local_mlp] please"). Identical
+    structure -- pre-norm windowed linear token-mixer (no softmax) +
+    residual, pre-norm per-token FFN + residual -- the ONLY change is
+    the mixing conv itself: circular `Conv2d` (kernel `(2w+1,2w+1)`)
+    over a `(n_sites_x, n_sites_y)` token grid instead of circular
+    `Conv1d` over a flat token sequence. `norm1`/`mlp`/`norm2`/`dropout`
+    are exactly `_LocalMixerBlock`'s own (per-token pointwise operations,
+    genuinely unchanged by how many spatial axes the token grid has)."""
+
+    def __init__(self, d_model: int, window: int, mlp_ratio: int, dropout: float):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.mix = nn.Conv2d(
+            d_model, d_model, kernel_size=2 * window + 1, padding=window, padding_mode="circular"
+        )
+        self.norm2 = nn.LayerNorm(d_model)
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, mlp_ratio * d_model),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * d_model, d_model),
+        )
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor, Px: int, Py: int) -> torch.Tensor:
+        """`x`: `(B, Px*Py, d_model)`, site-major (matches
+        `KSAutoencoderLocalField2D`'s own flattening)."""
+        B = x.shape[0]
+        h = self.norm1(x).reshape(B, Px, Py, -1).permute(0, 3, 1, 2)  # (B, d_model, Px, Py)
+        h = self.mix(h).permute(0, 2, 3, 1).reshape(B, Px * Py, -1)
+        x = x + self.dropout(h)
+        return x + self.dropout(self.mlp(self.norm2(x)))
+
+
+class _LocalMLPDeltaBody2D(nn.Module):
+    """`backbone="local_mlp_2d"` (added 2026-09-28) -- 2D generalization
+    of `_LocalMLPDeltaBody`, the ACTUAL 2D analogue of Section 224's own
+    propagator (as opposed to `site_conv_2d`, the backbone this
+    project's first 2D KS training run actually used -- see that
+    experiment's own writeup for why `site_conv_2d` was tried first).
+
+    Purpose-built for a `local_field_2d`-paired latent specifically, so
+    (unlike 1D's `_LocalMLPDeltaBody`, general enough to tokenize an
+    ARBITRARY flat `d_latent`) no general tokenizer is needed at all:
+    tokens ARE the sites, already naturally gridded
+    `(n_sites_x, n_sites_y)` -- `z` is reshaped directly to that grid,
+    matching `KSAutoencoderLocalField2D`'s own site-major flattening
+    exactly, embedded to `token_d_model` per site, mixed by `n_layers`
+    `_LocalMixerBlock2D`s, projected back to `local_channels` per site,
+    zero-initialized for the identity-at-init property."""
+
+    def __init__(
+        self, n_sites_x: int, n_sites_y: int, local_channels: int,
+        token_d_model: int, n_layers: int, mlp_ratio: int, window: int, dropout: float, zero_init: bool,
+    ):
+        super().__init__()
+        self.n_sites_x = n_sites_x
+        self.n_sites_y = n_sites_y
+        self.local_channels = local_channels
+        self.token_embed = nn.Linear(local_channels, token_d_model)
+        self.blocks = nn.ModuleList(
+            [_LocalMixerBlock2D(token_d_model, window, mlp_ratio, dropout) for _ in range(n_layers)]
+        )
+        self.norm = nn.LayerNorm(token_d_model)
+        self.token_unembed = nn.Linear(token_d_model, local_channels)
+        if zero_init:
+            nn.init.zeros_(self.token_unembed.weight)
+            nn.init.zeros_(self.token_unembed.bias)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites_x*n_sites_y*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        tokens = z.reshape(B, Px * Py, c)
+        h = self.token_embed(tokens)
+        for block in self.blocks:
+            h = block(h, Px, Py)
+        h = self.norm(h)
+        delta = self.token_unembed(h)
+        return delta.reshape(B, Px * Py * c)
+
+
+def _biot_savart_velocity(omega: torch.Tensor, Lx: float, Ly: float) -> torch.Tensor:
+    """`omega`: `(B, Px, Py)` vorticity sampled on an `(n_sites_x,
+    n_sites_y)` periodic grid of physical size `Lx x Ly`. Returns
+    `(B, Px, Py, 2)` = `(u, v)`, the EXACT (not learned) velocity
+    recovered via `nabla^2 psi = -omega`, `u = psi_y`, `v = -psi_x`.
+
+    In Fourier space this is `psi_hat = omega_hat / |k|^2` (the k=0
+    mode fixed at 0 -- the operator is singular there, and mean
+    vorticity is dynamically irrelevant, same convention as the true
+    solver's own `_velocity_from_vorticity` in
+    `ks_latent.solver.kolmogorov`), then `u_hat = i*ky*psi_hat`,
+    `v_hat = -i*kx*psi_hat`. `k = 2*pi*n/L` is defined in PHYSICAL
+    units, so this is correct at any grid size/domain -- the same
+    resizability argument already used for the gauge-anchor channel."""
+    Px, Py = omega.shape[-2], omega.shape[-1]
+    device, dtype = omega.device, omega.dtype
+    # MPS has no float64 (brief §1.2/§1.3) -- use it when available (CPU,
+    # the precision-critical path this is validated against in
+    # test_biot_savart_matches_analytic_taylor_green) and fall back to the
+    # input's own (float32) dtype on MPS/other accelerators during training.
+    compute_dtype = torch.float64 if device.type == "cpu" else dtype
+    kx = torch.fft.fftfreq(Px, d=Lx / Px, device=device).to(compute_dtype) * (2.0 * math.pi)
+    ky = torch.fft.fftfreq(Py, d=Ly / Py, device=device).to(compute_dtype) * (2.0 * math.pi)
+    KX = kx.reshape(Px, 1).expand(Px, Py)
+    KY = ky.reshape(1, Py).expand(Px, Py)
+    K2 = KX * KX + KY * KY
+    K2_inv = torch.where(K2 > 0, 1.0 / K2.clamp_min(1e-12), torch.zeros_like(K2))
+
+    omega_hat = torch.fft.fft2(omega.to(compute_dtype))
+    psi_hat = omega_hat * K2_inv.to(omega_hat.dtype)
+    u_hat = 1j * KY.to(omega_hat.dtype) * psi_hat
+    v_hat = -1j * KX.to(omega_hat.dtype) * psi_hat
+    u = torch.fft.ifft2(u_hat).real.to(dtype)
+    v = torch.fft.ifft2(v_hat).real.to(dtype)
+    return torch.stack([u, v], dim=-1)
+
+
+class _LocalMLPDeltaBody2DBiotSavart(nn.Module):
+    """`backbone="local_mlp_2d_biotsavart"` (added 2026-10-01, D2 of
+    docs/oct_1_exp.md -- user-directed: "I'm trying to improve transfer
+    by creating dynamics between localized data"). Identical to
+    `_LocalMLPDeltaBody2D` (same tokens-ARE-sites design, same
+    `_LocalMixerBlock2D` mixing stack, same zero-init identity-at-init
+    property) except ONE addition before `token_embed`: channel 0 of
+    the input (the non-learned, gauge-anchored physical average of
+    vorticity over each site) is treated as vorticity sampled on this
+    grid and run through the EXACT (not learned) Biot-Savart/
+    streamfunction recovery (`_biot_savart_velocity`), and the
+    resulting `(u, v)` fields are embedded and ADDED to the usual
+    `local_channels`-based token embedding before the mixer stack runs
+    unchanged.
+
+    This supplies, in closed form, the one term in 2D vorticity
+    dynamics that genuinely cannot be made local no matter how wide a
+    learned window is: velocity recovery is a `1/k^2` Fourier divide,
+    an exact, distance-independent coupling between vorticity
+    everywhere in the domain and velocity everywhere in the domain. A
+    finite window can only ever approximate this by being wide enough
+    relative to the CURRENT domain size -- and under L-transfer the
+    domain size changes while any fixed window (in sites) does not, so
+    no single trained window stays adequate at every transferred size.
+    This branch is a deterministic function of the current state (plain
+    FFT ops, differentiable) and never touches the final
+    zero-initialized `token_unembed`, so identity-at-init is
+    unaffected.
+
+    `Lx`/`Ly` are config, not learned, and MUST be rescaled on resize
+    by the same ratio applied to `n_sites_x`/`n_sites_y` -- see
+    `load_propagator_checkpoint_resized_2d_biotsavart`."""
+
+    def __init__(
+        self, n_sites_x: int, n_sites_y: int, local_channels: int,
+        token_d_model: int, n_layers: int, mlp_ratio: int, window: int, dropout: float, zero_init: bool,
+        Lx: float, Ly: float, vel_scale: float = 1.0, zero_init_embed: bool = False,
+    ):
+        super().__init__()
+        self.n_sites_x = n_sites_x
+        self.n_sites_y = n_sites_y
+        self.local_channels = local_channels
+        self.Lx = Lx
+        self.Ly = Ly
+        self.vel_scale = vel_scale
+        # C9 training only: raw Biot-Savart velocity `(B, Px*Py, 2)` computed
+        # by the caller from the WIDE-domain anchor field (truth outside the
+        # crop's free interior, prediction inside). `None` (always, at
+        # deployment) means: solve on this module's own periodic domain.
+        self.velocity_override: torch.Tensor | None = None
+        self.token_embed = nn.Linear(local_channels, token_d_model)
+        self.velocity_embed = nn.Linear(2, token_d_model, bias=False)
+        if zero_init_embed:
+            nn.init.zeros_(self.velocity_embed.weight)
+        self.blocks = nn.ModuleList(
+            [_LocalMixerBlock2D(token_d_model, window, mlp_ratio, dropout) for _ in range(n_layers)]
+        )
+        self.norm = nn.LayerNorm(token_d_model)
+        self.token_unembed = nn.Linear(token_d_model, local_channels)
+        if zero_init:
+            nn.init.zeros_(self.token_unembed.weight)
+            nn.init.zeros_(self.token_unembed.bias)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites_x*n_sites_y*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        tokens = z.reshape(B, Px * Py, c)
+        if self.velocity_override is not None:
+            velocity = self.velocity_override
+        else:
+            omega = tokens[:, :, 0].reshape(B, Px, Py)
+            velocity = _biot_savart_velocity(omega, self.Lx, self.Ly).reshape(B, Px * Py, 2)
+        h = self.token_embed(tokens) + self.velocity_embed(velocity / self.vel_scale)
+        for block in self.blocks:
+            h = block(h, Px, Py)
+        h = self.norm(h)
+        delta = self.token_unembed(h)
+        return delta.reshape(B, Px * Py * c)
+
+
+class _ConsensusRelax2D(nn.Module):
+    """C7 learned consensus (docs/ks_local_field_ltransfer.tex Sec. c7). Each
+    site emits a message `m_j` and a log-precision `s_j`; `n_iter` rounds of
+    precision-weighted averaging over the Chebyshev radius-`radius`
+    neighbourhood (circular, via torch.roll) spread the messages,
+    `m <- sum_k w_k m_k / sum_k w_k` with `w_k = exp(s_k)` (inverse-variance
+    fusion, as in LETKF's merging of overlapping local analyses). The result
+    enters the token stream only through `sigmoid(gate(h)) * W_o m` with
+    `W_o` zero-initialized, so at init this block is the identity and it can
+    add large-scale context without overwriting the local state (unlike the
+    E(D(z)) re-projection C4 showed to be destructive). All weights are
+    per-site and shared, so it resizes like the rest of local_mlp_2d."""
+
+    def __init__(self, d_model: int, d_msg: int, n_iter: int, radius: int):
+        super().__init__()
+        self.norm = nn.LayerNorm(d_model)
+        self.to_msg = nn.Linear(d_model, d_msg)
+        self.to_logprec = nn.Linear(d_model, 1)
+        self.gate = nn.Linear(d_model, d_model)
+        self.out = nn.Linear(d_msg, d_model)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+        self.n_iter, self.radius = n_iter, radius
+        self.offsets = [(dx, dy) for dx in range(-radius, radius + 1) for dy in range(-radius, radius + 1)]
+
+    def forward(self, h: torch.Tensor, Px: int, Py: int) -> torch.Tensor:
+        B = h.shape[0]
+        x = self.norm(h)
+        m = self.to_msg(x).reshape(B, Px, Py, -1)
+        w = torch.exp(self.to_logprec(x).clamp(-6.0, 6.0)).reshape(B, Px, Py, 1)
+        wm = w * m
+        for _ in range(self.n_iter):
+            num = sum(torch.roll(wm, shifts=(dx, dy), dims=(1, 2)) for dx, dy in self.offsets)
+            den = sum(torch.roll(w, shifts=(dx, dy), dims=(1, 2)) for dx, dy in self.offsets)
+            m = num / den
+            wm = w * m
+        ctx = self.out(m.reshape(B, Px * Py, -1))
+        return h + torch.sigmoid(self.gate(x)) * ctx
+
+
+class _LocalMLPConsensusDeltaBody2D(_LocalMLPDeltaBody2D):
+    """`backbone="local_mlp_2d_consensus"`: `_LocalMLPDeltaBody2D` with a
+    `_ConsensusRelax2D` block before every local mixer block."""
+
+    def __init__(self, n_sites_x, n_sites_y, local_channels, token_d_model, n_layers, mlp_ratio, window,
+                 dropout, zero_init, d_msg: int, n_iter: int, radius: int):
+        super().__init__(n_sites_x, n_sites_y, local_channels, token_d_model, n_layers, mlp_ratio, window,
+                         dropout, zero_init)
+        self.consensus = nn.ModuleList(
+            [_ConsensusRelax2D(token_d_model, d_msg, n_iter, radius) for _ in range(n_layers)]
+        )
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        h = self.token_embed(z.reshape(B, Px * Py, c))
+        for cons, block in zip(self.consensus, self.blocks):
+            h = block(cons(h, Px, Py), Px, Py)
+        return self.token_unembed(self.norm(h)).reshape(B, Px * Py * c)
+
+
+class _MultiscaleLocalMLPDeltaBody2D(nn.Module):
+    """`backbone="multiscale_local_mlp_2d"` (added 2026-10-01, D3 of
+    docs/oct_1_exp.md -- user-directed after D2's exact-physics
+    Biot-Savart term collapsed under transfer: "please make very sure
+    to design trainable dynamic interactions between the localized
+    dynamics coming from the fixed 'patched' model").
+
+    Two scales, BOTH genuinely trainable (unlike D2, where only the
+    fine mixer was learned and the long-range term was a fixed formula
+    that didn't generalize in amplitude):
+
+    - FINE: identical to `_LocalMLPDeltaBody2D` (same tokens-ARE-sites
+      design, same window/n_layers).
+    - REGIONAL: fine tokens (post-embed, pre-mix) are average-pooled by
+      a fixed `(pool_x, pool_y)` SITE ratio into a coarser token grid,
+      projected to `regional_d_model`, run through its OWN
+      `_LocalMixerBlock2D` stack (own weights -- a separate, learned
+      dynamical system at the regional scale, not a copy of the fine
+      one), then projected back to `fine_d_model` and broadcast
+      (nearest-neighbor upsample) back onto the fine grid, ADDED to the
+      fine tokens before the fine mixer runs. Both projections
+      (pool-and-project, project-and-broadcast) are learned `Linear`
+      layers with real gradients -- this is the "trainable dynamic
+      interaction between patches" the fine scale alone cannot
+      represent: a regional site's own window reaches `pool_x *
+      regional_window` fine sites per hop, a strictly wider physical
+      range than the fine mixer's own window, and the WAY information
+      moves between scales is fit to data rather than fixed.
+
+    Resizes the same way `_LocalMLPDeltaBody2D` does: every weight
+    shape depends on `local_channels`/`token_d_model`/`window` (fine)
+    or `regional_token_d_model`/`regional_window` (regional) and
+    `pool_x`/`pool_y`, never on `n_sites_x`/`n_sites_y` themselves, so
+    the regional grid (`n_sites_x // pool_x`, `n_sites_y // pool_y`)
+    simply grows at the same rate the fine grid does under L-transfer.
+
+    Equivariance note (ground rule 19, same precedent as the encoder's
+    own patchify and `local_mlp_2d_aniso`'s y-phase): the regional
+    pooling only gives EXACT shift-equivariance for shifts that are a
+    whole multiple of `(pool_x, pool_y)` sites -- a generic single-site
+    shift changes which fine sites fall in which pooling block. This is
+    intended, not a bug; see `test_propagator_multiscale_local_mlp_2d.py`."""
+
+    def __init__(
+        self, n_sites_x: int, n_sites_y: int, local_channels: int,
+        fine_token_d_model: int, fine_n_layers: int, mlp_ratio: int, fine_window: int,
+        dropout: float, zero_init: bool,
+        pool_x: int, pool_y: int, regional_token_d_model: int, regional_n_layers: int, regional_window: int,
+    ):
+        super().__init__()
+        self.n_sites_x = n_sites_x
+        self.n_sites_y = n_sites_y
+        self.local_channels = local_channels
+        self.pool_x = pool_x
+        self.pool_y = pool_y
+        self.regional_nx = n_sites_x // pool_x
+        self.regional_ny = n_sites_y // pool_y
+
+        self.token_embed = nn.Linear(local_channels, fine_token_d_model)
+        self.fine_blocks = nn.ModuleList(
+            [_LocalMixerBlock2D(fine_token_d_model, fine_window, mlp_ratio, dropout) for _ in range(fine_n_layers)]
+        )
+        self.norm = nn.LayerNorm(fine_token_d_model)
+        self.token_unembed = nn.Linear(fine_token_d_model, local_channels)
+        if zero_init:
+            nn.init.zeros_(self.token_unembed.weight)
+            nn.init.zeros_(self.token_unembed.bias)
+
+        self.pool_project = nn.Linear(fine_token_d_model, regional_token_d_model)
+        self.regional_blocks = nn.ModuleList(
+            [_LocalMixerBlock2D(regional_token_d_model, regional_window, mlp_ratio, dropout)
+             for _ in range(regional_n_layers)]
+        )
+        self.regional_norm = nn.LayerNorm(regional_token_d_model)
+        self.broadcast_project = nn.Linear(regional_token_d_model, fine_token_d_model)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites_x*n_sites_y*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        tokens = z.reshape(B, Px * Py, c)
+        h_fine = self.token_embed(tokens)  # (B, Px*Py, fine_d)
+
+        h_grid = h_fine.reshape(B, Px, Py, -1).permute(0, 3, 1, 2)  # (B, fine_d, Px, Py)
+        h_pooled = F.avg_pool2d(h_grid, kernel_size=(self.pool_x, self.pool_y))  # (B, fine_d, Rx, Ry)
+        Rx, Ry = self.regional_nx, self.regional_ny
+        h_regional = self.pool_project(
+            h_pooled.permute(0, 2, 3, 1).reshape(B, Rx * Ry, -1)
+        )  # (B, Rx*Ry, regional_d)
+        for block in self.regional_blocks:
+            h_regional = block(h_regional, Rx, Ry)
+        h_regional = self.regional_norm(h_regional)
+
+        broadcast = self.broadcast_project(h_regional)  # (B, Rx*Ry, fine_d)
+        broadcast_grid = broadcast.reshape(B, Rx, Ry, -1).permute(0, 3, 1, 2)  # (B, fine_d, Rx, Ry)
+        broadcast_grid = broadcast_grid.repeat_interleave(self.pool_x, dim=2).repeat_interleave(self.pool_y, dim=3)
+        broadcast_fine = broadcast_grid.permute(0, 2, 3, 1).reshape(B, Px * Py, -1)
+
+        h = h_fine + broadcast_fine
+        for block in self.fine_blocks:
+            h = block(h, Px, Py)
+        h = self.norm(h)
+        delta = self.token_unembed(h)
+        return delta.reshape(B, Px * Py * c)
+
+
+class _LocalMLPDeltaBody2DAniso(nn.Module):
+    """`backbone="local_mlp_2d_aniso"` (added 2026-09-29, user-directed
+    after G2's own reconciliation check confirmed Kolmogorov flow's
+    transfer gap is genuine, not an IC artifact -- see
+    `docs/ks_local_field_ltransfer.tex`'s "orientation hypothesis" note).
+
+    Identical to `_LocalMLPDeltaBody2D` (same tokens-ARE-sites design,
+    same `_LocalMixerBlock2D` mixing, same zero-init identity-at-init
+    property) except one addition: a FIXED (non-learned), per-y-site
+    phase pair `cos(forcing_n*y_site)`/`sin(forcing_n*y_site)` is
+    projected through a small learned `phase_embed` and ADDED to the
+    token embedding before mixing -- giving the propagator explicit,
+    exact access to "where am I in the forcing's own phase" (these two
+    fixed channels are, by construction, exactly invariant under
+    `y_site -> y_site + n_sites_y/forcing_n`, the system's own real
+    residual symmetry), rather than `_LocalMLPDeltaBody2D`'s implicit
+    (and for Kolmogorov flow, physically wrong) assumption that `y` is a
+    free translation symmetry just like `x`. `x`-equivariance is
+    completely unaffected (the phase signal depends only on `y_site`,
+    broadcast identically across every `x`-site), so `x`-direction
+    L-transfer still works via the same zero-retraining resize
+    mechanism -- see `docs/ks_local_field_ltransfer.tex`'s own G2
+    experiment, unchanged by this addition."""
+
+    def __init__(
+        self, n_sites_x: int, n_sites_y: int, local_channels: int,
+        token_d_model: int, n_layers: int, mlp_ratio: int, window: int, dropout: float, zero_init: bool,
+        forcing_n: int,
+    ):
+        super().__init__()
+        self.n_sites_x = n_sites_x
+        self.n_sites_y = n_sites_y
+        self.local_channels = local_channels
+        self.token_embed = nn.Linear(local_channels, token_d_model)
+        self.phase_embed = nn.Linear(2, token_d_model, bias=False)
+        self.blocks = nn.ModuleList(
+            [_LocalMixerBlock2D(token_d_model, window, mlp_ratio, dropout) for _ in range(n_layers)]
+        )
+        self.norm = nn.LayerNorm(token_d_model)
+        self.token_unembed = nn.Linear(token_d_model, local_channels)
+        if zero_init:
+            nn.init.zeros_(self.token_unembed.weight)
+            nn.init.zeros_(self.token_unembed.bias)
+
+        y_site_idx = torch.arange(n_sites_y).float() + 0.5
+        phase = 2.0 * math.pi * forcing_n * y_site_idx / n_sites_y
+        cos_sin_y = torch.stack([torch.cos(phase), torch.sin(phase)], dim=-1)  # (n_sites_y, 2)
+        self.register_buffer("cos_sin_y", cos_sin_y)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """`z`: `(B, n_sites_x*n_sites_y*local_channels)`, site-major -> same shape."""
+        B = z.shape[0]
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        tokens = z.reshape(B, Px, Py, c)
+        h = self.token_embed(tokens)  # (B, Px, Py, d_model)
+        phase_h = self.phase_embed(self.cos_sin_y)  # (Py, d_model)
+        h = h + phase_h.view(1, 1, Py, -1)
+        h = h.reshape(B, Px * Py, -1)
+        for block in self.blocks:
+            h = block(h, Px, Py)
+        h = self.norm(h)
+        delta = self.token_unembed(h)
+        return delta.reshape(B, Px * Py * c)
 
 
 class _LocalVectorField(nn.Module):
@@ -1807,6 +2352,74 @@ class _SpectralPDEDeltaBody(nn.Module):
                     self._stable_linear_positions[pos] = order
                     stable_raw_params.append(raw_param)
                 self._stable_linear_raw_params = stable_raw_params
+        elif field_kind == "rational":
+            # `field_kind="rational"` (added 2026-09-27, Section 226, user-
+            # directed: "let's try the rational function idea. keep the
+            # functional form pretty simple. at most degree 3 in
+            # denominator and numerator and try to explicitly avoid
+            # poles" -- following Section 225's finding that
+            # `field_kind="chebyshev"` tracked real one-step transitions
+            # well (R^2=0.92) but still diverged to NaN in its own
+            # standalone rollout by step ~81, the same "accurate short-
+            # term, unstable long-term" pattern every prior field_kind in
+            # this codebase has shown).
+            #
+            # `correction = N(library) / (1 + softplus(D(library)))`, where
+            # `N`/`D` are each a SEPARATE, plain linear layer over the SAME
+            # degree-`<=poly_degree` monomial library `_polynomial_library`
+            # already builds for `field_kind="polynomial"` (reused
+            # directly, not a new library construction) -- deliberately
+            # NOT combined with any of `poly_stable_leading`/
+            # `poly_no_constant`/`poly_fixed_linear_terms`/
+            # `poly_stable_linear_terms`/`poly_exclude_nonconservative`/
+            # `poly_time_deriv[2]` (all `polynomial`/`chebyshev`-only,
+            # deliberately not extended here) -- "keep the functional
+            # form pretty simple" was the explicit request, so this is
+            # the plainest version of a rational closure, not a
+            # combination with every other stability mechanism at once.
+            #
+            # **Why `1 + softplus(...)` for the denominator, specifically
+            # (this is the "explicitly avoid poles" mechanism, not a
+            # soft regularizer)**: `softplus(x) = log(1+exp(x)) >= 0` for
+            # EVERY real `x`, so `D = 1 + softplus(raw) >= 1` ALWAYS,
+            # architecturally, regardless of what `raw` (an unconstrained
+            # linear combination of the library, itself degree
+            # `<=poly_degree`) evaluates to or how training moves its
+            # weights. The correction is therefore never divided by
+            # anything closer to zero than `1.0` -- a genuine, provable
+            # pole-avoidance guarantee, not merely an empirical one. This
+            # does NOT by itself guarantee the overall `N/D` value stays
+            # small (that remains the job of the existing chaos-
+            # preservation regularizers, `w_pde_spectrum_shape`/
+            # `w_pde_energy_floor`, same as for every other field_kind) --
+            # it only guarantees the division itself can never blow up
+            # from an near-zero denominator, which is the specific,
+            # distinct failure mode ("poles") the user asked to avoid.
+            n_vars = max_order + 1
+            term_indices = _polynomial_term_indices(n_vars, poly_degree, poly_max_term_order, None)
+            n_terms = len(term_indices)
+            self._rational_term_indices = term_indices
+            char_k = 2.0 * math.pi * K / L
+            norm_scales = torch.tensor(
+                [char_k ** (n * poly_norm_power) for n in range(max_order + 1)], dtype=torch.float32
+            )
+            self.register_buffer("_deriv_norm_scales", norm_scales, persistent=False)
+            self.rational_num_coeffs = nn.Linear(n_terms, 1, bias=True)
+            self.rational_denom_coeffs = nn.Linear(n_terms, 1, bias=True)
+            if zero_init:
+                # Numerator zeroed -> correction=0 at init regardless of
+                # the denominator's own value (identity-at-init, same
+                # convention as every other backbone/field_kind). The
+                # denominator is left at its own default init (not
+                # specially zeroed) -- with `raw=0` at every input,
+                # `D = 1 + softplus(0) = 1 + ln(2) ~= 1.69`, a perfectly
+                # well-defined, finite starting denominator; there is no
+                # "more correct" alternative init to prefer here, and
+                # zeroing it would change nothing about the
+                # identity-at-init property (already guaranteed by the
+                # numerator alone).
+                nn.init.zeros_(self.rational_num_coeffs.weight)
+                nn.init.zeros_(self.rational_num_coeffs.bias)
         elif field_kind == "forced_burgers":
             # `field_kind="forced_burgers"` (added 2026-09-14, Section 175,
             # user-directed, refining their own Section 174 proposal after
@@ -2536,6 +3149,18 @@ class _SpectralPDEDeltaBody(nn.Module):
                 correction = F.linear(library, weight, self.poly_coeffs.bias).squeeze(-1)  # (B, N_w)
             else:
                 correction = self.poly_coeffs(library).squeeze(-1)  # (B, N_w)
+        elif self.field_kind == "rational":
+            # See __init__'s "rational" branch docstring for the full
+            # pole-avoidance derivation. `z_prev`/`z_prev2` (time-
+            # derivative augmentation) are NOT supported here -- "keep
+            # the functional form pretty simple" -- so `derivs` is used
+            # as synthesized, no `_augment_derivs_with_time_derivs` call.
+            derivs_norm = derivs / self._deriv_norm_scales
+            library = _polynomial_library(derivs_norm, self.poly_degree, self.poly_max_term_order, None)  # (B, N_w, n_terms)
+            numerator = self.rational_num_coeffs(library).squeeze(-1)  # (B, N_w)
+            denom_raw = self.rational_denom_coeffs(library).squeeze(-1)  # (B, N_w)
+            denom = 1.0 + F.softplus(denom_raw)  # >= 1.0 always -- no poles, ever
+            correction = numerator / denom
         elif self.field_kind == "forced_burgers":
             # See __init__'s docstring for the full derivation. `correction`
             # here is the ENTIRE right-hand side (advection + real
@@ -3635,6 +4260,16 @@ class LatentPropagator(nn.Module):
                     d, cfg.n_tokens, cfg.token_d_model, cfg.token_n_layers, cfg.token_mlp_ratio,
                     cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.token_window,
                 )
+            elif cfg.backbone == "multiscale_local_mlp":
+                # __post_init__ already enforces d_latent == sum of the
+                # three scales' own block sizes.
+                self.body = _MultiscaleLocalMLPDeltaBody(
+                    cfg.multiscale_fine_n_sites, cfg.multiscale_fine_channels, cfg.multiscale_fine_window,
+                    cfg.multiscale_regional_n_sites, cfg.multiscale_regional_channels, cfg.multiscale_regional_window,
+                    cfg.multiscale_global_channels,
+                    cfg.multiscale_token_d_model, cfg.multiscale_n_layers, cfg.token_mlp_ratio,
+                    cfg.dropout, cfg.zero_init,
+                )
             elif cfg.backbone == "masked_mlp":
                 # attn_window doubles as the mask's circular-band radius here
                 # too (None = fully dense "full mlp"); unlike "local_mlp", None
@@ -3737,6 +4372,62 @@ class LatentPropagator(nn.Module):
                 self.body = _SiteConvDeltaBody(
                     cfg.site_conv_n_sites, cfg.site_conv_local_channels, cfg.site_conv_hidden,
                     cfg.site_conv_n_layers, cfg.attn_window, cfg.zero_init,
+                )
+            elif cfg.backbone == "site_conv_2d":
+                # __post_init__ already enforces attn_window is not None
+                # and d == site_conv2d_n_sites_x*site_conv2d_n_sites_y*
+                # site_conv2d_local_channels for this backbone.
+                self.body = _SiteConv2DDeltaBody(
+                    cfg.site_conv2d_n_sites_x, cfg.site_conv2d_n_sites_y, cfg.site_conv2d_local_channels,
+                    cfg.site_conv2d_hidden, cfg.site_conv2d_n_layers, cfg.attn_window, cfg.zero_init,
+                )
+            elif cfg.backbone == "local_mlp_2d":
+                # __post_init__ already enforces attn_window is not None
+                # and d == local_mlp2d_n_sites_x*local_mlp2d_n_sites_y*
+                # local_mlp2d_local_channels for this backbone.
+                self.body = _LocalMLPDeltaBody2D(
+                    cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
+                    cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init,
+                )
+            elif cfg.backbone == "local_mlp_2d_biotsavart":
+                # Same sizing fields as "local_mlp_2d" (reused, not
+                # duplicated); __post_init__ already enforces attn_window
+                # is not None, d matches, and Lx/Ly > 0.
+                self.body = _LocalMLPDeltaBody2DBiotSavart(
+                    cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
+                    cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.biot_savart_Lx, cfg.biot_savart_Ly,
+                    getattr(cfg, "biot_savart_vel_scale", 1.0), getattr(cfg, "biot_savart_zero_init_embed", False),
+                )
+            elif cfg.backbone == "local_mlp_2d_consensus":
+                self.body = _LocalMLPConsensusDeltaBody2D(
+                    cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
+                    cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init,
+                    cfg.consensus_d_msg, cfg.consensus_n_iter, cfg.consensus_radius,
+                )
+            elif cfg.backbone == "multiscale_local_mlp_2d":
+                # Fine scale reuses "local_mlp_2d"'s own sizing fields;
+                # __post_init__ already enforces attn_window is not None,
+                # d matches, and n_sites_x/y are divisible by
+                # multiscale_pool_x/y.
+                self.body = _MultiscaleLocalMLPDeltaBody2D(
+                    cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
+                    cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init,
+                    cfg.multiscale_pool_x, cfg.multiscale_pool_y, cfg.multiscale_regional_token_d_model,
+                    cfg.multiscale_regional_n_layers, cfg.multiscale_regional_window,
+                )
+            elif cfg.backbone == "local_mlp_2d_aniso":
+                # __post_init__ already enforces attn_window is not None,
+                # d == local_mlp2d_aniso_n_sites_x*local_mlp2d_aniso_n_sites_y*
+                # local_mlp2d_aniso_local_channels, and n_sites_y % forcing_n == 0.
+                self.body = _LocalMLPDeltaBody2DAniso(
+                    cfg.local_mlp2d_aniso_n_sites_x, cfg.local_mlp2d_aniso_n_sites_y,
+                    cfg.local_mlp2d_aniso_local_channels, cfg.local_mlp2d_aniso_token_d_model,
+                    cfg.local_mlp2d_aniso_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.local_mlp2d_aniso_forcing_n,
                 )
             elif cfg.backbone == "fourier_mlp":
                 # n_history=1 (not cfg.n_history, which is meaningless here --
@@ -3978,46 +4669,17 @@ class LatentPropagator(nn.Module):
 
 
 def aux_cfg_to_propagator_cfg(cfg: AuxPropagatorConfig) -> PropagatorConfig:
-    return PropagatorConfig(
-        d_latent=cfg.d_latent, hidden=cfg.hidden, n_blocks=cfg.n_blocks,
-        dropout=cfg.dropout, zero_init=cfg.zero_init, mode=cfg.mode, backbone=cfg.backbone,
-        n_tokens=cfg.n_tokens, token_d_model=cfg.token_d_model, token_nhead=cfg.token_nhead,
-        token_n_layers=cfg.token_n_layers, token_mlp_ratio=cfg.token_mlp_ratio,
-        attn_window=cfg.attn_window, pos_encoding=cfg.pos_encoding, token_window=cfg.token_window,
-        n_history=cfg.n_history, delta_cap=cfg.delta_cap, delta_cap_relative=cfg.delta_cap_relative,
-        fno_modes=cfg.fno_modes, fno_n_layers=cfg.fno_n_layers,
-        fourier_ifft_readout=cfg.fourier_ifft_readout, nonexpansive=cfg.nonexpansive,
-        spectral_K=cfg.spectral_K, spectral_N_w=cfg.spectral_N_w, spectral_L=cfg.spectral_L,
-        spectral_max_order=cfg.spectral_max_order, spectral_integrator=cfg.spectral_integrator,
-        ode_substeps=cfg.ode_substeps, spectral_physics_prior=cfg.spectral_physics_prior,
-        spectral_field_kind=cfg.spectral_field_kind, spectral_poly_degree=cfg.spectral_poly_degree,
-        spectral_poly_max_term_order=cfg.spectral_poly_max_term_order,
-        spectral_poly_norm_power=cfg.spectral_poly_norm_power,
-        spectral_poly_stable_leading=cfg.spectral_poly_stable_leading,
-        spectral_poly_no_constant=cfg.spectral_poly_no_constant,
-        spectral_poly_fixed_linear_terms=cfg.spectral_poly_fixed_linear_terms,
-        spectral_poly_exclude_nonconservative=cfg.spectral_poly_exclude_nonconservative,
-        spectral_poly_stable_linear_terms=cfg.spectral_poly_stable_linear_terms,
-        spectral_poly_time_deriv=cfg.spectral_poly_time_deriv,
-        spectral_poly_time_deriv_dt_snap=cfg.spectral_poly_time_deriv_dt_snap,
-        spectral_poly_time_deriv2=cfg.spectral_poly_time_deriv2,
-        spectral_burgers_nu_init=cfg.spectral_burgers_nu_init,
-        spectral_burgers_beta_max=cfg.spectral_burgers_beta_max,
-        spectral_burgers_nonlinear_nu=cfg.spectral_burgers_nonlinear_nu,
-        spectral_burgers_kernel_instability=cfg.spectral_burgers_kernel_instability,
-        spectral_burgers_kernel_A_max=cfg.spectral_burgers_kernel_A_max,
-        spectral_burgers_kernel_width_init=cfg.spectral_burgers_kernel_width_init,
-        spectral_burgers_forcing_max=cfg.spectral_burgers_forcing_max,
-        spectral_burgers_kernel_A_fixed=cfg.spectral_burgers_kernel_A_fixed,
-        spectral_burgers_beta_fixed=cfg.spectral_burgers_beta_fixed,
-        spectral_burgers_kernel_mu_init=cfg.spectral_burgers_kernel_mu_init,
-        spectral_burgers_no_forcing=cfg.spectral_burgers_no_forcing,
-        spectral_burgers_kernel_A_init=cfg.spectral_burgers_kernel_A_init,
-        spectral_burgers_beta_init=cfg.spectral_burgers_beta_init,
-        masked_mlp_expand_factor=cfg.masked_mlp_expand_factor,
-        site_conv_n_sites=cfg.site_conv_n_sites, site_conv_local_channels=cfg.site_conv_local_channels,
-        site_conv_hidden=cfg.site_conv_hidden, site_conv_n_layers=cfg.site_conv_n_layers,
-    )
+    """Copy EVERY field the two config classes share. (Until 2026-10-03 this
+    was a hand-maintained list that silently dropped fields added later --
+    `biot_savart_Lx/Ly`, `consensus_*`, `multiscale_pool_*`, ... -- so e.g. a
+    resized D2 model kept the native box's Lx. Every shared field had
+    identical defaults, so this is behaviour-preserving for all existing
+    checkpoints except that resized Biot-Savart models now get the right Lx.)"""
+    import dataclasses
+    prop_fields = {f.name for f in dataclasses.fields(PropagatorConfig)}
+    return PropagatorConfig(**{
+        f.name: getattr(cfg, f.name) for f in dataclasses.fields(AuxPropagatorConfig) if f.name in prop_fields
+    })
 
 
 def build_propagator(cfg: PropagatorConfig | AuxPropagatorConfig) -> LatentPropagator:

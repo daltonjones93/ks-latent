@@ -331,6 +331,37 @@ def spatial_coherence_loss(
     return 1.0 - bandedness_score
 
 
+def blockwise_spatial_coherence_loss(
+    z: torch.Tensor, blocks: list[int], bandwidth: float = 3.0, eps: float = 1e-3, signed: bool = False
+) -> torch.Tensor:
+    """`spatial_coherence_loss`, applied SEPARATELY to consecutive slices
+    of `z` (added 2026-09-28, user-directed: multiscale-latent
+    experiment, "please only apply w_spatial per block"). `blocks`: sizes
+    summing to `z.shape[1]`, e.g. `[48, 12, 2]` for a fine/regional/global
+    multiscale latent -- each slice is evaluated as its OWN closed
+    circular ring (`spatial_coherence_loss`'s own `dist = min(diff,
+    d-diff)` uses `d = that slice's own width`, not the full `z`'s), so a
+    concatenated latent's block-boundary indices are never scored as if
+    they were spatially adjacent (they are not: the last site of one
+    scale and the first site of the next carry no physical adjacency
+    relationship at all). Returns the plain, UNWEIGHTED mean of the
+    per-block losses (each already normalized to a comparable range by
+    `spatial_coherence_loss` itself), so every scale is encouraged
+    equally regardless of how many raw dimensions it happens to occupy
+    -- weighting by block size would let the largest block dominate the
+    signal for the smallest ones almost entirely.
+    """
+    if sum(blocks) != z.shape[1]:
+        raise ValueError(f"blocks {blocks} must sum to z.shape[1]={z.shape[1]}")
+    losses = []
+    offset = 0
+    for size in blocks:
+        z_block = z[:, offset : offset + size]
+        losses.append(spatial_coherence_loss(z_block, bandwidth=bandwidth, eps=eps, signed=signed))
+        offset += size
+    return torch.stack(losses).mean()
+
+
 def _propagator_step_jacobian_matrix(
     step_fn: Callable[[torch.Tensor], torch.Tensor], z: torch.Tensor,
 ) -> torch.Tensor:

@@ -159,3 +159,42 @@ def test_lyapunov_spectrum_latent_propagator_rejects_bad_mode():
             prop, np.zeros(6), mode="bogus", n_directions=2,
             n_steps=2, qr_every=1, dt_snap=0.25,
         )
+
+
+# --- task A2 (docs/full_paper_tasks.md): float64 tangent option --------------------
+
+
+def test_single_state_float64_recovers_linear_spectrum_to_machine_precision():
+    """With B=0 the single-state map is z -> A z; its exponents are log|eig(A)|
+    exactly. float64 must recover them to ~1e-12; float32 only to ~1e-6."""
+    A = torch.diag(torch.tensor([1.3, 0.9, 0.5], dtype=torch.float32))
+    prop = _LinearTwoStepPropagator(A, torch.zeros(3, 3))
+    z0 = np.zeros(6)  # a linear map's Jacobian does not depend on the state; z=0 stays bounded
+    expected = np.log(np.array([1.3, 0.9, 0.5]))
+    kw = dict(mode="single_state", n_directions=3, n_steps=200, qr_every=1, dt_snap=1.0, warmup_steps=200)
+    res64 = lyapunov_spectrum_latent_propagator(prop, z0, tangent_dtype=torch.float64, **kw)
+    res32 = lyapunov_spectrum_latent_propagator(prop, z0, **kw)
+    # A's entries are float32-representable, so the float64 copy holds them exactly.
+    expected_f32 = np.log(np.array([1.3, 0.9, 0.5], dtype=np.float32).astype(np.float64))
+    np.testing.assert_allclose(res64.exponents, expected_f32, atol=1e-12)
+    np.testing.assert_allclose(res32.exponents, expected, atol=1e-5)
+
+
+def test_single_state_float64_does_not_mutate_caller_propagator():
+    A = torch.diag(torch.tensor([1.1, 0.7], dtype=torch.float32))
+    prop = _LinearTwoStepPropagator(A, torch.zeros(2, 2))
+    lyapunov_spectrum_latent_propagator(
+        prop, np.ones(4), mode="single_state", n_directions=2, n_steps=10, qr_every=1, dt_snap=1.0,
+        tangent_dtype=torch.float64,
+    )
+    assert prop.A.dtype == torch.float32
+
+
+def test_float64_tangent_rejected_outside_single_state():
+    A = torch.eye(2) * 0.5
+    prop = _LinearTwoStepPropagator(A, torch.zeros(2, 2))
+    with pytest.raises(ValueError, match="single_state"):
+        lyapunov_spectrum_latent_propagator(
+            prop, np.ones(4), mode="two_step", n_directions=2, n_steps=10, qr_every=1, dt_snap=1.0,
+            tangent_dtype=torch.float64,
+        )

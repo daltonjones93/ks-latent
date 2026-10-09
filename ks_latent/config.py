@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 
 
@@ -69,6 +70,329 @@ class KSConfig:
 
     def replace(self, **kwargs) -> "KSConfig":
         return dataclasses.replace(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class KSConfig2D:
+    """Physical + numerical setup for the 2D (isotropic) Kuramoto-Sivashinsky
+    solver (added 2026-09-28, user-directed: `docs/ks_local_field_ltransfer.tex`
+    Section "Staged next steps", Step 1 -- "implement step 1: 2D KS").
+
+        u_t + nabla^2 u + nabla^4 u + (1/2)|nabla u|^2 = 0,
+        (x,y) in [0,Lx) x [0,Ly), periodic in both directions.
+
+    This is the isotropic/Michelson-Sivashinsky form of 2D KS (the
+    standard "2D KS equation" in the flame-front/thin-film-instability
+    literature) -- NOT a literal generalization of the 1D equation's own
+    `u u_x` divergence-form nonlinearity, which has no unique isotropic
+    2D analogue. `(1/2)|nabla u|^2 = (1/2)(u_x^2 + u_y^2)` is a genuinely
+    different nonlinear term (not a pure divergence), so `ks_latent.
+    solver.ks2d`'s nonlinear-term computation cannot reuse `ks_latent.
+    solver.ks`'s own `_nonlinear` trick (`g * FFT(u**2)`, which relies
+    specifically on `u u_x = (1/2)(u^2)_x` being an exact x-derivative)
+    -- it instead differentiates `u` spectrally in both directions,
+    squares and sums in physical space, then transforms forward. See
+    `ks_latent/solver/ks2d.py`'s module docstring for the full derivation.
+
+    The LINEAR operator, by contrast, has the exact same functional form
+    as 1D: `Lhat(kx,ky) = K^2 - K^4` with `K^2 = kx^2+ky^2` (from
+    `-nabla^2 u - nabla^4 u`'s Fourier multipliers), so the ETDRK4
+    contour-integral coefficient construction (`ks2d.
+    etdrk4_coefficients_2d`) is the SAME algorithm as 1D's `ks.
+    etdrk4_coefficients`, generalized to an arbitrary-shape (here 2D)
+    `Lhat` via broadcasting -- reimplemented independently in `ks2d.py`
+    rather than refactoring `ks.py`'s own validated function, to carry
+    zero risk to the already-Gate-1-validated 1D solver.
+
+    Square domain (`Lx=Ly`, `NX=NY`) is the natural default matching this
+    project's own KS 1D convention, but both axes are independently
+    configurable (needed for the anisotropic L-transfer test in Step 1's
+    own payoff experiment, extending L_x and L_y separately).
+    """
+
+    Lx: float = 44.0
+    Ly: float = 44.0
+    NX: int = 128
+    NY: int = 128
+    dt: float = 0.02
+    snapshot_every: int = 5
+    spinup_time: float = 200.0
+    seed: int = 0
+
+    @property
+    def dt_snap(self) -> float:
+        return self.dt * self.snapshot_every
+
+    def replace(self, **kwargs) -> "KSConfig2D":
+        return dataclasses.replace(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class KolmogorovConfig:
+    """Physical + numerical setup for forced 2D incompressible
+    Navier-Stokes in vorticity-streamfunction form on a periodic domain,
+    with an added large-scale linear drag -- "Kolmogorov flow" (added
+    2026-09-28, `docs/ks_local_field_ltransfer.tex` "Staged next steps"
+    Step 2, gated on Step 1 -- 2D KS -- succeeding first, which it did:
+    Section 230, D_KY=71.9).
+
+        omega_t + u . grad(omega) = nu * nabla^2 omega - alpha * omega + f(y),
+        u = (psi_y, -psi_x),   nabla^2 psi = -omega,
+        f(y) = -(nu * forcing_n**2 + alpha) * forcing_n * cos(forcing_n * y).
+
+    **Why the drag term (`alpha`), and the real story behind finding a
+    genuinely chaotic, well-resolved config at all** (full account in
+    `docs/RESULTS.md`'s "Step 2" progress note -- summarized here because
+    it materially changed this config's defaults twice). An early,
+    naive parameter search (short Lyapunov measurements, `warmup_time=0.0`,
+    the function's own default) found the plain equation apparently
+    stable at EVERY Reynolds number tried, `Re in [40, 1000]`, in this
+    exact square box (`Lx=Ly=2*pi`, `forcing_n=4`) at production
+    resolution `NX=NY=128` -- alarming, since the laminar base flow is
+    confirmed linearly unstable there. This turned out to be a real
+    methodology bug, not physics: the Benettin QR algorithm's own random
+    initial tangent basis needs a genuine warmup period to align with the
+    true dominant directions (this project's own established protocol,
+    e.g. `scripts/exp_e1_groundtruth_lyapunov_ltransfer.py`, already uses
+    `warmup_time=300` by default -- the ad hoc exploration scripts for
+    THIS system simply hadn't followed that convention). Once corrected
+    (`warmup_time=20`, `total_time=40`, both `>=0` in every call from here
+    on), Re=50 turned out to sit right at a marginal/limit-cycle-like
+    secondary state (leading exponent ~0 on the saturated attractor, not
+    the "-0.2 to -0.4" the buggy measurement reported), and genuine,
+    resolution-converged chaos appeared cleanly by Re=70-100 in the SAME
+    plain square box, with NO drag needed to get there at all.
+
+    Drag was tested afterward, at this now-confirmed-chaotic Re=100, and
+    turned out to matter for a different reason than originally guessed:
+    not "needed to reach chaos" (physically motivated by 2D turbulence's
+    inverse-cascade condensation problem, Kraichnan 1967, and the
+    parallel to RBC's own vertical-confinement outer scale -- chat
+    discussion, 2026-09-28) but empirically found to substantially
+    ENRICH the attractor once already chaotic: `D_KY` at Re=100 measured
+    7.90 (`alpha=0`), 23.26 (`alpha=0.05`), 16.18 (`alpha=0.1`) -- a real,
+    non-monotonic optimum, not "more drag is always better," with
+    `alpha=0.05` the clear winner among the three tried.
+
+    `f(y)` is updated (not just the linear operator) so the laminar
+    solution remains an EXACT steady state of the full nonlinear equation
+    with the drag term included -- re-derived directly:
+    `nabla^2(omega_lam) = -forcing_n**2 * omega_lam`, so balancing
+    `0 = nu*nabla^2(omega_lam) - alpha*omega_lam + f(y)` requires
+    `f(y) = (nu*forcing_n**2 + alpha) * omega_lam = -(nu*forcing_n**2 +
+    alpha) * forcing_n * cos(forcing_n*y)`; `alpha=0` recovers the
+    original (undamped) forcing exactly. `Re = 1/nu` is still exposed as
+    a read-only convenience (matching how the plain-Kolmogorov-flow
+    literature reports it), independent of `alpha`.
+
+    Same single-scalar-field (vorticity), periodic-2D-domain state
+    representation as `KSConfig2D` -- Step 2's whole point is reusing
+    Step 1's architecture code (`KSAutoencoderLocalField2D`,
+    `site_conv_2d`/`local_mlp_2d` propagators, `generate_trajectory_dataset2d`,
+    `lyapunov_spectrum_ks2d`'s own pattern) unchanged on a genuinely
+    different nonlinearity (advection of vorticity by a divergence-free
+    velocity derived via a Poisson solve, vs. 2D KS's gradient-squared
+    term) -- the actual point of this system in the staged plan (the
+    "Staged next steps" section's own "Why this order" note).
+
+    Default domain `Lx=Ly=2*pi` and `forcing_n=4` match the standard
+    Kolmogorov-flow chaos benchmark used in the literature this project
+    already cites (Chandler & Kerswell 2013; Constante-Amores, Linot &
+    Graham's own KS/Kolmogorov-flow pair) -- NOT `KSConfig2D`'s own
+    `Lx=Ly=44` (2D KS's domain size is chosen for its own extensivity
+    regime and has no bearing on this system's natural length scale, set
+    by the forcing wavenumber instead).
+    """
+
+    Lx: float = 2.0 * math.pi
+    Ly: float = 2.0 * math.pi
+    NX: int = 128
+    NY: int = 128
+    nu: float = 0.01  # Re=100
+    alpha: float = 0.05  # large-scale linear drag -- see class docstring.
+    forcing_n: int = 4
+    dt: float = 0.01
+    snapshot_every: int = 20  # dt_snap=0.2 -- coarser than 2D KS's own 0.1
+    # (this system's own lambda1~0.09 is smaller/slower than KS's ~0.2-0.24,
+    # so a somewhat larger dt_snap still resolves the dynamics comparably
+    # while keeping dataset file sizes in the same ballpark, see
+    # scripts/gen_kolmogorov_dataset.py).
+    spinup_time: float = 100.0
+    seed: int = 0
+    # Measured (docs/RESULTS.md "Step 2" progress note, properly-warmed-up
+    # Lyapunov protocol -- warmup_time=20, total_time=40 -- at THIS exact
+    # production config): lambda1=0.0905, n_positive=12/24, D_KY=23.26.
+    # Getting here required correcting a real methodology bug found along
+    # the way: measuring the Lyapunov spectrum with insufficient warmup
+    # (the function's own warmup_time=0.0 default) gave badly wrong,
+    # even wrong-signed, leading exponents -- see the same progress note
+    # for the full story. alpha=0.05 (not 0.0 or 0.1, both also tried at
+    # this same Re) gave the richest attractor of the three: D_KY=7.90
+    # (alpha=0), 23.26 (alpha=0.05), 16.18 (alpha=0.1) -- a real,
+    # non-monotonic optimum, not "more drag is always better."
+
+    @property
+    def Re(self) -> float:
+        """Reynolds number `1/nu`, given the amplitude-1 laminar solution
+        `u_lam = sin(forcing_n * y)` this config's own `nu`/forcing
+        convention normalizes to."""
+        return 1.0 / self.nu
+
+    @property
+    def dt_snap(self) -> float:
+        return self.dt * self.snapshot_every
+
+    def replace(self, **kwargs) -> "KolmogorovConfig":
+        return dataclasses.replace(self, **kwargs)
+
+    def __post_init__(self):
+        if self.nu <= 0:
+            raise ValueError(f"nu must be > 0, got {self.nu!r}")
+        if self.forcing_n < 1:
+            raise ValueError(f"forcing_n must be >= 1, got {self.forcing_n!r}")
+        if self.alpha < 0:
+            raise ValueError(f"alpha (large-scale drag) must be >= 0, got {self.alpha!r}")
+
+
+@dataclass(frozen=True)
+class SWEConfig:
+    """Physical + numerical setup for the rotating shallow water
+    equations (SWE) on a doubly periodic domain (added 2026-10-06,
+    user-directed: "I would like to add one more model to test our L
+    transfer results" -- a third 2D chaotic system, alongside 2D KS and
+    Kolmogorov flow, both already in this codebase's
+    `ks_latent.solver.ks2d`/`ks_latent.solver.kolmogorov`).
+
+        u_t + u*u_x + v*u_y - f*v + g*eta_x = -alpha*u,
+        v_t + u*v_x + v*v_y + f*u + g*eta_y = -alpha*v,
+        eta_t + H*(u_x + v_y) + (eta*u)_x + (eta*v)_y = 0,
+        (x,y) in [0,Lx) x [0,Ly),  periodic.
+
+    Three prognostic fields (`u`, `v`, `eta`), not one -- the genuine new
+    thing this system adds relative to 2D KS/Kolmogorov's single scalar
+    field. `f` is a CONSTANT (f-plane) Coriolis parameter, not the
+    beta-plane `f(y)` Kolmogorov-flow-style forcing; the system's only
+    forcing here is whatever energy the initial condition carries, there
+    is no steady source term (`ks_latent.solver.swe` has no analogue of
+    Kolmogorov's `_forcing_fourier`). `alpha` (matching
+    `KolmogorovConfig`'s own field name and role: large-scale linear
+    drag, same "cap the inverse energy cascade" physical motivation --
+    Kraichnan 1967 2D-turbulence condensation, same citation) damps
+    momentum only, not `eta` -- mass is exactly conserved by the flux-form
+    continuity equation regardless of `alpha` (see
+    `ks_latent.solver.swe`'s module docstring for the conservation
+    argument and its own unit test).
+
+    **Why the linear operator here is a genuine generalization of every
+    other solver in this codebase, not a special case of one.** 2D
+    KS/Kolmogorov's own `Lhat(kx,ky)` is a SCALAR per wavenumber (one
+    field, pure real decay). Here, Coriolis rotation and the
+    pressure-gradient/divergence coupling between `(u,v,eta)` make the
+    per-wavenumber linear operator a genuine `3x3` MATRIX,
+    `L(kx,ky) = [[-alpha, f, -i*g*kx], [-f, -alpha, -i*g*ky],
+    [-i*H*kx, -i*H*ky, 0]]`, with complex (oscillatory, not purely
+    decaying) eigenvalues -- the inertia-gravity wave dispersion relation
+    `omega^2 = f^2 + g*H*k^2` at `alpha=0` (a standard, literature-known
+    closed form, used directly as a ground-truth check in
+    `tests/unit/test_solver_swe.py`, ground rule 1). `ks_latent.solver.
+    swe` diagonalizes this matrix once per wavenumber (cached, like every
+    other solver's ETDRK4 coefficients) and re-expresses the EXISTING
+    `ks_latent.solver.ks2d.etdrk4_coefficients_2d` contour-integral
+    machinery in the eigenbasis, rather than writing a new
+    matrix-exponential contour integral from scratch -- that function
+    already broadcasts over an arbitrary leading shape, so handing it the
+    per-wavenumber eigenvalues (shape `(NX,NY,3)` instead of `(NX,NY)`)
+    exercises its existing generality rather than extending it. This is
+    the `ETDRK4`-generalization-to-vector-`L` approach of Cox & Matthews
+    (2002, *J. Comput. Phys.* 176:430, the paper the scalar
+    Kassam-Trefethen 2005 contour trick itself builds on), i.e. the
+    "integrating factor" method the user's own request names: the fast
+    linear gravity-wave dynamics are advanced EXACTLY (via the
+    eigenvalue-wise exponential), and only the nonlinear advection terms
+    are handled by the (RK4-like) `ETDRK4` stage recursion -- precisely
+    what makes the scheme stable at a `dt` set by the SLOW advective
+    time scale rather than the fast gravity-wave one.
+
+    Default `Lx=Ly=2*pi`, matching `KolmogorovConfig`'s own domain
+    convention (a compact, well-studied periodic box) rather than 2D
+    KS's `L=44` (whose scale is set by KS's own extensivity regime, with
+    no bearing here). `g=1`, `H=1` give a unit gravity-wave speed
+    `sqrt(g*H)=1`, the natural nondimensional choice absent a specific
+    physical regime to match; `f`/`Fr`-like behaviour is then set purely
+    by the ratio of `f` to the advective/gravity-wave rate, exactly as
+    the classical nondimensional rotating-shallow-water literature
+    parametrizes it (Vallis, *Atmospheric and Oceanic Fluid Dynamics*,
+    ch. 3).
+
+    **Wind-stress forcing (`tau0`, `forcing_n`), added 2026-10-06,
+    user-directed: "please modify it to include the external wind stress
+    forcing term we discussed to sustain the chaotic state against the
+    linear friction."** Without a steady energy source, `alpha`-drag
+    alone just decays any initial perturbation back toward the trivial
+    rest state (`u=v=eta=0`) -- there is no analogue of Kolmogorov
+    flow's own linearly-unstable laminar base state here, so sustained
+    chaos needs an explicit, steady forcing the way Kolmogorov flow's
+    `f(y)` provides one. Added as a deterministic, STATE- and
+    TIME-independent body force on the `u`-momentum equation only (a
+    wind-stress profile, not a mass source):
+
+        F_u(y) = tau0 * sin(forcing_n * y),   F_v = 0,   F_eta = 0.
+
+    Same `forcing_n`-as-integer-mode-number convention as
+    `KolmogorovConfig.forcing_n` (exact spatial periodicity over `[0,Ly)`
+    requires `Ly * forcing_n` be an integer multiple of `2*pi`; the
+    default `Ly=2*pi` makes any integer `forcing_n` exact). Being
+    constant in state and time, this term contributes NOTHING to the
+    tangent/variational equation `ks_latent.solver.swe.
+    step_with_tangent_swe` integrates (exactly the same reasoning
+    `_nonlinear_kolmogorov`'s own `f_hat` already relies on) and does
+    not affect mass conservation (it never appears in the `eta`
+    equation). **`tau0=0.1` is a reasonable STARTING GUESS, not a
+    validated chaotic operating point** -- unlike `KolmogorovConfig`'s
+    own `alpha=0.05`/`Re=100` defaults, which were set only after a real
+    Lyapunov-spectrum parameter search (see that class's own docstring
+    for the full story), no such search has been run for this system
+    yet. Ground rule 6: do not report this as confirmed chaos until that
+    measurement exists; `tau0=0.0` recovers the original unforced system
+    exactly, for anyone who wants that behavior instead."""
+
+    Lx: float = 2.0 * math.pi
+    Ly: float = 2.0 * math.pi
+    NX: int = 128
+    NY: int = 128
+    g: float = 1.0
+    H: float = 1.0
+    f: float = 4.0  # Coriolis parameter (f-plane); see class docstring for the nondimensionalization
+    alpha: float = 0.05  # large-scale linear drag on momentum only, same role/name as KolmogorovConfig.alpha
+    tau0: float = 0.1  # wind-stress forcing amplitude; UNVALIDATED starting guess, see class docstring
+    forcing_n: int = 4  # wind-stress forcing wavenumber (integer mode number, same convention as KolmogorovConfig)
+    dt: float = 0.01
+    snapshot_every: int = 20
+    spinup_time: float = 100.0
+    seed: int = 0
+
+    @property
+    def c_gravity(self) -> float:
+        """Gravity-wave speed `sqrt(g*H)`, the natural velocity scale
+        this system's dispersion relation is built from."""
+        return math.sqrt(self.g * self.H)
+
+    @property
+    def dt_snap(self) -> float:
+        return self.dt * self.snapshot_every
+
+    def replace(self, **kwargs) -> "SWEConfig":
+        return dataclasses.replace(self, **kwargs)
+
+    def __post_init__(self):
+        if self.g <= 0:
+            raise ValueError(f"g must be > 0, got {self.g!r}")
+        if self.H <= 0:
+            raise ValueError(f"H (mean depth) must be > 0, got {self.H!r}")
+        if self.alpha < 0:
+            raise ValueError(f"alpha (large-scale drag) must be >= 0, got {self.alpha!r}")
+        if self.forcing_n < 0:
+            raise ValueError(f"forcing_n must be >= 0, got {self.forcing_n!r}")
 
 
 @dataclass(frozen=True)
@@ -414,6 +738,380 @@ class LocalFieldAutoencoderConfig:
             raise ValueError(f"n_site_mix_layers must be >= 0, got {self.n_site_mix_layers!r}")
         if self.hidden < 1:
             raise ValueError(f"hidden must be >= 1, got {self.hidden!r}")
+
+
+@dataclass(frozen=True)
+class MultiscaleLocalFieldAutoencoderConfig:
+    """Multiscale extension of `LocalFieldAutoencoderConfig`
+    (`encoder_kind="multiscale_local_field"`, added 2026-09-28,
+    user-directed: combine Section 224's local_field/local_mlp recipe
+    (the winning architecture this whole L-transfer result is built on)
+    with the multiscale-latent idea in
+    `docs/spatially_structured_latent_DA_FMM_research_idea.md` --
+    "think about how this would work and let's train something. use the
+    parts of 224 that seem to be helping performance the model as much
+    as possible."
+
+    **Motivation.** That research note's central hypothesis is that a
+    latent organized as `{z_local, z_regional, z_global}` (fine-to-coarse
+    spatial scales, each with its own characteristic support) could
+    retain long-range structure a purely LOCAL latent field cannot see
+    at all -- Section 224's own `local_mlp` propagator has a hard,
+    finite receptive field (6 sites at the trained size), which is
+    exactly what E1's L=25 down-transfer failure (`docs/
+    ks_local_field_ltransfer.tex`) is diagnosed as hitting: the
+    receptive field exceeding the (shrunken) domain. A regional/global
+    scale gives the model degrees of freedom whose support does NOT
+    shrink or grow the same way the fine scale's does under an L
+    transfer, a plausible route to a more robust floor. It is also the
+    natural encoder-side analogue of the FMM note's own hierarchy
+    (`near interactions -> fine representation`, `far interactions ->
+    coarse representation`), without yet building any DA-side
+    hierarchical kernel machinery -- this config is step one (does a
+    multiscale LATENT REPRESENTATION train and reconstruct well at all,
+    with Section 224's own architecture doing as much of the work as
+    possible), not the full FMM-covariance research program.
+
+    **Design: maximize literal reuse of Section 224's own layers.** The
+    FINE scale is Section 224's exact `LocalFieldAutoencoderConfig`
+    encoder (`enc_patchify`/`enc_mix`, same `site_mix_radius`/
+    `n_site_mix_layers`/`hidden` defaults) and decoder
+    (`dec_mix`/`dec_unpatchify`), reused as literal sub-modules, not
+    reimplemented. REGIONAL and GLOBAL scales are built by pooling the
+    fine scale's own hidden feature maps (not re-deriving from `u`
+    directly) via one more circular-conv site-mixing stage each, at
+    `n_sites` reduced by `regional_pool_factor` and
+    `regional_pool_factor * global_pool_factor` respectively -- the same
+    circular-conv weight-sharing design as the fine scale, just applied
+    at coarser resolution, so translation equivariance is preserved
+    (exactly, for shifts that are multiples of the coarser scale's own
+    site spacing).
+
+    **Gauge anchor, extended to every scale (CLAUDE.md §12.3's own
+    "not optional").** Channel 0 at every scale is the NON-learned
+    physical average of `u` over that scale's own support -- fine:
+    average over one fine patch (Section 224's own anchor, unchanged);
+    regional: average over `regional_pool_factor` fine patches; global:
+    average over the WHOLE domain. The global anchor is not an
+    arbitrary choice: for KS's periodic boundary conditions,
+    `mean(u)` (equivalently `integral(u dx)/L`) is an EXACTLY CONSERVED
+    quantity of the true dynamics (`u_t = -u u_x - u_xx - u_xxxx`
+    integrates to zero over one period) -- the global scale's own
+    leading channel is therefore a genuine physical invariant, not just
+    a coarse summary statistic, for free.
+
+    **Latent layout**: `z = concat([z_fine, z_regional, z_global])`,
+    each block flattened site-major internally (matching
+    `LocalFieldAutoencoderConfig`'s own convention), blocks concatenated
+    in that fixed fine/regional/global order --
+    `d_latent = fine_n_sites*fine_local_channels +
+    regional_n_sites*regional_local_channels + global_local_channels`.
+    """
+
+    NX: int = 256
+    fine_n_sites: int = 16
+    fine_local_channels: int = 3
+    fine_site_mix_radius: int = 2
+    fine_n_site_mix_layers: int = 3
+    hidden: int = 32
+    regional_pool_factor: int = 4
+    regional_local_channels: int = 3
+    global_pool_factor: int = 4  # applied ON TOP of regional_pool_factor
+    global_local_channels: int = 2
+
+    @property
+    def regional_n_sites(self) -> int:
+        return self.fine_n_sites // self.regional_pool_factor
+
+    @property
+    def global_n_sites(self) -> int:
+        return self.regional_n_sites // self.global_pool_factor
+
+    @property
+    def d_latent(self) -> int:
+        return (
+            self.fine_n_sites * self.fine_local_channels
+            + self.regional_n_sites * self.regional_local_channels
+            + self.global_local_channels
+        )
+
+    # Duck-typed aliases for any code that expects a plain
+    # `LocalFieldAutoencoderConfig`-shaped `.n_sites`/`.local_channels`
+    # (e.g. `w_logdet_physical`'s reg-loss call in `ks_latent.training.
+    # loops`, off by default in this project's own Section 224 recipe) --
+    # point at the FINE block, the closest analogue.
+    @property
+    def n_sites(self) -> int:
+        return self.fine_n_sites
+
+    @property
+    def local_channels(self) -> int:
+        return self.fine_local_channels
+
+    def __post_init__(self):
+        if self.NX % self.fine_n_sites != 0:
+            raise ValueError(f"NX={self.NX!r} must be divisible by fine_n_sites={self.fine_n_sites!r}")
+        if self.fine_local_channels < 1:
+            raise ValueError(f"fine_local_channels must be >= 1, got {self.fine_local_channels!r}")
+        if self.fine_n_sites % self.regional_pool_factor != 0:
+            raise ValueError(
+                f"fine_n_sites={self.fine_n_sites!r} must be divisible by "
+                f"regional_pool_factor={self.regional_pool_factor!r}"
+            )
+        if self.regional_local_channels < 1:
+            raise ValueError(f"regional_local_channels must be >= 1, got {self.regional_local_channels!r}")
+        if self.regional_n_sites % self.global_pool_factor != 0:
+            raise ValueError(
+                f"regional_n_sites={self.regional_n_sites!r} must be divisible by "
+                f"global_pool_factor={self.global_pool_factor!r}"
+            )
+        if self.global_n_sites != 1:
+            raise ValueError(
+                f"global_pool_factor={self.global_pool_factor!r} must reduce regional_n_sites="
+                f"{self.regional_n_sites!r} to exactly 1 site (a genuinely GLOBAL scale) -- "
+                f"got global_n_sites={self.global_n_sites!r}. Use a larger global_pool_factor."
+            )
+        if self.global_local_channels < 1:
+            raise ValueError(f"global_local_channels must be >= 1, got {self.global_local_channels!r}")
+        if self.fine_site_mix_radius < 0:
+            raise ValueError(f"fine_site_mix_radius must be >= 0, got {self.fine_site_mix_radius!r}")
+        if self.fine_n_site_mix_layers < 0:
+            raise ValueError(f"fine_n_site_mix_layers must be >= 0, got {self.fine_n_site_mix_layers!r}")
+        if self.hidden < 1:
+            raise ValueError(f"hidden must be >= 1, got {self.hidden!r}")
+
+
+@dataclass(frozen=True)
+class LocalFieldAutoencoderConfig2D:
+    """2D generalization of `LocalFieldAutoencoderConfig`
+    (`encoder_kind="local_field_2d"`, added 2026-09-28,
+    `docs/ks_local_field_ltransfer.tex` "Staged next steps" Step 1) --
+    `Conv2d` throughout in place of `Conv1d`, everything else the same
+    design: exact non-overlapping 2D patchify, circular 2D site-mixing
+    (periodic in BOTH x and y, matching 2D KS's own domain), gauge-anchored
+    channel 0 (the non-learned physical average of `u` over each 2D
+    patch), latent shaped `(n_sites_x, n_sites_y, local_channels)`,
+    flattened site-major (`z_flat[:, (site_x*n_sites_y+site_y)*c + ch]`).
+    See `ks_latent.models.autoencoder_local_field_2d`'s module docstring
+    for the exact layer-by-layer mapping from `KSAutoencoderLocalField`.
+    """
+
+    NX: int = 128
+    NY: int = 128
+    n_sites_x: int = 16
+    n_sites_y: int = 16
+    local_channels: int = 3
+    site_mix_radius: int = 2
+    n_site_mix_layers: int = 3
+    hidden: int = 32
+    # C19 (2026-10-04): decoder site-mixing reach, independent of the encoder's.
+    # None = same as the encoder (all checkpoints before C19).
+    dec_site_mix_radius: int | None = None
+    dec_n_site_mix_layers: int | None = None
+
+    @property
+    def patch_x(self) -> int:
+        return self.NX // self.n_sites_x
+
+    @property
+    def patch_y(self) -> int:
+        return self.NY // self.n_sites_y
+
+    @property
+    def d_latent(self) -> int:
+        return self.n_sites_x * self.n_sites_y * self.local_channels
+
+    def __post_init__(self):
+        if self.NX % self.n_sites_x != 0:
+            raise ValueError(f"NX={self.NX!r} must be divisible by n_sites_x={self.n_sites_x!r}")
+        if self.NY % self.n_sites_y != 0:
+            raise ValueError(f"NY={self.NY!r} must be divisible by n_sites_y={self.n_sites_y!r}")
+        if self.local_channels < 1:
+            raise ValueError(f"local_channels must be >= 1, got {self.local_channels!r}")
+        if self.site_mix_radius < 0:
+            raise ValueError(f"site_mix_radius must be >= 0, got {self.site_mix_radius!r}")
+        if self.n_site_mix_layers < 0:
+            raise ValueError(f"n_site_mix_layers must be >= 0, got {self.n_site_mix_layers!r}")
+        if self.hidden < 1:
+            raise ValueError(f"hidden must be >= 1, got {self.hidden!r}")
+
+
+@dataclass(frozen=True)
+class LocalFieldAutoencoderAniso2DConfig:
+    """Anisotropic variant of `LocalFieldAutoencoderConfig2D`
+    (`encoder_kind="local_field_2d_aniso"`, added 2026-09-29, user-directed
+    after G2's own reconciliation check confirmed Kolmogorov flow's
+    zero-retraining transfer gap is genuine, not an IC artifact --- see
+    `docs/ks_local_field_ltransfer.tex`'s "Orientation hypothesis" section
+    and its Kolmogorov-flow-specific correction).
+
+    **Why NOT rotation-equivariant (unlike the 2D-KS-specific idea it
+    followed from).** Kolmogorov flow is NOT isotropic: the forcing
+    `f(y)=-nu*n^3*cos(n*y)` singles out a specific direction, giving
+    exact translation invariance in `x` but only DISCRETE period-`2*pi/n`
+    invariance in `y` (never full continuous `y`-translation invariance,
+    and no rotational symmetry at all -- confirmed directly by
+    `ks_latent.solver.kolmogorov`'s own equivariance tests). A rotation-
+    equivariant architecture would impose a symmetry this system's own
+    physics does not have. This class instead builds in the ACTUAL
+    symmetry: exact weight-sharing (hence equivariance) in `x`, combined
+    with an explicit, FIXED (non-learned) phase-conditioning signal in
+    `y` -- `cos(forcing_n*y)`/`sin(forcing_n*y)`, evaluated at each pixel
+    (encoder) or site (decoder) -- concatenated as extra input channels.
+    These two fixed channels are, by construction, EXACTLY invariant
+    under `y -> y + 2*pi/forcing_n` (the system's own real residual
+    symmetry) while varying meaningfully within one period, giving the
+    network explicit, exact access to "where am I in the forcing's own
+    phase" rather than the plain `local_field_2d` encoder's implicit (and
+    physically wrong) assumption that `y` is a free translation symmetry
+    just like `x`.
+
+    Everything else matches `LocalFieldAutoencoderConfig2D` exactly
+    (same patchify/site-mixing/gauge-anchor structure) --- see
+    `ks_latent.models.autoencoder_local_field_2d_aniso`'s own module
+    docstring for the exact channel-concatenation mechanics.
+    """
+
+    # Matches Section 231's own isotropic `local_field_2d` run exactly
+    # (NX=NY=128, n_sites_x=n_sites_y=8, Lx=Ly=2*pi) -- this class's
+    # intended use is a single-variable-changed comparison against that
+    # checkpoint (only the phase-conditioning is new), not the smaller
+    # NX=256/NY=128 shape used during ad hoc smoke-testing this class.
+    NX: int = 128
+    NY: int = 128
+    n_sites_x: int = 8
+    n_sites_y: int = 8
+    local_channels: int = 3
+    site_mix_radius: int = 2
+    n_site_mix_layers: int = 3
+    hidden: int = 32
+    forcing_n: int = 4
+
+    @property
+    def patch_x(self) -> int:
+        return self.NX // self.n_sites_x
+
+    @property
+    def patch_y(self) -> int:
+        return self.NY // self.n_sites_y
+
+    @property
+    def d_latent(self) -> int:
+        return self.n_sites_x * self.n_sites_y * self.local_channels
+
+    def __post_init__(self):
+        if self.NX % self.n_sites_x != 0:
+            raise ValueError(f"NX={self.NX!r} must be divisible by n_sites_x={self.n_sites_x!r}")
+        if self.NY % self.n_sites_y != 0:
+            raise ValueError(f"NY={self.NY!r} must be divisible by n_sites_y={self.n_sites_y!r}")
+        if self.local_channels < 1:
+            raise ValueError(f"local_channels must be >= 1, got {self.local_channels!r}")
+        if self.site_mix_radius < 0:
+            raise ValueError(f"site_mix_radius must be >= 0, got {self.site_mix_radius!r}")
+        if self.n_site_mix_layers < 0:
+            raise ValueError(f"n_site_mix_layers must be >= 0, got {self.n_site_mix_layers!r}")
+        if self.hidden < 1:
+            raise ValueError(f"hidden must be >= 1, got {self.hidden!r}")
+        if self.forcing_n < 1:
+            raise ValueError(f"forcing_n must be >= 1, got {self.forcing_n!r}")
+        if self.n_sites_y % self.forcing_n != 0:
+            raise ValueError(
+                f"n_sites_y={self.n_sites_y!r} must be a multiple of forcing_n={self.forcing_n!r} "
+                "for the site-level phase channels to exactly respect the y-period residual symmetry."
+            )
+
+
+@dataclass(frozen=True)
+class LocalAttentionAutoencoderConfig2D:
+    """`encoder_kind="local_attention_2d"` (added 2026-09-29, user-directed:
+    "please implement the local attention variant you described above" --
+    `CLAUDE_CODE_BRIEF.md` Sec. 12.2.2's "local attention variant" of the
+    local field architecture, built for the first time here). ISOTROPIC
+    (returns to `LocalFieldAutoencoderConfig2D`'s own plain setup, not the
+    phase-conditioned `..Aniso2DConfig` -- the propagator that failed was
+    the anisotropic one's; this tests a different, orthogonal axis:
+    whether a more expressive LOCAL mixing operator (windowed multi-head
+    self-attention instead of a fixed circular-conv kernel) narrows
+    Kolmogorov flow's transfer gap, independent of the drag/extensivity
+    question `alpha` addresses).
+
+    **Same overall shape as `LocalFieldAutoencoderConfig2D`** (patchify,
+    `n_site_mix_layers` local-mixing layers, gauge-anchored channel 0,
+    zero-retraining resize) -- the ONLY structural change is what performs
+    the site-mixing: windowed multi-head self-attention with a RELATIVE
+    position bias, instead of a circular `Conv2d`. Three properties (all
+    from the brief's own "Translation equivariance is not automatic here"
+    requirements list) make this resize-transferable exactly the same way
+    the conv version is:
+
+    1. Every learned weight (`Q`/`K`/`V`/output projections, FFN, the
+       small relative-bias table) has a shape depending only on `d_model`/
+       `n_heads`/`window`/`mlp_ratio` -- NEVER on `n_sites_x`/`n_sites_y`.
+       In particular the bias table is shape `(n_heads, window+1, window+1)`
+       -- indexed by the (circular, per-axis) OFFSET between two sites,
+       not by either site's absolute index -- so its size does not grow
+       with the site grid at all.
+    2. Attention is masked to a fixed square window (Chebyshev, i.e.
+       per-axis circular distance `<= window` on BOTH axes -- the same
+       `(2*window+1, 2*window+1)` neighborhood shape a `Conv2d` kernel of
+       that radius would cover), never global -- this is what keeps the
+       effective receptive field bounded in PHYSICAL units as the domain
+       grows, rather than automatically spanning the whole (now larger)
+       domain the way un-windowed/global attention would.
+    3. The SAME block (same Q/K/V/output/FFN/bias-table weights) is
+       applied at every site -- no per-site parameters anywhere.
+
+    Receptive field = `n_site_mix_layers * window` sites (an upper bound,
+    guaranteed by the mask; the learned attention weights may concentrate
+    more narrowly -- see `tests/unit/test_autoencoder_local_attention_2d.py`'s
+    own `test_receptive_field_bound`, which checks the bound, not
+    equality, per the brief's own caveat that this can differ from the
+    conv variant's fixed receptive field).
+    """
+
+    NX: int = 128
+    NY: int = 128
+    n_sites_x: int = 8
+    n_sites_y: int = 8
+    local_channels: int = 3
+    window: int = 2
+    n_site_mix_layers: int = 3
+    d_model: int = 32
+    n_heads: int = 4
+    mlp_ratio: int = 4
+    dropout: float = 0.0
+
+    @property
+    def patch_x(self) -> int:
+        return self.NX // self.n_sites_x
+
+    @property
+    def patch_y(self) -> int:
+        return self.NY // self.n_sites_y
+
+    @property
+    def d_latent(self) -> int:
+        return self.n_sites_x * self.n_sites_y * self.local_channels
+
+    def __post_init__(self):
+        if self.NX % self.n_sites_x != 0:
+            raise ValueError(f"NX={self.NX!r} must be divisible by n_sites_x={self.n_sites_x!r}")
+        if self.NY % self.n_sites_y != 0:
+            raise ValueError(f"NY={self.NY!r} must be divisible by n_sites_y={self.n_sites_y!r}")
+        if self.local_channels < 1:
+            raise ValueError(f"local_channels must be >= 1, got {self.local_channels!r}")
+        if self.window < 0:
+            raise ValueError(f"window must be >= 0, got {self.window!r}")
+        if self.n_site_mix_layers < 1:
+            raise ValueError(f"n_site_mix_layers must be >= 1, got {self.n_site_mix_layers!r}")
+        if self.d_model < 1:
+            raise ValueError(f"d_model must be >= 1, got {self.d_model!r}")
+        if self.n_heads < 1:
+            raise ValueError(f"n_heads must be >= 1, got {self.n_heads!r}")
+        if self.d_model % self.n_heads != 0:
+            raise ValueError(f"d_model={self.d_model!r} must be divisible by n_heads={self.n_heads!r}")
+        if self.mlp_ratio < 1:
+            raise ValueError(f"mlp_ratio must be >= 1, got {self.mlp_ratio!r}")
 
 
 @dataclass(frozen=True)
@@ -1029,7 +1727,8 @@ _VALID_PROPAGATOR_MODES = ("two_step", "markovian", "history")
 _VALID_PROPAGATOR_BACKBONES = (
     "mlp", "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
     "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
-    "spectral_pde", "spectral_pde_raw",
+    "spectral_pde", "spectral_pde_raw", "multiscale_local_mlp", "site_conv_2d", "local_mlp_2d",
+    "local_mlp_2d_aniso", "local_mlp_2d_biotsavart", "multiscale_local_mlp_2d", "local_mlp_2d_consensus",
 )
 
 
@@ -1041,7 +1740,8 @@ def _validate_propagator_mode_backbone(mode: str, backbone: str) -> None:
     if mode == "two_step" and backbone in (
         "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
         "local_mlp", "masked_mlp", "masked_mlp_wide", "masked_mlp_expand", "node", "cnn", "site_conv",
-        "spectral_pde", "spectral_pde_raw",
+        "spectral_pde", "spectral_pde_raw", "multiscale_local_mlp", "site_conv_2d", "local_mlp_2d",
+        "local_mlp_2d_aniso", "local_mlp_2d_biotsavart", "multiscale_local_mlp_2d", "local_mlp_2d_consensus",
     ):
         raise ValueError(
             f"backbone={backbone!r} is only implemented for mode='markovian' "
@@ -1066,12 +1766,12 @@ def _validate_spectral_field_kind(
     """Shared by `backbone="spectral_pde"`/`"spectral_pde_raw"` validation
     in both `AuxPropagatorConfig` and `PropagatorConfig` (added 2026-09-09,
     see `PropagatorConfig.spectral_field_kind`'s docstring)."""
-    if field_kind not in ("mlp", "polynomial", "chebyshev", "forced_burgers"):
+    if field_kind not in ("mlp", "polynomial", "chebyshev", "forced_burgers", "rational"):
         raise ValueError(
-            f"spectral_field_kind must be 'mlp', 'polynomial', 'chebyshev', or "
-            f"'forced_burgers', got {field_kind!r}"
+            f"spectral_field_kind must be 'mlp', 'polynomial', 'chebyshev', 'forced_burgers', "
+            f"or 'rational', got {field_kind!r}"
         )
-    if field_kind in ("polynomial", "chebyshev") and poly_degree not in (1, 2, 3):
+    if field_kind in ("polynomial", "chebyshev", "rational") and poly_degree not in (1, 2, 3):
         raise ValueError(f"spectral_poly_degree must be 1, 2, or 3, got {poly_degree!r}")
     if poly_max_term_order is not None and poly_max_term_order < 1:
         raise ValueError(
@@ -1824,6 +2524,126 @@ class AuxPropagatorConfig:
     site_conv_local_channels: int = 3
     site_conv_hidden: int = 32
     site_conv_n_layers: int = 3
+    # `site_conv_2d` (added 2026-09-28, `docs/ks_local_field_ltransfer.tex`
+    # "Staged next steps" Step 1) -- 2D generalization of `site_conv`,
+    # see `_SiteConv2DDeltaBody`'s own docstring. Defaults match
+    # `LocalFieldAutoencoderConfig2D`'s own defaults, same
+    # reuse-already-validated-parameters reasoning as `site_conv`'s own.
+    site_conv2d_n_sites_x: int = 16
+    site_conv2d_n_sites_y: int = 16
+    site_conv2d_local_channels: int = 3
+    site_conv2d_hidden: int = 32
+    site_conv2d_n_layers: int = 3
+    # `local_mlp_2d` (added 2026-09-28, `docs/ks_local_field_ltransfer.tex`
+    # "Staged next steps" Step 1, user-directed: "build [the actual 2D
+    # local_mlp] please") -- the actual 2D analogue of Section 224's own
+    # propagator (`local_mlp`), see `_LocalMLPDeltaBody2D`'s docstring.
+    # Purpose-built for a `local_field_2d`-paired latent: tokens ARE the
+    # sites, no general tokenizer needed, so only sizing fields (matching
+    # the paired encoder) plus `token_d_model`/`n_layers` -- `mlp_ratio`
+    # reuses `token_mlp_ratio`, the mixing radius reuses `attn_window`,
+    # same convention 1D `local_mlp` already uses.
+    local_mlp2d_n_sites_x: int = 16
+    local_mlp2d_n_sites_y: int = 16
+    local_mlp2d_local_channels: int = 3
+    local_mlp2d_token_d_model: int = 32
+    local_mlp2d_n_layers: int = 2
+    # `local_mlp_2d_aniso` (added 2026-09-29, user-directed: Kolmogorov
+    # flow's own transfer gap confirmed genuine, not an IC artifact --
+    # see the "orientation hypothesis" note; unlike 2D KS, Kolmogorov
+    # flow is NOT isotropic, so this variant builds in the system's
+    # ACTUAL symmetry -- exact x-equivariance, explicit fixed phase-
+    # conditioning in y -- rather than rotation equivariance, which
+    # would be the wrong symmetry here). Same sizing fields as
+    # `local_mlp_2d` plus `forcing_n` (the fixed cos/sin(forcing_n*y)
+    # phase channels' own wavenumber, must match the paired encoder's).
+    local_mlp2d_aniso_n_sites_x: int = 16
+    local_mlp2d_aniso_n_sites_y: int = 8
+    local_mlp2d_aniso_local_channels: int = 3
+    local_mlp2d_aniso_token_d_model: int = 32
+    local_mlp2d_aniso_n_layers: int = 2
+    local_mlp2d_aniso_forcing_n: int = 4
+    # `local_mlp_2d_biotsavart` (added 2026-10-01, D2 of docs/oct_1_exp.md,
+    # user-directed: "I'm trying to improve transfer by creating dynamics
+    # between localized data" -- a window, however wide, cannot represent
+    # the one genuinely NONLOCAL term in 2D vorticity dynamics (velocity
+    # recovery `nabla^2 psi = -omega` is an exact, distance-independent
+    # `1/k^2` Fourier divide), and no fixed window stays a meaningful
+    # fraction of the domain under L-transfer anyway. This backbone adds
+    # that exact, non-learned term as an extra input to `local_mlp_2d`'s
+    # own mixer: same sizing fields as `local_mlp_2d`
+    # (`local_mlp2d_n_sites_x/y`, `local_mlp2d_local_channels`,
+    # `local_mlp2d_token_d_model`, `local_mlp2d_n_layers` -- reused, not
+    # duplicated, since the mixer stack itself is identical), plus the
+    # physical domain size needed to build the correct Fourier `k`-grid.
+    # `biot_savart_Lx`/`biot_savart_Ly` MUST be rescaled on resize
+    # (`load_propagator_checkpoint_resized_2d_biotsavart`) by the same
+    # ratio applied to `local_mlp2d_n_sites_x/y` -- silently leaving them
+    # at the trained domain size would evaluate the elliptic solve on the
+    # wrong `k`-grid after a resize, a much worse failure than raising.
+    biot_savart_Lx: float = 2 * math.pi
+    biot_savart_Ly: float = 2 * math.pi
+    # C9 (docs/ks_local_field_ltransfer.tex Sec. c8c12): velocity is divided by
+    # `biot_savart_vel_scale` (set from the training set's own Biot-Savart velocity
+    # std, so large-domain amplitudes stay in range), and the velocity embedding
+    # can be zero-initialized. Defaults reproduce D2 exactly.
+    biot_savart_vel_scale: float = 1.0
+    biot_savart_zero_init_embed: bool = False
+    # `multiscale_local_mlp_2d` (added 2026-10-01, D3 of docs/oct_1_exp.md,
+    # user-directed after D2's biotsavart term collapsed under transfer:
+    # "please make very sure to design trainable dynamic interactions
+    # between the localized dynamics coming from the fixed 'patched'
+    # model"). Two genuinely trainable scales: the FINE scale is
+    # `local_mlp_2d`'s own mixer (reusing its sizing fields above
+    # unchanged), and a REGIONAL scale pools fine tokens by a fixed
+    # (pool_x, pool_y) site ratio, runs its OWN `_LocalMixerBlock2D`
+    # stack (own learned weights), and the pooled/broadcast exchange
+    # Linear layers are themselves trained end to end -- unlike D2's
+    # fixed-formula Biot-Savart term, every cross-scale interaction here
+    # is learned, so there is no un-normalized exact-physics amplitude
+    # for it to collapse on under resize (`_LocalMixerBlock2D`'s own
+    # LayerNorm bounds the regional branch the same way it already
+    # bounds the fine one). `n_sites_x`/`n_sites_y` must be divisible by
+    # `multiscale_pool_x`/`multiscale_pool_y`.
+    multiscale_pool_x: int = 2
+    multiscale_pool_y: int = 2
+    multiscale_regional_token_d_model: int = 32
+    multiscale_regional_n_layers: int = 2
+    multiscale_regional_window: int = 2
+    # `local_mlp_2d_consensus` (added 2026-10-02, C7 of
+    # docs/ks_local_field_ltransfer.tex): local_mlp_2d plus a learned, gated,
+    # iterative inverse-variance relaxation over neighbouring sites (each
+    # site emits a message and a precision; `consensus_n_iter` rounds of
+    # precision-weighted Chebyshev-radius-`consensus_radius` averaging; the
+    # result enters only through a zero-initialized gated residual). Sizing
+    # reuses the `local_mlp2d_*` fields.
+    consensus_n_iter: int = 4
+    consensus_radius: int = 1
+    consensus_d_msg: int = 16
+    # `multiscale_local_mlp` (added 2026-09-28, user-directed: combine
+    # Section 224's local_field/local_mlp recipe with the multiscale
+    # latent idea in docs/spatially_structured_latent_DA_FMM_research_
+    # idea.md). Three independent `local_mlp`-style bodies (see
+    # `_LocalMLPDeltaBody`, unchanged -- same weight-shared, windowed,
+    # NO-softmax linear mixer already found to be the one propagator
+    # design that recovers chaos, see that class's own docstring), one
+    # per scale, no cross-scale coupling in the dynamics model for this
+    # first version (the encoder/decoder's own cross-scale coupling,
+    # through joint reconstruction, is what's relied on to keep scales
+    # consistent -- see `KSAutoencoderMultiscaleLocalField`'s docstring).
+    # Defaults match the paired encoder's own defaults exactly, same
+    # "reuse parameters already validated by the encoder" reasoning as
+    # `site_conv_*` above: fine mirrors Section 224 exactly
+    # (n_sites=16, channels=3, window=3); regional/global are new.
+    multiscale_fine_n_sites: int = 16
+    multiscale_fine_channels: int = 3
+    multiscale_fine_window: int = 3
+    multiscale_regional_n_sites: int = 4
+    multiscale_regional_channels: int = 3
+    multiscale_regional_window: int = 1
+    multiscale_global_channels: int = 2
+    multiscale_token_d_model: int = 32
+    multiscale_n_layers: int = 2
 
     def __post_init__(self):
         _validate_propagator_mode_backbone(self.mode, self.backbone)
@@ -1864,6 +2684,118 @@ class AuxPropagatorConfig:
                     f"site_conv_local_channels (got d_latent={self.d_latent!r}, "
                     f"site_conv_n_sites={self.site_conv_n_sites!r}, "
                     f"site_conv_local_channels={self.site_conv_local_channels!r})"
+                )
+        if self.backbone == "site_conv_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='site_conv_2d' requires attn_window to be set (its circular "
+                    "site-mixing radius, both axes) -- there is no 'global site_conv_2d'."
+                )
+            expected_d = self.site_conv2d_n_sites_x * self.site_conv2d_n_sites_y * self.site_conv2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='site_conv_2d' requires d_latent == site_conv2d_n_sites_x * "
+                    f"site_conv2d_n_sites_y * site_conv2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+        if self.backbone == "local_mlp_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d' requires attn_window to be set (its windowed "
+                    "mixer radius, both axes) -- there is no 'global local_mlp_2d'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+        if self.backbone == "local_mlp_2d_biotsavart":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d_biotsavart' requires attn_window to be set (its "
+                    "windowed mixer radius, both axes) -- there is no 'global local_mlp_2d_biotsavart'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_biotsavart' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.biot_savart_Lx <= 0 or self.biot_savart_Ly <= 0:
+                raise ValueError(
+                    f"biot_savart_Lx/Ly must be > 0, got "
+                    f"{self.biot_savart_Lx!r}/{self.biot_savart_Ly!r}"
+                )
+        if self.backbone == "local_mlp_2d_consensus":
+            if self.attn_window is None:
+                raise ValueError("backbone='local_mlp_2d_consensus' requires attn_window to be set.")
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_consensus' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels (got {self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.consensus_n_iter < 1 or self.consensus_radius < 1 or self.consensus_d_msg < 1:
+                raise ValueError("consensus_n_iter, consensus_radius, consensus_d_msg must all be >= 1")
+        if self.backbone == "multiscale_local_mlp_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='multiscale_local_mlp_2d' requires attn_window to be set "
+                    "(the FINE scale's windowed mixer radius) -- there is no 'global "
+                    "multiscale_local_mlp_2d'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='multiscale_local_mlp_2d' requires d_latent == "
+                    f"local_mlp2d_n_sites_x * local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.local_mlp2d_n_sites_x % self.multiscale_pool_x != 0:
+                raise ValueError(
+                    f"local_mlp2d_n_sites_x={self.local_mlp2d_n_sites_x!r} must be divisible "
+                    f"by multiscale_pool_x={self.multiscale_pool_x!r}"
+                )
+            if self.local_mlp2d_n_sites_y % self.multiscale_pool_y != 0:
+                raise ValueError(
+                    f"local_mlp2d_n_sites_y={self.local_mlp2d_n_sites_y!r} must be divisible "
+                    f"by multiscale_pool_y={self.multiscale_pool_y!r}"
+                )
+        if self.backbone == "local_mlp_2d_aniso":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d_aniso' requires attn_window to be set (its windowed "
+                    "mixer radius, both axes) -- there is no 'global local_mlp_2d_aniso'."
+                )
+            expected_d = (
+                self.local_mlp2d_aniso_n_sites_x * self.local_mlp2d_aniso_n_sites_y
+                * self.local_mlp2d_aniso_local_channels
+            )
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_aniso' requires d_latent == local_mlp2d_aniso_n_sites_x * "
+                    f"local_mlp2d_aniso_n_sites_y * local_mlp2d_aniso_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.local_mlp2d_aniso_n_sites_y % self.local_mlp2d_aniso_forcing_n != 0:
+                raise ValueError(
+                    f"local_mlp2d_aniso_n_sites_y={self.local_mlp2d_aniso_n_sites_y!r} must be a "
+                    f"multiple of local_mlp2d_aniso_forcing_n={self.local_mlp2d_aniso_forcing_n!r}"
+                )
+        if self.backbone == "multiscale_local_mlp":
+            expected_d = (
+                self.multiscale_fine_n_sites * self.multiscale_fine_channels
+                + self.multiscale_regional_n_sites * self.multiscale_regional_channels
+                + self.multiscale_global_channels
+            )
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='multiscale_local_mlp' requires d_latent == fine_n_sites*fine_channels "
+                    f"+ regional_n_sites*regional_channels + global_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
                 )
         if self.backbone == "spectral_pde":
             if self.spectral_K is None or self.spectral_N_w is None:
@@ -2735,6 +3667,113 @@ class PropagatorConfig:
     site_conv_local_channels: int = 3
     site_conv_hidden: int = 32
     site_conv_n_layers: int = 3
+    # `site_conv_2d` (added 2026-09-28, `docs/ks_local_field_ltransfer.tex`
+    # "Staged next steps" Step 1) -- 2D generalization of `site_conv`,
+    # see `_SiteConv2DDeltaBody`'s own docstring. Defaults match
+    # `LocalFieldAutoencoderConfig2D`'s own defaults, same
+    # reuse-already-validated-parameters reasoning as `site_conv`'s own.
+    site_conv2d_n_sites_x: int = 16
+    site_conv2d_n_sites_y: int = 16
+    site_conv2d_local_channels: int = 3
+    site_conv2d_hidden: int = 32
+    site_conv2d_n_layers: int = 3
+    # `local_mlp_2d` (added 2026-09-28, `docs/ks_local_field_ltransfer.tex`
+    # "Staged next steps" Step 1, user-directed: "build [the actual 2D
+    # local_mlp] please") -- the actual 2D analogue of Section 224's own
+    # propagator (`local_mlp`), see `_LocalMLPDeltaBody2D`'s docstring.
+    # Purpose-built for a `local_field_2d`-paired latent: tokens ARE the
+    # sites, no general tokenizer needed, so only sizing fields (matching
+    # the paired encoder) plus `token_d_model`/`n_layers` -- `mlp_ratio`
+    # reuses `token_mlp_ratio`, the mixing radius reuses `attn_window`,
+    # same convention 1D `local_mlp` already uses.
+    local_mlp2d_n_sites_x: int = 16
+    local_mlp2d_n_sites_y: int = 16
+    local_mlp2d_local_channels: int = 3
+    local_mlp2d_token_d_model: int = 32
+    local_mlp2d_n_layers: int = 2
+    # `local_mlp_2d_aniso` (added 2026-09-29, user-directed: Kolmogorov
+    # flow's own transfer gap confirmed genuine, not an IC artifact --
+    # see the "orientation hypothesis" note; unlike 2D KS, Kolmogorov
+    # flow is NOT isotropic, so this variant builds in the system's
+    # ACTUAL symmetry -- exact x-equivariance, explicit fixed phase-
+    # conditioning in y -- rather than rotation equivariance, which
+    # would be the wrong symmetry here). Same sizing fields as
+    # `local_mlp_2d` plus `forcing_n` (the fixed cos/sin(forcing_n*y)
+    # phase channels' own wavenumber, must match the paired encoder's).
+    local_mlp2d_aniso_n_sites_x: int = 16
+    local_mlp2d_aniso_n_sites_y: int = 8
+    local_mlp2d_aniso_local_channels: int = 3
+    local_mlp2d_aniso_token_d_model: int = 32
+    local_mlp2d_aniso_n_layers: int = 2
+    local_mlp2d_aniso_forcing_n: int = 4
+    # `local_mlp_2d_biotsavart` (added 2026-10-01, D2 of docs/oct_1_exp.md,
+    # user-directed: "I'm trying to improve transfer by creating dynamics
+    # between localized data" -- a window, however wide, cannot represent
+    # the one genuinely NONLOCAL term in 2D vorticity dynamics (velocity
+    # recovery `nabla^2 psi = -omega` is an exact, distance-independent
+    # `1/k^2` Fourier divide), and no fixed window stays a meaningful
+    # fraction of the domain under L-transfer anyway. This backbone adds
+    # that exact, non-learned term as an extra input to `local_mlp_2d`'s
+    # own mixer: same sizing fields as `local_mlp_2d`
+    # (`local_mlp2d_n_sites_x/y`, `local_mlp2d_local_channels`,
+    # `local_mlp2d_token_d_model`, `local_mlp2d_n_layers` -- reused, not
+    # duplicated, since the mixer stack itself is identical), plus the
+    # physical domain size needed to build the correct Fourier `k`-grid.
+    # `biot_savart_Lx`/`biot_savart_Ly` MUST be rescaled on resize
+    # (`load_propagator_checkpoint_resized_2d_biotsavart`) by the same
+    # ratio applied to `local_mlp2d_n_sites_x/y` -- silently leaving them
+    # at the trained domain size would evaluate the elliptic solve on the
+    # wrong `k`-grid after a resize, a much worse failure than raising.
+    biot_savart_Lx: float = 2 * math.pi
+    biot_savart_Ly: float = 2 * math.pi
+    # C9 (docs/ks_local_field_ltransfer.tex Sec. c8c12): velocity is divided by
+    # `biot_savart_vel_scale` (set from the training set's own Biot-Savart velocity
+    # std, so large-domain amplitudes stay in range), and the velocity embedding
+    # can be zero-initialized. Defaults reproduce D2 exactly.
+    biot_savart_vel_scale: float = 1.0
+    biot_savart_zero_init_embed: bool = False
+    # `multiscale_local_mlp_2d` (added 2026-10-01, D3 of docs/oct_1_exp.md,
+    # user-directed after D2's biotsavart term collapsed under transfer:
+    # "please make very sure to design trainable dynamic interactions
+    # between the localized dynamics coming from the fixed 'patched'
+    # model"). Two genuinely trainable scales: the FINE scale is
+    # `local_mlp_2d`'s own mixer (reusing its sizing fields above
+    # unchanged), and a REGIONAL scale pools fine tokens by a fixed
+    # (pool_x, pool_y) site ratio, runs its OWN `_LocalMixerBlock2D`
+    # stack (own learned weights), and the pooled/broadcast exchange
+    # Linear layers are themselves trained end to end -- unlike D2's
+    # fixed-formula Biot-Savart term, every cross-scale interaction here
+    # is learned, so there is no un-normalized exact-physics amplitude
+    # for it to collapse on under resize (`_LocalMixerBlock2D`'s own
+    # LayerNorm bounds the regional branch the same way it already
+    # bounds the fine one). `n_sites_x`/`n_sites_y` must be divisible by
+    # `multiscale_pool_x`/`multiscale_pool_y`.
+    multiscale_pool_x: int = 2
+    multiscale_pool_y: int = 2
+    multiscale_regional_token_d_model: int = 32
+    multiscale_regional_n_layers: int = 2
+    multiscale_regional_window: int = 2
+    # `local_mlp_2d_consensus` (added 2026-10-02, C7 of
+    # docs/ks_local_field_ltransfer.tex): local_mlp_2d plus a learned, gated,
+    # iterative inverse-variance relaxation over neighbouring sites (each
+    # site emits a message and a precision; `consensus_n_iter` rounds of
+    # precision-weighted Chebyshev-radius-`consensus_radius` averaging; the
+    # result enters only through a zero-initialized gated residual). Sizing
+    # reuses the `local_mlp2d_*` fields.
+    consensus_n_iter: int = 4
+    consensus_radius: int = 1
+    consensus_d_msg: int = 16
+    # `multiscale_local_mlp` -- see AuxPropagatorConfig's own docstring
+    # for the full rationale; identical fields/defaults here.
+    multiscale_fine_n_sites: int = 16
+    multiscale_fine_channels: int = 3
+    multiscale_fine_window: int = 3
+    multiscale_regional_n_sites: int = 4
+    multiscale_regional_channels: int = 3
+    multiscale_regional_window: int = 1
+    multiscale_global_channels: int = 2
+    multiscale_token_d_model: int = 32
+    multiscale_n_layers: int = 2
 
     def __post_init__(self):
         _validate_propagator_mode_backbone(self.mode, self.backbone)
@@ -2783,6 +3822,118 @@ class PropagatorConfig:
                     f"site_conv_local_channels (got d_latent={self.d_latent!r}, "
                     f"site_conv_n_sites={self.site_conv_n_sites!r}, "
                     f"site_conv_local_channels={self.site_conv_local_channels!r})"
+                )
+        if self.backbone == "site_conv_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='site_conv_2d' requires attn_window to be set (its circular "
+                    "site-mixing radius, both axes) -- there is no 'global site_conv_2d'."
+                )
+            expected_d = self.site_conv2d_n_sites_x * self.site_conv2d_n_sites_y * self.site_conv2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='site_conv_2d' requires d_latent == site_conv2d_n_sites_x * "
+                    f"site_conv2d_n_sites_y * site_conv2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+        if self.backbone == "local_mlp_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d' requires attn_window to be set (its windowed "
+                    "mixer radius, both axes) -- there is no 'global local_mlp_2d'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+        if self.backbone == "local_mlp_2d_biotsavart":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d_biotsavart' requires attn_window to be set (its "
+                    "windowed mixer radius, both axes) -- there is no 'global local_mlp_2d_biotsavart'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_biotsavart' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.biot_savart_Lx <= 0 or self.biot_savart_Ly <= 0:
+                raise ValueError(
+                    f"biot_savart_Lx/Ly must be > 0, got "
+                    f"{self.biot_savart_Lx!r}/{self.biot_savart_Ly!r}"
+                )
+        if self.backbone == "local_mlp_2d_consensus":
+            if self.attn_window is None:
+                raise ValueError("backbone='local_mlp_2d_consensus' requires attn_window to be set.")
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_consensus' requires d_latent == local_mlp2d_n_sites_x * "
+                    f"local_mlp2d_n_sites_y * local_mlp2d_local_channels (got {self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.consensus_n_iter < 1 or self.consensus_radius < 1 or self.consensus_d_msg < 1:
+                raise ValueError("consensus_n_iter, consensus_radius, consensus_d_msg must all be >= 1")
+        if self.backbone == "multiscale_local_mlp_2d":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='multiscale_local_mlp_2d' requires attn_window to be set "
+                    "(the FINE scale's windowed mixer radius) -- there is no 'global "
+                    "multiscale_local_mlp_2d'."
+                )
+            expected_d = self.local_mlp2d_n_sites_x * self.local_mlp2d_n_sites_y * self.local_mlp2d_local_channels
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='multiscale_local_mlp_2d' requires d_latent == "
+                    f"local_mlp2d_n_sites_x * local_mlp2d_n_sites_y * local_mlp2d_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.local_mlp2d_n_sites_x % self.multiscale_pool_x != 0:
+                raise ValueError(
+                    f"local_mlp2d_n_sites_x={self.local_mlp2d_n_sites_x!r} must be divisible "
+                    f"by multiscale_pool_x={self.multiscale_pool_x!r}"
+                )
+            if self.local_mlp2d_n_sites_y % self.multiscale_pool_y != 0:
+                raise ValueError(
+                    f"local_mlp2d_n_sites_y={self.local_mlp2d_n_sites_y!r} must be divisible "
+                    f"by multiscale_pool_y={self.multiscale_pool_y!r}"
+                )
+        if self.backbone == "local_mlp_2d_aniso":
+            if self.attn_window is None:
+                raise ValueError(
+                    "backbone='local_mlp_2d_aniso' requires attn_window to be set (its windowed "
+                    "mixer radius, both axes) -- there is no 'global local_mlp_2d_aniso'."
+                )
+            expected_d = (
+                self.local_mlp2d_aniso_n_sites_x * self.local_mlp2d_aniso_n_sites_y
+                * self.local_mlp2d_aniso_local_channels
+            )
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='local_mlp_2d_aniso' requires d_latent == local_mlp2d_aniso_n_sites_x * "
+                    f"local_mlp2d_aniso_n_sites_y * local_mlp2d_aniso_local_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
+                )
+            if self.local_mlp2d_aniso_n_sites_y % self.local_mlp2d_aniso_forcing_n != 0:
+                raise ValueError(
+                    f"local_mlp2d_aniso_n_sites_y={self.local_mlp2d_aniso_n_sites_y!r} must be a "
+                    f"multiple of local_mlp2d_aniso_forcing_n={self.local_mlp2d_aniso_forcing_n!r}"
+                )
+        if self.backbone == "multiscale_local_mlp":
+            expected_d = (
+                self.multiscale_fine_n_sites * self.multiscale_fine_channels
+                + self.multiscale_regional_n_sites * self.multiscale_regional_channels
+                + self.multiscale_global_channels
+            )
+            if self.d_latent != expected_d:
+                raise ValueError(
+                    f"backbone='multiscale_local_mlp' requires d_latent == fine_n_sites*fine_channels "
+                    f"+ regional_n_sites*regional_channels + global_channels "
+                    f"(got d_latent={self.d_latent!r}, expected {expected_d!r})"
                 )
         if self.backbone == "masked_mlp_wide" and self.attn_window is None:
             raise ValueError(
@@ -3035,6 +4186,19 @@ class Stage1TrainingConfig:
     # SAME-SIGN local coherence specifically. Only meaningful with
     # w_spatial > 0.
     spatial_signed: bool = False
+    # `spatial_blocks` (added 2026-09-28, user-directed: multiscale-latent
+    # experiment, "please only apply w_spatial per block") -- optional
+    # list of block sizes summing to `d_latent` (e.g. `[48, 12, 2]` for a
+    # fine/regional/global multiscale latent). `None` (default) preserves
+    # the original behavior exactly: `spatial_coherence_loss` on the
+    # WHOLE `z` as one ring. When given, `blockwise_spatial_coherence_
+    # loss` is used instead -- each block scored as its OWN closed
+    # circular ring, so block-boundary indices (which carry no real
+    # physical adjacency across scales) are never scored as if they
+    # were spatially adjacent. See `blockwise_spatial_coherence_loss`'s
+    # own docstring for the mechanism and a direct empirical
+    # demonstration of the boundary artifact this fixes.
+    spatial_blocks: list[int] | None = None
     # `w_jacobian_bandedness` (added 2026-09-24, Section 214, user-
     # directed: "let's make D3 into a loss, since this seems like it's
     # the most important statistic to improve our chances at being able
@@ -4086,6 +5250,19 @@ class Stage2TrainingConfig:
     # See Stage1TrainingConfig.spatial_signed's docstring -- identical
     # meaning, applied to Stage 2's own w_spatial term.
     spatial_signed: bool = False
+    # `spatial_blocks` (added 2026-09-28, user-directed: multiscale-latent
+    # experiment, "please only apply w_spatial per block") -- optional
+    # list of block sizes summing to `d_latent` (e.g. `[48, 12, 2]` for a
+    # fine/regional/global multiscale latent). `None` (default) preserves
+    # the original behavior exactly: `spatial_coherence_loss` on the
+    # WHOLE `z` as one ring. When given, `blockwise_spatial_coherence_
+    # loss` is used instead -- each block scored as its OWN closed
+    # circular ring, so block-boundary indices (which carry no real
+    # physical adjacency across scales) are never scored as if they
+    # were spatially adjacent. See `blockwise_spatial_coherence_loss`'s
+    # own docstring for the mechanism and a direct empirical
+    # demonstration of the boundary artifact this fixes.
+    spatial_blocks: list[int] | None = None
     # Stage-2 analogue of Stage1TrainingConfig.w_jacobian_bandedness --
     # see that field's docstring and `ks_latent.training.losses.
     # propagator_jacobian_bandedness_loss`'s docstring for the full

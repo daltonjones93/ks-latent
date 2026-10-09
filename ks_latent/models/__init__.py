@@ -18,7 +18,11 @@ import torch
 from ks_latent.config import AuxPropagatorConfig, EnsemblePropagatorConfig, PropagatorConfig
 from ks_latent.models.autoencoder_fourier_mlp import KSAutoencoderFourierMLP
 from ks_latent.models.autoencoder_local_field import KSAutoencoderLocalField
+from ks_latent.models.autoencoder_local_field_2d import KSAutoencoderLocalField2D
+from ks_latent.models.autoencoder_local_field_2d_aniso import KSAutoencoderLocalFieldAniso2D
+from ks_latent.models.autoencoder_local_attention_2d import KSAutoencoderLocalAttention2D
 from ks_latent.models.autoencoder_masked_mlp import KSAutoencoderMaskedMLP
+from ks_latent.models.autoencoder_multiscale_local_field import KSAutoencoderMultiscaleLocalField
 from ks_latent.models.autoencoder_mlp import KSAutoencoderMLP
 from ks_latent.models.autoencoder_patched import KSAutoencoderPatched
 from ks_latent.models.autoencoder_spectral_field import KSAutoencoderSpectralField
@@ -36,6 +40,10 @@ _ENCODER_CLASSES = {
     "vit_fourier_hybrid": KSAutoencoderViTFourierHybrid,
     "spectral_field": KSAutoencoderSpectralField,
     "local_field": KSAutoencoderLocalField,
+    "multiscale_local_field": KSAutoencoderMultiscaleLocalField,
+    "local_field_2d": KSAutoencoderLocalField2D,
+    "local_field_2d_aniso": KSAutoencoderLocalFieldAniso2D,
+    "local_attention_2d": KSAutoencoderLocalAttention2D,
 }
 
 
@@ -152,6 +160,304 @@ def load_autoencoder_checkpoint_resized(
     ae.load_state_dict(ckpt["ae_state_dict"], strict=True)
     ae = ae.to(device)
     return ae, new_cfg, ckpt
+
+
+def load_autoencoder_checkpoint_resized_2d(
+    path, new_n_sites_x: int, new_n_sites_y: int, new_NX: int, new_NY: int,
+    device: str | torch.device = "cpu",
+):
+    """2D analogue of `load_autoencoder_checkpoint_resized` (added
+    2026-09-29, G1/G2: `docs/ks_local_field_ltransfer.tex` "L-transfer for
+    the 2D systems" plan) -- loads a `local_field_2d` checkpoint's trained
+    weights into a freshly constructed model at DIFFERENT
+    `n_sites_x`/`n_sites_y`/`NX`/`NY`. Same mechanism, same reasoning:
+    every learned layer in `KSAutoencoderLocalField2D`
+    (`enc_patchify`/`dec_unpatchify`: `Conv2d`/`ConvTranspose2d` with
+    kernel `(patch_x, patch_y)`; `enc_mix`/`dec_mix`: circular `Conv2d`
+    with kernel `2*site_mix_radius+1`; `enc_out`/`dec_in`: `1x1` `Conv2d`)
+    has a weight shape depending only on `patch_x`/`patch_y`,
+    `site_mix_radius`, and `hidden` -- NONE on `n_sites_x`/`n_sites_y`/
+    `NX`/`NY` themselves, so a plain `load_state_dict(strict=True)` into a
+    differently-sized model works with zero reshaping, exactly as it does
+    in 1D.
+
+    **Caller's responsibility, not checked here beyond the assertions
+    below**: `new_NX/new_n_sites_x` and `new_NY/new_n_sites_y` must both
+    equal the checkpoint's own trained `patch_x`/`patch_y` (same
+    reasoning as the 1D function's `patch_size` check) -- e.g.\ scaling
+    `Lx` by `1.5x` while holding `dx` fixed scales `NX` by `1.5x`, which
+    (patch size fixed) scales `n_sites_x` by the same `1.5x`."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    encoder_kind = ckpt.get("encoder_kind", "transformer")
+    if encoder_kind != "local_field_2d":
+        raise ValueError(
+            f"load_autoencoder_checkpoint_resized_2d only supports encoder_kind='local_field_2d' "
+            f"(size-independent weight shapes) -- got {encoder_kind!r}"
+        )
+    old_cfg = ckpt["ae_config"]
+    old_patch_x = old_cfg.NX // old_cfg.n_sites_x
+    old_patch_y = old_cfg.NY // old_cfg.n_sites_y
+    new_patch_x = new_NX // new_n_sites_x
+    new_patch_y = new_NY // new_n_sites_y
+    if (new_patch_x, new_patch_y) != (old_patch_x, old_patch_y):
+        raise ValueError(
+            f"new patch size ({new_patch_x},{new_patch_y}) must equal the checkpoint's own "
+            f"trained patch size ({old_patch_x},{old_patch_y}) for this to be a genuine "
+            "L-transfer (same physical content per patchify site)."
+        )
+    from ks_latent.config import LocalFieldAutoencoderConfig2D
+    new_cfg = LocalFieldAutoencoderConfig2D(
+        NX=new_NX, NY=new_NY, n_sites_x=new_n_sites_x, n_sites_y=new_n_sites_y,
+        local_channels=old_cfg.local_channels, site_mix_radius=old_cfg.site_mix_radius,
+        n_site_mix_layers=old_cfg.n_site_mix_layers, hidden=old_cfg.hidden,
+        dec_site_mix_radius=getattr(old_cfg, "dec_site_mix_radius", None),
+        dec_n_site_mix_layers=getattr(old_cfg, "dec_n_site_mix_layers", None),
+    )
+    ae = KSAutoencoderLocalField2D(new_cfg)
+    ae.load_state_dict(ckpt["ae_state_dict"], strict=True)
+    ae = ae.to(device)
+    return ae, new_cfg, ckpt
+
+
+def load_autoencoder_checkpoint_resized_2d_attn(
+    path, new_n_sites_x: int, new_n_sites_y: int, new_NX: int, new_NY: int,
+    device: str | torch.device = "cpu",
+):
+    """Analogue of `load_autoencoder_checkpoint_resized_2d` for
+    `encoder_kind="local_attention_2d"` (added 2026-09-29, user-directed:
+    "please implement the local attention variant you described above").
+    Same mechanism, same reasoning: every learned weight in
+    `KSAutoencoderLocalAttention2D` (`enc_patch_embed`/`dec_out`: `Linear`
+    with shape depending only on `patch_x*patch_y`/`d_model`;
+    `_WindowedAttnBlock2D`'s `Q`/`K`/`V`/output/FFN/bias-table: shapes
+    depending only on `d_model`/`n_heads`/`window`/`mlp_ratio`) has NO
+    dependence on `n_sites_x`/`n_sites_y`/`NX`/`NY` -- so
+    `load_state_dict(strict=True)` into a differently-sized model works
+    with zero reshaping. The ONLY reason this works at all: each
+    `_WindowedAttnBlock2D`'s structural `mask`/`dx_idx`/`dy_idx` buffers
+    are registered `persistent=False` (see that class's own docstring),
+    so they are simply absent from the checkpoint's `state_dict` and get
+    recomputed fresh for the NEW `n_sites_x`/`n_sites_y` at construction
+    time here, rather than being loaded (and mismatching) from the old
+    checkpoint."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    encoder_kind = ckpt.get("encoder_kind", "transformer")
+    if encoder_kind != "local_attention_2d":
+        raise ValueError(
+            f"load_autoencoder_checkpoint_resized_2d_attn only supports encoder_kind="
+            f"'local_attention_2d' (size-independent weight shapes) -- got {encoder_kind!r}"
+        )
+    old_cfg = ckpt["ae_config"]
+    old_patch_x = old_cfg.NX // old_cfg.n_sites_x
+    old_patch_y = old_cfg.NY // old_cfg.n_sites_y
+    new_patch_x = new_NX // new_n_sites_x
+    new_patch_y = new_NY // new_n_sites_y
+    if (new_patch_x, new_patch_y) != (old_patch_x, old_patch_y):
+        raise ValueError(
+            f"new patch size ({new_patch_x},{new_patch_y}) must equal the checkpoint's own "
+            f"trained patch size ({old_patch_x},{old_patch_y}) for this to be a genuine "
+            "L-transfer (same physical content per patchify site)."
+        )
+    from ks_latent.config import LocalAttentionAutoencoderConfig2D
+    new_cfg = LocalAttentionAutoencoderConfig2D(
+        NX=new_NX, NY=new_NY, n_sites_x=new_n_sites_x, n_sites_y=new_n_sites_y,
+        local_channels=old_cfg.local_channels, window=old_cfg.window,
+        n_site_mix_layers=old_cfg.n_site_mix_layers, d_model=old_cfg.d_model,
+        n_heads=old_cfg.n_heads, mlp_ratio=old_cfg.mlp_ratio, dropout=old_cfg.dropout,
+    )
+    ae = KSAutoencoderLocalAttention2D(new_cfg)
+    ae.load_state_dict(ckpt["ae_state_dict"], strict=True)
+    ae = ae.to(device)
+    return ae, new_cfg, ckpt
+
+
+def load_autoencoder_checkpoint_resized_2d_aniso_x(
+    path, new_n_sites_x: int, new_NX: int, device: str | torch.device = "cpu",
+):
+    """Anisotropic analogue of `load_autoencoder_checkpoint_resized_2d`
+    (added 2026-09-29) -- resizes ONLY in `x` (`n_sites_y`/`NY` stay
+    FIXED), matching `local_field_2d_aniso`'s own real symmetry:
+    Kolmogorov flow (the system this variant targets) is translation-
+    equivariant in `x` only, never in `y` (see
+    `KSAutoencoderLocalFieldAniso2D`'s own module docstring) -- resizing
+    `y` would not be a genuine zero-retraining transfer for this
+    architecture at all, since its `y`-direction phase buffers are
+    fixed at the trained `n_sites_y`/`NY`, not size-independent the way
+    every `x`-direction weight is.
+
+    Same weight-shape reasoning as the isotropic 2D resize function
+    otherwise: `enc_patchify`/`dec_unpatchify`/`enc_mix`/`dec_mix`/
+    `enc_out`/`dec_in` all have shapes depending only on
+    `patch_x`/`patch_y`/`site_mix_radius`/`hidden`/`local_channels`,
+    never on `n_sites_x`/`NX` -- a plain `load_state_dict(strict=True)`
+    into a model with more `x`-sites succeeds with zero reshaping. The
+    phase buffers (`cos_y_pixel`/`sin_y_pixel`/`cos_y_site`/`sin_y_site`)
+    are recomputed fresh at construction time (not loaded from the
+    checkpoint's own state_dict, since buffers aren't parameters) using
+    the SAME `NY`/`n_sites_y`/`forcing_n`, so they are identical to the
+    original checkpoint's own values -- correct by construction, not
+    merely by coincidence."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    encoder_kind = ckpt.get("encoder_kind", "transformer")
+    if encoder_kind != "local_field_2d_aniso":
+        raise ValueError(
+            f"load_autoencoder_checkpoint_resized_2d_aniso_x only supports "
+            f"encoder_kind='local_field_2d_aniso' -- got {encoder_kind!r}"
+        )
+    old_cfg = ckpt["ae_config"]
+    old_patch_x = old_cfg.NX // old_cfg.n_sites_x
+    new_patch_x = new_NX // new_n_sites_x
+    if new_patch_x != old_patch_x:
+        raise ValueError(
+            f"new patch_x={new_patch_x} must equal the checkpoint's own trained "
+            f"patch_x={old_patch_x} for this to be a genuine x-direction L-transfer."
+        )
+    from ks_latent.config import LocalFieldAutoencoderAniso2DConfig
+    new_cfg = LocalFieldAutoencoderAniso2DConfig(
+        NX=new_NX, NY=old_cfg.NY, n_sites_x=new_n_sites_x, n_sites_y=old_cfg.n_sites_y,
+        local_channels=old_cfg.local_channels, site_mix_radius=old_cfg.site_mix_radius,
+        n_site_mix_layers=old_cfg.n_site_mix_layers, hidden=old_cfg.hidden, forcing_n=old_cfg.forcing_n,
+    )
+    ae = KSAutoencoderLocalFieldAniso2D(new_cfg)
+    ae.load_state_dict(ckpt["ae_state_dict"], strict=True)
+    ae = ae.to(device)
+    return ae, new_cfg, ckpt
+
+
+def load_propagator_checkpoint_resized_2d(
+    path, new_n_sites_x: int, new_n_sites_y: int, device: str | torch.device = "cpu",
+):
+    """2D analogue of `load_propagator_checkpoint_resized` (added
+    2026-09-29, G1/G2) -- loads a `backbone="local_mlp_2d"` propagator's
+    trained weights into a freshly constructed model at different
+    `n_sites_x`/`n_sites_y` (hence `d_latent`). Only `local_mlp_2d` is
+    supported (raises otherwise): its layers (`_LocalMixerBlock2D`'s
+    windowed circular `Conv2d`, kernel `2*attn_window+1`, and the
+    per-token FFN) all have shapes depending on `local_channels`,
+    `token_d_model`, `attn_window` -- NONE on `n_sites_x`/`n_sites_y`
+    themselves, same reasoning as `local_mlp`'s own 1D resize."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    old_cfg = ckpt["prop_config"]
+    if getattr(old_cfg, "backbone", None) not in ("local_mlp_2d", "local_mlp_2d_consensus"):
+        raise ValueError(
+            f"load_propagator_checkpoint_resized_2d only supports backbone='local_mlp_2d' or 'local_mlp_2d_consensus' "
+            f"(verified size-independent weight shapes) -- got {getattr(old_cfg, 'backbone', None)!r}."
+        )
+    import dataclasses
+    new_d_latent = new_n_sites_x * new_n_sites_y * old_cfg.local_mlp2d_local_channels
+    new_cfg = dataclasses.replace(
+        old_cfg, d_latent=new_d_latent,
+        local_mlp2d_n_sites_x=new_n_sites_x, local_mlp2d_n_sites_y=new_n_sites_y,
+    )
+    prop = build_propagator_from_config(new_cfg)
+    prop.load_state_dict(ckpt["prop_state_dict"], strict=True)
+    prop = prop.to(device)
+    return prop, new_cfg, ckpt
+
+
+def load_propagator_checkpoint_resized_2d_biotsavart(
+    path, new_n_sites_x: int, new_n_sites_y: int, device: str | torch.device = "cpu",
+):
+    """`backbone="local_mlp_2d_biotsavart"` analogue of
+    `load_propagator_checkpoint_resized_2d` (added 2026-10-01, D2 of
+    docs/oct_1_exp.md). Identical weight-shape reasoning (every learned
+    layer's shape depends on `local_channels`/`token_d_model`/
+    `attn_window`, never on `n_sites_x`/`n_sites_y` themselves) PLUS one
+    thing the plain `local_mlp_2d` resize does not need to do:
+    `biot_savart_Lx`/`biot_savart_Ly` must be rescaled by the same ratio
+    applied to `n_sites_x`/`n_sites_y`, or the elliptic solve's Fourier
+    `k`-grid would silently be evaluated at the WRONG physical domain
+    size after a resize -- a much worse failure mode than raising, so
+    this is done unconditionally, not behind a flag."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    old_cfg = ckpt["prop_config"]
+    if getattr(old_cfg, "backbone", None) != "local_mlp_2d_biotsavart":
+        raise ValueError(
+            f"load_propagator_checkpoint_resized_2d_biotsavart only supports "
+            f"backbone='local_mlp_2d_biotsavart' -- got {getattr(old_cfg, 'backbone', None)!r}."
+        )
+    import dataclasses
+    new_d_latent = new_n_sites_x * new_n_sites_y * old_cfg.local_mlp2d_local_channels
+    new_Lx = old_cfg.biot_savart_Lx * (new_n_sites_x / old_cfg.local_mlp2d_n_sites_x)
+    new_Ly = old_cfg.biot_savart_Ly * (new_n_sites_y / old_cfg.local_mlp2d_n_sites_y)
+    new_cfg = dataclasses.replace(
+        old_cfg, d_latent=new_d_latent,
+        local_mlp2d_n_sites_x=new_n_sites_x, local_mlp2d_n_sites_y=new_n_sites_y,
+        biot_savart_Lx=new_Lx, biot_savart_Ly=new_Ly,
+    )
+    prop = build_propagator_from_config(new_cfg)
+    prop.load_state_dict(ckpt["prop_state_dict"], strict=True)
+    prop = prop.to(device)
+    return prop, new_cfg, ckpt
+
+
+def load_propagator_checkpoint_resized_2d_multiscale(
+    path, new_n_sites_x: int, new_n_sites_y: int, device: str | torch.device = "cpu",
+):
+    """`backbone="multiscale_local_mlp_2d"` analogue of
+    `load_propagator_checkpoint_resized_2d` (added 2026-10-01, D3 of
+    docs/oct_1_exp.md). Every weight shape depends on `local_channels`/
+    `token_d_model`/`window` (fine) or `regional_token_d_model`/
+    `regional_window` (regional) and `pool_x`/`pool_y`, never on
+    `n_sites_x`/`n_sites_y` themselves -- the regional grid size is
+    DERIVED (`new_n_sites_x // pool_x`), not stored, so resizing it is
+    nothing more than resizing the fine grid, same reasoning as plain
+    `local_mlp_2d`."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    old_cfg = ckpt["prop_config"]
+    if getattr(old_cfg, "backbone", None) != "multiscale_local_mlp_2d":
+        raise ValueError(
+            f"load_propagator_checkpoint_resized_2d_multiscale only supports "
+            f"backbone='multiscale_local_mlp_2d' -- got {getattr(old_cfg, 'backbone', None)!r}."
+        )
+    if new_n_sites_x % old_cfg.multiscale_pool_x != 0:
+        raise ValueError(
+            f"new_n_sites_x={new_n_sites_x!r} must be divisible by "
+            f"multiscale_pool_x={old_cfg.multiscale_pool_x!r}"
+        )
+    if new_n_sites_y % old_cfg.multiscale_pool_y != 0:
+        raise ValueError(
+            f"new_n_sites_y={new_n_sites_y!r} must be divisible by "
+            f"multiscale_pool_y={old_cfg.multiscale_pool_y!r}"
+        )
+    import dataclasses
+    new_d_latent = new_n_sites_x * new_n_sites_y * old_cfg.local_mlp2d_local_channels
+    new_cfg = dataclasses.replace(
+        old_cfg, d_latent=new_d_latent,
+        local_mlp2d_n_sites_x=new_n_sites_x, local_mlp2d_n_sites_y=new_n_sites_y,
+    )
+    prop = build_propagator_from_config(new_cfg)
+    prop.load_state_dict(ckpt["prop_state_dict"], strict=True)
+    prop = prop.to(device)
+    return prop, new_cfg, ckpt
+
+
+def load_propagator_checkpoint_resized_2d_aniso_x(
+    path, new_n_sites_x: int, device: str | torch.device = "cpu",
+):
+    """Anisotropic analogue of `load_propagator_checkpoint_resized_2d`
+    (added 2026-09-29) -- resizes ONLY `n_sites_x` (`n_sites_y` stays
+    FIXED, same reasoning as `load_autoencoder_checkpoint_resized_2d_
+    aniso_x`: the phase buffer is fixed at the trained `n_sites_y`/
+    `forcing_n`, not size-independent, and Kolmogorov flow itself is
+    only translation-equivariant in `x`). Only `local_mlp_2d_aniso` is
+    supported (raises otherwise)."""
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    old_cfg = ckpt["prop_config"]
+    if getattr(old_cfg, "backbone", None) != "local_mlp_2d_aniso":
+        raise ValueError(
+            f"load_propagator_checkpoint_resized_2d_aniso_x only supports backbone="
+            f"'local_mlp_2d_aniso' -- got {getattr(old_cfg, 'backbone', None)!r}."
+        )
+    import dataclasses
+    new_d_latent = new_n_sites_x * old_cfg.local_mlp2d_aniso_n_sites_y * old_cfg.local_mlp2d_aniso_local_channels
+    new_cfg = dataclasses.replace(
+        old_cfg, d_latent=new_d_latent, local_mlp2d_aniso_n_sites_x=new_n_sites_x,
+    )
+    prop = build_propagator_from_config(new_cfg)
+    prop.load_state_dict(ckpt["prop_state_dict"], strict=True)
+    prop = prop.to(device)
+    return prop, new_cfg, ckpt
 
 
 def build_propagator_from_config(prop_cfg):

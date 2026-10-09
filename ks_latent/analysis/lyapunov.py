@@ -19,6 +19,7 @@ QR would otherwise require.
 from __future__ import annotations
 
 import contextlib
+import os
 from dataclasses import dataclass
 from typing import Callable
 
@@ -28,9 +29,16 @@ from scipy.fft import fft, ifft
 from torch.func import jvp, vmap
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from ks_latent.config import KSConfig
+from ks_latent.config import KolmogorovConfig, KSConfig, KSConfig2D, SWEConfig
 from ks_latent.models.propagator import LatentPropagator
 from ks_latent.solver.ks import get_operator, spinup, step_with_tangent
+from ks_latent.solver.ks2d import get_operator2d, spinup2d, step_with_tangent2d
+from ks_latent.solver.kolmogorov import (
+    get_operator_kolmogorov,
+    spinup_kolmogorov,
+    step_with_tangent_kolmogorov,
+)
+from ks_latent.solver.swe import get_operator_swe, spinup_swe, step_with_tangent_swe
 
 
 def _maybe_noise_disabled(propagator) -> contextlib.AbstractContextManager:
@@ -52,6 +60,9 @@ class LyapunovResult:
     total_time: float
     kaplan_yorke_dimension: float
     n_positive: int
+    # Running estimates at intermediate averaging times (physical time ->
+    # exponents sorted descending), only when `record_steps` was requested.
+    partial_exponents: dict[float, np.ndarray] | None = None
 
 
 def kaplan_yorke_dimension(exponents_desc: np.ndarray) -> float:
@@ -88,6 +99,9 @@ def benettin(
     warmup_steps: int = 0,
     rng: np.random.Generator | None = None,
     max_abs_state: float | None = None,
+    checkpoint_path: str | None = None,
+    checkpoint_every: int = 0,
+    record_steps: list[int] | None = None,
 ) -> LyapunovResult:
     """Benettin's algorithm for the Lyapunov spectrum of any discrete-time map.
 
@@ -100,11 +114,28 @@ def benettin(
     `n_steps` and `warmup_steps` must each be a multiple of `qr_every` --
     every interval is renormalized, none is partial, so the exponent average
     is over uniform-length intervals.
+
+    Preemption: with `checkpoint_path` and `checkpoint_every > 0` (in QR
+    intervals), the full algorithm state is written atomically every
+    `checkpoint_every` intervals and on completion; if the file already
+    exists and matches this run's shape/length, the run resumes from it and
+    reproduces an uninterrupted run: bitwise for a deterministic step
+    function (see tests/unit/test_lyapunov_checkpoint.py), and to the
+    step function's own run-to-run floating-point noise otherwise (the
+    Kolmogorov FFT path differs by ~1e-15 between two uninterrupted runs;
+    a kill -9/resume drill matched at the same level).
+    `record_steps` (multiples of `qr_every`, counted from the end of warmup)
+    stores running exponent estimates, so one long run also yields the
+    shorter-window estimates for a convergence check.
     """
     if n_steps % qr_every != 0:
         raise ValueError(f"n_steps={n_steps} must be a multiple of qr_every={qr_every}")
     if warmup_steps % qr_every != 0:
         raise ValueError(f"warmup_steps={warmup_steps} must be a multiple of qr_every={qr_every}")
+    record_steps = sorted(record_steps or [])
+    for rs in record_steps:
+        if rs % qr_every != 0 or not 0 < rs <= n_steps:
+            raise ValueError(f"record_steps entry {rs} must be a multiple of qr_every in (0, n_steps]")
     if rng is None:
         rng = np.random.default_rng(0)
 
@@ -112,6 +143,46 @@ def benettin(
     q0, _ = np.linalg.qr(rng.normal(size=(state_dim, n_directions)))
     tangent = np.ascontiguousarray(q0.T)  # (n_directions, state_dim), rows orthonormal
     state = np.asarray(state0).copy()
+
+    n_warm_intervals = warmup_steps // qr_every
+    n_main_intervals = n_steps // qr_every
+    fingerprint = np.array([state_dim, n_directions, qr_every, n_warm_intervals, n_main_intervals])
+    intervals_done = 0  # counts warmup intervals first, then main intervals
+    log_sums = np.zeros(n_directions)
+    partial: dict[int, np.ndarray] = {}
+
+    if checkpoint_path is not None and os.path.exists(checkpoint_path):
+        with np.load(checkpoint_path) as ck:
+            if not np.array_equal(ck["fingerprint"], fingerprint):
+                raise ValueError(
+                    f"Checkpoint {checkpoint_path} was written by a different run "
+                    f"(fingerprint {ck['fingerprint'].tolist()} vs {fingerprint.tolist()}); "
+                    "delete it or use a different path."
+                )
+            state = ck["state"].copy()
+            tangent = np.ascontiguousarray(ck["tangent"])
+            log_sums = ck["log_sums"].copy()
+            intervals_done = int(ck["intervals_done"])
+            for rs, ex in zip(ck["partial_steps"], ck["partial_exponents"]):
+                partial[int(rs)] = ex.copy()
+
+    def save_checkpoint():
+        if checkpoint_path is None:
+            return
+        tmp = checkpoint_path + ".tmp.npz"
+        steps = sorted(partial)
+        np.savez(
+            tmp,
+            fingerprint=fingerprint,
+            state=state,
+            tangent=tangent,
+            log_sums=log_sums,
+            intervals_done=intervals_done,
+            partial_steps=np.array(steps, dtype=np.int64),
+            partial_exponents=(np.stack([partial[s] for s in steps]) if steps
+                               else np.zeros((0, n_directions))),
+        )
+        os.replace(tmp, checkpoint_path)
 
     def check_bounded(s):
         if not np.all(np.isfinite(s)):
@@ -123,28 +194,29 @@ def benettin(
                 "bounded attractor; check the model/parameters before trusting the spectrum."
             )
 
-    def run(n: int, accumulate: bool) -> np.ndarray:
-        nonlocal state, tangent
-        log_sums = np.zeros(n_directions)
-        for interval_start in range(0, n, qr_every):
-            for _ in range(qr_every):
-                state, tangent = step_with_tangent_fn(state, tangent)
-                check_bounded(state)
-            q, r = np.linalg.qr(tangent.T)
-            diag_r = np.diag(r)
-            signs = np.sign(diag_r)
-            signs[signs == 0.0] = 1.0
-            q = q * signs[None, :]
-            diag_r = diag_r * signs
-            tangent = np.ascontiguousarray(q.T)
-            if accumulate:
-                log_sums += np.log(np.abs(diag_r))
-        return log_sums
+    record_set = set(record_steps)
+    total_intervals = n_warm_intervals + n_main_intervals
+    while intervals_done < total_intervals:
+        for _ in range(qr_every):
+            state, tangent = step_with_tangent_fn(state, tangent)
+            check_bounded(state)
+        q, r = np.linalg.qr(tangent.T)
+        diag_r = np.diag(r)
+        signs = np.sign(diag_r)
+        signs[signs == 0.0] = 1.0
+        q = q * signs[None, :]
+        diag_r = diag_r * signs
+        tangent = np.ascontiguousarray(q.T)
+        intervals_done += 1
+        if intervals_done > n_warm_intervals:
+            log_sums += np.log(np.abs(diag_r))
+            main_steps = (intervals_done - n_warm_intervals) * qr_every
+            if main_steps in record_set:
+                partial[main_steps] = np.sort(log_sums / (main_steps * dt_per_step))[::-1]
+        if checkpoint_every > 0 and intervals_done % checkpoint_every == 0:
+            save_checkpoint()
+    save_checkpoint()
 
-    if warmup_steps > 0:
-        run(warmup_steps, accumulate=False)
-
-    log_sums = run(n_steps, accumulate=True)
     total_time = n_steps * dt_per_step
     exponents = log_sums / total_time
     order = np.argsort(exponents)[::-1]
@@ -157,6 +229,9 @@ def benettin(
         total_time=total_time,
         kaplan_yorke_dimension=d_ky,
         n_positive=n_positive,
+        partial_exponents=(
+            {s * dt_per_step: ex for s, ex in sorted(partial.items())} if record_steps else None
+        ),
     )
 
 
@@ -215,7 +290,239 @@ def lyapunov_spectrum_ks(
     )
 
 
-def _make_single_state_step_fn(propagator: LatentPropagator) -> StepWithTangentFn:
+def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int) -> StepWithTangentFn:
+    """2D analogue of `_ks_step_with_tangent_physical_space`. `benettin`
+    is written for a flat `(state_dim,)` vector space (QR needs a plain
+    2D matrix, `(n_directions, state_dim)`) -- this wrapper flattens the
+    `(NX,NY)` physical field to `(NX*NY,)` and each tangent direction the
+    same way at the boundary, reshaping back to `(NX,NY)` only internally
+    to call `step_with_tangent2d`."""
+    op = get_operator2d(cfg, M=M)
+    NX, NY = cfg.NX, cfg.NY
+
+    def step_fn(u_flat: np.ndarray, tangent_flat: np.ndarray):
+        u_phys = u_flat.reshape(NX, NY)
+        v = np.fft.fft2(u_phys)
+        n_directions = tangent_flat.shape[0]
+        tangent_phys = tangent_flat.reshape(n_directions, NX, NY)
+        dV = np.fft.fft2(tangent_phys, axes=(-2, -1))
+        v_next, dV_next = step_with_tangent2d(v, dV, op)
+        u_next = np.fft.ifft2(v_next).real
+        tangent_next = np.fft.ifft2(dV_next, axes=(-2, -1)).real
+        return u_next.reshape(NX * NY), tangent_next.reshape(n_directions, NX * NY)
+
+    return step_fn
+
+
+def lyapunov_spectrum_ks2d(
+    cfg: KSConfig2D,
+    *,
+    n_directions: int,
+    total_time: float,
+    qr_interval: float,
+    warmup_time: float = 0.0,
+    seed: int = 0,
+    initial_state: np.ndarray | None = None,
+    max_abs_state: float = 50.0,
+    M: int = 32,
+) -> LyapunovResult:
+    """2D analogue of `lyapunov_spectrum_ks` -- full Lyapunov spectrum of
+    the 2D KS PDE via the variational ETDRK4 integrator
+    (`ks_latent.solver.ks2d.step_with_tangent2d`). `initial_state`, if
+    given, must be `(NX,NY)` (flattened internally); the result's own
+    `exponents`/`D_KY` are in the same flat-vector convention every other
+    `LyapunovResult` in this module uses, so downstream code (Kaplan-Yorke,
+    `n_positive`, etc.) needs no 2D-specific handling at all."""
+    step_fn = _ks2d_step_with_tangent_physical_space(cfg, M)
+    if initial_state is None:
+        initial_state = spinup2d(cfg, np.random.default_rng(seed), M=M)
+    initial_state_flat = initial_state.reshape(cfg.NX * cfg.NY)
+
+    qr_every = max(1, int(round(qr_interval / cfg.dt)))
+    n_steps = (int(round(total_time / cfg.dt)) // qr_every) * qr_every
+    warmup_steps = (int(round(warmup_time / cfg.dt)) // qr_every) * qr_every
+
+    return benettin(
+        step_fn,
+        initial_state_flat,
+        n_directions=n_directions,
+        n_steps=n_steps,
+        qr_every=qr_every,
+        dt_per_step=cfg.dt,
+        warmup_steps=warmup_steps,
+        rng=np.random.default_rng(seed + 1),
+        max_abs_state=max_abs_state,
+    )
+
+
+def _kolmogorov_step_with_tangent_physical_space(cfg: KolmogorovConfig, M: int) -> StepWithTangentFn:
+    """Kolmogorov-flow analogue of `_ks2d_step_with_tangent_physical_space`
+    -- same flatten-at-the-boundary wrapper (`benettin` needs a flat
+    `(state_dim,)` vector space), calling `step_with_tangent_kolmogorov`
+    internally."""
+    op = get_operator_kolmogorov(cfg, M=M)
+    NX, NY = cfg.NX, cfg.NY
+
+    def step_fn(u_flat: np.ndarray, tangent_flat: np.ndarray):
+        u_phys = u_flat.reshape(NX, NY)
+        v = np.fft.fft2(u_phys)
+        n_directions = tangent_flat.shape[0]
+        tangent_phys = tangent_flat.reshape(n_directions, NX, NY)
+        dV = np.fft.fft2(tangent_phys, axes=(-2, -1))
+        v_next, dV_next = step_with_tangent_kolmogorov(v, dV, op)
+        u_next = np.fft.ifft2(v_next).real
+        tangent_next = np.fft.ifft2(dV_next, axes=(-2, -1)).real
+        return u_next.reshape(NX * NY), tangent_next.reshape(n_directions, NX * NY)
+
+    return step_fn
+
+
+def lyapunov_spectrum_kolmogorov(
+    cfg: KolmogorovConfig,
+    *,
+    n_directions: int,
+    total_time: float,
+    qr_interval: float,
+    warmup_time: float = 0.0,
+    seed: int = 0,
+    initial_state: np.ndarray | None = None,
+    max_abs_state: float = 200.0,
+    M: int = 32,
+    checkpoint_path: str | None = None,
+    checkpoint_every_time: float = 0.0,
+    record_times: list[float] | None = None,
+) -> LyapunovResult:
+    """Full Lyapunov spectrum of forced 2D Navier-Stokes (Kolmogorov flow)
+    via the variational ETDRK4 integrator (`ks_latent.solver.kolmogorov.
+    step_with_tangent_kolmogorov`) -- same interface and flat-vector
+    convention as `lyapunov_spectrum_ks2d`, so downstream code (Kaplan-Yorke,
+    `n_positive`, etc.) needs no Kolmogorov-specific handling at all.
+    `max_abs_state=200.0` (vs. 2D KS's `50.0`) since vorticity magnitudes
+    at moderate Re run somewhat larger than KS's own `u` scale.
+
+    `checkpoint_path`/`checkpoint_every_time`/`record_times` (physical time,
+    measured after warmup) are passed through to `benettin` for
+    preemptable runs and running-average convergence checks."""
+    step_fn = _kolmogorov_step_with_tangent_physical_space(cfg, M)
+    if initial_state is None:
+        initial_state = spinup_kolmogorov(cfg, np.random.default_rng(seed), M=M)
+    initial_state_flat = initial_state.reshape(cfg.NX * cfg.NY)
+
+    qr_every = max(1, int(round(qr_interval / cfg.dt)))
+    n_steps = (int(round(total_time / cfg.dt)) // qr_every) * qr_every
+    warmup_steps = (int(round(warmup_time / cfg.dt)) // qr_every) * qr_every
+    record_steps = [
+        (int(round(t / cfg.dt)) // qr_every) * qr_every for t in (record_times or [])
+    ]
+    checkpoint_every = (
+        max(1, int(round(checkpoint_every_time / (qr_every * cfg.dt)))) if checkpoint_every_time > 0 else 0
+    )
+
+    return benettin(
+        step_fn,
+        initial_state_flat,
+        n_directions=n_directions,
+        n_steps=n_steps,
+        qr_every=qr_every,
+        dt_per_step=cfg.dt,
+        warmup_steps=warmup_steps,
+        rng=np.random.default_rng(seed + 1),
+        max_abs_state=max_abs_state,
+        checkpoint_path=checkpoint_path,
+        checkpoint_every=checkpoint_every,
+        record_steps=record_steps or None,
+    )
+
+
+def _swe_step_with_tangent_physical_space(cfg: SWEConfig, M: int) -> StepWithTangentFn:
+    """SWE analogue of `_kolmogorov_step_with_tangent_physical_space` --
+    same flatten-at-the-boundary wrapper (`benettin` needs a flat
+    `(state_dim,)` vector space), calling `step_with_tangent_swe`
+    internally. The only real difference from the single-field solvers:
+    the physical state is `(3,NX,NY)` (three prognostic fields, not
+    one), so the flat dimension is `3*NX*NY`, not `NX*NY`."""
+    op = get_operator_swe(cfg, M=M)
+    NX, NY = cfg.NX, cfg.NY
+
+    def step_fn(q_flat: np.ndarray, tangent_flat: np.ndarray):
+        q_phys = q_flat.reshape(3, NX, NY)
+        q_hat = np.fft.fft2(q_phys, axes=(-2, -1))
+        n_directions = tangent_flat.shape[0]
+        tangent_phys = tangent_flat.reshape(n_directions, 3, NX, NY)
+        dQ_hat = np.fft.fft2(tangent_phys, axes=(-2, -1))
+        q_hat_next, dQ_hat_next = step_with_tangent_swe(q_hat, dQ_hat, op)
+        q_next = np.fft.ifft2(q_hat_next, axes=(-2, -1)).real
+        tangent_next = np.fft.ifft2(dQ_hat_next, axes=(-2, -1)).real
+        return q_next.reshape(3 * NX * NY), tangent_next.reshape(n_directions, 3 * NX * NY)
+
+    return step_fn
+
+
+def lyapunov_spectrum_swe(
+    cfg: SWEConfig,
+    *,
+    n_directions: int,
+    total_time: float,
+    qr_interval: float,
+    warmup_time: float = 0.0,
+    seed: int = 0,
+    initial_state: np.ndarray | None = None,
+    max_abs_state: float = 200.0,
+    M: int = 32,
+    checkpoint_path: str | None = None,
+    checkpoint_every_time: float = 0.0,
+    record_times: list[float] | None = None,
+) -> LyapunovResult:
+    """Full Lyapunov spectrum of the rotating shallow water equations via
+    the variational ETDRK4 ("integrating factor") integrator
+    (`ks_latent.solver.swe.step_with_tangent_swe`) -- same interface and
+    flat-vector convention as `lyapunov_spectrum_kolmogorov`/
+    `lyapunov_spectrum_ks2d`, so downstream code (Kaplan-Yorke,
+    `n_positive`, etc.) needs no SWE-specific handling at all.
+    `max_abs_state=200.0` is an UNTESTED default carried over from
+    Kolmogorov flow's own choice, not a measured bound for this system --
+    no real spectrum has been computed for SWE yet (ground rule 6:
+    `SWEConfig.tau0`'s own docstring already flags that `tau0=0.1` is an
+    unvalidated starting guess); revisit this default once a first real
+    run's state magnitudes are known.
+
+    `checkpoint_path`/`checkpoint_every_time`/`record_times` (physical time,
+    measured after warmup) are passed through to `benettin` for
+    preemptable runs and running-average convergence checks."""
+    step_fn = _swe_step_with_tangent_physical_space(cfg, M)
+    if initial_state is None:
+        initial_state = spinup_swe(cfg, np.random.default_rng(seed), M=M)
+    initial_state_flat = initial_state.reshape(3 * cfg.NX * cfg.NY)
+
+    qr_every = max(1, int(round(qr_interval / cfg.dt)))
+    n_steps = (int(round(total_time / cfg.dt)) // qr_every) * qr_every
+    warmup_steps = (int(round(warmup_time / cfg.dt)) // qr_every) * qr_every
+    record_steps = [
+        (int(round(t / cfg.dt)) // qr_every) * qr_every for t in (record_times or [])
+    ]
+    checkpoint_every = (
+        max(1, int(round(checkpoint_every_time / (qr_every * cfg.dt)))) if checkpoint_every_time > 0 else 0
+    )
+
+    return benettin(
+        step_fn,
+        initial_state_flat,
+        n_directions=n_directions,
+        n_steps=n_steps,
+        qr_every=qr_every,
+        dt_per_step=cfg.dt,
+        warmup_steps=warmup_steps,
+        rng=np.random.default_rng(seed + 1),
+        max_abs_state=max_abs_state,
+        checkpoint_path=checkpoint_path,
+        checkpoint_every=checkpoint_every,
+        record_steps=record_steps or None,
+    )
+
+
+def _make_single_state_step_fn(
+    propagator: LatentPropagator, tangent_dtype: torch.dtype = torch.float32
+) -> StepWithTangentFn:
     """"single_state" mode (brief §6.2): the "z -> z approximation used
     originally". The trained propagator is really a map on the 2d-dim
     history `(z_{n-1}, z_n)`; this mode approximates it as a self-contained
@@ -225,15 +532,27 @@ def _make_single_state_step_fn(propagator: LatentPropagator) -> StepWithTangentF
     accuracy relative to the true dynamics is exactly the open question
     the handoff flags -- that's what `two_step` mode below is for comparing
     against, not a claim that this mode is correct.
+
+    `tangent_dtype` (task A2, docs/full_paper_tasks.md): the precision of the
+    base step and the tangent JVPs. The default float32 matches every model
+    spectrum reported so far; `torch.float64` runs a float64 deep copy of the
+    propagator (the caller's module is not modified) as a precision control.
+    The QR in `benettin` is float64 either way.
     """
+    if tangent_dtype not in (torch.float32, torch.float64):
+        raise ValueError(f"tangent_dtype must be torch.float32 or torch.float64, got {tangent_dtype}")
     propagator = propagator.to("cpu").eval()
+    if tangent_dtype == torch.float64:
+        import copy
+
+        propagator = copy.deepcopy(propagator).double().eval()
 
     def g(z: torch.Tensor) -> torch.Tensor:
         return propagator.step(z.unsqueeze(0), z.unsqueeze(0)).squeeze(0)
 
     def step_fn(state: np.ndarray, tangent: np.ndarray):
-        z = torch.tensor(state, dtype=torch.float32)
-        tangent_t = torch.tensor(tangent, dtype=torch.float32)
+        z = torch.tensor(state, dtype=tangent_dtype)
+        tangent_t = torch.tensor(tangent, dtype=tangent_dtype)
         z_next = g(z)
 
         def jvp_one(v):
@@ -331,6 +650,7 @@ def lyapunov_spectrum_latent_propagator(
     warmup_steps: int = 0,
     seed: int = 0,
     max_abs_state: float = 1e3,
+    tangent_dtype: torch.dtype = torch.float32,
 ) -> LyapunovResult:
     """Lyapunov spectrum of a trained `LatentPropagator`, in physical time
     units via `dt_snap` (brief §6.2: report lambda_1 = lambda_1_step / Delta_t,
@@ -358,11 +678,13 @@ def lyapunov_spectrum_latent_propagator(
             )
         step_fn = _make_history_step_fn(propagator)
     else:
+        if tangent_dtype != torch.float32 and mode != "single_state":
+            raise ValueError("tangent_dtype other than float32 is only implemented for mode='single_state'")
         initial_pair = np.asarray(initial_pair, dtype=np.float64).reshape(-1)
         if initial_pair.shape[0] != 2 * d:
             raise ValueError(f"initial_pair must have 2*d_latent={2 * d} elements")
         if mode == "single_state":
-            step_fn = _make_single_state_step_fn(propagator)
+            step_fn = _make_single_state_step_fn(propagator, tangent_dtype)
             state0 = initial_pair[d:]
         elif mode == "two_step":
             step_fn = _make_two_step_step_fn(propagator)
