@@ -918,7 +918,7 @@ def main() -> None:
         "(default 4). See PropagatorConfig's 'spectral_pde' docstring.",
     )
     parser.add_argument(
-        "--spectral-field-kind", choices=["mlp", "polynomial", "chebyshev", "forced_burgers"], default="mlp",
+        "--spectral-field-kind", choices=["mlp", "polynomial", "chebyshev", "forced_burgers", "rational"], default="mlp",
         help="--aux-backbone spectral_pde/spectral_pde_raw only. AuxPropagatorConfig."
         "spectral_field_kind (default 'mlp'). 'polynomial' (added 2026-09-09, "
         "user-directed: 'expand the pde as a polynomial (degree 1 or 2) in all the "
@@ -1613,7 +1613,7 @@ def main() -> None:
         "(default 4).",
     )
     parser.add_argument(
-        "--pde-field-kind", choices=["mlp", "polynomial", "chebyshev"], default="mlp",
+        "--pde-field-kind", choices=["mlp", "polynomial", "chebyshev", "rational"], default="mlp",
         help="--pde-distill only. pde_head's AuxPropagatorConfig.spectral_field_kind "
         "(default 'mlp'). See --spectral-field-kind's help text -- identical mechanism, "
         "applied to pde_head instead of a spectral_pde/spectral_pde_raw aux. 'chebyshev' "

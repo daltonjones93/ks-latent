@@ -52,7 +52,22 @@ def main() -> None:
     parser.add_argument("--n-ensemble", type=int, default=64)
     parser.add_argument("--n-prop-steps", type=int, default=5)
     parser.add_argument("--n-cycles", type=int, default=40)
-    parser.add_argument("--obs-stride-at-old-L", type=int, default=8, help="Scaled up automatically for --new-L.")
+    parser.add_argument(
+        "--method", choices=["pff", "letkf"], default="pff",
+        help="DA analysis scheme (added 2026-09-28): 'pff' (default, this project's primary NAT-PFF) "
+        "or 'letkf' (ks_latent.da.letkf, a covariance-localized EnKF comparator -- same forecast, "
+        "same localization taper, different analysis update).",
+    )
+    parser.add_argument("--letkf-inflation", type=float, default=1.0)
+    parser.add_argument("--obs-stride-at-old-L", type=int, default=8,
+                        help="Only with --legacy-scaled-stride: scaled by new_L/old_L (E2/E7 behaviour).")
+    parser.add_argument("--obs-spacing-units", type=float, default=3.125,
+                        help="Physical spacing between observations (task D1, 2026-10-08); the stride in grid "
+                             "points is round(spacing / dx). 3.125 = stride 8 at L=100, NX=256.")
+    parser.add_argument("--legacy-scaled-stride", action="store_true",
+                        help="Reproduce E2/E7: stride = obs_stride_at_old_L * new_L/old_L. Since dx is held "
+                             "fixed, this DOUBLES the physical observation spacing at every doubling of L "
+                             "(the confound of review sec. 4.2a).")
     parser.add_argument("--dt-snap", type=float, default=1.0)
     parser.add_argument("--localizer", choices=["none", "gaspari_cohn"], default="gaspari_cohn")
     parser.add_argument("--gc-c", type=float, default=3.0, help="In SITE units at the NEW (transferred) n_sites.")
@@ -66,12 +81,18 @@ def main() -> None:
     old_ae_cfg = old_ckpt["ae_config"]
     new_n_sites = int(round(old_ae_cfg.n_sites * scale))
     new_NX = int(round(old_ae_cfg.NX * scale))
-    obs_stride = int(round(args.obs_stride_at_old_L * scale))
+    dx = args.new_L / new_NX
+    if args.legacy_scaled_stride:
+        obs_stride = int(round(args.obs_stride_at_old_L * scale))
+    else:
+        obs_stride = max(1, int(round(args.obs_spacing_units / dx)))
+    obs_spacing = obs_stride * dx
     assert new_NX % new_n_sites == 0, f"new_NX={new_NX} not divisible by new_n_sites={new_n_sites}"
     print(f"[ltransfer-da] old: L={args.old_L} NX={old_ae_cfg.NX} n_sites={old_ae_cfg.n_sites} "
           f"obs_stride={args.obs_stride_at_old_L}")
     print(f"[ltransfer-da] new: L={args.new_L} NX={new_NX} n_sites={new_n_sites} "
-          f"obs_stride={obs_stride}  (scale={scale}x, physical dx and obs spacing both held fixed)")
+          f"obs_stride={obs_stride} -> obs spacing {obs_spacing:g} units "
+          f"({'legacy scaled stride' if args.legacy_scaled_stride else 'fixed physical spacing'})")
 
     ae, ae_cfg, _ = load_autoencoder_checkpoint_resized(args.ae_checkpoint, new_n_sites=new_n_sites, new_NX=new_NX)
     d = ae_cfg.n_sites * ae_cfg.local_channels
@@ -105,7 +126,7 @@ def main() -> None:
     cfg = CycleConfig(
         n_prop_steps=args.n_prop_steps, n_cycles=args.n_cycles, n_ensemble=args.n_ensemble,
         pff_config=PFFConfig(method="NAT", n_steps=100), seed=args.seed,
-        localize_fn=localize_fn,
+        localize_fn=localize_fn, method=args.method, letkf_inflation=args.letkf_inflation,
     )
     result = run_da_experiment(prop, decoder, encoder, obs_op, truth_traj, z0_ensemble, z_minus1_ensemble, cfg)
 
@@ -119,6 +140,7 @@ def main() -> None:
         "calibration_spread_over_rmse": spread / rmse_da if rmse_da > 0 else float("nan"),
         "skill_free_over_da": rmse_free / rmse_da if rmse_da > 0 else float("nan"),
         "n_ensemble": args.n_ensemble,
+        "method": args.method,
         "localizer": args.localizer,
         "gc_c": args.gc_c if args.localizer == "gaspari_cohn" else None,
         "old_L": args.old_L,
@@ -126,7 +148,20 @@ def main() -> None:
         "new_NX": new_NX,
         "new_n_sites": new_n_sites,
         "obs_stride": obs_stride,
+        "obs_spacing_units": obs_spacing,
+        "legacy_scaled_stride": bool(args.legacy_scaled_stride),
+        "n_cycles": args.n_cycles,
+        "n_prop_steps": args.n_prop_steps,
+        "seed": args.seed,
+        "rmse_da_per_step": [float(x) for x in result.rmse_da],
+        "rmse_free_per_step": [float(x) for x in result.rmse_free],
+        "spread_per_step": [float(x) for x in result.spread],
     }
+    late = slice(len(result.rmse_da) // 2, None)  # steady state = second half of the analysed steps (cycles 51-100 of 100)
+    da_l, fr_l, sp_l = (np.asarray(report[k])[late] for k in ("rmse_da_per_step", "rmse_free_per_step",
+                                                               "spread_per_step"))
+    report["skill_steady"] = float(np.mean(fr_l / da_l))
+    report["calibration_steady"] = float(np.mean(sp_l / da_l))
     ARTIFACTS_DIR.mkdir(exist_ok=True)
     suffix = f"_{args.tag}" if args.tag else ""
     out_path = ARTIFACTS_DIR / f"da_pff_ltransfer{suffix}.json"

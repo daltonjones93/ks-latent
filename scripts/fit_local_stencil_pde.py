@@ -69,6 +69,7 @@ def main() -> None:
     parser.add_argument("--alpha", type=float, default=1e-3, help="Ridge regularization strength.")
     parser.add_argument("--degree", type=int, default=1, help="Polynomial feature degree (1=linear).")
     parser.add_argument("--label", default="")
+    parser.add_argument("--out-json", default=None, help="Optional path for the results (task A7).")
     args = parser.parse_args()
 
     ae, ae_cfg, ckpt = load_autoencoder_checkpoint(args.ae_checkpoint)
@@ -107,6 +108,23 @@ def main() -> None:
         results.append((w, X_train.shape[1], train_r2, val_r2))
         print(f"[{args.label}] {w:>6} {X_train.shape[1]:>11} {train_r2:>10.4f} {val_r2:>10.4f}")
 
+    if args.out_json:
+        import json
+        import subprocess
+        from pathlib import Path
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        h = ae_cfg.NX // n_sites * (float(ckpt.get("L", 100.0)) if isinstance(ckpt, dict) else 100.0) / ae_cfg.NX
+        Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_json).write_text(json.dumps({
+            "ae_checkpoint": args.ae_checkpoint, "dataset": args.dataset, "label": args.label,
+            "n_sites": n_sites, "local_channels": local_channels, "site_length": h,
+            "degree": args.degree, "ridge_alpha": args.alpha,
+            "n_train_traj": args.n_train_traj, "n_val_traj": args.n_val_traj,
+            "results": [{"half_width_sites": w, "half_width_physical": w * h, "n_features": nf,
+                         "train_R2": tr, "val_R2": va} for (w, nf, tr, va) in results],
+            "git_sha": sha,
+        }, indent=2))
+        print(f"[{args.label}] wrote {args.out_json}")
     print(f"[{args.label}] done.")
 
 
