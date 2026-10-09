@@ -1,0 +1,114 @@
+%% Paper 1. Layout follows the AGU journal class used by van Leeuwen (arXiv:2601.01795):
+%% PJ2019.cls (= AGU agujournal2019.cls, 2019-04-16), `draft` option, apacite author-year
+%% citations. The REVTeX/Chaos version of 2026-10-08 is superseded by this one.
+\PassOptionsToPackage{natbibapa}{apacite}% keep \citet / \citep with apacite
+\documentclass[draft]{PJ2019}
+
+\usepackage{amsmath,amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage[group-separator={,}]{siunitx}
+\usepackage[hidelinks]{hyperref}
+
+\input{macros}
+
+% Float placement for a single-column draft: let figures and tables sit near their first
+% mention (the REVTeX top-only placement pushed most of them to the end of the paper).
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\journalname{Draft}
+
+\begin{document}
+
+\title{Local latent fields for extensive spatiotemporal chaos: zero-shot domain transfer
+validated by Lyapunov spectra, and exactly local ensemble data assimilation}
+
+\authors{Dalton Jones\affil{1}, Peter Jan van Leeuwen\affil{1}}
+
+\affiliation{1}{Department of Atmospheric Science, Colorado State University, Fort Collins, USA}
+
+\correspondingauthor{Dalton Jones}{daltjone@colostate.edu}
+
+% Key points: AGU limit of three, at most 140 characters each, no special characters.
+\begin{keypoints}
+\item A learned local latent field trained at one domain size reproduces the true Lyapunov dimension on domains up to four times larger.
+\item Training on windows of one large simulation, with boundaries driven by the simulation, is what lets the learned local rule transfer.
+\item Because the latent field is exactly local, a 64 member ensemble filter keeps its skill on domains with a hundred times the area.
+\end{keypoints}
+
+% Every number below is in a table: Tables III, IV (Part I), Table tab:da_2d_sizes and
+% tab:da_1d (Part II); the box-trained range in Fig. 5 / Table IV of App. D.
+\begin{abstract}
+Learned surrogates of spatiotemporally chaotic systems usually compress the state into one
+latent vector, whose size is fixed at training time. In extensive chaos the number of active
+degrees of freedom grows with the domain, so such a surrogate cannot even be evaluated on a
+domain of another size. We make the latent a field instead: a few channels at each site of a
+lattice that tiles the domain, built only from weight-shared operators of finite reach, so that
+one trained model runs on any larger domain by adding sites. We test whether such models
+reproduce extensive chaos by comparing the Lyapunov spectra of the learned maps with those of
+the true equations. Trained at $L=100$, a one-dimensional Kuramoto--Sivashinsky model
+reproduces the Kaplan--Yorke dimension to within $0.2$--$1.2\%$ from $L=50$ to $L=400$, and the
+positive part of its spectrum collapses onto the truth's. In two-dimensional
+Kuramoto--Sivashinsky and Kolmogorov flows, the same architecture trained on a small periodic box
+misses the dimension of larger domains by up to $38\%$, while trained on windows of one large
+simulation, with the window boundary driven by the simulation, it is within $0.6$--$2\%$ and
+$1$--$9\%$; the weakest drag remains harder. With a per-patch decoder the latent observation
+operator is exactly local, and a per-site ensemble filter with 64 members keeps $90\%$ of its
+skill from a $44^2$ to a $440^2$ domain, with memory that grows no faster than the area, while an unlocalized
+filter of the same size fails whenever the attractor has more unstable directions than the
+ensemble has members. We also report what does not work: box training, short rollouts that
+admit spurious regimes, and squared-error rollouts that damp the dimension.
+\end{abstract}
+
+\section*{Plain Language Summary}
+Many chaotic systems, from flame fronts to atmospheric flows, are spatially extended: the
+larger the domain, the more independent chaotic degrees of freedom it holds. Machine-learned
+surrogates usually describe the whole state by one fixed-length list of numbers, which cannot
+grow with the domain. We instead learn a field of a few numbers at each point of a lattice,
+updated by the same local rule everywhere, so that a model trained on a small domain runs on a
+larger one simply by adding lattice points. We check this transfer with the strictest test
+available, the model's own Lyapunov spectrum against that of the true equations, in three
+systems. The same locality lets data assimilation, the combination of a model with
+observations used in weather forecasting, run in the learned space with a small, fixed
+ensemble, whether the domain is small or a hundred times larger.
+
+\input{sections/01_introduction}
+\input{sections/02_background}
+\input{sections/03_method}
+\input{sections/04_systems}
+\input{sections/05_results_1d}
+\input{sections/06_results_2d}
+\input{sections/07_data_assimilation}
+\input{sections/08_failure_modes}
+\input{sections/09_discussion}
+\input{sections/10_conclusions}
+
+\appendix
+\input{appendix/A_architecture}
+\input{appendix/B_proofs}
+\input{appendix/C_ground_truth}
+\input{appendix/D_tables}
+\input{appendix/E_da_details}
+\input{appendix/F_reproducibility}
+
+\section*{Open Research Section}
+% TODO(G5): repository and DOI for code, trained models and the result files.
+The code, trained models and result files that support the findings of this study, and the
+scripts that produce every table and figure from them, are available from the corresponding
+author upon reasonable request (Appendix~\ref{app:reproducibility}).
+
+\section*{Conflict of Interest}
+The authors have no conflicts to disclose.
+
+\bibliography{refs}
+
+\end{document}

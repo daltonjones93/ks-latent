@@ -1,0 +1,8 @@
+{
+  "table": "tab03_transfer1d",
+  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
+  "timestamp_utc": "2026-10-08T22:21:02Z",
+  "inputs": [
+    "artifacts/experiments/e1_model/summary_1d_transfer.json"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "figure": "fig07_rollouts_spectra",
+  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
+  "timestamp_utc": "2026-10-08T23:32:14Z",
+  "inputs": [
+    "artifacts/experiments/e1_model/spectra_overlay_1d.json",
+    "artifacts/experiments/spectra/fields/kolm_x3.npz",
+    "artifacts/experiments/spectra/fields/ks1d_x4.npz",
+    "artifacts/experiments/spectra/fields/ks2d_x2.npz",
+    "artifacts/experiments/spectra/kolm_x1.json",
+    "artifacts/experiments/spectra/kolm_x2.json",
+    "artifacts/experiments/spectra/kolm_x3.json",
+    "artifacts/experiments/spectra/kolm_x3.json",
+    "artifacts/experiments/spectra/ks1d_x1.json",
+    "artifacts/experiments/spectra/ks1d_x2.json",
+    "artifacts/experiments/spectra/ks1d_x4.json",
+    "artifacts/experiments/spectra/ks1d_x4.json",
+    "artifacts/experiments/spectra/ks2d_x1.5.json",
+    "artifacts/experiments/spectra/ks2d_x1.json",
+    "artifacts/experiments/spectra/ks2d_x2.json",
+    "artifacts/experiments/spectra/ks2d_x2.json"
+  ]
+}

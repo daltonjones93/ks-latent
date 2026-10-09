@@ -1,0 +1,10 @@
+{
+  "figure": "fig02_systems",
+  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
+  "timestamp_utc": "2026-10-08T23:30:54Z",
+  "inputs": [
+    "artifacts/datasets/kolmogorov_wide16_alpha0.05.h5",
+    "artifacts/datasets/ks2d_wide6.h5",
+    "artifacts/datasets/stage1_trajectories_dtsnap1.h5"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "figure": "fig12_jacobian_timing",
+  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
+  "timestamp_utc": "2026-10-08T23:32:17Z",
+  "inputs": [
+    "artifacts/experiments/da2d/jacobian_timing_F4.json"
+  ]
+}

@@ -1,0 +1,113 @@
+%======================================================================
+\section{Discussion and limitations}
+\label{sec:discussion}
+%======================================================================
+
+\para{What transfer requires.} Four conditions emerged, and each was
+necessary in at least one system. First, the physics must be extensive
+at the scales involved. This can be checked before any model is trained,
+from ground truth at two sizes: the 2D KS density is $82.0$ and $84.0$ per
+base box at $44^2$ and $66^2$, constant within the spread of the truth runs,
+while in Kolmogorov flow the truth's density per box rises with the
+channel width at every drag ($15.9$, $15.4$, $17.8$ at $\alpha=0.1$; $21.5$, $24.3$,
+$25.1$ at $\alpha=0.05$; $25.2$, $25.8$, $27.6$ at $\alpha=0.025$). A local model is
+extensive by construction (Remark~\ref{rem:extensive_model}), so wherever
+the truth is not, a transfer error is expected and is not a failure of
+training. Second, the training data must contain the local statistics of
+a large domain. The same architecture trained on a small periodic box
+misses $\DKY$ by $15$--$38\%$ in three of the four larger configurations we
+evaluated (it happens to be accurate at $\alpha=0.1$, $2\times$), and trained on
+windows of one large simulation it transfers (Sec.~\ref{sec:box_vs_window}); the window
+training is a limited-area problem, and Proposition~\ref{prop:halo} shows
+that the forced halo trains exactly that problem. Third, the learned map
+must remain chaotic, and chaotic at the right rate, when it runs freely.
+Short rollouts leave room for spurious regimes
+(Sec.~\ref{sec:fail_regimes}); long squared-error rollouts damp the growth
+rates (Sec.~\ref{sec:fail_mse}); free-rollout statistics compared with the
+training data detect the first problem without any truth, and the
+truth-free selection rule of Sec.~\ref{sec:canonical_results} chose a
+model that is within $0.9$--$5.9\%$ of the truth at every width. Fourth, the
+model's reach must cover the interaction range of the dynamics.
+
+\para{The interaction range is the design length.} The light cone set by
+the speed at which perturbations spread is far too short to constrain the
+reach of a model at these time steps (Sec.~\ref{sec:receptive}). The length
+that matters is the distance beyond which neighbouring values stop
+improving a one-step prediction: three to four sites, $19$--$25$ length
+units, for the 1D latent dynamics, against a trained reach of six. In
+Kolmogorov flow most of the unstable directions lie in the band around
+the forcing wavenumber, $31.5$ of $36$ at $|\bm k|\in[2,8)$ for $\alpha=0.05$ at
+$3\times$, whose wavelengths span one to four sites. Models whose encoder
+reaches two sites and whose propagator reaches one fail even when trained
+on windows of the very domain they are evaluated on, with errors of
+$66$--$100\%$ in $\DKY$ (Appendix~\ref{app:tables}). The rule we take from this
+is to measure the interaction range on data, for example by fitting a
+shared stencil of increasing width, and to give the encoder and
+propagator a reach that covers it with a margin. The reach then sets the
+smallest domain the model can be used on, which is what fails at $L=25$.
+
+\para{Transfer error as a probe of the physics.} Because a local model
+is extensive by construction, the difference between its dimension
+density and the truth's on a larger domain measures how far the truth is
+from extensive at that size, once the model is accurate at the native
+size. The weakest drag, where the native-size models scatter most and the
+transferred models fall below a rising truth, is where the inverse
+cascade is least arrested, and we expect non-local effects to be largest
+there. Using
+transfer error to locate the scales at which a system stops being
+extensive is a question in its own right, which we leave to future work.
+
+\para{What locality buys in data assimilation.} The latent fields make
+localization possible in a learned space, and with a per-patch decoder
+they make it exact (Proposition~\ref{prop:blockdiag}). The consequence is
+the one that matters for large domains: the ensemble a localized filter
+needs is set by the local problem and does not grow with the domain,
+while an unlocalized filter needs more members than the attractor has
+unstable directions, a number that grows with the domain
+(Secs.~\ref{sec:da_2d} and \ref{sec:da_1d}). Two weaknesses remain. With
+16 members the per-site filter is much weaker than the dense filter with
+the same taper, which localizes the covariance itself, and the
+deterministic transform does not remove the gap; tapering the
+neighbourhood covariance inside each local analysis is the obvious next
+step. And about $40\%$ of the analysis error variance in physical space is
+the decoder's own error, concentrated at patch edges, so a better decoder
+would improve the analysis directly.
+
+\para{Limitations.} We state them plainly.
+\begin{itemize}
+\item \emph{Ground truth.} The Kolmogorov truths at $\alpha=0.1$, $1\times$, at
+  $\alpha=0.05$, $3\times$, and at all three widths for $\alpha=0.025$ rest on one
+  40-unit run each; such runs deviated from their 120-unit continuations
+  by $-17\%$ to $+23\%$, and were high in five of seven cases. The 2D KS truths
+  average over 40 time units and their running estimates still move by
+  $3$--$5\%$; there is no truth at $88^2$.
+\item \emph{Kolmogorov geometry.} The channel is widened in $x$ only,
+  because the forcing fixes the height; transfer in $y$ is untested.
+\item \emph{Models.} Most 2D models have one training seed (the 1D model
+  has three, the $\alpha=0.05$ canonical model two); the 1D and 2D
+  canonical architectures differ (full reach in 1D, per-patch in 2D); the
+  weakest drag remains $8$--$25\%$ off.
+\item \emph{What the spectra compare.} The model's Lyapunov spectrum is
+  that of the latent map. Comparing it with the PDE's assumes that the
+  decoder is a smooth, injective map on the attractor, which the agreement
+  of the spectra supports but does not prove.
+\item \emph{Reconstruction.} Local neural-field latents have been
+  reported to fail on KS at the decoder \citep{aroma2024}. Our autoencoders
+  reconstruct the field to $0.01\%$ (1D), $2.6$--$2.9\%$ (2D KS) and $1.2\%$
+  (Kolmogorov) of its variance, and the per-patch decoders leave seams
+  that appear as excess energy above the patch wavenumber.
+\item \emph{Data assimilation.} The experiments are twin experiments with
+  synthetic, regular and dense observations (half the site length),
+  additive Gaussian model noise and no inflation tuning beyond a short
+  sweep. The ensemble is under-dispersive. We did not compare against a
+  filter in the physical space of the PDE, and Kolmogorov flow was not
+  assimilated.
+\end{itemize}
+
+\para{Outlook.} The ingredients carry over to any system whose chaos is
+extensive and whose dynamics are local at the scale of a few patches:
+convection in large aspect-ratio cells, limited-area atmospheric models
+nested in a global one, where the forced halo is already the operating
+mode, and high-resolution models whose domain is chosen by the
+application rather than by the training data.
+% TODO(G-pass): add verified citations for the outlook systems if they are kept.

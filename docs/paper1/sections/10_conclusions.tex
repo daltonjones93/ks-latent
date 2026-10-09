@@ -1,0 +1,46 @@
+%======================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+%======================================================================
+
+A latent field, built only from operators that are shared by all sites
+and read a bounded neighbourhood, gives a learned surrogate of extensive
+chaos that can be run on domains it was never trained on, and the
+models' own Lyapunov spectra show that it reproduces the density of
+chaos there. In one dimension the transferred Kuramoto--Sivashinsky model
+stays within $0.2$--$1.2\%$ of the true Kaplan--Yorke dimension up to four
+times the training length, and its spectrum, not only its dimension,
+follows the truth's. In two dimensions the architecture alone is not
+enough: what makes the learned rule transfer is the data it is trained
+on. Trained on a small periodic box it misses the dimension of larger
+domains by up to $38\%$; trained on windows of one large simulation, with
+the boundary of each window driven by the simulation, it is within
+$0.6$--$2\%$ in 2D Kuramoto--Sivashinsky and $1$--$9\%$ in Kolmogorov flow at
+the two stronger drags; of six training variants at the strongest drag,
+the one chosen without any reference to the truth has the lowest mean
+error. The weakest drag remains harder.
+
+The failures are as instructive as the successes. Rollouts that are too
+short leave the free-running model room to settle into spurious regimes,
+and squared-error rollouts that are too long damp its growth rates, a
+bias that follows from the structure of the loss; free-rollout
+statistics, compared with the training data, catch the first problem
+without any truth, and the dimension comparison exposes the second.
+
+The same locality carries over to data assimilation. With a per-patch
+decoder the latent observation operator is exactly local, so a per-site
+ensemble filter in latent space is exact, needs only a fixed number of
+forward passes for its Jacobian, and uses memory that grows no faster
+than the area. With 64 members it keeps $90\%$ of its skill from $44^2$ to
+$440^2$, while an unlocalized filter fails whenever the attractor has more
+unstable directions than the ensemble has members; in one dimension a
+localized filter needs 16 members at every size, and an unlocalized one
+needs twice as many with every doubling of the domain.
+
+The rule we take from this work is short: measure the interaction range
+of the dynamics, give the model a reach that covers it, train on windows
+of a domain large enough to contain the local statistics of the target,
+and check the result against the Lyapunov spectrum of the truth at more
+than one size. Where those conditions hold, a model trained once is a
+model for every domain size, and a localized filter built on it does not
+need a larger ensemble as the domain grows.

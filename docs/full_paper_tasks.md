@@ -1,0 +1,1601 @@
+# Full paper: atomic task list
+
+Sources: `docs/paper1_review.md` (the critical review, 2026-10-08), `docs/paper1_outline.md`,
+`docs/paper1/main.tex` and its sections. This file supersedes `docs/paper1_tasks.md` for
+everything that remains.
+
+**Decision: build on `docs/paper1/`.** The revtex skeleton, §3–§6, App. B–C, `macros.tex`,
+`refs.bib`, the figure scripts and their provenance sidecars are all reusable. Starting over
+would cost a day and gain nothing. The paper becomes one manuscript in two parts:
+
+- **Part I — dynamics.** A learned local latent rule, trained once, reproduces the extensive
+  Lyapunov dimension at domain sizes it never saw. Window training with a forced halo is what
+  makes this work in 2D. Validated against full Lyapunov spectra in three systems.
+- **Part II — data assimilation.** A per-patch decoder makes the latent observation operator
+  exactly local, so a fixed-size localized ensemble filter keeps its skill at any domain size.
+
+Part I is written from data already in hand. Part II needs the follow-up runs in Block D
+first, then is written in Block E. Blocks A–C and Block D are independent: start Block D's
+runs in the background on day 1 and write Part I while they run.
+
+Status key: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped. Each task has an ID,
+dependencies, an estimated effort, and a done-criterion. Tasks are ordered so that each one
+can be picked up alone. "Figure tasks" follow the figure contract in §F.
+
+Conventions that apply to every task:
+- Never edit a number into prose by hand; every number comes from an artifact or a script
+  output, and figures are produced by `scripts/paper_figures/*.py` with a `.meta.json`.
+- Never read a difference below the truth's measured uncertainty as a model effect.
+- Pre-register a decision rule before any run whose result changes a claim.
+- Do not touch `RegConfig.lambda_z` / `--lambda-z`.
+- Report every negative result that is referenced anywhere in the paper.
+
+---
+
+## Block A — Fix Part I's data (no new training, all cheap)
+
+### A1 `[x]` Re-evaluate the 1D model at L = 25, 50, 100, 200, 400 with standardized initial conditions
+- Why: `scripts/run_ltransfer_test.py:83,101` encodes the raw solver field (σ = 1.32); §3.6
+  claims standardized ICs (review §4.5). The 1D Table III numbers are also record-only, with no
+  JSON artifact.
+- Do: add `--normalize-ic` (dataset mean/std from `stage1_trajectories_dtsnap1.h5` metadata)
+  to `run_ltransfer_test.py`; run the Section-224 checkpoint at all five sizes, 1 IC seed each,
+  plus seeds 1–2 of the E4 training seeds at L = 100 and 200; write one JSON per run under
+  `artifacts/experiments/e1_model/` with `D_KY`, `lambda1`, `n_positive`, `spectrum`.
+- Depends on: nothing. Effort: 1 h code, ~1 h runs (CPU, can run in background).
+- Decision rule (pre-registered): accept the existing Table III if every D_KY moves < 1%;
+  otherwise Table III and Fig. 3 are regenerated from the new JSONs and §5 is reworded.
+- Done when: five JSONs exist, `fig03_1d_transfer.py` reads them instead of hard-coded values.
+- **Done 2026-10-08.** `scripts/eval_1d_transfer.py`; 23 JSONs in `artifacts/experiments/e1_model/`
+  (3 ICs × 5 sizes, training seeds 1–2, raw-IC checks); summary
+  `e1_model/summary_1d_transfer.json` (`scripts/summarize_1d_transfer.py`). Rule verdict:
+  **regenerate** (L=50 moved 1.6%). Table III is now generated
+  (`docs/paper1/tables/tab03_transfer1d.tex`), Fig. 3 reads the summary. Model − truth:
+  −0.7 / −1.1 / −1.8 / −0.3% at L = 50/100/200/400. Findings: the "20% amplitude undershoot" was
+  a units error; L = 25 is IC-dependent (one IC chaotic); details in `docs/paper1/decisions.md`.
+
+### A2 `[x]` Float64 control of one model Lyapunov spectrum per system
+- Why: model tangents are propagated in float32 (`lyapunov.py:540–541`); §3.6 says double.
+- Do: add a `--tangent-dtype float64` option to the model Benettin adapter; run 1D L = 100,
+  2D KS 44², Kolmogorov α = 0.05 1× (IC seed 0) in float64; record D_KY, n₊, λ₁ side by side.
+- Depends on: nothing. Effort: 1 h code, ≤ 3 h CPU.
+- Decision rule: if D_KY changes < 0.5% and n₊ is unchanged, state "float32 propagation,
+  double-precision QR; a float64 control changes D_KY by < 0.5%". Otherwise re-run every
+  model spectrum in float64 (then budget a day of CPU).
+- Done when: a table of (system, dtype, D_KY, n₊, λ₁) is saved to `artifacts/experiments/lyap_dtype_control.json`.
+- **Done 2026-10-08.** `tangent_dtype` option + 3 unit tests; `scripts/lyap_dtype_control.py`;
+  table in `artifacts/experiments/lyap_dtype_control.json`. Three-IC means: float64 − float32 =
+  0.00% / −0.06% (1D L=100/200), +0.30% (2D KS 44²), −2.2% (Kolmogorov α=0.05 1×, IC range 25%).
+  **Rule deviation, recorded:** single-run comparisons measure chaotic sampling noise (two
+  float64 runs of one configuration differ by 1.8%), so the test used is mean difference vs IC
+  spread; no precision bias, no float64 re-run. Side finding: Kolmogorov 1× per-IC model
+  scatter is sampling noise (review §5 item 6 withdrawn). See `docs/paper1/decisions.md`.
+
+### A3 `[x]` Finish the two paused α = 0.1, 3× truth seeds
+- Why: the 3× point is the only Kolmogorov number quoted below 5%; the single 40-unit truth
+  is biased +10% on average (App. C). Checkpoints are at t = 64/140 in
+  `artifacts/experiments/crop/truth_a0p1_x3_seed{1,2}_T120.ckpt.npz`.
+- Do: resume both with `run_truth_kolmogorov.py` (same T = 120 running-average protocol).
+- Depends on: nothing. Effort: ≈ 2.5 h CPU each, parallel. Run at normal priority.
+- Decision rule: Table II's 3× entry becomes the 3-seed mean with its spread; no model is
+  re-selected on this basis.
+- Done when: `truth_a0p1_x3_seed{1,2}_T120.json` exist and Table II is regenerated.
+
+### A4 `[x]` Two more 2D-KS truth seeds at 44² and one at 66²
+- Why: both 2D-KS truths are single 40-unit runs; §6.4 currently reads a 4.6% density
+  difference as possibly real.
+- Do: `exp_g1`-style runs with new IC seeds, 150 directions at 44² (seeds 1, 2) and 300 at
+  66² (seed 1), with running D_KY recorded at t = 10, 20, 30, 40.
+- Depends on: nothing. Effort: 44²: ~1–2 h each; 66²: ~4–8 h. Background, one at a time.
+- Decision rule: model is "consistent with the truth" if inside the seed spread; report the
+  spread as the error bar in Fig. 6(a,c).
+- Done when: three new JSONs exist; `fig06_scaling.py` draws error bars from them.
+- **Done 2026-10-08.** `scripts/run_truth_ks2d.py` (same protocol + checkpoint + running D_KY);
+  `artifacts/experiments/truth_ks2d/`. 44²: 81.77 / 80.66 / 83.60 (mean 82.01); 66²: 192.50 /
+  185.60 (mean 189.05). Density 0.0424 → 0.0434 (+2.5%, inside the run spread; the "4.6% rise"
+  was single-run noise). Running estimates still move 3–5% over the last 20 units. All truth
+  consumers now read run JSONs via `scripts/paper_figures/_truths.py` (Table II, Table IV,
+  Figs. 5, 6). §4.2, §4.4, §6.1–6.4 updated. Model consistent: 2.0% / 0.6% at 44²/66².
+
+### A5 `[x]` Lyapunov spectra overlay (density vs i/L) for 1D, model and truth
+- Why: shows the whole spectral density transfers, not only D_KY; connects to
+  Carretero-González et al. 1999.
+- Do: from A1's JSONs (model spectra at L = 100, 200, 400) and `e1_groundtruth_lyapunov_L*.json`
+  (truth spectra), plot λ_i against i/L; one panel; report where model and truth diverge
+  (collective / strongly negative modes).
+- Depends on: A1. Effort: 1 h.
+- Done when: `fig04_1d_spectra.pdf` exists (becomes Fig. 3(c) or Fig. 4).
+- **Done 2026-10-08.** `scripts/paper_figures/fig04_1d_spectra.py` → `fig04_1d_spectra.pdf`
+  (now Fig. 4 in §5) + `artifacts/experiments/e1_model/spectra_overlay_1d.json`. Truth spectra
+  extended to the model's 0.48·L directions (`e1_groundtruth_lyapunov_L{25,50,100,200,400}_fullspec*.json`).
+  Positive part: mean |Δλ| 0.002–0.003; positive-exponent density 0.12–0.125 (model) vs
+  0.12–0.135 (truth). The model departs only in strongly contracting directions (i/L > 0.22),
+  which do not enter D_KY. Extra truth realizations also give every 1D size ≥ 2 truth runs.
+
+### A6 `[x]` Decoded energy spectra and reconstruction MSE table (the AROMA bar)
+- Why: AROMA reports KS as a failure case for local neural fields; our reconstruction MSE is
+  10⁻² yet D_KY is right. Show the decoded spectra.
+- Do: for the 1D model (L = 100, 200, 400), `p7b_ks2d` (44², 66², 88²) and `k_xs01_v5` (1–3×):
+  time-averaged energy spectrum of free rollouts vs truth; interior reconstruction MSE and
+  relative spectral error per band. Write `artifacts/experiments/spectra/*.json`.
+- Depends on: nothing. Effort: 2 h code, 1 h runs.
+- Done when: a table for App. D and `fig07_rollouts.pdf` input data exist.
+- **Done 2026-10-08.** `scripts/eval_spectra_recon.py` (1000-snapshot truth, free rollout,
+  reconstruction; band energies) → `artifacts/experiments/spectra/{ks1d_x1,2,4; ks2d_x1,1.5,2;
+  kolm_x1,2,3}.json`; App. D table `docs/paper1/tables/tabD_spectra.tex`
+  (`scripts/paper_figures/tabD_spectra.py`). 1D: recon error 0.01% of variance, rollout bands
+  within ~10%. Kolmogorov: recon 1.3%; beyond-box energy 0.3–0.6% (model) vs 0.07–0.14% (truth).
+  **2D KS: recon 2.6–2.9%; the per-patch decoder moves ~1.5% of energy to |k| ≥ 1.4 (patch
+  seams, review H6).** *Corrected by A9:* the single-run "large-scale build-up at 66²/88²" (51–55%
+  at |k| < 0.35, std +11/19%) does not survive a second IC; only the seam excess is robust.
+
+### A7 `[x]` Learned-stencil interaction-range numbers into an artifact
+- Why: §3.3 is being rewritten around the measured interaction range (review §4.2d in /Users/daltonjones/Documents/latent_DA/docs/paper1_review.md); the
+  stencil R² table lives only in `docs/RESULTS.md`.
+- Do: re-run `scripts/fit_local_stencil_pde.py` on the Section-224 latent for w ∈ {0,…,8};
+  save `artifacts/experiments/stencil_r2_1d.json`.
+- Depends on: nothing. Effort: 1 h.
+- Done when: JSON exists; used by §3.3 text and an appendix figure.
+- **Done 2026-10-08.** `fit_local_stencil_pde.py --out-json`; `artifacts/experiments/
+  stencil_r2_1d_deg{1,2}.json`. Quadratic stencil val R² 0.152/0.578/0.816/0.882/0.900/0.904/
+  0.904/0.904/0.903 at w = 0…8 sites (h = 6.25): saturates at w = 4 (25 units), 88% at w = 3
+  (19 units). Linear stencil ≤ 0.025 at every width (closure needs the nonlinearity).
+  Reproduces the record's table.
+
+### A8 `[x]` Record the exact training configuration of every model in the paper
+- Why: App. A does not exist; `k_xs01_v5` has `w_rank=0.02` (inert), the 1D model has
+  `w_spatial=0.01` signed, ε defaults differ by model.
+- Do: script `scripts/paper_figures/tabA_architecture.py` that reads each checkpoint's config
+  and writes `docs/paper1/tables/tabA_architecture.tex` (one row per model: patch, c, hidden,
+  reaches, w, n_ℓ, d_m, steps, k_mid/k_max, noise, w_var, w_logdet, ε, w_rank, w_spatial,
+  crop sizes, halo, dataset, trajectories).
+- Depends on: nothing. Effort: 2 h.
+- Done when: the table compiles and matches `.meta.json`/checkpoint configs.
+- **Done 2026-10-08.** `scripts/paper_figures/tabA_architecture.py` → `docs/paper1/tables/
+  tabA_architecture.tex` (5 models × 18 settings) + full resolved configs in
+  `artifacts/experiments/model_configs.json`; new `appendix/A_architecture.tex` included in
+  `main.tex`, compiles. 2D values read from checkpoints and crop-training logs; 1D training
+  values from its launch script + code defaults (checkpoints store architecture only).
+  Footnotes: 1D `w_spatial` 0.01 signed; `k_xs01_v5` `w_rank` 0.02 (inert).
+
+### A9 `[x]` Free-rollout statistics diagnostic for 2D KS
+- Why: it is the truth-free diagnostic the paper proposes in §3.6 and uses for model selection
+  (review objection 2); it exists for Kolmogorov only.
+- Do: port `exp_rollout_stats_kolmogorov.py` to 2D KS; run `p7b_ks2d` at 44²/66²/88².
+- Depends on: nothing. Effort: 1 h code, minutes to run.
+- Done when: `artifacts/experiments/rollout_stats/p7b_ks2d_*.json` exist.
+- **Done 2026-10-08.** `scripts/exp_rollout_stats_ks2d.py` → `artifacts/experiments/rollout_stats/
+  p7b_ks2d_ks2d_n1000.json` (44²/66²/88² × IC seeds 0, 1; model vs same-IC truth vs training
+  data). Model and truth agree within IC scatter on std and large-scale share at every size;
+  the seam band (|k| ≥ 1.4) is 1.7–2.4% of energy vs 0.5–0.8% (truth), in every run. For 2D KS a
+  training-data reference is valid only for small-scale bands (the 264² domain's large-scale
+  share is 77%, a size effect); it flags the seam excess. 100-unit windows give ±10–20%
+  scatter in large-scale statistics, so model selection by these statistics needs ≥ 2 ICs.
+
+### A10 `[x]` Choose the main-text α = 0.1 model by a truth-free rule
+- Why: `k_xs01_v5` was picked for its 3× truth error after seven variants were scored on the
+  truth; v7 has the lower validation loss (review objection 2 and §11.2).
+- Do: write the rule first (recommended: lowest final validation rollout loss among variants
+  whose free-rollout statistics are within 15% of the training data), apply it to v4/v5/v7,
+  record the choice and the losing variants' numbers in App. D.
+- Depends on: A9 (only for the rollout-statistics part; Kolmogorov statistics already exist).
+  Effort: 1 h.
+- Done when: `docs/paper1/decisions.md` records the rule, the date, and the chosen model.
+
+- **Done 2026-10-08.** Rule pre-registered in `docs/paper1/decisions.md` before evaluation
+  (eligibility: free-rollout vorticity std and forcing-band share within 15% of training data at
+  1–3×, 2 ICs; selection: lowest k=8 normalized forecast error on the held-out validation
+  trajectory, model on the full 32π×2π domain). `scripts/select_alpha01_model.py`; results in
+  `artifacts/experiments/a10_selection/` (`decision.json`). All six eligible; **selected
+  `k_xs01_v2`** (k8 error 0.0191 vs 0.0196–0.0204; ≥ 4.6 paired SE ahead). Truth errors
+  0.9 / 5.9 / 7.6% at 1/2/3× (v5 was 8.8 / 9.9 / 2.3%). Main-text model is read from
+  `decision.json` by `_style.MAIN_A01` (Figs. 5–6, Tables IV and A); §6.3 and App. A describe
+  the rule. The 3× truth will change when A3 lands; no re-selection.
+
+---
+
+## Block B — Write Part I (text)
+
+Each task is one section or one subsection; each ends with a compile.
+
+### B1 `[x]` Rewrite §3.3 (locality) around the interaction range
+- Use review §9 "§3.3" wording; cite Kaneko 1986 / Deissler & Kaneko 1987 for v_*; quote the
+  measured v_* = 1.26 and the stencil saturation at 3 sites (A7); drop or demote Eq. (loc_bound).
+- Depends on: A7. Effort: 2 h.
+
+### B2 `[x]` Fix §3.2 Remark and Prop. 1 statement
+- Remark: cite Livi 1986, Isola 1990, Carretero-González 1999 (Chaos); "finite-size corrections
+  are set by the model's reach". Prop. 1: add "shifts by whole patches" and the P ≥ 2r+1 proviso
+  to the statement.
+- Depends on: nothing. Effort: 1 h.
+
+### B3 `[x]` Fix Lemma 3's surrounding text and add the noise-penalty remark
+- Quantify k_max Δt λ₁ per system; add Bishop (1995) expansion as a remark; tie P9b to it.
+- Depends on: nothing. Effort: 2 h.
+
+### B4 `[x]` Fix §3.6 (evaluation) wording
+- Float32 propagation + float64 QR (A2 result); standardized ICs (A1 result); model window
+  lengths (2000 steps = 400 time units for Kolmogorov); "directions chosen so that D_KY is
+  bracketed, enforced by an exception".
+- Depends on: A1, A2. Effort: 1 h.
+
+### B5 `[x]` Update §3.6 canonical-recipe paragraph and point to App. A
+- Mention w_rank (inert) and w_spatial; state that k_max differs by model and why.
+- Depends on: A8, A10. Effort: 1 h.
+- **Done 2026-10-08.** w_spatial mentioned for 1D; w_rank not mentioned in §3 because the
+  A10-selected model does not use it (it stays in the §8 ablation table). "Fixed before the
+  final round" removed (contradicted by A10).
+
+### B6 `[x]` Fix §4 (systems)
+- Re convention: define your own, reduce to Vinograd et al. at α = 0; Lyapunov-time wording
+  (100+ for L ≥ 50; 6–16 units; 2–6 windows); 2D-KS truth uncertainty paragraph (A4);
+  Edson et al. for L = 22; Table II regenerated from A3/A4.
+- Depends on: A3, A4. Effort: 2 h.
+- **Done 2026-10-08 except A3.** Rewritten: rows D_KY / D_KY per box / n₊ per box (n₊ as a
+  third row, not a secondary axis); ±15% band on single-run truths; open = truth, filled =
+  model as in Fig. 3; system hues and drag markers from `_style.py`; A4 seeds included.
+  **Awaiting A3**: rerun the script; the α = 0.1 3× band becomes a three-run error bar; recheck
+  the caption sentence "models track the truth at α = 0.1 and 0.05".
+- **Done 2026-10-08 except the A3-dependent part** (see "Awaiting A3" below): Lyapunov-time
+  wording, Re convention (Vinograd et al.'s definition applied to our forcing amplitude, equal
+  to theirs at α=0), Edson et al. for L=22 and the L≥80 law, 2D-KS uncertainty, convention
+  paragraph rewritten (multi-run means, matched-IC scoring removes truth noise only).
+
+### B7 `[x]` Fix §5 (1D)
+- L = 25 paragraph (marginal truth, lattice narrower than kernel); add the w_spatial sentence;
+  Table III from A1 JSONs; add the spectra overlay paragraph (A5).
+- Depends on: A1, A5. Effort: 2 h.
+
+### B8 `[x]` Fix §6 (2D)
+- "93–100%"; "at least as accurate, at 30% higher reconstruction error"; name `k_xs005_noreg`;
+  §6.4 "consistent with extensive scaling within truth uncertainty"; §6.5 scope to P2 at
+  α = 0.05, 3×; Table IV caption convention; model-selection sentence (A10); add the per-IC
+  amplification result (review §5.6) as a short paragraph.
+- Depends on: A4, A10. Effort: 3 h.
+- **Done 2026-10-08 except the A3-dependent numbers** (listed under "Awaiting A3"). Per-IC
+  "amplification" paragraph **not added**: withdrawn by A2 (sampling noise); §4.4 now states that
+  matched-IC scoring removes truth noise only. Added a "Beyond the dimension" paragraph (A6/A9:
+  Kolmogorov band energies, 2D KS amplitude within IC scatter, patch seams at |k| ≥ 1.4).
+  §6.5 scoped to P2 at α=0.05, 3×. References `app:tables` (created in B12).
+
+### B9 `[x]` Write §8 "What does not work" (Part I version, ~2 pages)
+- Attention collapse; MSE damping × ε table (v1–v7 with validation loss and rollout-statistics
+  columns); spectral regularizer A/B; training-set size (`k_xs005_v2`); P9 spurious regimes and
+  the rollout-statistics diagnostic. Keep the DA negative results for Part II.
+- Depends on: A9, A10. Effort: 4 h.
+- **Done 2026-10-08.** `sections/08_failure_modes.tex` (in `main.tex`): attention (1D collapse;
+  2D windowed-attention encoder, raw-IC caveat), coupling/data size under window training,
+  short-rollout regimes (P9 → P9b), MSE damping × ε with generated Table
+  (`tables/tab08_alpha01_ablation.tex`, `scripts/paper_figures/tab08_alpha01_ablation.py`;
+  paper v1–v6 = record k_xs01, v2, v3, v4, v5, v7). All errors recomputed against current truths.
+  Record correction: k_xs005_noreg 3× is 7.2%, not 5.1%. The 1D attention-collapse statement
+  rests on the record (no single artifact lists every attention run).
+
+### B10 `[x]` Write §2 Background and related work (~2.5 pages)
+- Use review §6 verbatim as the source list; include the prior-work feature table (local /
+  zero-shot L / Lyapunov validation / window training / localized latent DA) with Pathak 2018,
+  Constante-Amores 2024, Bar-Sinai 2019, Kochkov 2021, Stachenfeld 2022, de Villeroché 2026,
+  Özalp & Magri 2025, Carretero-González 1999, ROAD-EnKF, LAE-EnKF, Latent-EnSF.
+- Depends on: B13 (bib). Effort: 1 day.
+- **Done 2026-10-08.** `sections/02_background.tex` (in `main.tex`): extensive chaos and
+  Lyapunov analysis (incl. Carretero-González 1999 as the lattice precedent), learned surrogates
+  (global latents, single-size Lyapunov validation, local models, larger-domain deployment,
+  limited-area models, rollout training), latent/localized DA, novelty statement; Table
+  `tab:prior_work` with the verified characterizations from the literature pass.
+
+### B11 `[x]` Write §1 Introduction (~2 pages)
+- Follow outline §2.1 with the corrected positioning sentences (review §3.2 item 1) and the
+  contributions list from review §2.3.
+- Depends on: B10, and Part II's headline numbers (E-block) for the DA bullet; write the DA
+  bullet last.
+- Effort: 1 day.
+- **Done 2026-10-08 except the DA bullet's numbers** (`TODO(Part II, block E)` in
+  `sections/01_introduction.tex`; see "Awaiting Part II" below). Also awaits A3 (the
+  "1–9% in Kolmogorov flow" range).
+
+- **Done 2026-10-08**: DA bullet written from §7 (90% of skill kept 44²→440², linear memory, unlocalized fails beyond the native size, 1D ensemble need doubles with L, localized 16 at every size). Also fixed the stale box-trained range (19–38% → 15–38% in three of four cases, after A3).
+### B12 `[x]` Write App. A (architecture tables), App. D (full evaluation tables)
+- App. A from A8; App. D generated by a script from `artifacts/experiments/crop/*.json`
+  (every model × size × IC, with the truth convention and the stale-field warning).
+- Depends on: A8. Effort: 3 h.
+- **Done 2026-10-08.** App. A from A8 (+ selection rule, A10). App. D:
+  `appendix/D_tables.tex` with generated tables `tables/tabD_{ks2d,kolm01,kolm005,kolm0025}.tex`
+  (`scripts/paper_figures/tabD_evaluations.py`: 28 models + box-trained baselines, current truth
+  convention) and `tabD_spectra.tex` (A6); per-IC CSV `artifacts/experiments/appendix_D_evaluations.csv`
+  (201 rows, incl. the stale JSON truth fields, flagged). Wide tables now use `\widetabular`
+  (macros.tex) and table bodies `\tabinput`; no overfull tables remain.
+
+### B13 `[x]` Bibliography verification pass and `refs.bib` fixes
+- Apply review §6 "bibliographic corrections"; add every new reference; resolve every [v] and
+  [standard] tag by checking DOI/pages; record the search date and terms in App. F.
+- Depends on: nothing. Effort: half a day.
+- **Done 2026-10-08.** Every entry status-tagged; all verified/checked except Livi 1986
+  (partial) and Long 2015 (standard). ~50 entries added for §1/§2/Part II. Search log in
+  `docs/paper1/decisions.md` (B13 entry); App. F (G5) should copy it.
+
+### B14 `[x]` Write App. C additions
+- 2D-KS uncertainty paragraph; model-side Benettin settings; float64 control (A2); running
+  D_KY for the new truth seeds (A3, A4).
+- Depends on: A2, A3, A4. Effort: 2 h.
+- **Done 2026-10-08 except the A3 rows.** `scripts/paper_figures/tabC_truth.py` generates the
+  truth-run list, the Kolmogorov running-D_KY table and a new 2D KS running table; App. C gains
+  "Independent realizations" (thread-count trajectories), "Convergence and spread of the 2D KS
+  truths" and "Model spectra and their precision" (A2 table). A3 rows appear on rerun; the
+  deviation statistics sentence is on the "Awaiting A3" list.
+
+---
+
+### Awaiting A3 (α = 0.1, 3× truth seeds 1–2) — **done 2026-10-08**
+All items below applied after the runs landed (3-run mean 53.47; selected model's 3× error
+7.6% → 2.6%); details in `docs/paper1/decisions.md`, A3 entry. B11 stays `[~]` for Part II only.
+Automatic on rerun (read the run JSONs through `_truths.py`): Table II
+(`tab02_tab03.py`), Table IV (`tab04_transfer2d.py`), Figs. 5 and 6, and (Block C) Fig. 10
+(`fig10_failure.py`), App. figures `figC1_truth_convergence.py` and `figC2_appendix_panels.py`.
+Manual text edits:
+- [x] §4.4 convention paragraph: remove the `TODO(A3)` comment; α=0.1 3× becomes a three-run
+  mean; update the "remaining sizes rest on a single run" sentence.
+- [x] §6.3 "Selecting a model without the truth": the selected model's 3× error (7.6% now) and
+  v5's (2.3% now) change; the selection itself is not revisited.
+- [x] §6.3 "Results": the "1–9% at α=0.1 and α=0.05" range.
+- [x] §6.4 scaling paragraph: α=0.1 truth density at 3× (18.8 per box now) and the sentence
+  "the truth's rise at 3× rests on a single 40-unit run".
+- [x] App. C: running D_KY table/figure gains two α=0.1 3× rows; 40- vs 120-unit deviation
+  statistics (−17% to +23%, mean +10%) are recomputed with them (B14).
+- [x] decisions.md: A3 entry, and whether the +10% bias of 40-unit truths holds at 3×.
+- [x] §1 contributions bullet "1–9% in Kolmogorov flow at the two stronger drags".
+- [x] Block C captions/text: Fig. 6 caption ("track the truth at α = 0.1 and 0.05"); §8.4
+  "raising it from 16 to 32 at α = 0.1 lowers it by 3–10 points" and Fig. 10 caption "no row is
+  lightest in every column"; App. C Fig. `fig:truth_convergence` caption deviation range and
+  count (TODO(A3) comment). Then mark C6, C7, C8 `[x]`.
+- [x] §8.4 text: the α=0.1 3× numbers (v1 15.4%, v2 7.6%, v3/v4 12–14%, v5 2.3%, v6 9.8%) and
+  the claim that a different variant is best at each size; Table VIII regenerates itself
+  (`tab08_alpha01_ablation.py`).
+
+---
+
+### Awaiting Part II (Block D runs, then Block E)
+- [x] §1 contributions, last bullet: replace `TODO(Part II, block E)` with the headline DA
+  numbers (fixed-N skill from 44² to 440², unlocalized degradation, cost/memory).
+- [x] §1 roadmap sentence and §9 cross-references once §7 exists (`sec:da_results`). (done 2026-10-08)
+
+---
+
+## Block C — Part I figures
+
+Follow §F (figure contract). One script per figure in `scripts/paper_figures/`, each writing a
+PDF and a `.meta.json`. Keep `_style.py` as the single source of palette and sizes.
+
+### C1 `[x]` Fig. 1 — concept schematic (TikZ or matplotlib)
+- Four panels: (a) global vector vs local field; (b) transfer = same weights, more sites;
+  (c) crop with margin, forced halo, free interior; (d) per-patch decoder → block-diagonal
+  observation Jacobian → per-site analysis. Hand-drawn geometry, no data.
+- Effort: half a day. Done when it reads without the caption.
+- **Done 2026-10-08.** `scripts/paper_figures/fig01_concept.py` → `figures/fig01_concept.pdf`
+  (matplotlib, 2×2). In §1 as `fig:concept`, referenced from the paragraph that introduces the
+  latent field.
+
+### C2 `[x]` Fig. 2 — systems gallery
+- 1D KS space–time (L = 100, 250 time units); 2D KS snapshot on the 264² training domain with
+  one 40×40-site crop outlined and its halo/interior shaded; Kolmogorov vorticity on the
+  16×2π strip with one 48-site crop outlined. Shared colormap for the two 2D panels; colorbar
+  once. Pull fields from the HDF5 datasets.
+- Effort: 3 h.
+- **Done 2026-10-08.** `fig02_systems.py`; one shared diverging colormap for all three panels
+  (fields standardized; the 2D datasets are stored standardized). Kolmogorov panel at
+  α = 0.05. In §4 as `fig:systems`.
+
+### C3 `[x]` Fig. 3 — 1D transfer (regenerate from A1)
+- (a) D_KY vs L with truth and model, 0.226L line, L = 25 marked as "outside validity"
+  rather than "collapses"; (b) D_KY/L with the three training seeds, y-range stated in the
+  caption; (c) spectra overlay from A5. Move the L = 25 annotation off the marker.
+- Depends on: A1, A5. Effort: 2 h.
+- **Done 2026-10-08.** Annotation moved to the empty lower right ("outside validity (4 sites <
+  7-site kernel)"); legend order truth / seed 0 / seeds 1–2; caption states the (b) y-range and
+  no longer says the L = 25 model "loses all chaos" (A1: IC-dependent). Panel (c) stays a
+  separate figure (Fig. 4, `fig04_1d_spectra.py`, A5), which reads better at full width.
+
+### C4 `[x]` Fig. 4 — rollouts and spectra at transfer sizes
+- Top row: truth vs transferred model space–time at L = 400 (1D). Middle: 2D KS 88² truth
+  vs model snapshots. Bottom: time-averaged energy spectra, model vs truth, for 1D (100, 200,
+  400) and 2D KS (44², 66², 88²), from A6.
+- Depends on: A6. Effort: 4 h.
+- **Done 2026-10-08** as `fig07_rollouts_spectra.py` (`fig:rollouts`, in §6, cited from §5 and
+  §6): 2×3 grid, rows 1D L = 400 and 2D KS 88², columns PDE / model / spectra. Fields from
+  `eval_spectra_recon.py --fields-out` (new flag; writes `spectra/fields/*.npz`, not the JSON).
+  Found and fixed on the way: the Kolmogorov A6 spectra used v5, not the A10-selected v2 —
+  re-run with v2, §6 numbers and Table `tab:spectra` updated (decisions.md, Block C).
+
+### C5 `[x]` Fig. 5 — box vs window (revise)
+- Linear error axis with a broken scale for the 93–100% bars, or two panels (0–40% and
+  90–100%); state the floor only if a log axis is kept; per-IC dots retained.
+- Effort: 2 h.
+- **Done 2026-10-08.** Linear axis broken between 42% and 88%; caption rewritten (no floor).
+  Regenerates itself after A3 (α = 0.1, 3× bars).
+
+### C6 `[x]` Fig. 6 — scaling (revise)
+- Add seed error bars from A3/A4; shaded ±15% band for single-run truths; mark n₊ on a
+  secondary axis or in a small table inset; unify marker semantics with Fig. 3.
+- Depends on: A3, A4. Effort: 2 h.
+
+### C7 `[x]` Fig. 10 — failure modes
+- (a) v1–v7 ablation as a size × variant error heat-map with validation loss annotated;
+  (b) free-rollout variance vs lead time for k_max = 12/16/32 (illustrates Lemma 3);
+  (c) P9 energy-share drift vs truth (from `rollout_stats/`).
+- Depends on: A9. Effort: 4 h.
+- **Done 2026-10-08 except A3.** `fig10_failure.py` (`fig:failure`, in §8). (a) heat map with
+  k_max and val. column; (b) **changed**: the variance-vs-lead diagnostic was run
+  (`scripts/exp_forecast_variance.py`) and shows no amplitude contraction for any k_max (all
+  within 2.3% to 64 steps), so (b) shows signed D_KY error of three k_max pairs instead; the
+  variance result is stated in §8.4 (decisions.md, Block C); (c) P9 large-scale energy share
+  at 2×, PDE vs k_max 12 vs k_max 32. **Awaiting A3**: rerun; recheck the §8.4 "3–10 points"
+  range for v2 → v1 and the caption claim "no row is lightest in every column".
+
+### C8 `[x]` App. figures
+- Truth running-D_KY convergence (exists; add the new seeds); per-IC scatter at 1× (models vs
+  matched truths); C19 reach/channel ablation bars; stencil R² vs half-width (A7).
+- Depends on: A3, A4, A7. Effort: 3 h.
+- **Done 2026-10-08 except A3.** `figC1_truth_convergence.py` rewritten (house style; one
+  panel per system and size, reads every run that recorded a running D_KY, so the α = 0.1 3×
+  panel appears by itself; 2D KS panels added; now a `figure*`). `figC2_appendix_panels.py`
+  (`fig:appendix_panels`, App. D): (a) per-IC scatter at α = 0.05 1×, (b) C19 reach/channel
+  ablation, (c) stencil R² vs half-width. **Awaiting A3**: rerun figC1; fix the caption's
+  "−17% to +23%, four of five above" (TODO(A3) comment in `C_ground_truth.tex`).
+
+### C9 `[x]` Fig. 11 — rollout filmstrips and PDE–model correlation (2D systems) — merged into Fig. 7
+- Fig. 7 already has the 1D L = 400 space–time and one 2D KS 88² snapshot; this adds what it
+  lacks: (a) 2D KS 88² PDE vs model at four times from a common encoded IC, (b) Kolmogorov
+  α = 0.1 at 3× (Lx = 6π) PDE vs model at first and last stored time, (c) pattern correlation
+  of model vs PDE against time (dotted line = 1/λ₁ for 2D KS). Message: pointwise agreement is
+  lost after a few Lyapunov times, statistics persist; the 2D KS model panels also show faint
+  site-block seams worth a sentence in §6.
+- **Script written and run 2026-10-08**: `scripts/paper_figures/fig11_rollout_filmstrip.py` →
+  `figures/fig11_rollout_filmstrip.pdf` on the real fields (`spectra/fields/{ks2d_x2,kolm_x3}.npz`,
+  regenerated at 16:25–16:27 by another job with a dense time axis). Result: 2D KS correlation
+  leaves 1 near 1/λ₁ and falls to ~0.1 by t≈20; Kolmogorov plateaus near 0.5 (forced pattern).
+- **TODO:** (1) check the model panels' faint site-block seams (visible in both systems) and
+  say what they are in the caption; (2) add to §6 as `fig:rollout_filmstrip` with a caption and
+  one paragraph (the Kolmogorov 0.5 plateau needs a sentence); (3) optionally add a DA companion
+  (truth / ensemble mean / error at L = 440 with observation sites) once D0 lands.
+- Effort: 1 h plus run time.
+
+- **Merged into C4's Fig. 7, 2026-10-08** (decided with the user: a separate filmstrip would
+  mostly repeat Fig. 7(d,e)). Fig. 7 (`fig07_rollouts_spectra.py`) gained a Kolmogorov α = 0.1,
+  3× row (PDE / model / kinetic-energy spectra at 1×–3×, v2) and a full-width panel of pattern
+  correlation vs t·λ₁ for all three systems (Kolmogorov as anomaly correlation: the PDE's
+  forcing-locked mean y-profile removed). Correlation falls below 0.5 after 2.85 (1D), 2.75
+  (2D KS) and 2.34 (Kolmogorov) Lyapunov times; late level −0.01 / 0.14 / 0.18
+  (`spectra/fields/pattern_correlation_summary.json`). New fields: `spectra/fields/kolm_x3.npz`
+  (400 steps, stride 2); `ks2d_x2.npz` re-dumped at stride 5 (identical to the old stride-50
+  dump at t = 35). `fig11_rollout_filmstrip.py` is retired (left on disk, not used).
+---
+
+## Block D — Part II follow-up runs (start on day 1, in the background)
+
+> **2026-10-09:** the shifted-tiling filter (H9 → Block I) supersedes the single-tiling 2D
+> accuracy numbers. D2, D5–D10 are rerun under Block I (table at the top of Block I); D1, D3,
+> D4 and the dense/unlocalized points stand.
+
+All DA runs: 100 cycles, steady state = cycles 51–100, report per-cycle arrays, seed 0 unless
+stated. Queue them in one orchestration script with logging to a file (never `/dev/null`).
+Large domains (≥ 220²) one at a time; they reach ~20 GB.
+
+**Launched 2026-10-08 16:11 (while A3 finishes):** every Block D run that needs no code
+change, in `scripts/run_blockD_nocode.sh` (log `artifacts/logs/blockD_nocode.log`, outputs
+`artifacts/experiments/da2d/da2d_D*`). Small lane, normal priority: D2 2D half (strides 4/16/32
+at 44²), D9 at 88², D5 (9 runs). Large lane, `nice 10`, one domain at a time: D9 at 220², D8
+(4 runs), D7 seed 1 at 220² and 330². Still need code first: D1, D2 1D half, D3, D4, D6
+(then D10); D5's local row should be repeated with the D4 variant if D4 is adopted.
+
+### D0 `[x]` Ingest the finished queue
+- `da2d_C_L440_local_N64_s0.json` and the `M_*` memory re-measurements have landed. Run
+  `scripts/summarize_da2d.py`, record the L = 440 steady-state skill and the clean peak RSS per
+  size in `docs/paper1/decisions.md`; profile `LETKFLocal2D.analyze` at d = 1536 if filter-only
+  RSS is not within 30% of linear in d (review §8.11).
+- Effort: 1 h (+ 2 h if a profile is needed).
+
+- **Done 2026-10-08**: L = 440 steady-state skill 3.90; local filter RSS linear in d (no profile needed); decisions.md.
+### D1 `[x]` 1D DA sweeps at fixed observation spacing
+- Why: `run_da_pff_ltransfer.py:76` scales the stride with L (review §4.2a).
+- Do: add `--obs-spacing-units` (default 3.125) that sets the stride in grid points from Δx;
+  re-run E2 (PFF) and E7 (EnKF), none vs GC, N ∈ {8,16,32,64,128,256}, at L = 200 and 400;
+  write `e2b_*.csv`, `e7b_*.csv`.
+- Decision rule (pre-registered): C5's 1D half stands if, at N = 64, unlocalized skill < 1 and
+  GC/none ≥ 1.5 at both sizes; if unlocalized skill ≥ 2, restate C5 as a fixed-N ratio claim
+  and move the obs-density result (D2) to the front.
+- Effort: 1 h code; 48 points × ~2 min ≈ 2 h unattended.
+
+- **Done 2026-10-08**: fixed-spacing sweeps, PFF and EnKF, L = 200/400. Rule: GC/none ≥ 1.5 holds everywhere; unlocalized < 1 at N = 64 holds at L = 400, not at L = 200 (1.1–1.3, the rule's uncovered middle case). Unlocalized threshold tracks n₊ + 1. decisions.md.
+### D2 `[x]` Observation-spacing sweep, 1D and 2D
+- Why: the spacing threshold (DA fails above the pattern wavelength) is a result and the
+  diagnosis of the 1D confound (review §5.2).
+- Do: 1D at L = 200, GC, N = 64, spacing ∈ {1.6, 3.1, 6.25, 12.5}; 2D at 44², local, N = 64,
+  spacing ∈ {1.4, 2.75, 5.5, 11} (the 2.75/5.5/11 probes exist in `da2d/probe/`, re-run under
+  the current code for consistency).
+- Effort: 8 runs, ~2 h.
+
+- **Done 2026-10-08**: both halves; DA fails once the observation spacing reaches the site length (1D 6.25, 2D 5.5). decisions.md.
+### D3 `[x]` SEC: PSD-projected and serial variants
+- Do: (i) `sec_localize_covariance_psd` — eigenvalue clipping after the elementwise correction;
+  (ii) serial SEC: apply the correction to each observation's regression coefficients in a
+  serial perturbed-observation EnKF (new small class, same `analyze` interface). Unit tests:
+  both reduce to the plain filter when the table is the identity; serial SEC matches the
+  Kalman posterior for a linear-Gaussian case at large N.
+- Then re-run E3 (SEC vs GC on the local latent) at L = 200 with D1's spacing.
+- Decision rule: report whichever of (i)/(ii) runs at every N; "GC beats SEC at the transfer
+  size" or "SEC beats GC" is stated from that; the indefiniteness result is reported as a
+  property of the matrix form.
+- Effort: half a day code; 12 points × 2 min.
+
+- **Done 2026-10-08**: SEC-PSD and serial SEC EnKF both run at every N; GC beats both below N = 256. Raw matrix SEC fails 5/6. decisions.md.
+### D4 `[x]` Deterministic per-site ensemble transform (ETKF) variant of `LETKFLocal2D`
+- Why: the per-site filter at N = 16 scores 1.8 vs 3.8 for dense+GC; the perturbed-observation
+  update is the likely cause (review §5.9).
+- Do: add `method="letkf_local2d_etkf"` (Hunt et al. 2007 transform in ensemble space per
+  site, same R-localization, same compact Jacobian); unit test against the Kalman posterior;
+  run N ∈ {8,16,32,64,128} at 44² and N = 64 at 88².
+- Decision rule: adopt the ETKF variant as "the per-site filter" if its N = 16 skill ≥ 3 and
+  N = 64 skill is within 10% of the perturbed-observation version; otherwise report both.
+- Effort: half a day code; 6 runs, ~3 h.
+
+- **Done 2026-10-08**: ETKF variant coded and tested; N = 64 within 2% of perturbed-obs, N = 16 = 1.87 < 3 → not adopted, report both (decisions.md).
+### D5 `[x]` Inflation sweep at 44²
+- Do: inflation ∈ {1.0, 1.05, 1.1, 1.2} for dense-none, dense-GC, local (D4 variant if
+  adopted), N = 64.
+- Decision rule: if unlocalized N = 64 skill at 44² changes by > 30%, re-run the 66²/88²
+  unlocalized points with the best inflation; otherwise state "inflation neutral" with numbers.
+- Effort: 12 runs ≈ 5 h unattended.
+
+- **Done 2026-10-08**: inflation neutral (≤ 1% unlocalized, ≤ 9% any filter); no reruns. Repeat local row if D4 adopted.
+### D6 `[x]` Physical-space RMSE
+- Do: in `cycling.py`, optionally decode the analysis mean and the free run each cycle and
+  record physical RMSE against `u_truth` (and the observed-site RMSE separately); re-run one
+  point per size (local N = 64 at 44², 88², 220², 330²) with the flag on.
+- Decision rule: report both metrics; if they differ by > 20% explain (decoder error floor).
+- Effort: 2 h code; ~2.5 h runs.
+
+- **Code done 2026-10-08; 44², 88² done** (`[~]`): physical skill 6.24 / 4.78 vs latent 4.23 / 4.00; decoder floor ≈ 40% of analysis error variance. 220²/330² queued behind the large lane (`run_blockD_nocode.sh d6`).
+- **Done 2026-10-09**: 220², 330² landed. Physical analysis RMSE 1.05 / 0.99 / 1.01 / 1.02 (44²–330²), at observed points 0.79–0.82, decoder floor 0.65–0.69; physical skill 4.5–6.2 vs latent 3.8–4.2. §7.2 updated.
+### D7 `[x]` Seed repeats for the headline 2D points
+- Do: seed 1 for local N = 64 at 220² and 330²; seed 1 for dense-none N = 64 at 44² and 88²
+  (exists for some); record run-to-run spread.
+- Effort: ~3 h unattended (large domains one at a time).
+
+- **Done 2026-10-09**: seed 1 at 220² 3.90 (3.84), 330² 3.88 (3.86); per-site seed spread 0.02–0.15 at every size 44²–330² (§7.2, App. E).
+### D8 `[x]` Ensemble-size sweep at a transfer size
+- Do: local filter N ∈ {8,16,32,128} at 220² (N = 64 exists).
+- Effort: 4 runs ≈ 2 h.
+
+- **Done 2026-10-08**: per-site filter at 220², N = 8/16/32/64/128: 1.06 / 1.80 / 3.28 / 3.84 / 3.64 — the same curve as at 44²–88² (32 members slightly lower). §7.2 and `tab07_2d_ensemble` updated.
+### D9 `[x]` Model-noise sweep completion
+- Do: noise ∈ {0.02, 0.04, 0.16} at 44² exists; add 0.04 at 88² and 220² to show the
+  skill/calibration trade-off is size-independent.
+- Effort: 2 runs ≈ 1.5 h.
+
+- **Done 2026-10-08**: noise 0.04 gives +13–14% skill, −0.03 calibration at 44², 88², 220² alike.
+### D10 `[x]` Seam diagnostic (H6)
+- Do: on saved analyses from D6, ratio of mean |∇u| across patch edges to inside patches, for
+  analysis / forecast / truth; one number per size.
+- Effort: 2 h.
+
+- **44², 88² done 2026-10-08** (`[~]`): edge/interior gradient ratio truth 1.0, recon 3.6, analysis 3.8, free 3.0. Rerun `scripts/exp_d10_seams.py` when D6 220²/330² land.
+- **Done 2026-10-09**: edge/interior gradient ratio at 44², 88², 220², 330²: truth 1.00, reconstruction 3.6, analysis 3.8, free run 3.0 — size-independent (§7.2).
+### D13 `[~]` Accuracy: match observation interpolation → continued as Block H (2026-10-09)
+- Finding: the 2D latent filter (1.05 physical RMSE at 44²) is worse than cubic interpolation of the
+  observations (0.83). Details and every test in decisions.md ("Accuracy study").
+- Done: R / model-noise sweep (best 0.97); hybrid physical analysis (0.975); variational recentring
+  (0.956 with localized ensemble B); low-pass of the decoded analysis matches interpolation (0.81–0.82
+  vs 0.83). Gradient-matching AE loss: trades seams for resolved-scale error (worse total).
+- Next: (1) evaluate `p7c12_ks2d` (12-channel per-patch AE, Stage A done) with
+  `scripts/exp_recon_bands.py p7b_ks2d p7c12_ks2d`; retrain `p7c12g3_ks2d` if wanted; (2) if the
+  floor drops, Stage B (~2 h) and the 44² DA test; (3) else decoder reach 1 (filter generalization);
+  (4) whatever the outcome: add the interpolation baseline to §7.2 / Fig. 9 and reframe Part II's
+  claims accordingly (pending user decision).
+
+### D11 `[→I11]` (optional) Physical-space baseline filter on the true PDE at 44²
+- Do: per-site EnKF on the 128² PDE state with a 64-member ensemble of true integrations,
+  same observations; one point.
+- Effort: 1–3 days code; ~1 h run. Do only if time remains after D1–D10; otherwise state as a
+  limitation.
+
+### D12 `[→I19]` (optional) Kolmogorov DA at 1× and 3×
+- Do: Kolmogorov truth generation and strip geometry in the 2D DA script; local N = 64, one
+  point per size.
+- Effort: 1–2 days code; hours of runs. Paper-2 material if dropped.
+
+---
+
+## Block E — Write Part II (after Block D)
+
+### E1 `[x]` Decide Part II's headline table and figure from D0–D9
+- Write `docs/paper1/decisions.md` entry: which filter variant is "the per-site filter",
+  which inflation/noise setting is canonical, and the final steady-state skill table
+  (sizes 44²–440², N = 64, local / dense+GC / dense-none) with seed spreads.
+- Effort: 2 h.
+
+- **Done**: headline = Table `tab:da_2d_sizes` + Fig. 9 (fixed 64-member per-site filter, 44² → 440²).
+### E2 `[x]` Write §7.1 — exact locality (Prop. 4, colouring, per-site filter definition)
+- Name the filter correctly; define skill, spread, calibration, steady state, and both RMSE
+  metrics in-line for a dynamics audience; cite Takeda & Miyoshi 2026 and Bocquet & Carrassi
+  2017 for the ensemble-size bound.
+- Effort: 3 h.
+
+- **Done 2026-10-08**: `sections/07_data_assimilation.tex` §7.1 (protocol, filter names, exactness, metrics incl. physical RMSE, n₊ bound with measured n₊); §7 now in `main.tex` with TODO(E3/E4/E5) placeholders. 'Appendix~E' is cited by name until E6 exists.
+### E3 `[x]` Write §7.2 — fixed ensemble across 56× area (2D headline)
+- Table: skill vs size for the three filters; text on n₊ vs N; saturation by N = 16 for
+  dense+GC vs the heuristic; small-N behaviour (D4); under-dispersion and the noise trade-off.
+- Depends on: E1. Effort: 4 h.
+
+- **Drafted 2026-10-08** (`[~]`): §7.2 with generated `tab07_2d_sizes`/`tab07_2d_ensemble` (`tab07_2d_da.py`); headline = fixed per-site N = 64 from 44² to 440² (skill 4.23 → 3.90). E1 decision taken in passing: headline table = Table `tab:da_2d_sizes`. TODO(D7, D8) in the text: seed-1 at 220²/330² and N = 16/32/128 at 220² fill in on rerun; revisit wording then.
+- **Done 2026-10-09**: all TODO(D7/D6/D10) placeholders resolved.
+### E4 `[x]` Write §7.3 — observation density and the 1D results
+- D2's spacing threshold; D1's fixed-spacing sweeps (PFF and EnKF agree); GC vs none ratio;
+  the fixed-size negative result (SEC on the global latent beats GC on the local field at
+  L = 100, with the two-architecture caveat and the 75%-of-ring taper note); D3's SEC result
+  stated as a property of the matrix form.
+- Depends on: D1–D3. Effort: 4 h.
+
+- **Done 2026-10-08**: §7.3 with `tab07_1d_da` (`tab07_1d_da.py`): spacing threshold (D2), fixed-spacing 1D sweeps (D1), L = 100 SEC caveats, D3 as a property of the matrix form.
+### E5 `[x]` Write §7.4 — cost and memory, honestly
+- Measured CPU and clean peak RSS per size (D0); the dense filter's d² accounting; where the
+  per-site filter overtakes the dense one; what remains unexplained.
+- Depends on: D0. Effort: 2 h.
+
+- **Drafted 2026-10-08** (`[~]`): §7.4 with `tab_da_cost` (`tab_da_cost.py`). TODO: clean per-site memory at 330² from D6/D7 when they land; per-site loop not profiled (stated).
+- **Done 2026-10-09**: 330² memory in text and `tab_da_cost`.
+### E6 `[x]` Write App. E — DA details
+- Filter equations, observation networks in physical units at every size, taper construction,
+  SEC implementations, inflation sweep, per-cycle curves, run-to-run spread.
+- Depends on: D1–D9. Effort: 4 h.
+
+- **Drafted 2026-10-08** (`[~]`): `appendix/E_da_details.tex` (networks table, filter equations incl. ETKF and both SEC forms, inflation table, seed spread, transient). TODO(D7) seed spread at 220²/330²; per-cycle curves figure belongs to Block F.
+- **Done 2026-10-09**: seed spread at every size.
+### E7 `[x]` Write §9 Discussion and limitations
+- What transfer requires; the interaction-range design rule; transfer error as a physics probe
+  (one paragraph, paper 2); limitations list from review §3.2 item 9; outlook (RBC, LAM, CM1).
+- Depends on: B-block, E2–E5. Effort: half a day.
+
+- **Done 2026-10-08**: `sections/09_discussion.tex` (what transfer requires, four conditions; interaction range as the design length incl. the narrow-reach P6 failures; transfer error as a physics probe; what locality buys in DA; limitations list; outlook without citations, TODO(G-pass) to add verified ones). Included in `main.tex`; no undefined references remain.
+### E8 `[x]` Write §10 Conclusions, the abstract, the Chaos lead paragraph, and the title
+- Use review §2.3 as the starting text; every number in the abstract traced to a table.
+- Depends on: everything above. Effort: 3 h.
+
+---
+
+## Block F — Part II figures
+
+- **Done 2026-10-08**: title = review §2.3's recommendation ("…zero-shot domain transfer validated by Lyapunov spectra, and exactly local ensemble data assimilation"); three Key Points (128–132 characters); final abstract (every number traced to Table III, Table IV, `tab:da_2d_sizes`, Fig. 5 — noted in a comment); Plain Language Summary (serves as the Chaos lead paragraph at submission); new `sections/10_conclusions.tex`. Checked while writing: "the weakest drag departs most from extensive" was false (α = 0.05 rises most) — removed from §10 and softened in §9; "selected model among the most accurate" made exact (lowest mean error of the six α = 0.1 variants, 3.1%). Number check rerun: 0 unmatched.
+### F1 `[x]` Fig. 8 — 1D DA (regenerate from D1–D3)
+- (a) L = 100 trained size: global none / global+SEC / local none / local+GC; (b) L = 200 and
+  (c) L = 400 at fixed spacing: none vs GC, PFF and EnKF; SEC shown as its own curve where it
+  runs, hatched region where it does not; observation spacing in every panel title.
+- Depends on: D1, D3. Effort: 3 h.
+
+- **Done 2026-10-08**: `fig08_1d_da.py` rewritten from the D1/D3 JSONs (steady-state skill, fixed spacing), panel (a) from the L = 100 sweeps (whole-run skill, stated); truth n₊+1 marked. In §7.3 as `fig:da_1d`. Found while doing it: §7.1/§7.3 had quoted the model's n₊ (25, 49–50) as the truth's (26–27, 50–51) — corrected; decisions.md.
+### F2 `[x]` Fig. 9 — 2D DA headline
+- (a) decoder Jacobian sparsity image with the 6-column block marked; (b) skill vs domain
+  area for local / dense+GC / dense-none at N = 64, 44²→440², with n₊ and D_KY on a top axis;
+  (c) skill vs N at 44², 88², 220² for the local filter; (d) per-cycle skill and spread/RMSE
+  at 330² (100 cycles); (e) CPU time and clean peak RSS vs d, dense vs local, with the dense
+  d² accounting line; (f) observation-spacing sweep (D2) with the pattern wavelength marked.
+- Depends on: D0–D8. Effort: 1 day.
+
+- **Built 2026-10-08** (`[~]`): `fig09_2d_da.py` → `fig:da_2d` in §7.2, six panels: (a) dense reverse-mode Jacobian at 44² (`scripts/exp_f2_jacobian_sparsity.py`; off-block entries exactly 0); (b) skill vs area, per-site / dense+GC / unlocalized 64 and 128; (c) skill vs N at 44², 88², 220² + dense GC; (d) per-cycle error, spread, free run at 330²; (e) filter memory vs d with ∝d and ∝d² guides; (f) skill vs observation spacing / site length, 2D and 1D. CPU time stays in Table `tab:da_cost` (one axis per panel). Deviations from the spec: no n₊ top axis (n₊ in the caption), per-cycle panel shows errors and spread (same units) rather than skill and calibration.
+- **TODO — finalize after the 330² runs (~20:30)**: rerun `tab_da_cost.py`, then `fig09_2d_da.py` (panel (e) gains the clean 330² per-site memory point from D6/D7); look at the figure again; then mark `[x]`.
+- **Done 2026-10-09**: final with the 330² memory point (4.30 GB; sub-linear from 220²: ×1.28 for ×2.25 area); labels in (e), (f) fixed. Text/abstract/intro/conclusions changed from "memory linear" to "no faster than the area".
+### F3 `[x]` Fig. 11 — DA snapshot at a transfer size
+- Truth, free forecast, analysis (decoded mean), and analysis error at 330², one cycle in
+  steady state; shared colormap; observation sites overlaid on the truth panel.
+- Depends on: D6. Effort: 3 h.
+
+- **Done 2026-10-09**: `fig11_da_snapshot.py` → `fig:da_snapshot` in §7.2: truth / free run / analysis / error at 330², cycle 78, full domain and a 55×55 window with observation sites and patch edges. The free-run panel shows why the skill reference is weak (mean of decorrelated members keeps only the large scales); §7.1 now says skill is measured against the free ensemble mean.
+### F4 `[x]` Fig. 12 — Jacobian timing and colouring (small, could be an appendix figure)
+- Re-run `exp_t1_jacobian_timing.py` at the corrected deployment; reverse mode vs coloured
+  vs d.
+- Effort: 1 h.
+
+- **Done 2026-10-08**: new `scripts/exp_f4_jacobian_timing.py` (the old T1 script sized the domain from the crop grid and scaled the stride with L) at the deployment grid, stride 8, 44²–440²; `fig12_jacobian_timing.py` → App. E (`fig:jacobian_timing`, `app:da_jacobian`) and one sentence in §7.4. Coloured = reverse mode exactly (diff 0) up to 132²; coloured 1.3 → 49 ms (slope 0.81 in d), reverse 7 → 415 ms by 132² (slope 1.84). 4 threads, run while the large DA lane was busy, so absolute times are indicative.
+### F5 `[ ]` Animations for the supplement / talk
+- 2D KS 88² truth vs model rollout; DA cycling at 330² (truth / analysis / error). Frames
+  from `docs/anim_frames/` tooling; MP4 + a 6-frame filmstrip figure for the supplement.
+- Effort: half a day.
+
+---
+
+## Block G — Polish and submission
+
+### G1 `[x]` Figure consistency pass
+- Every figure: same fonts as body (serif, 8.5 pt), one palette (`_style.py`), truth always in
+  neutral ink, model in one hue per system, identical marker semantics across Figs. 3/6/9,
+  axis labels with units, panel letters, colorbars once per figure, no text smaller than 7 pt,
+  vector PDF, column widths exact (3.37 / 6.75 in). Check each in grayscale and at 50% zoom.
+- Effort: half a day.
+
+- **Done 2026-10-08**: figures are now designed at the layout's text width (`_style.COL2` = 5.5 in for the AGU draft class, 397.5 pt; switch to 3.37/7.0 for REVTeX at submission) and included at natural size, centred, so every font prints at its designed size; all explicit font sizes below 7 pt raised to 7 (contract minimum). Then every figure re-rendered and inspected: titles shortened where they collided with panel letters (details moved to captions/axis labels), legends moved off data or replaced by direct labels (Fig. 9 b, e, f), Fig. 8's legend deduplicated and markers made distinct for grayscale (none ▽/△, GC ○/□), Fig. 4/6/12 legends moved below the axes, Fig. 10 validation column spaced. Checked in grayscale at half size (Figs. 6, 8, 10). Palette, truth-in-ink, open-truth/filled-model and one-hue-per-system semantics were already in place from Block C. `fig11_rollout_filmstrip.pdf` is not used by the paper.
+### G2 `[x]` Number-provenance pass
+- Script `scripts/paper_figures/check_numbers.py`: extract every number in the `.tex` sources
+  that also appears in a table/figure script and assert equality; list record-only numbers.
+- Effort: half a day.
+
+- **Done 2026-10-08**: `scripts/paper_figures/check_numbers.py` → `docs/paper1/number_check.md`. 524 decimals in the text: 410 printed in generated tables, 109 equal to a value in the 527 result files at the printed precision, 5 unmatched — all checked by hand and explained in the script (a literature value, two axis limits, a D9 skill, a memory ratio). Limitation stated in the report: a match is consistency, not proof of source; the check catches numbers that match nothing. Integers are not checked. Rerun after every text or result change (it is fast).
+### G3 `[x]` Internal-consistency pass against the review
+- Walk review §4.2, §4.5, §9, §10 line by line and tick each item; delete `paper1_outline.md`'s
+  stale numbers or mark the file as superseded.
+- Effort: 3 h.
+
+- **Done 2026-10-08**: `docs/paper1/review_checklist.md` (every item of review §4.2, §4.5, §9, §10 with status). Fixed in this pass: forced-halo failure test now covers η = R−1 and R−2 (text matched); Prop. 4(b) statement and proof cover both per-site updates; App. C "chosen to exceed" and "earlier values"; Table IV headers; `paper1_outline.md` and `paper1_tasks.md` marked superseded. Deferred to G4: output-projection bias explanation, table abbreviations.
+### G4 `[x]` Writing pass
+- One idea per sentence; define every symbol at first use; no claim without a number or a
+  citation; every negative result stated once; cut §8 to ≤ 2 pages; cut repeated caveats.
+- Effort: 1 day.
+
+- **Done 2026-10-08**: §8 rewritten from 1306 to 1145 words incl. captions (~850 body, ≤ 2 pages), every number stated once, selection-rule robustness kept; symbols defined at first use ($n_+$, $\kmid$/$\kmax$ in §3; EnKF, PFF, GC in §7.1; "Kolm." expanded in the Table II caption for all tables); the two items deferred from G3 (no-bias explanation in §3.2; abbreviation) done; duplicate "finite-time estimate is random" sentence in §3.6 merged, free-rollout screen now says training data or truth; §5/§6 tightened (ambiguous "either", per-patch paragraph). Number check: 0 unmatched. Sections written today (§7, §9, §10) were drafted to the one-idea-per-sentence rule and were spot-checked, not rewritten.
+### G5 `[x]` App. F — reproducibility
+- Code layout, seeds, device policy, test list (equivariance, forced halo, block-diagonal
+  Jacobian, colouring, Kalman checks, geometry), compute budget, data/code availability
+  statement, commit SHA, environment lock.
+- Effort: 3 h.
+
+- **Done 2026-10-08**: `appendix/F_reproducibility.tex` (code and provenance, numerics/devices/seeds incl. FFT-thread realizations, versions, the 132 tests the claims rest on — run and passing, compute costs from run files), included in `main.tex`; Open Research text points to it. TODO(G8) in the appendix: tagged release commit and archive DOI — the results were produced from a dirty working tree on top of 2cd9da0, so a release commit is required before submission.
+### G6 `[~]` Compile in `reprint` (two-column) layout and fix layout issues
+- Floats, table widths, equation breaks, overfull boxes; `latexmk -pdf` clean with no `??`.
+- Effort: 3 h.
+
+- **Done in part 2026-10-08** (user request): `main.tex` now follows AIP's REVTeX 4.2 template (`aipsamp.tex`): `aip,cha,reprint` two-column layout, short running title, provisional abstract and Chaos lead paragraph (TODO(E8)), acknowledgments, Author Declarations (conflict of interest) and Data Availability (TODO(G5)) before the appendices, `hidelinks`. All overfull boxes fixed in `reprint` (wide tables → `table*`, long displays split); `preprint` also compiles (two small §2 overflows). Left for G6: float placement at the end of the appendices (pages of tables with white space).
+- **Superseded 2026-10-08** (user request): layout switched to the AGU class used by van Leeuwen, arXiv:2601.01795 (`docs/paper1/PJ2019.cls` = agujournal2019, `draft` option, apacite author-year citations via `natbibapa`, Key Points + Abstract + Plain Language Summary, Open Research Section and Acknowledgments before the references). Peter Jan van Leeuwen added as second author (CSU affiliation from his paper). A `ruledtabular` shim in `macros.tex` keeps the REVTeX tables; floats use `[htbp]`. The class's ragged-right draft mode emits ~1000 harmless overfull warnings (the reference paper emits 510 the same way). TODO: Dalton Jones's affiliation; acknowledgments; both authors to confirm the conflict-of-interest sentence; target journal (Chaos would need REVTeX again).
+- **2026-10-08** (user): both authors at CSU (corresponding: daltjone@colostate.edu); no acknowledgments (section removed); no conflict of interest (stated); **target journal Chaos** — the AGU-style layout is kept for drafting at the user's request; switching back to REVTeX (`aip,cha`) is needed for the submission package (G8).
+### G7 `[ ]` External read
+- Send the PDF to one dynamics reader and one DA reader; collect objections; address each in
+  `docs/paper1/decisions.md`.
+- Effort: a week of calendar time.
+
+### G8 `[ ]` Submission package
+- Chaos cover letter; suggested referees; arXiv version with the same figures; supplement
+  (animations, App. D tables as CSV); Zenodo/GitHub release of code and the artifact JSONs
+  used by every figure.
+- Effort: half a day.
+
+---
+
+## Block H — Part II accuracy: make the latent filter beat the no-model baselines
+
+Started 2026-10-09 from the finding (D13) that the 2D latent filter's analysis (physical RMSE
+1.0 at 44²) is worse than interpolating the observations (spline 0.83; statistical
+interpolation with the climatological covariance 0.80). Part II's scaling result stands; this
+block is about accuracy. All numbers: 2D KS, 44², per-site filter, N = 64, observation spacing
+2.75 (stride 8, 4 per site), observation noise 0.62 field units (0.1 standardized), 100 cycles,
+steady state = cycles 51–100, physical RMSE in field units (truth std 4.0). Scripts:
+`scripts/exp_obs_interp_baseline.py`, `exp_hybrid_da.py --diag --save-prior`, `exp_oi_bound.py`,
+`exp_recon_bands.py`, `run_gc_sweep.sh`, `run_acc2.sh`; results in `artifacts/experiments/da2d/`
+(`da2d_ACC*`, `da2d_GC_*`, `da2d_B2_*`, `hybrid_*`, `interp_baseline_L44.json`).
+
+### H0 Observations (what the diagnostics established)
+
+**O1 — Error budget by wavenumber band** (error variance, field units²; observation Nyquist and
+patch wavenumber both ≈ 1.14):
+
+| |k| band | 6-ch decoder floor | 12-ch decoder floor | spline interp. | current analysis |
+|---|---|---|---|---|
+| [0, 0.6) | 0.002 | 0.001 | 0.095 | 0.214 |
+| [0.6, 1.14) | 0.037 | 0.002 | 0.259 | 0.340 |
+| [1.14, 1.6) | 0.136 | 0.011 | 0.307 | 0.198 |
+| ≥ 1.6 | 0.267 | 0.063 | 0.028 | 0.295 |
+| total → RMSE | 0.44 → 0.67 | 0.08 → 0.28 | 0.69 → 0.83 | 1.05 → 1.02 |
+
+The latent represents the observed scales almost perfectly (6-ch floor 0.04 below the Nyquist)
+yet the analysis carries 0.55 there: the filter, not the representation, fails at observed scales.
+Above the Nyquist the analysis is already at the 6-ch floor, and there the latent beats
+interpolation in [1.14, 1.6) — the only band where a model can beat the observations.
+
+**O2 — Ensemble span.** Only 20% of the prior error variance lies in the span of the 63
+decoded ensemble perturbations (global least squares, `hybrid_diag_mn0.08`). The perturbation
+spectrum is large-scale (band shares 0.66 / 0.31 / 0.07 / 0.11), so the directions are not the
+wrong shape; there are too few of them. One-step bound √(1−0.20) × prior 1.09 = 0.98 = the
+observed analysis (0.975–1.06).
+
+**O3 — Localization.** At 44² the Gaspari–Cohn half-width 3 (support radius 6 sites on an 8 × 8
+lattice) hardly localizes; the per-site filter there is in effect a global 64-member filter.
+Tightening to half-width 1–2 gains only 2% (0.967 → 0.947). At one observation per site (stride
+16) the filter gives 2.83 against 3.00 for interpolation, i.e. the sparse regime is where a
+model-based filter starts to win, but only just.
+
+**O4 — Fitting the observations harder makes the total worse.** Error at the observed points is
+0.81 > noise 0.62, so the prior is over-weighted; but inflation 1.5–3, smooth physical-space model
+noise (std 0.1–0.2, length 4–8 grid points) and the physical-space hybrid analysis with inflation
+all lower the error at the observed points (to 0.60) while raising the total (to 1.24). An
+optimal linear analysis with the prior error's own (isotropic) covariance reaches only 0.92;
+with the ensemble perturbation spectrum 0.945. The prior error has a near-white component
+(RMSE 0.31 above |k| = 1.14, the decoder seams) that every observation sees and that any
+covariance-based update spreads as if it were signal, and its large-scale part is
+non-stationary (an isotropic OI on it over-corrects). Changing the filter alone cannot beat
+interpolation on this decoder.
+
+**O5 — The decoder is the lever.** A per-patch autoencoder with 12 channels per site (same
+training, `p7c12_ks2d`, Stage A) has floor 0.28 vs 0.67, and its seam band is 0.063 vs 0.267.
+Seam-penalty losses on the 6-channel decoder (gradient matching, `--w-grad`) only trade seam
+error for resolved-scale error (0.78–0.85 total): 6 channels per 16 × 16 patch is a capacity
+limit.
+
+**O6 — Model noise / R.** Model noise 0.08 → 0.02 improves the analysis 1.05 → 0.97 (every size);
+assuming a larger observation error in the filter (0.15–0.2) fixes calibration (0.35 → 0.8) but not
+accuracy. The free-run skill reference in the paper (≈ 4) is a weak reference; the paper must say
+so (done in §7.1) and show the no-model baselines.
+
+### H0b The argument (short)
+
+1. *Subspace bound.* A square-root/transform ensemble update moves the mean within
+   span(X_f): e_a = (I − P)e_f + P e_f', so ‖e_a‖ ≥ ‖(I − P)e_f‖ = √(1−f)‖e_f‖ with f the span
+   fraction. Measured f = 0.20 ⇒ ≥ 0.98. Localization raises the effective rank, but only if the
+   error is local; the seam component is everywhere.
+2. *Representation error as observation error.* Innovation d = ε + H e_L + H e_S with e_S the
+   decoder's small-scale error (white-like, σ_S = 0.31): R_eff = r² + σ_S² (0.62² → 0.69²), and,
+   worse, any gain K that spreads innovations also spreads e_S. Hence O4. With the 12-channel
+   decoder σ_S ≈ 0.07 and the term vanishes.
+3. *Where a model can win.* With m = 256 observations and ≈ 200 resolved modes, interpolation is
+   already near-optimal at |k| < 1.14. A model-based filter can only beat it through (a) a prior
+   that is better than climatology at the observed scales and (b) the scales the observations do
+   not resolve, where only the model carries information. (b) requires a decoder whose floor is
+   below the truth's energy there (12-ch: 0.011 vs truth ≈ 0.31 in [1.14, 1.6)); (a) requires an
+   ensemble that spans the prior error (f ≫ 0.2) — hybrid static-plus-ensemble covariances are the
+   standard remedy.
+4. *Prediction to test (H1).* Same filter, 12-channel model: analysis ≈ √(0.1 + 0.011 + 0.063) ≈
+   0.4–0.45 if the observed-scale error reaches interpolation's level (0.35 var), 0.6–0.7 if it
+   stays where it is. Either beats 0.80. If it does not, the prior error at observed scales is the
+   remaining problem (→ H5).
+
+### H1 `[~]` Twelve-channel 2D KS model: train, screen, transfer, assimilate
+- Stage B for `p7c12_ks2d` running since 2026-10-09 (nice 10; ~2–2.5 h). Then: free-rollout
+  screen; `exp_crop_eval` at 44², 66², 88² (2 ICs); `exp_recon_bands.py`; DA at 44² stride 8 and
+  16 (`run_acc2.sh`-style, `--phys-rmse`), scored against `interp_baseline_L44.json` and the
+  climatological OI baseline (`exp_oi_bound.py`).
+- Pre-registered decision rule: adopt the 12-channel model as the canonical 2D KS model if (i) its
+  transfer errors at 44², 66² are within the truth spread (≤ 2.5%), (ii) its free-rollout
+  statistics pass the §3.6 screen, and (iii) its analysis RMSE at stride 8 is ≤ 0.80 (the no-model
+  bar). If (iii) fails but (i)–(ii) hold, keep it and go to H5. If (i) fails, report it in §8 and
+  keep the 6-channel model.
+- If adopted: rerun Block D's 2D runs (A/B/C sizes, D2, D5–D9; ~1 day, large domains one at a
+  time) and Part I's 2D KS numbers (Tables IV, D; Figs. 5–7).
+
+### H2 `[→I18]` No-model baselines into the paper
+- Add spline and climatological-OI baselines (`exp_obs_interp_baseline.py`, `exp_oi_bound.py`
+  last line) to §7.2 and Fig. 9(b)/(f) at every size and observation density; state in §7.1 that
+  skill against the free run is not an accuracy measure. Do this whatever H1 gives.
+
+### H3 `[→I10]` "Why" figure for §7: error anatomy
+- Panels: (a) error variance by band for decoder floor, interpolation, analysis (O1); (b) prior
+  error spectrum vs ensemble perturbation spectrum and the span fraction per cycle (O2);
+  (c) error at observed points vs total error across the batch-2 settings (O4). From existing
+  JSONs; half a day. This turns the accuracy limitation into a result.
+
+### H4 `[→I5]` The regime where the filter should win: sparse or noisy observations
+- With the adopted model: stride 16 and 32 (interpolation 3.0 and 4.0 — it fails), and
+  observation noise 0.1 / 0.2 / 0.4 at stride 8 (interpolation degrades in proportion; a good
+  prior should not). 8 runs at 44², then the best point at 220². Expect this to be the headline
+  accuracy result; the dense-and-accurate network is interpolation's home turf.
+
+### H5 `[dropped]` Ensemble covariance: raise the span fraction
+- (a) Hybrid covariance: static latent B from the training latents (localized) + ensemble B, in
+  `var_recenter` (`cov="hybrid"`), the EnVar remedy for rank deficiency; (b) 128 members with the
+  12-channel model; (c) ensemble of lagged analysis increments as extra directions. Score by span
+  fraction (`exp_hybrid_da.py --diag`) and analysis RMSE. Only after H1.
+
+### H6 `[dropped]` Decoder reach 1 (fallback if H1 fails on the floor)
+- Reach-1 decoder keeps a local Jacobian (3 × 3-site blocks, 54 forward passes); generalize
+  `LETKFLocal2D` to that block structure; retrain. 1–2 days.
+
+### H7 `[→I11]` Physical-space ensemble filter on the PDE at 44² (was D11)
+- Now justified: it gives the ceiling for a filter with a perfect model at this network. A local
+  ETKF on the 128² grid with 64 PDE members; `exp_hybrid_da.py`'s per-patch ETKF already does the
+  analysis step on a grid, so only the PDE ensemble forecast is new (~half a day). Report next to
+  the latent filter and the no-model baselines.
+
+### H9 `[~]` Overlapping tilings: remove the seams with no retraining
+- Idea (user, 2026-10-09): encode/decode the field on several tilings shifted by a fraction of a
+  patch and blend the decodings, so every point is taken mostly from a tiling where it sits
+  mid-patch. No retraining needed: the AE was trained on crops at arbitrary pixel offsets and the
+  propagator is translation-equivariant, so shifted encodings are in distribution.
+- **Measured (`scripts/exp_overlap_recon.py`, p7b_ks2d, 44², 20 snapshots; error power by band
+  |k| < 0.6 / 0.6–1.14 / 1.14–1.6 / > 1.6):**
+  | reconstruction | RMSE | bands |
+  |---|---|---|
+  | 1 tiling (current) | 0.665 | 0.002 0.037 0.136 0.267 |
+  | 4 tilings (half-patch), plain average | 0.411 | 0.001 0.024 0.056 0.088 |
+  | 4 tilings, Hann partition of unity | **0.340** | 0.005 0.033 0.049 0.029 |
+  | 16 tilings (quarter-patch), plain average | 0.311 | 0.001 0.023 0.044 0.029 |
+  The decoder floor halves (0.665 → 0.340), and the seam band (> 1.6) drops 9×. The floor is now
+  well under interpolation (0.83) and climatological OI (0.80), which removes O1's ceiling with
+  the existing model; the 12-channel model (H1) can be blended the same way.
+- **DA result, cheap form (a), 2026-10-09 (`scripts/exp_h9_tiled_da.py`, 44², N=64 per tiling,
+  stride 8, obs noise 0.62 field units, GC c=1.5 sites, model noise 0.02, steady = cycles 51–100,
+  analysis RMSE in field units; truth std 4.0):**
+  | | seed 0 | seed 1 | seed 2 |
+  |---|---|---|---|
+  | current filter (1 tiling) | 0.944 | 0.880 | 0.908 |
+  | **4 tilings, independent filters, Hann-blended** | **0.572** | **0.549** | **0.566** |
+  | spline interpolation (no model) | 0.829 | 0.813 | 0.819 |
+  | decoder floor, 1 tiling / 4 blended | 0.69 / 0.35 | 0.65 / 0.34 | 0.66 / 0.35 |
+  Controls (seed 0): 4 ensembles on the SAME tiling, averaged: 0.943; one tiling with N=256:
+  0.949, so the gain is from moving the seams, not from 4× the members. Feeding the blended
+  analysis back (re-encode on every tiling, `--feedback`) is worse: 0.811 (c=1.5), 0.907 (c=3);
+  the projection costs more than it gains, so tilings run independently.
+  **The latent filter now beats interpolation by 30–33% and climatological OI (0.80) by ~29%,
+  with no retraining, at 4× the cost.** Still to do: (d) the same at 220² (scaling claim must
+  survive the blend); (e) sparse network (stride 16, needs offsets 0/8 with a stride-16 network —
+  offsets not a multiple of the stride: generalize the observation-site map); (f) the 12-channel
+  model (H1) blended.
+- Sparse network (stride 16, 2026-10-09, seed 0): single 3.37, blended **1.86**, interpolation 3.01.
+  Continued as **Block I**.
+- Original plan: (a) **DA, cheap form**: run the existing per-site filter independently on the
+  four tilings (four latent ensembles, each exact and local), report the Hann-blended analysis
+  in physical space; 4× cost. (b) **Joint form, "DA on the intersections"**: state = the four
+  tilings' latents, observation operator = the blended decoder; still exactly local (each
+  observation touches ≤ 4 sites, one per tiling), coloured Jacobian with 4× the JVPs; the
+  analysis couples the tilings only through the overlaps. Re-encode the blended analysis on each
+  tiling at every cycle so the four ensembles stay consistent (a projection; measure its error).
+  (c) If (a)/(b) beat 0.80 at stride 8, this goes into §7 as the accuracy fix, with the
+  floor table above, and the exactness statement extended to the multi-tiling operator.
+
+### H8 `[→I18]` Rewrite Part II's claims after H1–H4
+- Abstract, Key Points, §1 bullet, §7.2, §10: scaling and exactness stay; accuracy stated
+  against the no-model baselines with the regime where the filter wins named explicitly.
+
+---
+
+> **Superseded by Block I (2026-10-09):** H2→I18, H3→I10, H4→I5, H7→I11, H8→I18; H1 continues as
+> I12. Dropped: H5 (the blend lifts the accuracy limit H5 was aimed at; calibration is I6) and H6
+> (fallback for a floor problem the blend has removed).
+
+## Block I — Shifted-tiling filter: make it Part II's method (from H9, 2026-10-09)
+
+**Where we are.** Running the existing per-site latent filter on K = 4 tilings shifted by half a
+patch, and blending the K analyses in physical space with Hann weights, cuts the 2D KS analysis
+error at 44² from 0.88–0.94 to 0.55–0.57 (3 seeds). That beats spline interpolation (0.81–0.83)
+and climatological OI (0.80) by ~30%, with no retraining and at K× the cost (H9 table). Controls
+rule out "more members" as the cause: 4 ensembles on one tiling give 0.943, and 1 × 256 members
+gives 0.949. On the sparse network (stride 16, one observation per site length, where D2 found
+that DA fails) the blend gives 1.86 against interpolation's 3.01 and the single tiling's 3.37
+(seed 0, GC c = 1.5 not retuned). Weak points so far:
+- the blended ensemble is under-dispersive (spread/RMSE 0.37 at stride 8, 0.22 at stride 16);
+- scaling with the blend is untested beyond 44²;
+- there is no perfect-model ceiling yet.
+
+Everything in this block uses `scripts/exp_h9_tiled_da.py` (generalized 2026-10-09: offsets
+need not be multiples of the observation stride; K ∈ {1, 2, 4, 16}; Hann or uniform weights;
+inflation; free run; blended spread; error at observed points; peak RSS). Runs go through
+`scripts/run_h9_queue.sh` (log `artifacts/logs/h9_queue.log`), outputs
+`artifacts/experiments/da2d/h9_<tag>.json`. Defaults unless stated: N = 64 per tiling, model
+noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.62 field units),
+100 cycles, steady state = cycles 51–100, physical RMSE in field units.
+
+### Which Block D runs must be redone with the blended filter
+
+| D task | Rerun? | Why / where |
+|---|---|---|
+| D1 1D fixed-spacing sweeps | No | 1D uses the full-reach AE (no per-patch seams); tiling does not apply. 1D accuracy vs interpolation is checked separately in I15. |
+| D2 observation-spacing sweep (2D) | **Yes** → I5 | The "DA fails at spacing ≥ site length" result is overturned at stride 16 (1.86 vs interpolation 3.01). |
+| D3 SEC vs GC | No | Relative comparison of localizers (1D, dense latent); unaffected. |
+| D4 per-site ETKF | No | Not adopted; blending is orthogonal to the update form. |
+| D5 inflation | **Yes** → I6 | The blended ensemble has its own calibration (0.37); tuning must be redone. |
+| D6 physical RMSE at 44²–330² | **Yes** → I1 | This is the headline accuracy-vs-size table. |
+| D7 seed repeats | **Yes** → I1 | Seed 1 at 220², 330² with the blend. |
+| D8 ensemble-size sweep | **Yes** → I3 | The "required N is size-independent" claim must hold for the method we report. |
+| D9 model-noise sweep | **Yes** → I6 | Folded into the calibration retune. |
+| D10 seam diagnostic | **Yes** → I9 | Edge/interior gradient ratio of the blended analysis (expect ≈ 1). |
+| Dense / unlocalized points (A/B/C sizes) | No | The n₊ > N failure concerns the latent ensemble's rank, not the seams. I1(d) adds one blended unlocalized point at 44² to show blending does not rescue it. |
+| Latent-space skill tables | Recompute | Report physical RMSE and the no-model baselines first, with skill against the free run second (it is a weak reference, H0 O6). |
+
+### I0 `[ ]` Pre-registered adoption rule (written before the 220² result, 2026-10-09 06:40)
+- Adopt the K = 4 blended filter as "the per-site filter" of Part II if:
+  1. its 220² steady-state RMSE is ≤ 0.80 (beats climatological OI);
+  2. that value is ≤ 1.15× its 44² value (0.575);
+  3. the I1 sizes 88²–330² satisfy (1)–(2) too.
+- If (2) fails but (1) holds, report the accuracy gain and the scaling separately (scaling with the single-tiling filter, accuracy with the blend at each size).
+- If (1) fails at 220², the blend is a 44² result only. Report it in §7 as such and find out why (I8).
+
+### I1 `[~]` Scaling with the blend (D6/D7 rerun)
+- (a) K = 4 and K = 1 at 88², 220², 330², seed 0, same settings as 44². 220² was launched
+  2026-10-09 06:40 (`run_h9_queue.sh l220`). One large domain at a time.
+- (b) Seed 1 at 220², 330², and seeds 1–2 at 88².
+- (c) **440², required** (the abstract's 44²→440² claim must be restated with the blended filter or the range shortened). Measured peak RSS is 4.7 GB at 220² (K = 4), so ~19 GB at 440² is expected: feasible, run alone. The single-tiling C run reached ~20 GB, but the h9 script
+  stores no history, so first measure peak RSS at 330².
+- (d) One unlocalized blended point at 44² (dense filter on each tiling), N = 64.
+- **220² done 2026-10-09 (seed 0):** 1 tiling 0.902, 4 tilings blended **0.560**, interpolation 0.820;
+  free-run skill 5.07 → 8.17; blended spread/RMSE 0.375. Wall time 293 s (K = 1) and 675 s (K = 4),
+  serial in one process, 2.3× rather than 4× because the truth integration is shared. Peak RSS
+  4.3 GB (K = 1) and 4.7 GB (K = 4). **I0 conditions 1 and 2 pass at 220²** (0.560 ≤ 0.80, and
+  ≤ 1.15 × 0.575); condition 3 (88², 330²) is pending.
+- Report at each size: the blended and single RMSE, interpolation and climatological OI at that
+  size, free-run skill, calibration, wall time and peak RSS. Apply I0.
+
+### I2 `[~]` Equal-cost comparisons — is the blend an efficient use of members?
+- **44² done 2026-10-09** (3 seeds, each paired on one cached truth; seed 2's spinup is now
+  cached too, because an uncached 200-unit spinup is not bitwise reproducible across runs, as
+  chaos amplifies floating-point differences):
+  | total 64 members | seed 0 | seed 1 | seed 2 | mean |
+  |---|---|---|---|---|
+  | 1 tiling × 64 | 0.951 | 0.879 | 0.859 | 0.896 |
+  | 2 tilings × 32 | 0.712 | 0.670 | 0.657 | 0.680 |
+  | 4 tilings × 16 | **0.632** | **0.613** | **0.596** | **0.614** |
+  | interpolation | 0.829 | 0.813 | 0.813 | |
+  At a fixed total of 64 members, 4 × 16 is 31% better than 1 × 64, and better than interpolation
+  on every seed. At a fixed 256: 4 × 64 0.575 against 1 × 256 0.949. **Splitting the members
+  across tilings is a better use of them than one larger ensemble.**
+- **220² done 2026-10-09** (seed 0, total 64): 1 × 64 0.902, 2 × 32 0.681, 4 × 16 **0.623**
+  (interpolation 0.820). The same ordering and the same ratios as at 44² (0.951 / 0.712 / 0.632). Wall
+  time 293 / 308 / 406 s, peak RSS 4.2–4.3 GB: at a fixed total of members, the blend costs ~1.4×.
+- At a fixed total of 64 members: 1 × 64, 2 × 32 (K = 2, diagonal offset) and 4 × 16.
+- At a fixed total of 256 members: 1 × 256 (done, 0.949) and 4 × 64 (0.575).
+- At equal wall time: the K tilings are independent, so they run in parallel (K processes); report serial and parallel wall time.
+- Run at 44² and 220².
+- This decides whether the paper can say "efficient": if 4 × 16 beats 1 × 64, the blend is better per member as well as per run.
+
+### I3 `[ ]` Ensemble-size sweep with the blend (D8 rerun)
+- N per tiling ∈ {8, 16, 32, 64, 128}, K = 4, at 44² and 220².
+- Claim to test: the N needed for a given RMSE is the same at both sizes, as for the single tiling.
+- Plot the RMSE against the total member count, with the single-tiling curve and interpolation.
+
+### I4 `[~]` Number of tilings and blend weights
+- **44² done 2026-10-09** (seed 0, N = 64 per tiling; analysis RMSE; wall time for 100 cycles):
+  | | stride 8 | stride 16 | wall |
+  |---|---|---|---|
+  | K = 1 | 0.951 | 3.368 | 13 s |
+  | K = 2 (diagonal) | 0.692 | 2.248 | 20 s |
+  | K = 4 Hann | 0.575 | 1.856 | 31 s |
+  | K = 4 uniform | 0.629 | **1.421** | 29 s |
+  | K = 16 Hann (quarter-patch) | **0.427** | **1.144** | 102 s |
+  | interpolation | 0.829 | 3.008 | |
+  K = 4 is not the knee: 16 tilings improve a further 26% (dense network) and 38% (sparse network),
+  far beyond the decoder floor's change (0.35 → 0.30). This is consistent with I8: the
+  grid-tied *filter* errors average down, not just the seams. Hann weights win at stride 8 and
+  uniform weights at stride 16. With sparse observations the grid-tied filter error dominates the
+  seams, and uniform weights average more tilings per point. **Follow-ups:**
+  - weight family w ∝ hann^p, p ∈ {0, 0.5, 1}, at K = 4 and 16;
+  - K = 16 at 220² (the cost is ~3.5× K = 4, still linear in area);
+  - K = 16 in I2's equal-cost test (16 × 4 members).
+  Calibration worsens with K (spread/RMSE 0.24 at K = 16), since independent spreads average
+  down faster than the errors (I6).
+- K ∈ {1, 2, 4, 16} with Hann weights, plus K = 4 with uniform weights.
+- Run at 44², strides 8 and 16.
+- Output: an accuracy-vs-cost curve, and whether 16 quarter-patch tilings are worth 4× more than 4 (the floor goes from 0.35 to 0.31 only).
+- Expect K = 4 to be the knee.
+
+### I5 `[ ]` Observation regime (replaces H4; D2 rerun) — the likely headline
+- **WARNING (2026-10-09 08:27): at stride 16 the filter has not reached a steady state.**
+  Errors drift upward over all 100 cycles: slow filter divergence from under-dispersion. 10-cycle
+  block means (12-channel):
+  - 1 tiling: 0.56 → 0.90 → 1.21;
+  - tiling 0 inside the 16-tiling run: 0.57 → 1.20 → 2.50;
+  - 16-tiling blend: 0.35 → 0.47 → 0.65;
+  - stride 8, for comparison: flat (0.26–0.29).
+  Single runs at stride 16 also vary strongly with the noise realization (tiling 0 gives 1.09 vs
+  1.87 in two otherwise identical runs). **Every stride-16 number recorded so far (6-channel 1.86 /
+  1.14, 12-channel 1.09 / 1.00 / 0.63) is a cycles-51–100 average of a drifting error; do not
+  quote it.** For I5:
+  - 300 cycles;
+  - a drift test (mean over cycles 151–225 vs 226–300; call a run steady only if they differ by
+    < 10%);
+  - 3 seeds per cell;
+  - run I21 (inflation / RTPS) at stride 16 *first*, because it is the standard cure for this
+    divergence.
+- Grid: stride ∈ {4, 8, 16, 32} × observation noise ∈ {0.1, 0.2, 0.4} standardized, at 44², K = 1 and K = 4.
+- GC c is retuned per stride, c ∈ {1.5, 2, 3}, because sparse networks need wider localization.
+- Baselines at every point: spline interpolation, and climatological OI (`exp_oi_bound.py`, generalized to stride and noise).
+- Then the two most informative points at 220².
+- Pre-registered expectation: the blend's margin over interpolation grows with observation spacing and noise. If it does not, say so; the dense, accurate network is interpolation's best case, and the paper should show the full map.
+- Figure: RMSE ratio (blend / best no-model baseline) on the stride × noise grid.
+
+### I6 `[ ]` Calibration retune (D5, D9 rerun)
+- The blended spread is 0.37 of the RMSE. The cause is that independent filters' spreads average down while their errors partly do not.
+- Sweep at 44², stride 8 and 16:
+  - inflation {1.0, 1.1, 1.2, 1.5};
+  - model noise {0.02, 0.04, 0.08};
+  - assumed R ×{1, 1.5, 2};
+  - post-blend spread rescaling: inflate the blended perturbations by √K_eff, with K_eff measured from inter-tiling member correlation. This only rescales the output ensemble, nothing inside the filters.
+- Report the best RMSE and the best calibration separately, and the trade-off between them. Do not claim a calibrated ensemble unless one of these delivers 0.7–1.2.
+
+### I7 `[ ]` Forecasts from the blended analysis
+- From steady-state analyses (cycles 51–100), forecast each tiling's ensemble mean freely and blend, out to ~10 Lyapunov times (λ₁ of 2D KS at 44²: from Table truth).
+- Compare against: forecasts from the single-tiling analysis; forecasts from the true state encoded once (decoder-limited ceiling); persistence; climatology.
+- Report the lead time at which error reaches 50% and 100% of the climatological std.
+- A DA paper is judged by whether the analysis improves forecasts; this shows whether the 40% analysis gain survives the dynamics or is only a smoother picture at t = 0.
+
+### I8 `[~]` Why the blend works: error mechanics (math + measurement)
+- **44² done 2026-10-09** (`h9_L44_I89_T4.json`, stride 8; error variance by band
+  [0, 0.6) / [0.6, 1.14) / [1.14, 1.6) / ≥ 1.6):
+  - tiling 0: 0.170 / 0.274 / 0.181 / 0.285;
+  - Hann blend: 0.077 / 0.118 / 0.087 / 0.050;
+  - mean inter-tiling error correlation: 0.26 / 0.48 / 0.32 / 0.12.
+  **The gain is at every scale, not only the seam band.** The tilings' analysis errors are
+  weakly correlated even at large scales, so most of the single-tiling analysis error is
+  *grid-tied* (it depends on where the patch lattice sits); the same-tiling control (0.943) shows it is
+  not sampling noise. Seams are its most visible part. Re-encoding the blended mean on one tiling
+  gives 0.85 (vs 0.575): feedback re-imposes one tiling's grid-tied error, which explains the
+  `--feedback` result. (The w^T C w "prediction" for the uniform average is an algebraic identity,
+  not a test; the content is C's correlations.) Write-up frame: translation-averaging of a
+  shift-variant estimator (cycle spinning), seams as one instance.
+- **220² done 2026-10-09** (`h9_L220_I89_T4.json`): tiling 0 0.143 / 0.242 / 0.160 / 0.269, blend
+  0.067 / 0.120 / 0.077 / 0.049, inter-tiling correlation 0.24 / 0.48 / 0.31 / 0.12, re-encoded blend 0.82.
+  The same mechanics as at 44², to two digits: size-independent.
+- With Σ_k w_k = 1, the blended error is e_b = Σ_k w_k e_k, and per band, var(e_b) = w^T C w, where C is the inter-tiling error covariance.
+- Measure C per wavenumber band, and the correlation of tiling errors in the seam band versus the large scales.
+- Prediction: the seam band is near-uncorrelated across tilings, so it is reduced roughly 1/K-fold, while the large scales are near-fully correlated and unchanged. Check that w^T C w reproduces the measured blend RMSE.
+- Also explain why feedback hurt (0.811): measure the error of re-encoding the blend on one tiling. The prediction is that it returns the 0.69 single-tiling floor, so feedback reinjects the seams every cycle.
+- Write as a short proposition plus measurement for App. E.
+
+### I9 `[~]` Seam diagnostic on blended analyses (D10 rerun)
+- **44² done 2026-10-09** (`seams_I9.json`, 10 steady-state fields; edge/interior gradient ratio
+  on tiling 0's patch grid, half-shifted grid in brackets): truth 1.02 (0.99); single-tiling analysis
+  3.70 (0.90); blended analysis 1.02 (1.00) at stride 8 and 0.91 (0.88) at stride 16; blended floor
+  1.03 (1.01). **The seams are gone at both grids, not moved.** 220² (6 fields): truth 1.00 (1.00),
+  single 3.67 (0.92), blend 1.02 (1.01). Fig. 11 redo still to do (fields in `h9_L*_I89_*_fields.npz`).
+- Add `--save-fields` to `exp_h9_tiled_da.py` (truth, single and blended analyses at a few cycles).
+- Compute the edge/interior gradient ratio with `exp_d10_seams.py` at 44² and 220². Expect ≈ 1.0, against 3.8 for the single tiling.
+- Use the same fields to redo Fig. 11 (snapshot) with a blended-analysis column. The seams disappearing is the most convincing picture of the method.
+
+### I10 `[ ]` Error-anatomy figure (H3 updated)
+- One figure, error variance by wavenumber band, for:
+  - the decoder floor, single and blended;
+  - interpolation;
+  - climatological OI;
+  - the single and blended analyses;
+  - the perfect-model ceiling (I11).
+- Add the span-fraction panel from H3, recomputed for the blended prior.
+
+### I11 `[~]` Perfect-model ceiling (H7, now required)
+- **Code done 2026-10-09.**
+  - `ks_latent/da/letkf_phys.py`: local ETKF on the grid, 4 × 4 analysis blocks, R-localization
+    with Gaspari–Cohn, optional multiplicative inflation and RTPS.
+  - `tests/unit/test_letkf_phys.py`: 4 tests. Without localization it matches the Kalman mean and
+    covariance to 1e-10; distant blocks are untouched; RTPS with α = 1 restores the prior spread.
+  - `scripts/exp_i11_pde_letkf.py`: the ensemble is forecast with the PDE itself (batched ETDRK4).
+    It assimilates the same truth and the same observation-noise draws as `exp_h9_tiled_da.py`, so
+    the comparison is paired.
+  - Smoke test (10 cycles): analysis 0.16, spread/RMSE 1.09.
+- **Sweep launched 2026-10-09** (`scripts/run_i11_sweep.sh`, log `artifacts/logs/i11_sweep.log`):
+  strides 8 and 16 × GC half-width c ∈ {4, 8.25, 12} units × RTPS ∈ {0, 0.5, 0.9}, plus no
+  localization with RTPS 0.5; 20 runs, ~3.5 min each. **The ceiling is the best steady RMSE over
+  this declared grid** (stated before the results).
+- 08:03: the stride-8 best so far sits at the edge of the grid. Errors are 0.131 / 0.096 / 0.083
+  for c = 4 / 8.25 / 12, all with RTPS 0, and RTPS only hurts (over-dispersion). So the grid is
+  extended upward, to c ∈ {16, 24} and no localization with RTPS 0, at both strides
+  (`run_i11_sweep2.sh`, runs after the first sweep). The ceiling is quoted over the extended grid,
+  and the extension is stated.
+  **Implication for the latent filter:** its GC c was tuned without the blend (best 1.5–2 sites,
+  H0 O3). With grid-tied errors averaged out, wider c may now help: add c ∈ {2, 3, 4} sites to the
+  I21 sweep.
+- Physical-space local ETKF on the 128² PDE with 64 true-PDE members, same observations, at strides 8 and 16, at 44².
+- This is the only way to say how good 0.57 is, as a percentage of the best achievable with this network and ensemble size. Report "the latent filter reaches X% of the perfect-model error reduction over interpolation".
+- `exp_hybrid_da.py`'s per-patch physical ETKF is the analysis step; the PDE ensemble forecast is new (~half a day).
+
+### I12 `[ ]` Twelve-channel model with the blend (H1 extension)
+- **Blended floor measured 2026-10-09** (Stage A AE): 0.276 (1 tiling) / 0.157 (4) / 0.112 (16),
+  seam band 0.063 → 0.011 → 0.007. Stage B finishing; then the DA runs below.
+- **Pivot test launched 2026-10-09 ~08:05** (`scripts/run_i12_pivot.sh`, log
+  `artifacts/logs/i12_pivot.log`; it starts by itself when Stage B finishes, ~08:30):
+  - blended DA at 44² (K = 1, 4, 16; strides 8 and 16; seed 0; K = 4 seeds 1–2), ~10 min;
+  - then Lyapunov transfer at 44² and 66² (H1 rule (i)), ~1.5 h.
+  **Pre-registered pivot rule:** switch the canonical 2D KS model to `p7c12_ks2d` if:
+  1. its K = 4 blended analysis beats the 6-channel K = 4 by ≥ 15% at both strides (seed 0), and on
+     all three seeds at stride 8;
+  2. its D_KY transfer errors at 44² and 66² are within the truth spread (≤ 2.5%; the 6-channel
+     model gives 1.7% and 2.4%).
+  - If (1) holds and (2) fails: use 12 channels for Part II only, say so explicitly, and keep
+    6 channels for Part I.
+  - If (1) fails: stay with 6 channels.
+  - **DECIDED 2026-10-09 08:25 (user): Part II switches to `p7c12_ks2d`.** The first result,
+    K = 4 at stride 8, gives 0.345 against 0.575 for 6 channels. **Part I keeps the 6-channel
+    model** unless the 12-channel model shows significant benefits there (Lyapunov transfer at 44²
+    and 66², running in the pivot script; report against the 6-channel 1.7% / 2.4%).
+    Model-specific Block I runs (I1, I2, I3, I4, I5, I21; I9/I10 figures) are redone with 12
+    channels; the 6-channel results stay recorded as the method on the Part I model.
+  - **Part I check done 2026-10-09 08:34** (`artifacts/experiments/crop/p7c12_ks2d_x*_seed0.json`): D_KY
+    error at 44² is 2.1% (12-channel) vs 1.7% (6-channel); at 66² 1.1% vs 2.4%. The two models are
+    mixed, both within the truth spread, one seed and one IC each: **no significant benefit, so Part I
+    keeps the 6-channel model**, per the user's rule. The 12-channel numbers can go in an appendix
+    sentence ("a 12-channel sibling gives 2.1% and 1.1%") as a capacity robustness check.
+  - **User decision 2026-10-09:** two models are acceptable if necessary. Both are in the same
+    architecture class, and the 12-channel model only adds capacity, which DA may need.
+  - Rule (1) compares the two models at the 6-channel model's untuned settings. Its verdict is
+    re-checked once I20/I21 have tuned the localization radius and cycle length, applying the best
+    settings to both models (I20/I21 started on the 6-channel model at ~08:10).
+  - Meanwhile: no model-specific 6-channel runs (I1 rest, I3, I5) until the decision.
+    Model-independent work continues: I11, and the code for I21–I24 and I27.
+- Once H1's Stage B is done: compute the blended floor (`exp_overlap_recon.py p7c12_ks2d`), then K = 1 and K = 4 DA at 44², strides 8 and 16.
+- If the 12-channel model passes H1's rules (i)–(ii), it becomes canonical: rerun I1, I3 and I5 with it.
+- Prediction from H0b plus H9: blended floor ≈ 0.15–0.2; analysis ≈ 0.4.
+
+### I13 `[ ]` Joint multi-tiling filter (option 2) — only if needed
+- State = all K tilings' latents; observation operator = the blended decoder.
+- Each observation touches at most K sites (one per tiling), so it stays exactly local. The coloured Jacobian costs K × c JVPs.
+- Pursue only if I1/I5 leave a gap and I8 shows correlated filter errors that a joint update could reduce. The feedback result (0.811) argues against any variant that re-encodes the blend.
+
+### I14 `[ ]` Cost and memory (§7.4 rerun)
+- From I1's records: wall time and peak RSS against area for K = 1 and K = 4, plus parallel wall time (K processes).
+- Update `tab_da_cost` and the "memory grows no faster than the area" sentence with the blend's numbers.
+
+### I15 `[ ]` 1D accuracy against interpolation
+- From the D1 GC N = 64 runs at L = 200, 400, compute the 1D physical analysis RMSE against spline interpolation of the same observations, at fixed spacing.
+- If the 1D filter already beats interpolation (full-reach AE, no seams), say so; it supports the seam diagnosis. If not, report it and diagnose before writing any 1D accuracy sentence.
+
+### I16 `[ ]` Robustness
+- (a) Spin-up from a climatological initial ensemble (no knowledge of the truth): cycles to steady state, K = 1 vs K = 4.
+- (b) Misspecified observation error: the filter assumes 0.5× and 2× the true noise.
+- (c) A 300-cycle run at 220²: no drift or divergence.
+- (d) Three seeds at the I5 headline point.
+
+### I17 `[ ]` Positioning and citations (verify every one against the primary source)
+- Cycle spinning / translation-invariant denoising: Coifman & Donoho (1995). This is the prior art for averaging shifted block transforms; present the blend as this idea applied to a patch latent, not as a new algorithm.
+- Overlapping local analysis domains in operational ensemble filters, e.g. LETKF local volumes (Ott et al. 2004; Hunt et al. 2007) and domain-localized EnKFs with overlap and blending. Check how they treat overlap.
+- Latent-DA baselines ROAD-EnKF (arXiv:2301.11961) and LAE-EnKF (arXiv:2603.06752): compare setups and numbers only where the configurations match; otherwise state that the setups differ.
+
+### I18 `[ ]` Rewrite Part II (absorbs H2, H8)
+- Proposed §7 order:
+  - 7.1 setting and exactness: Prop. 4 extended. Each tiling's filter is exactly local and the blend is a fixed linear map in physical space, so the composite stays local, at K× the cost.
+  - 7.2 accuracy at 44² against interpolation, climatological OI and the perfect-model ceiling, with the controls (I2) and the error anatomy (I10).
+  - 7.3 scaling with domain size (I1, I3).
+  - 7.4 observation regime (I5).
+  - 7.5 forecasts (I7).
+  - 7.6 cost (I14).
+- Abstract, Key Points, §1 bullet, §9 limitations (calibration, I6; the single 2D system), §10.
+- Figures: Fig. 9 rerun with the blend; new error-anatomy figure (I10); Fig. 11 with a blended column (I9); I5 ratio map.
+
+### I19 `[ ]` (optional) Kolmogorov DA at one size with the blend (was D12)
+- Evidence that the method is not specific to KS. Only after I1–I11.
+
+### Block I additions (2026-10-09, after the first I11 results and the user's questions)
+
+**Measured today, for these tasks:**
+- **12-channel AE with overlapping tilings** (`exp_overlap_recon.py p7c12_ks2d`, Stage A AE, 44²):
+  decoder floor 0.276 (1 tiling), 0.157 (4, Hann), 0.112 (16), against 0.665 / 0.340 / 0.311 for
+  the 6-channel model. The 12-channel blended DA waits for Stage B (I12).
+- **Error budget per cycle, prior → analysis** (44², stride 8, steady state):
+  - perfect-model filter (I11, c = 4, no RTPS): 0.143 → 0.131;
+  - latent, 1 tiling: 0.992 → 0.952;
+  - latent, 4 tilings blended (`h9_L44_T4_prior.json`): 0.646 → 0.575.
+  All three analyses are only 4–11% below their priors. **Correction (08:20, after I22's
+  measurement):** I first read this as "the learned model's per-cycle error is the bottleneck".
+  The data do not support that:
+  - The latent model error of one cycle, measured on an independent truth, is small: rms 0.038
+    per latent coordinate (climatological std 0.84), i.e. smaller than the isotropic noise the
+    runs already inject (0.045 accumulated).
+  - The relative error growth over a cycle is similar for both filters: latent blend
+    0.575 → 0.646 (+12%), perfect model 0.083 → 0.092 (+11%, c = 12).
+  So the latent filter does not lose to new model error each cycle. It equilibrates at a higher
+  level because the analysis cannot remove a persistent error component:
+  - the blended decoder floor, 0.35 of the 0.575;
+  - error outside the ensemble span (H0 O2: span fraction 0.20);
+  - a gain that is too small (spread 0.3 of the error).
+  The levers are therefore the representation (I12, 12 channels) and the ensemble's span and
+  spread (I21), more than the propagator.
+- **Spread vs error** (spread/RMSE): perfect model 1.12; latent 0.29 (1 tiling), 0.37 (4).
+  The latent filter believes its prior is 3–4× more accurate than it is, so its gain is too small.
+  With a perfect model no inflation is needed: RTPS 0.5 over-disperses it (1.60) and costs accuracy
+  (0.131 → 0.166).
+- **Gaussianity** (`scripts/exp_i_gaussianity.py` → `gaussianity_L44.json`):
+  - climatological u: skewness 0.03, excess kurtosis −0.21;
+  - latent coordinates per channel: |skew| 0.10, kurtosis −0.38;
+  - one-cycle prior ensembles (16 members): mean |skew| 0.40 (latent) and 0.42 (physical).
+  For n = 16 the sampling std of the skewness is ≈ 0.6, so the priors show **no detectable
+  non-Gaussianity in either space** at this cycle length. This regime cannot show a non-Gaussian
+  advantage either way.
+
+### I20 `[x]` Cycle length: assimilate more often
+- **Done 2026-10-09** (6-channel model, K = 4, 44², window 50 time units; propagator steps between
+  analyses 1 / 2 / 5 / 10):
+  - stride 8: 0.551 / 0.558 / **0.575** / 0.595;
+  - stride 16: 2.347 / 2.005 / **1.856** / 2.016.
+  Weak at dense spacing (−4% for 5× more analyses). Harmful at sparse spacing: every-step analyses
+  fit the few observed points (error there 0.32) without spreading the information, a symptom of
+  the too-small spread (I21). **Keep 5 steps.** Not repeated for 12 channels unless I21 changes the
+  spread.
+- The forecast sets the error, and latent forecast error grows quickly, so shorter cycles should
+  help the latent filter more than the perfect-model one.
+- Sweep n_prop_steps ∈ {1, 2, 5, 10} (Δt between analyses 0.1–1.0), K = 1 and K = 4 latent, and
+  the I11 filter at its best setting.
+- Report analysis RMSE against Δt for each, plus the number of analyses per time unit (cost).
+- Caveat: the observations then come more often too. Report it as "same network, more frequent";
+  it is not a free improvement.
+
+### I21 `[ ]` Under-dispersion is an accuracy problem, not only a calibration one (amends I6)
+- **Localization part done 2026-10-09** (6-channel, K = 4; GC c = 1.5 / 2 / 3 / 4 sites):
+  - stride 8: 0.575 / 0.582 / 0.602 / 0.640;
+  - stride 16: 1.856 / 2.017 / 2.173 / 2.181.
+  Wider is worse at both strides, unlike the perfect-model filter, which improves up to c = 12
+  units ≈ 2.2 sites and beyond. The latent ensemble's long-range correlations are less
+  trustworthy. RTPS code is done (`LETKFLocal2D(rtps=…)`, 2 tests; `--rtps` on
+  `exp_h9_tiled_da.py`); the inflation/RTPS sweep runs with the 12-channel model.
+- **12-channel sweep done 2026-10-09** (K = 4, 44², seed 0; `scripts/run_i21_c12.sh`, drift via
+  `scripts/drift_check.py`).
+  - **Stride 8, 100 cycles, error (spread/RMSE):**
+    - none 0.345 (0.55);
+    - RTPS 0.3 0.338 (0.64), 0.5 0.336 (0.73), **0.7 0.338 (0.86)**;
+    - inflation 1.2 0.337 (0.56), 1.5 0.342 (0.59).
+    **Pre-registered rule met: RTPS 0.5–0.7 gives calibration 0.73–0.86 at no accuracy cost.**
+    Adopt RTPS 0.7 at stride 8. Multiplicative inflation does not calibrate.
+  - **Stride 16, 300 cycles (mean over cycles 151–300; drift = cycles 226–300 vs 151–225):**
+    - none 2.06 (levels off near 2.1 after ~200 cycles);
+    - RTPS 0.3 1.74 (steady), 0.5 1.25 (drifting, +18%), 0.7 1.43 (+26%);
+    - inflation 1.2 1.96, 1.5 1.95;
+    - interpolation 2.89.
+    RTPS slows the sparse divergence but does not stop it. No sparse setting is final.
+- With spread at 0.3 of the error, the gain is too small. The earlier finding that inflation
+  makes it worse (H0 O4: the observed points improve, the total gets worse) was for one tiling,
+  where the inflated covariance spread grid-tied errors. The blend averages those away, so the
+  conclusion may flip.
+- Code: add RTPS / RTPP to `LETKFLocal2D` (one option, as in `letkf_phys.py`).
+- Sweep, K = 4 and 16, strides 8 and 16: multiplicative inflation {1, 1.2, 1.5, 2}, RTPS
+  {0.5, 0.9}, model noise {0.02, 0.05, 0.1}.
+- Pre-registered: if any setting gets the blended spread/RMSE into 0.7–1.2 at no more than 5%
+  accuracy cost, adopt it. If calibration and accuracy improve together, that is the headline
+  form of I6.
+
+### I22 `[ ]` Model-error statistics from training data (replace isotropic 0.02 noise)
+- **Measured 2026-10-09** (`scripts/exp_i22_model_error.py`, `ks_latent/da/model_error.py` + 4 tests;
+  independent truth, seed 3; 25,600 pooled site samples): one-cycle residual rms 0.038 per
+  coordinate, bias rms 0.0017, neighbour correlation 0.13 (block-diagonal Q is a fair
+  approximation), Q eigenvalues 0.0003–0.0027. **Q is smaller than the noise already injected**
+  (0.045), so data-estimated model error will *not* by itself raise the spread. The
+  under-dispersion does not come from unrepresented random model error. Still worth one run
+  (Q × {1, 4, 16}) to see whether Q's *shape* beats isotropic noise of equal size. Priority
+  drops from A to B for the KS paper. For CM1 the estimation code is ready and the question
+  stays open: a CM1 surrogate's error may be much larger.
+- The perfect-model filter is calibrated because its spread includes all the error growth. The
+  latent filter's model error (propagator and decoder) is represented only by isotropic latent
+  noise of std 0.02.
+- Estimate Q from data: one-cycle residuals r = E(u_{t+Δ}) − M^5(E(u_t)) on training
+  trajectories. Because the latent field is local and homogeneous, Q per site is a c × c block
+  plus nearest-neighbour cross-blocks, estimated by pooling over sites.
+- Draw the additive model noise from N(0, Q) (or a scaled Q) in `forecast_ensemble`.
+- Report: spread/RMSE, analysis RMSE, and whether Q's scale transfers to 220² unchanged. It
+  should, since it is a per-site statistic, and it makes a clean sentence for the paper.
+- This is standard in DA (additive model error estimated offline); here locality makes Q
+  site-local and size-independent.
+
+### I23 `[ ]` Ensemble observation perturbations instead of the mean Jacobian
+- `LETKFLocal2D` forms HBHᵀ from the decoder Jacobian at the ensemble mean (coloured JVPs). The
+  standard nonlinear EnKF uses the ensemble itself: Y = h(Z) − mean, and Cov(z_s, Y_used).
+- With the per-patch decoder this stays exactly local: each observation depends only on its own
+  site. It handles the decoder's nonlinearity across the ensemble, and drops the c JVPs per
+  cycle, though it needs N decodes, which the filter already does for the innovations.
+- Code: a `method="letkf_local2d_ens"` variant plus a unit test (for a linear decoder it equals the
+  Jacobian version). Test at 44² with K = 1 and 4.
+
+### I24 `[ ]` "No equations needed": framing, the right baseline, and an honest cost comparison
+- **Framing (for I18).** The latent filter needs trajectory data of the full state, not the
+  equations. I11 measures what that costs: 0.13 (equations known) vs 0.43–0.56 (learned). Say
+  both halves: no equations, but full-state training data, and a 3–4× accuracy price at this
+  network.
+- **The fair equation-free competitor is not the PDE filter** but a learned physical-space
+  emulator inside a physical-space LETKF (Brajard et al. 2020; Bocquet et al. 2020 — verify).
+  Cheapest available form, no training: the latent model used as a physical emulator. Forecast
+  on K tilings, decode and blend each member, run the physical local ETKF (`letkf_phys.py`, the
+  same tuned c as I11), then re-encode on each tiling.
+  - If it beats the latent analysis, the analysis belongs in physical space and the latent space
+    is a forecast device.
+  - If not, the latent analysis is earning its place.
+  - Either answer is publishable. (The earlier hybrid, one tiling, gave 0.975; the re-encoding
+    caveat from I8 applies.)
+- **Cost and memory against the physical LETKF.** Neither filter ever forms a covariance matrix.
+  The LETKF works in ensemble space per analysis block, N × N, with memory N × n_grid, so it is
+  also linear in area. **The latent method has no asymptotic scaling advantage over a
+  physical-space LETKF, and the paper must not claim one.** Measured differences to report:
+  - state per ensemble member: 6 numbers per 16 × 16 patch (43× smaller), × K tilings;
+  - local analyses: 64 sites vs 1024 blocks at 44²;
+  - forecast cost: propagator vs PDE solver per cycle (time both).
+  For 2D KS the spectral PDE is cheap, so the forecast saving is modest. It would matter for an
+  expensive model, but say "would", not "does".
+- **Where the advantage is real**, and how to position it in I18:
+  1. Against other latent DA (ROAD-EnKF, LAE-EnKF, global-latent PFF): physical localization
+     becomes exact and meaningful in latent space, and the same model transfers across sizes.
+  2. Against physical-space DA: no equations needed, at a measured accuracy price.
+
+### I25 `[ ]` Non-Gaussian errors: what the latent formulation can and cannot claim
+- **Honest status.** The filters used (LETKF and variants) are Gaussian. The latent formulation
+  does not by itself make the analysis non-Gaussian, and in today's regime the priors are
+  Gaussian to within sampling error in both spaces (measured above).
+- **Plausible advantages, to test, not to claim:**
+  1. **Local particle methods.** Exact locality plus compression give a per-site problem of
+     dimension c = 6 with about 16 local observations, instead of 256 grid points per patch.
+     Particle-filter degeneracy grows with the effective dimension of the local update, so
+     localized particle filters (Poterjoy 2016 MWR; Farchi & Bocquet 2018 NPG review — verify)
+     and the codebase's particle flow filter (`da/pff.py`, made per-site) become more tractable
+     in the latent field.
+  2. **The decoder as a learned anamorphosis.** A Gaussian latent prior maps to a non-Gaussian
+     physical one; a test is whether latent priors are closer to Gaussian than physical priors
+     in a regime where the latter are not.
+- **Regimes that would show it:**
+  - longer cycles (Δt = 2–5 time units, priors leave the linear regime);
+  - a nonlinear observation operator (e.g., observe u² or |∇u|, or thresholded or bounded data);
+  - heavy-tailed observation errors (Student-t, ν = 3).
+- **Test plan:** in one such regime, first rerun the Gaussianity diagnostic. Then compare the
+  physical LETKF (perfect model), the latent LETKF with the blend, and a per-site latent PFF.
+- **Scope:** probably Paper 2. For Paper 1, one paragraph in §9 stating the argument and that
+  it is untested. Optionally one demonstration with a nonlinear observation operator, if a
+  per-site PFF can be written in a day.
+
+### I26 `[ ]` Analysis granularity — the link between I11's best localization and K
+- **Correction 07:50:** the first sweep point suggested the perfect-model filter prefers a GC
+  half-width finer than one site, but c = 8.25 units (= the latent filter's 1.5 sites) gives 0.096
+  against 0.131 at c = 4. Revisit this task after the sweep; the granularity argument below may not
+  hold. The latent filter cannot localize below one site: c < 1.5 sites was
+  worse (H0 O3).
+- The K-tiling blend analyses each point in K differently placed sites (offsets p/2 for K = 4,
+  p/4 for K = 16), a finer effective analysis granularity than one site. That may be part of why
+  K = 16 helps.
+- Test: K = 16 at the I11 sweep's best c expressed in sites, and K = 16 with c ∈ {1, 1.5, 2}
+  sites. If the best latent c decreases with K, write this up as the mechanism (with I8).
+
+### Steering note: Paper 3 is CM1 squall-line DA (user, 2026-10-09)
+The end goal is to apply this method to CM1 output for a squall line, where the DA system has no
+closed-form evolution equations: the learned surrogate is the model. What that changes for Part II:
+- **I11 (perfect-model filter) is a twin-only diagnostic.** It measures the price of learning the
+  model. It is not a method we can use in Paper 3.
+- **Up-weighted, because they carry over:**
+  - I22 (model-error statistics from data): a CM1 surrogate will be imperfect;
+  - I23 (ensemble observation perturbations): radar reflectivity and radial velocity are nonlinear
+    observation operators;
+  - I24 (equation-free framing and forecast cost): against CM1 itself the cost argument becomes real;
+  - I25 (non-Gaussian): hydrometeors are bounded and skewed;
+  - plus I27 and I28 below.
+- **Down-weighted:** results that rely on periodicity, homogeneity or extensivity specifically
+  (D_KY-based arguments for the DA part; pooling statistics over all sites).
+
+### I27 `[ ]` Shifted tilings on a non-periodic domain
+- The blend uses periodic rolls, but a squall-line domain is not periodic. On a bounded domain,
+  shifted tilings leave partial patches at the edges.
+- Options:
+  - (a) Each tiling covers only whole patches inside the domain. Renormalize the Hann weights by
+    their local sum, so points near the boundary are served by fewer tilings.
+  - (b) Pad by reflection or with a halo from a larger window, which is what crop training already
+    does.
+- Test on 2D KS with a non-periodic window cut from the 220² truth, e.g. 88² inside 220²:
+  - the decoder floor and the blended DA error as a function of distance from the boundary;
+  - the same with the boundary strip treated as observed.
+- The crop-trained model was trained on non-periodic windows, so this should need no retraining.
+
+### I28 `[ ]` Imperfect-model twin (the CM1 situation in miniature)
+- The truth comes from a slightly different system than the one the surrogate was trained on:
+  2D KS with a modified coefficient (e.g., a damping term or a different ratio of the ∇² and ∇⁴
+  terms), or Kolmogorov flow at a different drag.
+- Compare: the latent filter with model noise from I22, the same with isotropic noise, and
+  interpolation. The perfect-model filter, now run with the wrong equations, is an informative
+  extra: the learned model is not alone in being wrong.
+- This is the closest Part II can get to Paper 3's setting, where the surrogate is fit to CM1 and
+  the truth is the atmosphere (or a different CM1 configuration).
+
+### I29 `[ ]` What lies outside the ensemble span? (diagnostic before any training change)
+- The "80% outside the span" figure (H0 O2) is a pessimistic measure: a *global* least-squares fit
+  of the whole 128² prior error with 63 decoded perturbations, for one tiling, before the blend. A
+  local filter only needs the error spanned *locally*. Measure before retraining anything:
+  1. **Local span fraction:** per site, fit the prior error in the site's analysis window (GC
+     support) with the ensemble perturbations restricted to that window, then average.
+  2. **The same for the perfect-model ensemble (I11)**, which works well. If its global span
+     fraction is also low but its local one is high, the global number was never the diagnosis.
+  3. **Decomposition of the blended prior error** into representation error
+     (D(E(u)) − u, unreachable by any latent ensemble) and latent error (D(z_f) − D(E(u))), each
+     with its local span fraction.
+- Decision:
+  - If the out-of-span part is mostly representation error, the fix is the decoder: I12, then I30(b).
+  - If it is latent error, the fix is how the ensemble is generated: I30(c).
+- Effort: ~2 h code, minutes to run. `exp_hybrid_da.py --diag` has the global version.
+
+### I30 `[ ]` Training-side options (only after I29 says which part dominates)
+- (a) **Capacity:** the 12-channel model (I12, running). Lowers the representation part directly
+  (floor 0.276 → 0.112 with 16 tilings).
+- (b) **Blend-aware autoencoder fine-tuning.** Add a loss on the Hann-blended reconstruction over
+  K random sub-patch offsets, keeping the single-tiling loss. The decoders then learn errors that
+  cancel across tilings, not just errors that happen to. Exact locality is untouched: each tiling
+  is still per-patch. ~Half a day of code, ~2 h fine-tuning from the current checkpoint; then
+  Stage 2 (always run Stage 2).
+- (c) **Stochastic, calibrated propagator.** Per-site noise inputs, trained with an ensemble
+  score (energy score or CRPS) over k-step rollouts against encoded truth. Ensemble spread and
+  its directions then come from the learned forecast-error distribution instead of isotropic
+  latent noise; this targets the span and the calibration at once. 1–2 days. Highly relevant to
+  CM1, where a deterministic surrogate's spread will be wrong.
+- **(d) tested 2026-10-09** (`scripts/exp_i30_propagator_degradation.py`, 12-channel, stride 16,
+  RTPS 0.5, 300 cycles). One-cycle propagator error against E(PDE(D(z))) from the same state:
+  - encoded truth 0.059;
+  - **analysis means 0.085–0.088 (1.5×)**;
+  - truth + random latent noise of the analysis error's size (0.45): **0.56–0.67 (10×)**.
+  Off-manifold distance |E(D(z)) − z| of analysis means is 0.09, against 0.08 for the truth, and
+  does not grow. So analysis *means* stay where the propagator works, and their degradation does
+  not drive the sparse divergence. But random perturbations, i.e. what ensemble *members* carry
+  (model noise, RTPS), wreck it. **Fine-tune launched 2026-10-09 08:47** (user):
+  - `p7c12n15_ks2d` = same AE plus `p7c12_ks2d`'s propagator fine-tuned 2000 steps;
+  - constant input noise 0.15, k = 32 throughout, lr 1e-4;
+  - new `--init-prop / --noise-start / --prop-lr / --k-full` options on `train_kolmogorov_crop.py`;
+  - log `artifacts/logs/crop_train_p7c12n15_ks2d.log`.
+  Then rerun: the degradation test, K = 4 at stride 8 and 16 (RTPS 0.5, 300 cycles), and a free
+  rollout screen, since noise training can damp the dynamics (Lemma 1).
+- (d) **Robustness to off-manifold analysis states.** Analysis latents need not lie in the
+  encoder's image. Train the propagator and decoder on perturbed latents ("analysis-like"
+  inputs; Stage 2 already anneals input noise 0.10 → 0.02, so check first whether raising its
+  floor helps). Cheap to test via a Stage 2 rerun.
+- (e) **DA-aware end-to-end training:** train the latent model to maximize the filter's
+  observation likelihood (ROAD-EnKF's approach, arXiv:2301.11961). The strongest form, but heavy.
+  Paper 2/3, not Paper 1.
+- Not proposed: anything that adds decoder reach (it breaks the exact block-diagonal Jacobian,
+  which is Part II's structural result), and the banded latent regularizer (known to collapse).
+
+### Block I priorities and estimates (2026-10-09, with the Paper 3 / CM1 steering)
+Part II stays in Paper 1 for now; it may later become its own paper. "Machine" is unattended run
+time, with large domains one at a time; "work" is coding, analysis and writing.
+
+| Pri. | Task | Machine | Work | Why |
+|---|---|---|---|---|
+| A | I1 scaling 88², 330², 440², seeds (completes I0) | ~2.5 h | small | The scaling claim must hold for the method we report. |
+| A | I12 12-channel model: H1 checks + blended DA | ~2–3 h | ~1 h | Floor 0.11 with 16 tilings. If adopted, I1/I3/I5 rerun (+~4 h machine). |
+| A | I21 inflation / RTPS with the blend | ~1 h | ~0.5 h | Spread is 0.3 of the error; likely an accuracy gain, not just calibration. |
+| B | I22 model error Q from training residuals | ~0.5 h | done | Measured: Q is smaller than the existing noise, so it is not the under-dispersion cause. One shape-vs-isotropic run left; code ready for CM1. |
+| A | I24 equation-free baseline (latent model as a physical emulator in the physical LETKF) + cost timing | ~1 h | ~3 h | Answers "why latent?" — the reviewer question. |
+| A | I5 observation spacing × noise grid | ~2.5 h | ~1 h | Likely headline (sparse observations: a third of interpolation's error). |
+| A | I11 finish sweep (running) | ~1 h | small | Ceiling for the accuracy statement. |
+| A | I9 Fig. 11 redo, I14 cost table, I17 citations | — | ~0.5 day | Paper. |
+| A | I18 rewrite §7, abstract, key points, §9, §10 | — | ~2 days | Paper. |
+| B | I23 ensemble observation perturbations | ~1 h | ~3 h | Nonlinear observations (radar) in Paper 3. |
+| B | I28 imperfect-model twin | ~2 h | ~2 h | CM1 in miniature; strong if I22 works. |
+| B | I27 non-periodic blend | ~1 h | ~3 h | Needed for CM1; could move to Paper 3. |
+| B | I20 cycle length | ~1 h | small | Cheap. The forecast sets the error. |
+| B | I3 ensemble-size sweep | ~1 h | small | Completes the "efficient ensemble" story. |
+| B | I7 forecasts from analyses | ~1 h | ~2 h | Reviewers will ask. |
+| B | I10 error-anatomy figure | — | ~0.5 day | Explains the mechanism. |
+| B | I15 1D vs interpolation | ~0.5 h | ~1 h | Consistency of claims. |
+| C | I13 joint filter, I16 robustness, I19 Kolmogorov DA, I26 granularity, I25 experiment (I25 paragraph is A, ~1 h) | — | — | Only if time; I25 experiment → Paper 2/3. |
+
+Totals:
+- A tier: ~12 h machine (+~4 h if the 12-channel model is adopted) and ~3.5 days of work, including the rewrite.
+- B tier: ~8 h machine and ~2 days of work.
+- Suggested sequence:
+  1. Overnight: I1 and I5.
+  2. Day 1: I12, I21, I22 code.
+  3. Day 2: I24, I22 runs, I23.
+  4. Days 3–5: figures and the rewrite, with B-tier runs in the background.
+
+**Queued 2026-10-09 06:45** (`scripts/run_h9_queue2.sh`, waits for the 220² pair; log
+`artifacts/logs/h9_queue.log`): I8+I9 at 44² (strides 8, 16; `--diag --save-fields`), I2 at 44²
+(1×64, 2×32, 4×16, seeds 0–2), I4 at 44² (K = 2, 16, uniform-weight 4; strides 8, 16), then 220²:
+I2 (4×16, 2×32) and I8+I9 (K = 4). Seam ratios via `scripts/exp_i9_seams.py` → `seams_I9.json`.
+
+**Order:**
+1. I1(a) at 220², running now; apply I0.
+2. I2, I4, I8 and I9 at 44². These are fast, about 1 h in total.
+3. I5 (~2 h) and I6 (~1 h).
+4. I11: half a day of code.
+5. I12, when H1 finishes.
+6. I1(b, c), I3 and the I5 points at 220², one large run at a time, overnight.
+7. I7, I10, I14 and I15.
+8. I18.
+
+I13, I16 and I19 can wait.
+
+---
+
+## §F Figure contract (applies to every figure task)
+
+- Produced by one script in `scripts/paper_figures/`, reading only `artifacts/` and writing
+  `docs/paper1/figures/<name>.pdf` plus `<name>.meta.json` (inputs, git SHA, timestamp).
+- Sizes: single column 3.37 in, double column 6.75 in; heights chosen so no figure exceeds
+  60% of a page.
+- Palette from `_style.py`: truth in neutral ink; 1D KS, 2D KS, Kolmogorov each a fixed hue
+  across the whole paper; drag values distinguished by marker and lightness, never hue alone.
+- Error bars: seed spread when several runs exist; a shaded ±15% band for single-run 2D
+  truths; stated in every caption.
+- Every panel: letter, axis labels with units, a legend or direct labels; log axes only for
+  ratios or when the data span > 2 decades, with the floor stated.
+- Space–time and field plots: `shading='flat'` with explicit edges, one shared colormap per
+  figure, symmetric limits for signed fields, colorbar once.
+- Captions say what is plotted and what the reader should see, in that order.
+- Each figure is checked in grayscale and at 50% zoom before it is accepted.
+
+---
+
+## Suggested order of execution
+
+Day 1: start A3, A4 (background CPU) and D0, D1, D2 (background); do A1, A2, A7, A8.
+Days 2–4: B1–B9, C3, C5, C6, C8; D3, D4 (code), then queue D4–D9 runs.
+Days 5–7: B10, B12, B13, B14, C1, C2, C4, C7; D5–D10 runs finish.
+Week 2: E1–E6, F1–F4; B11; A5/A6 figures if not done.
+Week 3: E7, E8, F5, G1–G6.
+Week 4: G7 external read, G8.
+
+Minimal path to a complete draft: A1, A3, A8, A10, B1–B10, B12–B14, C3, C5, C6, D0–D4, D6,
+E1–E8, F1, F2, G1–G6. Everything else strengthens but does not block.
