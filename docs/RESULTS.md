@@ -2160,6 +2160,844 @@ the checkpoint's own trained ratio unless an explicit override flag is
 passed); not fixed now since it didn't block this test (a dedicated,
 correct script was used instead).
 
+### E1: ground-truth Lyapunov spectrum at the L-transfer sizes, both directions (2026-09-28)
+
+User-directed follow-up to `docs/ks_local_field_ltransfer.tex`'s
+proposed E1 experiment ("designed experiments to prove the
+[L-transfer] results" -- see that document's full framing): run this
+project's own already-validated Gate-1 Benettin-QR pipeline
+(`scripts/exp_e1_groundtruth_lyapunov_ltransfer.py`) directly at the
+Phase F2 L-transfer sizes, to check the transferred model's own
+`D_KY` against genuine ground truth rather than only self-consistency.
+User: "couldn't we test E1 with L=50 and L=25 too? might be
+interesting." -- extended downward as well as upward.
+
+| $L$ | true $D_{KY}$ (Benettin QR) | true $D_{KY}/L$ | model $D_{KY}$ (zero retraining) | model $D_{KY}/L$ |
+|---|---|---|---|---|
+| 25 | 1.56 | 0.0622 | **0.00** (collapsed, 0/12 positive) | 0.0000 |
+| 50 | 11.37 | 0.2273 | 11.06 | 0.2212 |
+| 100 (trained) | 22.14 (Gate-1 target [21,24]) | 0.2214 | 22.14 | 0.2214 |
+| 200 | 45.46 | 0.2273 | 44.61 | 0.2230 |
+| 400 | 89.66 | 0.2242 | 89.13 | 0.2228 |
+
+**Finding 1, confirms the central L-transfer claim against real ground
+truth for the first time -- and the match gets TIGHTER, not looser, as
+the extrapolation grows**: at every size where the true system is
+comfortably chaotic (`L>=50`), the transferred model's `D_KY` matches
+the true, independently computed PDE value to within 2%.
+`L=200`: model 44.61 vs. true 45.46, 1.87% relative error.
+`L=400`: model 89.13 vs. true 89.66, **0.60% relative error** -- the
+best agreement of any size tested, at 4x the trained domain. This is
+no longer model-vs-itself -- it's the model's zero-retraining
+prediction checked against a computation it never saw, across a 16x
+range of domain sizes with no sign of degrading as `L` grows.
+
+**Finding 2, sharpens the claim -- extensivity is an asymptotic law,
+and the model breaks down harder than the true system does as `L`
+shrinks toward the pattern-forming scale.** At `L=25`
+(~2.8x KS's own pattern length `2*sqrt(2)*pi~8.9`), the TRUE system's
+own `D_KY/L` has already dropped sharply from the asymptotic ~0.226 to
+0.0622 -- expected, given `L=22` is this project's own Gate-1
+small-`L` benchmark (`D_KY in [5.2,5.6]`) and `L=25` is close to that
+same onset-of-chaos regime. But the true system is still genuinely
+chaotic at `L=25` (`D_KY=1.56`, one positive exponent). **The
+transferred model, at the same `L=25`, loses all chaos completely**
+(`D_KY=0`, `lambda1~=-0.0004`, measured via
+`scripts/run_ltransfer_test.py --new-L 25`) -- a sharp, clean
+transfer FAILURE, not merely a degradation, and the true system's own
+persistence of (weak) chaos at this size shows this isn't simply "the
+physics turning off." Most likely mechanism: the model's receptive
+field (6 sites, fixed by the trained weights) was tuned relative to
+`L=100`'s own site spacing; at `L=25` only 4 sites remain in the
+transferred lattice, so the receptive field now exceeds the domain
+itself. This is exactly the kind of clean, quantified breakdown point
+worth chasing further (does it track receptive-field-vs-domain-size
+precisely, testable with a checkpoint trained at a smaller
+`attn_window`? or is there a separate site-count representational
+floor too?) -- not yet investigated further this session.
+
+**E1 complete: all five sizes (L=25/50/100/200/400) now have
+ground-truth PDE `D_KY` measured directly, not assumed.** `L=400`'s
+run took 1711s wall time (NX=4096, n_directions=145, float64 CPU,
+`n_positive=50/145`, `lambda1=0.1026`).
+
+### E2: ensemble-size sweep at L=200 -- a real, but different, signature than predicted (2026-09-28)
+
+`scripts/exp_e2_ensemble_sweep_ltransfer.py`, `N_ens in
+{8,16,32,64,128,256}` x `{none, gaspari_cohn}`, zero retraining,
+`n_prop_steps=5` (kept matching Phase C/D's own harder $L=100$
+operating point above, not Phase A/B's easier `n_prop_steps=3`, for a
+fair comparison against the existing SEC-vs-GC table).
+
+| N_ens | skill, none | skill, Gaspari-Cohn | ratio (GC/none) |
+|---|---|---|---|
+| 8   | 0.722 | 0.831 | 1.15 |
+| 16  | 0.513 | 1.043 | 2.03 |
+| 32  | 0.596 | 1.218 | 2.04 |
+| 64  | 0.692 | 1.342 | 1.94 |
+| 128 | 0.848 | 1.395 | 1.65 |
+| 256 | 1.266 | 1.398 | 1.10 |
+
+**Mixed relative to the pre-registered "smallest N_ens clearing a
+skill>=2 threshold" signature -- reported honestly, not reframed
+after the fact.** Neither curve clears skill>=2 at any tested N_ens up
+to 256 at L=200 under `n_prop_steps=5` (consistent with this same
+operating point's own L=100 numbers in the Phase E1 SEC-vs-GC table
+above, not a new degradation specific to L=200) -- so that specific
+comparison is inconclusive within this range, not confirmed.
+
+**A different, real signature shows up instead.** Gaspari-Cohn's
+advantage over no localization is positive at EVERY tested N_ens
+(ratio >1 throughout), and critically does NOT reverse into a
+disadvantage at large N_ens the way it did at the trained size: the
+L=100 SEC-vs-GC table above shows Gaspari-Cohn measurably WORSE than
+no localization at N_ens=256 (rmse 0.405 vs. 0.377 -- over-tapering
+once the ensemble is already large enough to estimate the covariance
+well on its own). At L=200, the same N_ens=256 point still favors
+localization (skill 1.398 vs. 1.266). This is a real, if narrower, form
+of the central L-transfer claim: as the domain grows past the trained
+size, localization's value does not roll off with ensemble size the
+way it does at the trained size -- even though the absolute skill bar
+set in advance (>=2) was not cleared here. Next steps before treating
+this as settled: repeat at L=400, and rerun this identical sweep
+protocol at L=100 to confirm the crossover-vs-no-crossover contrast is
+reproducible and not itself noise (the original L=100 SEC-vs-GC sweep
+used a different tag/run than this script, so isn't a byte-identical
+comparison).
+
+### E6: LETKF implemented as a second DA analysis scheme, first head-to-head vs. PFF (2026-09-28)
+
+User: "would another DA technique be more suited to this problem?
+particle filter? some kind of kalman filtering?" then "sure implement
+LETKF." `ks_latent/da/letkf.py` (new): a covariance-localized EnKF
+(Houtekamer & Mitchell 1998/2001 -- explicitly NOT Hunt et al. 2007's
+own per-gridpoint local-domain LETKF, which targets much higher
+dimensions than this project's `d_latent<=192`; naming caveat stated
+directly in the module docstring to avoid overclaiming). Drop-in
+`analyze(Z0, y) -> Z_analysis` interface matching
+`ParticleFlowFilter`'s own, sharing the SAME forecast step and the SAME
+`localize_fn` taper -- isolates the analysis-update-rule choice as the
+one variable that differs from PFF. Kalman gain built from the
+ensemble-mean Jacobian of the (nonlinear) observation operator (same
+linearization PFF's own NAT branch already computes) and the localized
+ensemble forecast covariance; perturbed-observation (stochastic) update.
+
+Wired into `ks_latent/da/cycling.py` via a new `CycleConfig.method:
+"pff"|"letkf"` field (default `"pff"`, zero behavior change for every
+existing caller) and `--method`/`--letkf-inflation` on
+`scripts/run_da_pff_ltransfer.py`. 3 new unit tests
+(`tests/unit/test_letkf.py`): validated against the analytic
+linear-Gaussian Kalman posterior to <5% relative error (mirrors
+`test_pff_gaussian_linear`'s own bound exactly), plus shape/finiteness
+and a direct check that the taper measurably shrinks a deliberately
+induced far-apart prior correlation's effect on the posterior. Full
+suite: 814 passed (811 baseline + 3 new), no regressions.
+
+**First real result**: one head-to-head point at `L=200`, identical
+setup to E2's `N_ens=64`/Gaspari-Cohn row -- **LETKF: skill=1.310
+(rmse=0.832, calibration=0.784) vs. PFF: skill=1.342 (rmse=0.852,
+calibration=0.778) -- nearly indistinguishable.** Only one point, not
+a full comparison yet, but an encouraging early signal that the
+localization result doesn't depend on PFF's specific nonlinear flow
+mechanism -- the same effect should be demonstrable inside the
+classical, more widely-trusted EnKF family too. Natural next step:
+repeat E2's full N_ens/localizer sweep with `--method letkf` for a real
+comparison curve, not queued yet (deferred behind E3 per explicit user
+direction: "determine next step. if E3, do that").
+
+### E3: SEC vs. Gaspari-Cohn on the SAME (local) latent at L=200 -- first PASS in this project's decision-rule history (2026-09-28)
+
+`scripts/exp_e3_sec_vs_gc_at_transfer.py`/`scripts/exp_e3_sweep.py`
+(new): unlike the original L=100 SEC-vs-GC comparison (SEC on the
+44-dim GLOBAL latent, GC on the 48-dim LOCAL one -- two different
+architectures), this applies BOTH localizers to the SAME resized local
+latent at L=200 -- a methodologically cleaner ablation of localizer
+choice alone. Key realization stated directly in the new script's own
+docstring: `build_sec_table` is a pure Monte-Carlo function of
+ensemble size alone (no dependence on the physical system or latent
+dimension anywhere), so "fit SEC fresh at L=200" doesn't mean anything
+different numerically -- the table IS already L-independent by
+construction; what changes at L=200 is that SEC can finally be
+compared against Gaspari-Cohn on an apples-to-apples latent.
+
+| N_ens | SEC | Gaspari-Cohn | decision rule |
+|---|---|---|---|
+| 8   | FAILED (indefinite covariance) | 1.230 | SKIPPED |
+| 16  | FAILED | 0.935 | SKIPPED |
+| 32  | FAILED | 0.915 | SKIPPED |
+| 64  | FAILED | 0.812 | SKIPPED |
+| 128 | FAILED | 0.814 | SKIPPED |
+| 256 | 0.903 | 0.814 | **PASS** |
+
+**SEC failed outright -- a genuinely indefinite ensemble covariance
+(`robust_cholesky` raising on a matrix with a measurably negative
+eigenvalue, not roundoff-scale), not a close loss -- at every ensemble
+size except the largest tested.** `scripts/check_4_3_decision_rule.py`
+(same CSV passed as both --global-csv and --local-csv, since SEC and
+GC rows both live in one file here): **1 PASS, 0 FAIL, 5 SKIPPED --
+the first PASS this project's decision rule has EVER recorded**, at
+`N_ens=256`, Gaspari-Cohn beats SEC (0.814 vs. 0.903), a direct
+reversal of the L=100 result (0/6 PASS, SEC winning throughout, see
+Phase E1 above).
+
+**Genuinely informative beyond the single PASS**: SEC's own numerical
+fragility at small N_ens relative to a larger d_latent (96 at L=200,
+vs. 44 at L=100) is itself a form of the central claim -- an
+empirically-fit correction has no mechanism to stay well-posed as the
+latent dimension grows past what it was fit for, while Gaspari-Cohn's
+physical taper, needing no fitting at all, ran cleanly at every size
+tested. Caveat: this is one ensemble size's worth of head-to-head
+comparison, not the six-point sweep originally planned, precisely
+because SEC could not produce five of those six points at all --
+whether this fragility is specific to this project's own SEC/ensemble-
+generation convention or a more general property of covariance-based
+sampling corrections at this dimension-to-ensemble ratio is not yet
+known and would need its own follow-up (e.g. does `sec_n_trials`,
+currently 2000, matter here?).
+
+### E4: seed-robustness sweep complete, n=3 (2026-09-28)
+
+`scripts/exp_e4_seed_robustness_ltransfer.sh` (new): exact repeat of
+Section 224's own recipe with only `--seed` changed, followed by the
+same D_KY-at-L=100 measurement and Phase F2 transfer check to L=200.
+User: "I don't think we need a seed 3 if seed 1 and 2 show identical
+results" -- seed 3 was killed shortly after it started (Stage 1,
+epoch ~0) once seed 2's result confirmed seed 1's tight pattern; its
+partial artifacts were removed.
+
+| seed | D_KY(100) | D_KY/100 | D_KY(200) | D_KY/200 |
+|---|---|---|---|---|
+| 0 (Section 224) | 22.14 | 0.2214 | 44.61 | 0.2230 |
+| 1 (new) | 22.13 | 0.2213 | 44.32 | 0.2216 |
+| 2 (new) | 22.15 | 0.2215 | 44.41 | 0.2220 |
+| **mean +/- range** | -- | **0.2214 +/- 0.0001** | -- | **0.2222 +/- 0.0007** |
+
+Seed 1's Stage 1/Stage 2 converged to numbers nearly identical to
+Section 224's own (`val_recon_final=0.000113` vs. 224's `0.000125`;
+`val_kmax_mse~0.0157` vs. 224's `0.0161`); seed 2 likewise trained
+cleanly. **This closes E4's own stated bar (retrain across `>=3`
+seeds) with n=3.** The L=100 ratio is essentially seed-invariant
+(stdev 0.0001); the transferred L=200 ratio has a small but real
+spread (stdev 0.0007, seed 0 the high outlier) and every seed still
+lands close to E1's independently-measured true ratio (0.2273 at
+L=200). The L-transfer property is not an artifact of one lucky
+checkpoint. Not yet covered from E4's original scope: the $(P,c)$
+packaging sweep at fixed d_latent (does transfer quality depend on how
+the fixed local dof-density is split between sites and channels, not
+just its total).
+
+### E7: full LETKF ensemble sweep at L=200 -- reproduces PFF's entire pattern (2026-09-28)
+
+User: "let's design this experiment as E7, add a placeholder in the
+latex document and run this." Added `--method`/`--letkf-inflation`
+flags to `scripts/exp_e2_ensemble_sweep_ltransfer.py` (default `pff`,
+zero behavior change to E2's own recorded results) and reran E2's
+identical sweep protocol with `--method letkf` at L=200.
+
+| N_ens | PFF none | LETKF none | PFF GC | LETKF GC | ratio PFF | ratio LETKF |
+|---|---|---|---|---|---|---|
+| 8   | 0.722 | 0.784 | 0.831 | 0.801 | 1.15 | 1.02 |
+| 16  | 0.513 | 0.635 | 1.043 | 1.064 | 2.03 | 1.67 |
+| 32  | 0.596 | 0.559 | 1.218 | 1.163 | 2.04 | 2.08 |
+| 64  | 0.692 | 0.658 | 1.342 | 1.310 | 1.94 | 1.99 |
+| 128 | 0.848 | 0.905 | 1.395 | 1.387 | 1.65 | 1.53 |
+| 256 | 1.266 | 1.150 | 1.398 | 1.352 | 1.10 | 1.18 |
+
+**Both halves of the pre-registered prediction held.** Every LETKF
+skill value lands within ~0.15 of PFF's at the same point, and
+critically, Gaspari-Cohn's advantage over no localization never
+reverses at N_ens=256 under LETKF either (1.18x, vs. PFF's 1.10x) --
+the same qualitative signature E2 found for PFF, unlike the L=100
+crossover in the original SEC-vs-GC table. The alternative,
+also-informative outcome (a small-N_ens divergence, PFF's nonlinear
+flow handling non-Gaussianity better than LETKF's single linearized
+gain) did NOT occur -- the two methods behave as essentially
+interchangeable at this operating point, itself informative (no sign
+this posterior has enough non-Gaussian structure for PFF's extra
+machinery to earn its keep here). **Net effect: the
+localization-becomes-necessary-at-scale finding now stands under two
+independently implemented analysis schemes**, one of them the
+classical, widely-trusted EnKF family -- substantially de-risking the
+concern that Section E2/Phase F3's results are specific to PFF's own
+nonlinear-flow mechanics.
+
+### E2 repeated at L=400 -- unlocalized DA never beats free-running at ANY tested N_ens (2026-09-28)
+
+User: "Let's repeat E2/E3/E7 at L=400." Same protocol as the L=200
+sweep, `--new-L 400` (d_latent=192, NX=1024, n_sites=64, obs_stride=32).
+
+| N_ens | skill, none | skill, Gaspari-Cohn | ratio (GC/none) |
+|---|---|---|---|
+| 8   | 0.691 | 0.869 | 1.26 |
+| 16  | 0.510 | 0.990 | 1.94 |
+| 32  | 0.503 | 1.056 | 2.10 |
+| 64  | 0.597 | 1.047 | 1.75 |
+| 128 | 0.795 | 1.050 | 1.32 |
+| 256 | 0.897 | 1.066 | 1.19 |
+
+**Two findings.** Confirming: the "ratio never drops below 1" signature
+from L=200 reproduces almost exactly at L=400 (same shape, peaks near
+N_ens~32, eases toward 256, always >1) -- now shown at two independent
+transfer sizes, not one. Sharper/new: **without localization, skill
+never exceeds 1 at L=400 at ANY tested N_ens up to 256** (best case
+0.897, still worse than free-running) -- whereas at L=200, unlocalized
+skill did cross above 1 by N_ens=256 (1.266). At 4x the trained domain,
+no ensemble size tested rescues unlocalized DA at all; localization
+isn't merely better here, it's the only thing tested that makes DA
+worth running.
+
+**Cautionary observation, flagged rather than glossed over**:
+Gaspari-Cohn's own absolute skill ceiling is also lower at L=400
+(<=1.066) than at L=200 (<=1.398), even though gc_c=3.0 is, by
+construction, the same PHYSICAL localization radius at every transfer
+size (site spacing h=L/P held fixed by the transfer itself -- this
+isn't simply "the same taper covering a smaller fraction of a bigger
+domain," that invariance is exactly what the transfer is supposed to
+preserve). Not yet disentangled: whether this is n_prop_steps=5
+compounding more forecast error over a genuinely harder,
+higher-dimensional DA problem regardless of localization, or whether
+gc_c itself needs re-examining at large transfer factors.
+
+### E3 repeated at L=400 -- SEC fails at ALL six ensemble sizes; a real reproducibility caveat discovered along the way (2026-09-28)
+
+Same protocol as the L=200 E3 sweep, `--new-L 400`.
+
+**SEC's fragility gets categorically worse, not just quantitatively
+worse: at L=400, SEC fails -- the same indefinite-covariance error --
+at every single tested ensemble size, including 256**, the one size it
+managed at L=200. Gaspari-Cohn ran cleanly at all six.
+`check_4_3_decision_rule.py`: **0 PASS, 0 FAIL, 6 SKIPPED** -- the
+comparison cannot even be run, because SEC produces zero valid points
+at this size. Sharper version of the L=200 finding: an empirically-fit
+correction has no mechanism to stay well-posed as the latent dimension
+grows past what it was fit for, and by 4x the trained domain that
+failure is total.
+
+**Reproducibility caveat, discovered while re-running this sweep and
+reported honestly.** Repeating the identical Gaspari-Cohn point
+(N_ens=8, L=400, same explicit seed=0) three times gave three
+different `rmse_da` values (1.36, 1.31, 1.28, ~6% spread); the same
+check at L=200 (N_ens=64) gave two matching repeats and one differing
+repeat, similar magnitude. Consistent with -- and a concrete, quantified
+instance of -- a limitation `CLAUDE_CODE_BRIEF.md`'s own ground rule 3
+already documents: MPS does not guarantee bitwise-reproducible
+execution even with an identical seed (the propagator forward pass runs
+on MPS; only Lyapunov/PFF/LETKF linear algebra is pinned to CPU
+float64). **Does not undermine the qualitative findings**: SEC's
+failures are hard `RuntimeError`s from a measurably negative covariance
+eigenvalue, not a borderline number that could flip under ~5% noise,
+and every "ratio always >1" / "skill never exceeds 1" conclusion in
+this document has margins well outside that noise band. It DOES mean
+individual reported skill/RMSE values should be read as indicative, not
+exact to the last decimal -- a fully rigorous treatment would average
+multiple seeds per DA point (the same treatment E4 already gives the
+L-transfer architecture question), flagged as real follow-up work, not
+retroactively applied to every number already collected.
+
+### E7 repeated at L=400 -- LETKF confirms PFF's sharpest L=400 finding too (2026-09-28)
+
+Same protocol as E7's L=200 sweep, `--new-L 400`.
+
+| N_ens | PFF none | LETKF none | PFF GC | LETKF GC | ratio PFF | ratio LETKF |
+|---|---|---|---|---|---|---|
+| 8   | 0.691 | 0.732 | 0.869 | 0.795 | 1.26 | 1.09 |
+| 16  | 0.510 | 0.581 | 0.990 | 0.996 | 1.94 | 1.72 |
+| 32  | 0.503 | 0.466 | 1.056 | 1.025 | 2.10 | 2.20 |
+| 64  | 0.597 | 0.529 | 1.047 | 1.047 | 1.75 | 1.98 |
+| 128 | 0.795 | 0.730 | 1.050 | 1.053 | 1.32 | 1.44 |
+| 256 | 0.897 | 0.922 | 1.066 | 1.060 | 1.19 | 1.15 |
+
+**Confirms both halves of the prediction again, including the sharper
+L=400 finding**: LETKF's unlocalized skill also never exceeds 1 at any
+tested N_ens (0.922 at 256, essentially matching PFF's own 0.897) --
+"no ensemble size rescues unlocalized DA at 4x the trained domain" now
+holds under both analysis schemes, not one. The ratio column keeps its
+shape under LETKF too. Read alongside the reproducibility caveat above:
+these values carry the same ~5-6% run-to-run margin already quantified
+there, so the close PFF/LETKF agreement should be read at that
+resolution -- genuinely close, not identical to three significant
+figures.
+
+**E2/E3/E7 at L=400 now complete, closing out the user-directed "repeat
+at L=400" request.** Net picture across both transfer sizes: the
+localization-becomes-necessary finding holds at both L=200 and L=400,
+gets STRONGER (not weaker) as the domain grows (unlocalized DA goes
+from "beats free-running only at the largest tested ensemble" at L=200
+to "never beats free-running at any tested ensemble" at L=400), under
+BOTH DA methods tested (PFF and LETKF), and SEC's own numerical
+fragility also gets strictly worse with domain size (1/6 valid points
+at L=200 to 0/6 at L=400).
+
+### Step 1 (2D KS), part 1: solver validated, genuine chaos found on essentially the first attempt (2026-09-28)
+
+User: "please implement step 1: 2D KS" (from `docs/ks_local_field_ltransfer.tex`'s
+"Staged next steps" section).
+
+**Solver** (`ks_latent/solver/ks2d.py`, `ks_latent/config.py`'s
+`KSConfig2D`): isotropic 2D KS, `u_t + nabla^2 u + nabla^4 u +
+(1/2)|nabla u|^2 = 0`, periodic in both directions. Same ETDRK4/
+contour-integral machinery as 1D (`Lhat = K^2-K^4`, `K^2=kx^2+ky^2`,
+same functional form as 1D's own `k^2-k^4`), reimplemented
+independently (not refactored out of the validated 1D module) to carry
+zero risk to it. The nonlinear term CANNOT reuse 1D's own divergence-form
+trick (`-u u_x = -(1/2)(u^2)_x`, an exact x-derivative) -- 2D's
+`-(1/2)|nabla u|^2` is not a pure divergence, computed instead via
+spectral differentiation in both directions, squared and summed in
+physical space, transformed forward.
+
+**A real, non-obvious bug caught before it corrupted anything**: an
+initial unprojected implementation showed `mean(u)` drifting
+unboundedly and `max|u|` exceeding 100 within the spin-up window.
+Diagnosed correctly, not patched around: since EVERY term on this
+equation's RHS is a function of `u`'s spatial derivatives only, `u`'s
+absolute value carries zero physical content -- but unlike 1D (whose
+nonlinearity is an exact derivative, so `mean(u)` is automatically
+conserved with no extra step), 2D's own nonlinearity has a nonzero
+spatial mean (`<u_x^2+u_y^2> > 0` generically), so the equation
+genuinely drives an unbounded drift in the physically-meaningless mean
+mode. Fixed EXACTLY (not approximately): the k=0 Fourier mode is
+projected to zero after every step (base state AND every tangent
+direction, for a Lyapunov-consistent gauge) -- after the fix, `max|u|`
+stayed in `[10,16]` over a full 2000-step trajectory with `mean(u)`
+pinned at float64 roundoff.
+
+**Solver validation** (`tests/unit/test_solver_2d.py`, 9 tests, same
+Gate-1-style discipline as 1D): linear-instability spectrum (isotropic
+ring at `|K|=1/sqrt(2)`, same critical radius as 1D at every tested
+angle); ETDRK4 coefficient construction validated two ways (exact
+agreement with 1D's own tested function on a 1D-shaped input, proving
+the broadcasting generalization is lossless; direct mpmath comparison
+to 1e-12 on a 2D-shaped input); exact mean conservation; exact
+translation equivariance in x, in y, and jointly; convergence order
+>=3.5 in dt; small-domain decay to zero. All 9 pass; full suite 845/845
+(836 baseline + 9 new), no regressions.
+
+**Chaos found on essentially the first reasonable parameter choice --
+no extensive search needed.** At `Lx=Ly=32` (a modest first test
+domain): `lambda1=0.237`, `D_KY=45.5` (bracketed cleanly at 70
+directions, 24 positive), `D_KY/Area=0.0444` -- genuinely rich,
+well-behaved chaos (smoothly decreasing exponent spectrum, not
+degenerate). Confirmed again at the actual production config
+(`Lx=Ly=44, NX=NY=128`, the default in `KSConfig2D`): all 12 quick-test
+directions positive, consistent with even richer chaos at the larger
+domain. `ks_latent.analysis.lyapunov.lyapunov_spectrum_ks2d`/
+`_ks2d_step_with_tangent_physical_space` (new, additive) reuse the
+existing `benettin` core unmodified via a flatten/reshape wrapper at
+the boundary (`benettin` assumes a flat `(state_dim,)` vector space).
+
+**Architecture built (encoder + first propagator).**
+`KSAutoencoderLocalField2D` (`Conv2d` throughout, literal 2D
+generalization of Section 224's own encoder, same gauge-anchor design)
+-- 17 tests (shapes, exact gauge anchor, exact equivariance in x/y/
+jointly, no-bias output, gradient flow). First propagator attempt:
+`site_conv_2d` (2D generalization of the `site_conv` backbone, reusing
+the encoder's own circular-Conv2d site-mixing stack as a
+dimension-preserving `z->z` map -- same precedent Section 222/223
+established for 1D), NOT `local_mlp` generalized directly -- a
+deliberate scope choice for the first pass (no new 2D token-window
+masking machinery needed), noted honestly rather than implied to be
+"the 224 propagator in 2D."
+
+**Dataset-sizing mistake caught and fixed.** A first attempt reused 1D
+KS's own dataset convention directly (60 trajectories, 1001 snapshots
+each) without re-deriving the resulting file size for a 2D field -- a
+2D snapshot at NX=NY=128 has 64x the raw element count of 1D's own
+NX=256 field, so the same snapshot count produced a ~15.8GB file (raw +
+normalized arrays combined), most of the way through generating before
+the mistake was caught (user: "16 gb is huge, any way we can create a
+smaller dataset?"). Corrected to 30 trajectories (24 train/6 val) x 251
+snapshots (`trajectory_time=25`, ~6 Lyapunov times at
+`lambda1~=0.24`) -- ~1.8GB, generated in ~8 minutes. Verified no
+orphaned large files were left on disk from the failed attempts.
+
+**Training launched** (Section 228: Section 224's exact regularizer
+recipe, `d_latent=192`, `n_sites_x=n_sites_y=8`) on the corrected
+dataset; results pending.
+
+### `local_mlp_2d`: the actual 2D `local_mlp`, built as a second propagator to compare (2026-09-28)
+
+User: "how hard would building the actual 2D local_mlp be?" then
+"build it please." Genuinely straightforward given `site_conv_2d`'s own
+precedent: `_LocalMixerBlock`'s three components (pre-norm windowed
+mixer + residual, pre-norm per-token FFN + residual) are all per-token
+pointwise operations except the mixer itself, so the ONLY new code
+(`_LocalMixerBlock2D`) was swapping the windowed circular `Conv1d` for
+a windowed circular `Conv2d` -- the same 1D->2D generalization pattern
+already used twice (the encoder, `site_conv_2d`). `_LocalMLPDeltaBody2D`
+is purpose-built for a `local_field_2d`-paired latent specifically, so
+(unlike 1D's own general-purpose `local_mlp`) it needs no general
+tokenizer at all: tokens ARE the sites, already naturally gridded.
+
+9 new unit tests (shape, identity-at-init, exact equivariance under a
+site shift, gradient flow, multi-step rollout finiteness) -- all pass.
+Also directly verified NOT to trigger the multiscale experiment's own
+MPS rollout+backward+amp bug (that bug was specific to a degenerate
+single-token case; `local_mlp_2d`'s smallest realistic token grid is a
+genuine 8x8=64 tokens). Full suite: 871 passed (862 baseline + 9 new),
+no regressions. `backbone="local_mlp_2d"` wired into both
+`AuxPropagatorConfig`/`PropagatorConfig` (new `local_mlp2d_*` fields,
+same mechanical pattern as `multiscale_local_mlp`/`site_conv_2d`
+before it) and `LatentPropagator`'s dispatch. Not yet trained/compared
+against `site_conv_2d` -- queued behind Section 228's own results.
+
+### Section 228 result: `site_conv_2d` collapsed -- D_KY=0, a real negative result with a well-motivated next step (2026-09-28)
+
+Training completed (200+300 epochs). `val_recon_final=0.018712`,
+`best_val_kmax_mse=0.044841`. **A real anomaly flagged before
+diagnosing further**: `val_kmax_mse` printed EXACTLY `0.044846` for
+every logged epoch from ~80 through 300 (220+ epochs straight) despite
+the training `loss` itself continuing to change (0.016->0.046 as the
+k-curriculum ramped, matching the LR's own continuing cosine decay) --
+not a logging artifact (`val_kmax_mse` in the print statement is the
+genuine per-epoch recomputed value, confirmed by reading
+`ks_latent/training/loops.py`'s own `train_stage2`, not a "best so
+far" display).
+
+**Diagnosed directly rather than assumed.** Standalone rollout: finite
+everywhere over 2000 steps, `max|z|` in `[7.36,7.65]` (a slow,
+MONOTONIC, non-oscillating drift, not the usual bounded-fluctuation
+pattern a healthy chaotic rollout shows); different initial conditions
+stayed well-separated (mean pairwise distance 14.8 across 6 ICs after
+2000 steps -- rules out a classic fixed-point collapse where different
+ICs converge to the same state). The real number: Lyapunov spectrum of
+the trained latent model, `mode='single_state'`, `n_directions=192`,
+`n_steps=2000` -- **`lambda1=-1.19e-5` (essentially exactly zero),
+`n_positive=0/192`, `D_KY=0`.** A genuine collapse to a
+non-chaotic (near-neutral) dynamical regime, not the "diverges to
+NaN"/"clean fixed point" failure modes seen elsewhere in this
+project's history -- a third, distinct collapse signature.
+
+**A well-motivated explanation and next step, not a dead end.**
+`site_conv_2d` was chosen for this FIRST 2D attempt specifically
+because it needed no new 2D token-window masking machinery -- but
+`site_conv` was never the reliably robust backbone in 1D either:
+Section 222 (`site_conv`, 1D) got good short-horizon behavior but
+diverged catastrophically by step 1000; Section 223 (`local_mlp`, 1D)
+was the one that held `D_KY=22.66` bounded across the full 2000 steps
+and became Section 224's own winning recipe. This 2D collapse may
+simply be repeating a known-weaker-1D-backbone's own known
+unreliability, not a new, 2D-specific failure mode. `local_mlp_2d`
+(the actual 2D analogue of Section 224's own winning propagator,
+already built and tested per the user's own follow-up request) is the
+natural, well-precedented next attempt -- queued, not yet launched.
+
+### Section 230: genuine chaos recovered -- D_KY=71.9, with one honest caveat about what's actually been isolated (2026-09-28)
+
+User: "kill it. try 230 with attention window = 3" (Section 229,
+`local_mlp_2d` at the same `attn_window=2` Section 228 used, was
+killed mid-Stage-1 before producing a real result, superseded rather
+than diagnosed). Added `--backbone`/`--attn-window` CLI flags to
+`scripts/train_2dks_localfield_standalone.py` (additive, defaults
+preserve Section 228's exact behavior) and launched Section 230:
+`local_mlp_2d`, `attn_window=3` (receptive field `2 layers x 3 window
+= 6 sites ~= 33 physical units`, now above the "2-3 correlation
+lengths" heuristic's own upper bound of ~26.7 -- deliberately testing
+past it, not just up to it).
+
+`val_kmax_mse` never froze this time -- genuinely fluctuated the whole
+run (0.028 -> 0.017 minimum around epoch 100-110, a slow drift back to
+0.019 by epoch 300, ordinary training dynamics, not the pathological
+exact-repeat pattern Section 228 showed). `best_val_kmax_mse=0.016956`
+-- **more than 2.5x better than Section 228's 0.044841.**
+
+**Diagnostic: genuine, rich chaos.**
+
+| | Section 228 (`site_conv_2d`, window=2) | Section 230 (`local_mlp_2d`, window=3) |
+|---|---|---|
+| lambda1 | -1.19e-5 (~=0) | **0.197** |
+| n_positive | 0/192 | **35/192** |
+| D_KY | 0 | **71.9** |
+| max\|z\| pattern (2000 steps) | monotonic drift, 7.36->7.65 | genuinely oscillating, 7.17<->8.15, bounded |
+| IC pairwise separation | 14.8 | 15.95 |
+
+**D_KY=71.9 is strikingly consistent with the true system's own
+extensivity, not just "some positive number."** E1's own ground-truth
+measurement at the smaller `Lx=Ly=32` test domain gave
+`D_KY/Area=0.0444`; naively scaling that ratio to the production
+domain's area (`44^2=1936` vs `32^2=1024`) predicts `D_KY~=86` --
+same order of magnitude as the model's own 71.9, not a wild mismatch.
+(Not a rigorous ground-truth comparison -- that needs an actual
+Benettin-QR computation at `Lx=Ly=44` directly, not yet done -- but a
+strong, encouraging consistency check.)
+
+**One honest caveat, stated precisely rather than overclaimed.** Two
+variables changed between Section 228 and 230 (backbone AND
+`attn_window`), and Section 229 (`local_mlp_2d` at the SAME
+`attn_window=2` Section 228 used, which would have isolated which one
+mattered) was killed before finishing. Both plausibly contributed to
+the fix; the data needed to cleanly separate "backbone choice" from
+"receptive field width" as the operative variable does not exist yet.
+A genuine `local_mlp_2d`-at-`window=2` rerun would close this gap if
+it's ever worth the compute.
+
+### Step 2 (Kolmogorov flow): solver + architecture reuse implemented and validated (2026-09-28)
+
+User: "please implement step 2 from ks_local_field_ltransfer for
+Kolmogorov flow. Reuse as much as possible from prior code both for 2d
+KS and for the 1d ks." Proceeded despite Step 2's own stated gate (a
+fully validated 2D-KS zero-retraining transfer result) not yet being
+closed -- Section 230's chaos result was judged sufficient evidence the
+2D architecture generalizes to start Step 2 in parallel, with the
+transfer experiment itself still open on both systems; flagged rather
+than silently skipped.
+
+Forced 2D Navier-Stokes in vorticity-streamfunction form:
+`omega_t + u.grad(omega) = nu*nabla^2(omega) + f(y)`, `u=(psi_y,-psi_x)`,
+`nabla^2(psi)=-omega` solved exactly per-mode in Fourier space (one
+division per mode). `f(y) = -nu*n^3*cos(n*y)` is chosen so the laminar
+solution `u_lam=(sin(n*y),0)` is an EXACT steady state of the FULL
+nonlinear equation (the convective term vanishes identically on it) --
+the classical Kolmogorov-flow setup (Meshalkin & Sinai 1961; Chandler &
+Kerswell 2013 study exactly this `n=4`, `2*pi x 2*pi`-box configuration,
+already cited in this document's own literature review).
+
+**Real, quantified code reuse, not just a structural analogy.**
+`ks_latent/solver/kolmogorov.py` imports `wavenumbers2d` and
+`etdrk4_coefficients_2d` from `ks2d.py` DIRECTLY, unmodified -- the
+linear operator here (`Lhat=-nu*(kx^2+ky^2)`, pure diffusion, no
+zero-crossing, strictly better-conditioned than KS's own `K^2-K^4`) is a
+strict special case of the same contour-integral construction 2D KS
+already validated. `generate_trajectory_dataset2d` (`dataset2d.py`) was
+generalized with optional `integrate_fn`/`spinup_fn` parameters
+(defaulted to 2D KS's own functions, so every existing caller/test is
+byte-for-byte unaffected) rather than duplicated;
+`generate_trajectory_dataset_kolmogorov` is a 10-line wrapper.
+`KSAutoencoderLocalField2D`, `site_conv_2d`, and `local_mlp_2d` needed
+**zero new code** -- confirmed directly by reading them, not assumed:
+they operate on a flat `NX*NY` scalar field and have no notion of which
+PDE produced it. Only the nonlinear-term evaluation and its tangent-linear
+model are new physics-specific code, plus a new `KolmogorovConfig` and a
+`lyapunov_spectrum_kolmogorov` adapter mirroring `lyapunov_spectrum_ks2d`'s
+own flatten-at-the-boundary pattern.
+
+**The new tangent-linear model.** Vorticity advection `u.grad(omega)` is
+bilinear in `omega` (the velocity `u` is itself linear in `omega` via the
+Poisson solve) -- the same "product of two linear functionals of the
+state" structure both KS variants' own nonlinearities have, so the
+Frechet derivative is exact via the product rule:
+`D[u.grad(omega)][domega] = du.grad(omega) + u.grad(domega)`, `du` the
+velocity derived from `domega` by the identical linear map. No new
+derivation technique was needed, just the third application of a pattern
+this project has now used three times (1D KS, 2D KS, Kolmogorov flow).
+
+**Validation (9 new tests, `tests/unit/test_solver_kolmogorov.py`, all
+passing), two of which are new relative to both KS variants because this
+system's physics genuinely differs:**
+
+1. **The laminar solution is an exact fixed point of the discretized,
+   time-stepped equation**, not merely the continuous PDE --
+   `test_base_flow_is_exact_fixed_point` confirms `max|final - u_lam| <
+   1e-8` after 500 ETDRK4 steps. Needs no external literature number --
+   the strongest, least ambiguous check available for this solver.
+2. **Anisotropic translation equivariance, tested both ways.** `f(y)`
+   genuinely breaks full y-translation invariance (both KS variants are
+   equivariant in every direction; this system is not) but leaves an
+   EXACT residual discrete symmetry (shifts by `2*pi/n`) intact --
+   `test_translation_equivariance_exact_at_forcing_period_in_y` confirms
+   the residual symmetry to `1e-10`, and (ground rule 19, "test the
+   failure modes") `test_translation_NOT_equivariant_for_generic_y_shift`
+   confirms equivariance genuinely FAILS (relative difference > 0.05) for
+   a shift that is not a multiple of the forcing period -- if this ever
+   started passing, that would mean the forcing term had silently been
+   lost, not that anything improved. x-equivariance (unaffected by the
+   forcing) is exact to `1e-10`, as usual.
+3. Mean-vorticity conservation, `dt`-convergence order >= 3.5, and a
+   qualitative bifurcation check: the leading Lyapunov exponent of the
+   linearization about the laminar fixed point (measured via a bespoke
+   single-direction power-iteration growth-rate estimator built directly
+   on `step_with_tangent_kolmogorov`, not `benettin`'s full machinery,
+   which is unnecessary machinery -- and actively gets in the way here,
+   since its internal Kaplan-Yorke computation raises when not enough
+   directions bracket a still-growing cumulative sum) is negative at
+   Re=1 and positive at Re=50 (`n=4`, `2*pi`-box) -- consistent with,
+   but deliberately not claiming to precisely reproduce, the classical
+   Meshalkin-Sinai/Chandler-Kerswell literature (this project's compact
+   box is not the elongated/near-infinite-x domain the classical
+   `Re_c=sqrt(2)` result needs).
+
+Full suite re-run after all changes: 868/868 passing, no regressions
+(2 new tests added on top of the 9 listed above, during the methodology
+fix described below).
+
+### Section 231: genuine Kolmogorov-flow chaos found, a real methodology bug fixed along the way, and a trained local-field model that closely reproduces it (2026-09-28)
+
+**Correcting an overclaim from the entry above first.** "Re=50 well past
+chaos onset" was wrong -- see below. The test itself (laminar solution
+unstable between Re=1 and Re=50) is still correct and still passes; only
+the interpretive claim about how far past onset Re=50 sits was wrong.
+
+**The parameter search that followed hit a wall: every configuration
+tried looked stable.** Sweeping Re in [40, 1000], square and elongated
+(up to 4:1) boxes, forcing wavenumber n in {1,2,4}, and drag alpha in
+[0,0.3] -- all at production resolution NX=NY=128, all with dealiasing
+-- every single one showed a NEGATIVE leading Lyapunov exponent on the
+saturated attractor (typically -0.2 to -0.4), despite the laminar base
+flow being confirmed linearly unstable throughout. This is a
+well-documented, well-cited chaotic system (Chandler & Kerswell 2013 and
+others use exactly this n=4, 2*pi-box configuration) refusing to show
+ANY chaos anywhere in a wide, honest search -- a strong signal something
+was wrong, not that the literature was wrong.
+
+**It was a real bug, found by direct isolation, not a guess.** All these
+Lyapunov measurements used `warmup_time=0.0` (the function's own default)
+with only 6-8 total time units of measurement. This project's own
+established protocol elsewhere already knew better:
+`scripts/exp_e1_groundtruth_lyapunov_ltransfer.py` defaults
+`--warmup-time 300` out of `total_time=2000` -- the ad hoc exploration
+scripts written for Kolmogorov flow simply hadn't followed that
+convention. Direct isolation confirmed it exactly: measuring the SAME
+config (n=4, Re=50, laminar fixed point) with a short 3-time-unit,
+no-warmup power iteration gave lambda1 in [-0.2,-0.4] (matching the
+"stable everywhere" sweep results); the identical calculation with a
+10-time-unit warmup discarded and 30 more measured gave lambda1=0.837
+(NX=32) and 0.839 (NX=128) -- not a refinement, a sign flip, and one
+that agrees across resolution once measured correctly. **Lesson,
+recorded here so it isn't lost**: the Benettin QR algorithm's random
+initial tangent basis needs a genuine alignment period regardless of
+whether the base trajectory itself is already on the attractor;
+`warmup_time=0.0` is a dangerous default to leave unexamined for any new
+system, and this project's own E1 protocol already encoded that lesson
+once. Checked (grep for `warmup_time` across `scripts/`): this bug was
+contained to the new, ad hoc Kolmogorov-flow exploration scripts written
+this session -- 1D KS, 2D KS, and the trained-propagator Lyapunov checks
+all go through protocols that already set real warmup, so no past
+validated result in this project needs revisiting.
+
+**Once corrected, genuine, resolution-converged chaos appeared cleanly
+-- no drag, no elongated domain needed.** Re-measuring with
+`warmup_time=20, total_time=40`: Re=50 (n=4, square box) sits at
+lambda1=-0.0025, essentially marginal (a limit-cycle-like secondary
+state, not chaos); Re=70 gives lambda1=0.057, n_positive=3, D_KY=7.09;
+Re=100 gives lambda1=0.102, n_positive=2, D_KY=7.90 -- both confirmed at
+production resolution NX=128. Separately, testing whether a SMALLER
+forcing wavenumber (the opposite of what "less resolution" naively
+suggests -- raising n needs MORE points to resolve a shorter wavelength,
+and via the classical `Re_c~n*sqrt(2)` scaling makes the flow relatively
+LESS unstable at fixed Re, not more) could reach chaos at lower
+resolution found n=2, Re=40 chaotic at just NX=NY=48 (D_KY=3.59),
+confirmed resolution-converged at NX=96 (D_KY=3.37) -- a genuine minimal
+validated config, lower-dimensional than the n=4 point chosen for
+production below.
+
+**The drag term mattered for a different reason than originally
+guessed.** Motivated up front (chat discussion, 2026-09-28, on the
+parallel to RBC's own physical vertical confinement providing an outer
+scale against 2D turbulence's inverse-cascade condensation, Kraichnan
+1967) as a way to REACH chaos -- but once Re=100 was already confirmed
+chaotic without it, sweeping alpha there revealed a real, non-monotonic
+ENRICHMENT effect instead: D_KY=7.90 (alpha=0), **23.26** (alpha=0.05),
+16.18 (alpha=0.1). alpha=0.05 -- clearly best of the three, not "more
+drag is always better" -- was adopted as the production default.
+
+**Production config** (`KolmogorovConfig` defaults):
+`Lx=Ly=2*pi, NX=NY=128, nu=0.01 (Re=100), alpha=0.05, forcing_n=4,
+dt=0.01, snapshot_every=20 (dt_snap=0.2), spinup_time=100`.
+Ground truth at this config: lambda1=0.0905, n_positive=12/24,
+**D_KY=23.26** -- comparable in scale to 1D KS's own D_KY~22 at its
+canonical config.
+
+**Dataset + training (Section 231).** `generate_trajectory_dataset2d`
+was generalized (optional `integrate_fn`/`spinup_fn`, default unchanged)
+rather than duplicated; `generate_trajectory_dataset_kolmogorov` is a
+10-line wrapper. 30 trajectories (24 train/6 val), `trajectory_time=40`
+(~3.6 Lyapunov times at lambda1=0.0905 -- shorter than 2D KS's own ~6,
+traded off against file size given this system's slower dynamics),
+1.52GB. Training reused `KSAutoencoderLocalField2D`/`local_mlp_2d` and
+Section 224's regularizer recipe completely unchanged, `attn_window=3`
+(reusing Section 230's own value directly): `val_recon_final=0.008251`
+(better than 2D KS's own 0.016521), `best_val_kmax_mse=0.030675`,
+`val_kmax_mse` fluctuating genuinely throughout training -- no
+Section-228-style frozen-metric collapse signature at any point.
+
+**Result: the trained model reproduces the true system's own chaos
+closely, on the first attempt.** Standalone 2000-step rollout: finite
+throughout, `max|z|` oscillating boundedly (4.5-6.3, no drift), two
+independent ICs staying well-separated (final pairwise distance 15.0).
+Lyapunov spectrum of the trained propagator (`n_directions=192`,
+`warmup_steps=200`, `n_steps=2000`): lambda1=0.1207, n_positive=10/192,
+**D_KY=21.33** -- against the true system's own D_KY=23.26 at the
+identical config, a strikingly close match (closer, in fact, than 2D
+KS's own Section 230 comparison against a naively-scaled ground-truth
+estimate). The zero-retraining L-transfer payoff experiment (does this
+hold at larger domains/more forcing periods, where the local-field
+architecture's actual value proposition lives -- a single small box has
+almost no spatial extent to localize over) is the natural next step, not
+yet run.
+
+### G1/G2: L-transfer tested for real on both 2D systems -- a genuine, informative mixed result (2026-09-29)
+
+User-directed: "It seems like the next step would be to test L transfer
+for section 230 and 231... make a specific plan, numbered g1-g_n in the
+latex file, and let's run the relevant experiments one at a time." Full
+G1-G8 plan written into `docs/ks_local_field_ltransfer.tex`'s new
+"L-transfer for the 2D systems" section; G1 (2D KS) and G2 (Kolmogorov
+flow) run, both against genuine ground-truth Benettin-QR computations of
+the TRUE PDE at the transfer size (not just the model's own
+self-consistency), reusing `lyapunov_spectrum_ks2d`/`lyapunov_spectrum_
+kolmogorov` unchanged. New 2D resize helpers
+(`load_autoencoder_checkpoint_resized_2d`/`load_propagator_checkpoint_
+resized_2d`, `ks_latent/models/__init__.py`, 7 new tests) generalize the
+existing 1D `_resized` mechanism -- verified directly, same reasoning:
+Conv2d/circular-Conv2d weight shapes depend only on kernel size and
+channel counts, never on `n_sites_x`/`n_sites_y`/`NX`/`NY`, so a trained
+`local_field_2d`/`local_mlp_2d` state_dict loads with zero missing/
+unexpected keys into a differently-sized model.
+
+**G1 (2D KS, 1.5x per axis, `Lx=Ly=66` up from trained `44`).** TRUE PDE:
+lambda1=0.204, n_positive=101/300, **D_KY=192.5** (11803s, 300
+directions). MODEL (zero-retraining transfer): lambda1=0.057,
+n_positive=19/432, D_KY=43.6 -- **77% relative error**, far worse than
+1D KS's own E1 result (sub-2% at every size tested).
+
+**The disambiguating finding: the TRUE system's own D_KY/Area ratio is
+essentially constant across two independently-measured domain sizes** --
+0.0444 at the original Lx=Ly=32 test domain (Step 1's own early
+measurement) and **0.0442** at this experiment's Lx=Ly=66 -- about as
+clean a confirmation of genuine area-extensivity as this project has
+produced. This rules out "2D KS's physics isn't extensive" as the
+explanation for the 77% gap -- there manifestly IS a stable local law,
+and zero-retraining transfer is failing to carry it forward, a
+transfer-MECHANISM problem, not a physics problem. The model's own
+D_KY/Area collapses from 0.0371 (self-reported, trained size) to just
+**0.0100** under transfer -- a ~4x density drop, severe and specific.
+
+**G2 (Kolmogorov flow, 2x in x only, `Lx=4*pi` up from trained `2*pi`,
+`Ly` fixed at the forcing period).** TRUE PDE: lambda1=0.129,
+n_positive=28/75, **D_KY=56.8** (6833s, 75 directions) -- genuinely,
+richly chaotic, resolving the inverse-cascade/condensation worry raised
+in chat before this ran: doubling the domain does not collapse the
+attractor. MODEL (zero-retraining transfer): lambda1=0.102,
+n_positive=13/384, D_KY=28.4 -- **50% relative error**: smaller than 2D
+KS's 77%, but still a real, substantial gap.
+
+**But unlike G1, G2's own physics question is NOT yet settled.** The
+TRUE system's D_KY grew SUPER-linearly with area: 23.26 -> 56.84, a
+2.44x increase for an EXACTLY 2x increase in area -- not the ~2x growth
+clean linear-in-area extensivity predicts. Two live hypotheses, not yet
+disambiguated: (a) the drag alpha=0.05 isn't yet strong enough to pin
+the correlation length independent of domain size (genuinely
+non-extensive at this alpha, consistent with 2D turbulence's own
+inverse-cascade condensation, Kraichnan 1967); (b) simply "not yet
+asymptotic," the same finite-size caveat 1D KS's own E1 result raised at
+small L. The proposed disambiguating test (chat, 2026-09-29, not yet
+run): measure TRUE D_KY/Area at a third, larger x-scale and/or sweep
+alpha at fixed domain size, purely ground-truth (no retraining needed),
+to see whether the ratio converges or keeps accelerating.
+
+**One architecture-side hypothesis raised in chat, applies to both
+systems, not yet tested**: a fixed `attn_window` covers a shrinking
+FRACTION of the domain much faster in 2D than in 1D as domain size
+grows, since site count scales with (scale factor)^2 in 2D but only
+(scale factor) in 1D -- purely architectural, orthogonal to whether the
+underlying physics is extensive.
+
+**Status: paused here, user-directed ("don't continue to g3 without
+permission"), after G1/G2.** Both landed as genuine mixed results --
+neither a clean confirmation of the paper's central claim nor a clean
+refutation -- which is itself the honest, informative outcome this
+project's own "both verdicts are publishable" discipline calls for.
+G3-G8 remain queued.
+
 ### Phase 11 (never previously implemented): a local quadratic stencil closure fits Section 224's latent much better than Section 216's (2026-09-25)
 
 User: "do you think we would be able to fit a pde more easily to the

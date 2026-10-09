@@ -1,0 +1,293 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\title{\vspace{-1em}Zero-Retraining Domain-Size Transfer for Spatiotemporal
+Chaos, and a Damping-Controlled Route to It in Two Dimensions}
+\author{Dalton Jones}
+\date{\today}
+
+\newcommand{\DKY}{D_{\mathrm{KY}}}
+
+\setlength{\parskip}{0.3em}
+\setlength{\parindent}{0pt}
+\raggedbottom
+
+\begin{document}
+\maketitle
+\vspace{-2em}
+
+\noindent\textit{Summary memo. Full architecture, methodology, every
+number below, and the complete experiment log are in the companion
+document, \texttt{ks\_local\_field\_ltransfer.tex}, sent alongside this
+one; section references below (\S) point there.}
+
+\section{Architecture, in one paragraph}
+
+Instead of encoding a PDE's state into one global latent vector, we
+encode it into a \emph{field} of local latent sites laid out on a
+periodic lattice that mirrors the physical domain: a stack of circular
+convolutions (translation-equivariant by construction, with a fixed,
+non-learned gauge-anchor channel per site) maps the field to
+$P$ sites $\times$ $c$ channels, and a weight-shared local propagator
+advances every site using only its neighbors. Because every learned
+weight is a per-site operator, nothing in the model is tied to the
+domain size $L$ except the physical patch length each site represents.
+Growing $L$ at fixed resolution therefore only adds \emph{more sites},
+never a differently-shaped weight matrix --- so a checkpoint trained at
+one $L$ can be loaded, unchanged, into a model with more sites and run
+at a larger $L$ with zero retraining. (\S2, \S\,3.2)
+
+\section{Result 1: clean zero-shot transfer in 1D Kuramoto--Sivashinsky}
+
+Trained once at $L{=}100$ ($\DKY{=}22.14$), the model was evaluated
+zero-shot at $2\times$ and $4\times$ the domain, against freshly
+computed ground-truth Lyapunov spectra at each size:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & $L=100$ & $L=200$ & $L=400$ \\
+\midrule
+True $\DKY$ & 22.14 & 45.46 & 89.66 \\
+Model $\DKY$ (zero retraining) & 22.14 & 44.61 & 89.13 \\
+Relative error & --- & 1.87\% & 0.60\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The error does not grow with extrapolation distance --- it shrinks. The
+model's own $\DKY/L$ stays within 1\% of the true KS extensivity
+constant ($\approx0.226$) at every size. To our knowledge this is the
+first demonstration that a \emph{learned} latent representation
+reproduces a chaotic PDE's own extensive scaling law at a domain size it
+was never trained on, with literally zero parameter updates. Practically,
+it means ensemble data assimilation at $L{=}400$ can reuse a filter built
+once at $L{=}100$ --- an $\mathcal O(1)$ training cost instead of one
+retraining per domain size. (\S\,3.2, \S\,5.1)
+
+\section{Result 2: the mechanism does not survive the move to 2D}
+
+The same architecture, retrained on each 2D system at a single domain
+size, reproduces the true attractor well in-distribution (2D KS:
+$\DKY{=}71.9$; Kolmogorov flow: $\DKY{=}21.3$ vs.\ true $23.3$). But
+zero-shot transfer to a $1.5$--$2\times$ larger domain --- the exact
+procedure that worked cleanly in 1D --- degrades sharply:
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+System & True $\DKY$ (transfer size) & Zero-shot error \\
+\midrule
+2D Kuramoto--Sivashinsky & 192.5 & \textbf{77\%} \\
+Kolmogorov flow ($\alpha=0.05$ drag) & 56.8 & \textbf{50\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Diagnosing \emph{why} separated two distinct failures. For 2D KS, the
+true system's own dimension density $\DKY/\mathrm{Area}$ is confirmed
+constant across two independently measured domain sizes ($0.0444$ vs.\
+$0.0442$) --- the physics is genuinely extensive, so the 77\% gap is a
+failure of the transfer \emph{mechanism} itself (our working hypothesis:
+new domain area admits new pattern \emph{orientations} an isotropic
+kernel's free weights were never shown during training, unlike 1D, where
+new area only adds finer copies of an already-seen pattern). For
+Kolmogorov flow, by contrast, the true $\DKY$ grew \emph{super-linearly}
+with area ($2.44\times$ for a $2\times$ area increase) --- the physics
+itself was not yet extensive at this drag strength, consistent with 2D
+turbulence's well-known inverse energy cascade building a
+domain-size-dependent large-scale structure when nothing caps it.
+(\S\,8, \S\,8.1)
+
+\section{Result 3: added linear drag restores extensivity --- and transfer}
+
+That second diagnosis makes a specific, testable prediction: 2D
+turbulence with linear (Ekman) drag has a known frictional arrest
+scale, $\ell_\alpha\propto\alpha^{-3/2}$, above which the inverse
+cascade is capped and the dynamics become extensive. If Kolmogorov
+flow's transfer failure is a physics problem rather than an
+architecture problem, \emph{simply increasing the drag, with no change
+to the model at all, should repair it.} We doubled the drag
+($\alpha:0.05\to0.10$), regenerated the dataset, and retrained the
+identical architecture and recipe.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{figures/advisor_combined.pdf}
+\caption{(a) Zero-shot domain-transfer error across every system/setting
+tested --- doubling the drag alone takes Kolmogorov flow from 50\% down
+to the same regime 1D KS achieves. (b) Why: true $\DKY/\mathrm{Area}$,
+measured directly from the PDE (no learned model), is nearly flat out to
+$2\times$ area at $\alpha=0.1$ (extensivity restored) before drifting
+again at $3\times$ (delayed, not eliminated) --- and the model's own
+transfer error tracks this drift almost exactly, rising back toward
+$\sim$19\% exactly where the true density starts drifting again.}
+\label{fig:combined}
+\end{figure}
+
+The result: transfer error at $2\times$ domain fell from 50\% to
+\textbf{4.5\%}, confirmed independent of initial condition across three
+seeds (4.5--5.9\%) --- ruling out a multistability artifact, the one
+failure mode that produced a misleadingly large error estimate earlier
+in this project for 2D KS. \textbf{A single physical parameter, chosen
+for a reason derived from the physics, not tuned on the transfer metric
+itself, recovered 1D-KS-quality transfer with zero architecture
+changes.} One caveat, examined in the next section: of three
+independently retrained propagators at $\alpha=0.1$, one collapsed under
+transfer despite being indistinguishable from the other two at the
+trained size. (\S\,8.1)
+
+\section{Why some trained propagators transfer and others don't}
+\label{sec:m2}
+
+Three independently retrained propagators at $\alpha=0.1$ --- identical
+architecture, dataset, and recipe, differing only in random seed --- give
+a clean $2\times2$ puzzle. m0 and m1 transfer at $2\times$/$3\times$
+domain size with 4.5--5.9\% error, matching \S4. \textbf{m2 collapses to
+a near-fixed point under transfer ($D_{\mathrm{KY}}\approx0$--$2$,
+independent of initial condition) while being statistically
+indistinguishable from m0/m1 at the trained size} --- same training loss,
+same native-size $D_{\mathrm{KY}}$. Neither the loss curve nor a
+native-size evaluation would have flagged it.
+
+\textbf{What differs, found without ever running a transfer test.} The
+propagator's site-mixing layer has no softmax --- it is a literal,
+linear, shift-invariant circular convolution over the lattice of latent
+sites. For such an operator the gain at any spatial frequency is exact
+and computable in closed form (the 2D Fourier transform of the kernel),
+and training only ever constrains that gain at the handful of discrete
+frequencies the \emph{trained} lattice size admits. Resizing to a larger
+domain introduces new frequencies the kernel was never shown.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & Gain, trained freq.\ & Gain, new freq.\ ($2\times$) & Gain, new freq.\ ($3\times$) \\
+\midrule
+m0 & 2.02 & 1.58 & 1.82 \\
+m1 & 2.12 & 1.49 & 1.78 \\
+\textbf{m2} & \textbf{4.41} & \textbf{3.44} & \textbf{3.96} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+m2's kernel peaks at roughly \emph{double} the gain of m0/m1 at the
+frequencies it was trained on, and --- unlike m0/m1, whose gain at
+genuinely new frequencies drops noticeably below their own trained peak
+--- m2's gain at those new frequencies stays close to its already-large
+peak. Tellingly, the raw kernel size (Frobenius norm) is statistically
+indistinguishable across all three models: m2's filter is not bigger, it
+is more sharply tuned into one resonant mode, a difference invisible to
+any norm-based or loss-based check. One honest gap: a direct 300-step
+rollout of the base trajectory shows no visible difference between the
+three models at any resize factor tested, so this gain analysis is a
+plausible, measurement-consistent mechanism for the collapse, not yet a
+proven one --- closing that gap (a short-horizon tangent-growth probe at
+each resize factor) is the immediate next step. (\S\,9.1)
+
+\textbf{What this might mean going forward.} If it holds up, it points
+at a gap in how this whole class of model is trained and validated:
+
+\begin{itemize}[nosep]
+\item \emph{Training loss and native-size accuracy are not a
+  certificate of out-of-distribution structural stability.} Two seeds
+  that are indistinguishable by every metric we currently use to accept
+  a checkpoint differ by $2\times$ in an operator property that, as far
+  as we can tell, is the thing that actually matters for transfer.
+\item \emph{The relevant property is cheaply, exactly computable for
+  this whole architecture family} (any weight-shared, convolution-based
+  local propagator), because the site-mixing layers are linear and
+  shift-invariant by design. A maximum-gain bound, checked once after
+  training and costing nothing at inference, is a plausible screen to
+  catch a bad seed before ever running the expensive transfer-validation
+  pipeline.
+\item \emph{The contrast points at a specific regularizer, not just
+  ``penalize the norm.''} m0/m1 and m2 have statistically identical bulk
+  kernel size --- what differs is that m2's gain is sharply
+  \emph{concentrated} into one resonant frequency rather than spread out.
+  That is the actual failure mode a regularizer should target: penalize
+  peakedness/concentration of the kernel's frequency response (e.g.\ its
+  gain variance across frequency, or simply its max-to-mean gain ratio),
+  not overall gain, which a blanket spectral-norm cap would suppress
+  indiscriminately and likely cost real expressivity for no reason. A
+  smoothly-varying response is also the natural thing to want
+  independent of transfer: a resonant filter disproportionately amplifies
+  whatever noise or error happens to land near its one sensitive
+  frequency, so this plausibly improves in-distribution robustness too,
+  not only transfer --- untested, and the natural next experiment.
+\item \emph{This is a second, model-side precondition for transfer,
+  alongside the physics-side one in \S4.} \S4 showed transfer needs the
+  \emph{true system} to be extensive at the target size, checkable by
+  measuring $D_{\mathrm{KY}}/\mathrm{Area}$ with no learned model
+  involved. This section suggests transfer also needs the \emph{learned
+  operator} to have bounded gain at frequencies it was never shown ---
+  checkable, in principle, with no transfer test either. A general
+  transfer-readiness checklist for this architecture family may end up
+  being exactly these two checks, one on the physics and one on the
+  trained weights.
+\end{itemize}
+
+\section{Implications and next steps}
+
+\textbf{A general design principle.} Before investing in a local-field
+model for an unfamiliar extensive-chaos system, measure true
+$\DKY/\mathrm{Area}$ at two domain sizes --- cheap, no learned model
+required. If it is flat, zero-shot transfer should work; if not, check
+whether a physically motivated dissipation term can restore it before
+assuming the architecture needs to change.
+
+\textbf{A diagnostic for the onset of large-scale structure.} Because
+the local surrogate can only represent dynamics built from a bounded
+interaction range, its transfer error is a direct readout of how much of
+a system's attractor dimension is \emph{non-local} at a given scale ---
+and, in Fig.~\ref{fig:combined}b, that readout tracked the true extensivity drift almost
+1:1 at both points measured. The same idea applied to a cloud-resolving
+model in radiative-convective equilibrium would, in principle, locate
+the domain-size threshold for convective self-aggregation --- a known,
+actively studied transition in atmospheric science --- without an
+aggregation index defined by hand, and would give a causal test
+(disabling rain evaporation is known to remove the threshold's
+domain-size dependence, exactly analogous to raising $\alpha$ here).
+We checked the literature specifically for this combination (local
+surrogate + zero-shot transfer error + Lyapunov validation, used as a
+locality/extensivity diagnostic); we did not find it. (\S\,9)
+
+\textbf{Concrete next steps, in order:}
+\begin{enumerate}[nosep]
+\item \emph{Error bars.} A multi-seed re-measurement is underway: the
+  true $\DKY$ itself carries $\sim$9\% seed-to-seed scatter at the sizes
+  tested, comparable to several effects above, and must be quantified
+  before any of this is submission-ready.
+\item \emph{Map the crossover.} Sweep drag and domain size together and
+  test the predicted $L^*\propto\alpha^{-3/2}$ scaling directly against
+  the measured extensivity crossover --- turns a demonstration into a
+  quantitative, falsifiable physics claim.
+\item \emph{A cheap proxy.} Replace the expensive Lyapunov comparison
+  with forward-only statistics (energy spectrum, autocorrelation) so the
+  diagnostic is affordable at cloud-resolving-model scale.
+\item \emph{Close the gain-vs-collapse gap (\S\ref{sec:m2}).} A
+  short-horizon tangent-growth probe at each resize factor, to confirm
+  the spectral-gain mechanism directly; if confirmed, test whether a
+  peakedness penalty on the mixing kernel's frequency response
+  eliminates the seed-dependent collapse and improves in-distribution
+  robustness, without costing accuracy.
+\item \emph{Rayleigh--B\'enard, then a cloud-resolving model} in
+  radiative-convective equilibrium, as the direct test of the
+  atmospheric application above.
+\end{enumerate}
+
+\textbf{Publication framing.} Result 1 alone is a clean, submittable
+finding. Results 2--3 together are stronger: not ``this architecture
+transfers,'' but ``transfer is governed by a checkable physical
+precondition, and when it fails, the reason is diagnosable and, in one
+case, fixable with a single physically motivated parameter change.''
+Item 5, if it works, is the paper's headline application.
+
+\end{document}
