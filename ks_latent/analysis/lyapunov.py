@@ -290,7 +290,7 @@ def lyapunov_spectrum_ks(
     )
 
 
-def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int) -> StepWithTangentFn:
+def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int, cubic: float = 0.0) -> StepWithTangentFn:
     """2D analogue of `_ks_step_with_tangent_physical_space`. `benettin`
     is written for a flat `(state_dim,)` vector space (QR needs a plain
     2D matrix, `(n_directions, state_dim)`) -- this wrapper flattens the
@@ -306,7 +306,7 @@ def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int) -> StepWithT
         n_directions = tangent_flat.shape[0]
         tangent_phys = tangent_flat.reshape(n_directions, NX, NY)
         dV = np.fft.fft2(tangent_phys, axes=(-2, -1))
-        v_next, dV_next = step_with_tangent2d(v, dV, op)
+        v_next, dV_next = step_with_tangent2d(v, dV, op, cubic=cubic)
         u_next = np.fft.ifft2(v_next).real
         tangent_next = np.fft.ifft2(dV_next, axes=(-2, -1)).real
         return u_next.reshape(NX * NY), tangent_next.reshape(n_directions, NX * NY)
@@ -325,17 +325,20 @@ def lyapunov_spectrum_ks2d(
     initial_state: np.ndarray | None = None,
     max_abs_state: float = 50.0,
     M: int = 32,
+    cubic: float = 0.0,
 ) -> LyapunovResult:
-    """2D analogue of `lyapunov_spectrum_ks` -- full Lyapunov spectrum of
+    """`cubic`: J17A missing-process strength beta (`ks2d.cubic_term2d`); 0 = standard 2D KS.
+
+    2D analogue of `lyapunov_spectrum_ks` -- full Lyapunov spectrum of
     the 2D KS PDE via the variational ETDRK4 integrator
     (`ks_latent.solver.ks2d.step_with_tangent2d`). `initial_state`, if
     given, must be `(NX,NY)` (flattened internally); the result's own
     `exponents`/`D_KY` are in the same flat-vector convention every other
     `LyapunovResult` in this module uses, so downstream code (Kaplan-Yorke,
     `n_positive`, etc.) needs no 2D-specific handling at all."""
-    step_fn = _ks2d_step_with_tangent_physical_space(cfg, M)
+    step_fn = _ks2d_step_with_tangent_physical_space(cfg, M, cubic)
     if initial_state is None:
-        initial_state = spinup2d(cfg, np.random.default_rng(seed), M=M)
+        initial_state = spinup2d(cfg, np.random.default_rng(seed), M=M, cubic=cubic)
     initial_state_flat = initial_state.reshape(cfg.NX * cfg.NY)
 
     qr_every = max(1, int(round(qr_interval / cfg.dt)))

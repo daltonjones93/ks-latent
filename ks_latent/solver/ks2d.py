@@ -122,6 +122,17 @@ def _get_operator2d_cached(Lx: float, Ly: float, NX: int, NY: int, dt: float, M:
     return ETDRK4Operator2D(KX=KX, KY=KY, Lhat=Lhat, coeffs=coeffs)
 
 
+def modified_operator2d(cfg: KSConfig2D, lap_coef: float, M: int = 32) -> ETDRK4Operator2D:
+    """Operator for `u_t + lap_coef * nabla^2 u + nabla^4 u + (1/2)|nabla u|^2 = 0` (task I28,
+    2026-10-09: the imperfect-model twin's truth). `Lhat = lap_coef * K^2 - K^4`; the most
+    unstable wavenumber moves from `1/sqrt(2)` to `sqrt(lap_coef / 2)`. `lap_coef = 1` is the
+    standard equation (identical to `get_operator2d`)."""
+    KX, KY = wavenumbers2d(cfg.Lx, cfg.Ly, cfg.NX, cfg.NY)
+    K2 = KX**2 + KY**2
+    Lhat = lap_coef * K2 - K2**2
+    return ETDRK4Operator2D(KX=KX, KY=KY, Lhat=Lhat, coeffs=etdrk4_coefficients_2d(Lhat, cfg.dt, M=M))
+
+
 def get_operator2d(cfg: KSConfig2D, M: int = 32) -> ETDRK4Operator2D:
     """ETDRK4 operator for `cfg`, cached by `(Lx, Ly, NX, NY, dt, M)`."""
     return _get_operator2d_cached(cfg.Lx, cfg.Ly, cfg.NX, cfg.NY, cfg.dt, M)
@@ -136,7 +147,25 @@ def _nonlinear2d(v: np.ndarray, KX: np.ndarray, KY: np.ndarray) -> np.ndarray:
     return -0.5 * fft2(ux**2 + uy**2)
 
 
-def step2d(v: np.ndarray, op: ETDRK4Operator2D) -> np.ndarray:
+def cubic_term2d(w: np.ndarray, beta: float) -> np.ndarray:
+    """J17A missing process (2026-10-10): the Fourier-space tendency `-beta * P[(u - mean u)^3]` of
+    a batch `(..., NX, NY)` of Fourier states, P = removal of the k = 0 mode.
+
+    The cubic is evaluated on the MEAN-REMOVED field so that the dynamics stay invariant under
+    `u -> u + c`, as for standard 2D KS (see `step2d`): without that, the gauge-fixed k = 0 mode
+    and ETDRK4's intermediate stages (whose mean is not zero) would feed back into the term. The
+    system is therefore `u_t = KS(u) - beta * P[u'^3]` on zero-mean fields u' -- a local,
+    saturating, odd damping that no member of the KS family contains."""
+    w0 = np.array(w, copy=True)
+    w0[..., 0, 0] = 0.0
+    u = ifft2(w0, axes=(-2, -1)).real
+    out = -beta * fft2(u**3, axes=(-2, -1))
+    out[..., 0, 0] = 0.0
+    return out
+
+
+def step2d(v: np.ndarray, op: ETDRK4Operator2D, forcing_hat: np.ndarray | None = None,
+           cubic: float = 0.0) -> np.ndarray:
     """One ETDRK4 step in Fourier space (Kassam & Trefethen 2005, eq. 20)
     -- identical algebraic structure to `ks_latent.solver.ks.step`, only
     the nonlinear-term evaluation differs (see `_nonlinear2d`).
@@ -163,13 +192,21 @@ def step2d(v: np.ndarray, op: ETDRK4Operator2D) -> np.ndarray:
     zero mean, losing zero information about the actual pattern."""
     c = op.coeffs
     KX, KY = op.KX, op.KY
-    Nv = _nonlinear2d(v, KX, KY)
+    if forcing_hat is None:
+        nl0 = lambda w: _nonlinear2d(w, KX, KY)  # noqa: E731
+    else:  # I28: a time-independent forcing f(x, y) is part of the explicit term N
+        nl0 = lambda w: _nonlinear2d(w, KX, KY) + forcing_hat  # noqa: E731
+    if cubic == 0.0:
+        nl = nl0
+    else:  # J17A: the missing -beta u'^3 process, also explicit
+        nl = lambda w: nl0(w) + cubic_term2d(w, cubic)  # noqa: E731
+    Nv = nl(v)
     a = c.E2 * v + c.Q * Nv
-    Na = _nonlinear2d(a, KX, KY)
+    Na = nl(a)
     b = c.E2 * v + c.Q * Na
-    Nb = _nonlinear2d(b, KX, KY)
+    Nb = nl(b)
     cc = c.E2 * a + c.Q * (2.0 * Nb - Nv)
-    Nc = _nonlinear2d(cc, KX, KY)
+    Nc = nl(cc)
     v_next = c.E * v + Nv * c.f1 + 2.0 * (Na + Nb) * c.f2 + Nc * c.f3
     v_next[0, 0] = 0.0
     return v_next
@@ -182,6 +219,10 @@ def integrate2d(
     *,
     snapshot_every: int | None = None,
     M: int = 32,
+    op: ETDRK4Operator2D | None = None,
+    advect: tuple[float, float] | None = None,
+    forcing: np.ndarray | None = None,
+    cubic: float = 0.0,
 ) -> np.ndarray:
     """Integrate `u0` (`(NX, NY)`) for `n_steps` solver steps of size
     `cfg.dt`. Returns `(n_snapshots + 1, NX, NY)` including the initial
@@ -195,12 +236,27 @@ def integrate2d(
     of `step2d`'s own zero-mean-preserving evolution)."""
     if snapshot_every is None:
         snapshot_every = cfg.snapshot_every
-    op = get_operator2d(cfg, M=M)
+    if op is None:
+        op = get_operator2d(cfg, M=M)
+    # I28 structural model error (2026-10-09). `advect=(cx, cy)`: uniform mean-flow advection
+    # u_t + c.grad(u) + ..., applied EXACTLY as a Fourier phase shift after each step (uniform
+    # advection is a translation, and the KS dynamics commute with translations). `forcing`:
+    # time-independent f(x, y) (NX, NY) added to the right-hand side (zero-mean part only, since the
+    # k = 0 mode is gauge). Use one or the other: with both, the splitting is no longer exact.
+    if advect is not None and (forcing is not None or cubic != 0.0):
+        raise ValueError("integrate2d: advect cannot be combined with forcing or cubic (the splitting is exact only alone)")
+    # J17A: `cubic = beta` adds the missing process -beta * P[u'^3] (see `cubic_term2d`).
+    shift = None
+    if advect is not None:
+        shift = np.exp(-1j * (advect[0] * op.KX + advect[1] * op.KY) * cfg.dt)
+    forcing_hat = None if forcing is None else fft2(np.asarray(forcing, dtype=np.float64))
     u0 = u0.astype(np.float64) - u0.astype(np.float64).mean()
     v = fft2(u0)
     snapshots = [u0.copy()]
     for step_idx in range(1, n_steps + 1):
-        v = step2d(v, op)
+        v = step2d(v, op, forcing_hat, cubic)
+        if shift is not None:
+            v = v * shift
         if step_idx % snapshot_every == 0:
             snapshots.append(ifft2(v).real.copy())
     return np.stack(snapshots, axis=0)
@@ -230,7 +286,7 @@ def default_initial_condition2d(cfg: KSConfig2D, rng: np.random.Generator) -> np
 
 
 def step_with_tangent2d(
-    v: np.ndarray, dV: np.ndarray, op: ETDRK4Operator2D
+    v: np.ndarray, dV: np.ndarray, op: ETDRK4Operator2D, cubic: float = 0.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """Advance the base state `v` (`(NX,NY)`) and a batch of tangent
     vectors `dV` (`(k, NX, NY)`, complex, Fourier space) together, for
@@ -250,33 +306,50 @@ def step_with_tangent2d(
     c = op.coeffs
     KX, KY = op.KX, op.KY
 
+    # J17A: with `cubic = beta`, N gains -beta P[u'^3] (`cubic_term2d`), whose derivative in direction
+    # du is -3 beta P[u'^2 du'] (u', du' mean-removed). `base_nl` then also returns u'^2 (else None).
     def base_nl(state):
         ux = ifft2(1j * KX * state).real
         uy = ifft2(1j * KY * state).real
-        return ux, uy, -0.5 * fft2(ux**2 + uy**2)
+        N = -0.5 * fft2(ux**2 + uy**2)
+        if cubic == 0.0:
+            return (ux, uy, None), N
+        s0 = state.copy()
+        s0[0, 0] = 0.0
+        u = ifft2(s0).real
+        return (ux, uy, u**2), N + cubic_term2d(state, cubic)
 
-    def tangent_nl(ux, uy, dstate):
+    def tangent_nl(base, dstate):
+        ux, uy, u2 = base
         dux = ifft2(1j * KX[None, :, :] * dstate, axes=(-2, -1)).real
         duy = ifft2(1j * KY[None, :, :] * dstate, axes=(-2, -1)).real
-        return -fft2(ux[None, :, :] * dux + uy[None, :, :] * duy, axes=(-2, -1))
+        out = -fft2(ux[None, :, :] * dux + uy[None, :, :] * duy, axes=(-2, -1))
+        if u2 is not None:
+            d0 = dstate.copy()
+            d0[:, 0, 0] = 0.0
+            du = ifft2(d0, axes=(-2, -1)).real
+            dc = -3.0 * cubic * fft2(u2[None, :, :] * du, axes=(-2, -1))
+            dc[:, 0, 0] = 0.0
+            out = out + dc
+        return out
 
-    u_x_v, u_y_v, Nv = base_nl(v)
-    dNv = tangent_nl(u_x_v, u_y_v, dV)
+    bv, Nv = base_nl(v)
+    dNv = tangent_nl(bv, dV)
 
     a = c.E2 * v + c.Q * Nv
     da = c.E2[None, :, :] * dV + c.Q[None, :, :] * dNv
-    u_x_a, u_y_a, Na = base_nl(a)
-    dNa = tangent_nl(u_x_a, u_y_a, da)
+    ba, Na = base_nl(a)
+    dNa = tangent_nl(ba, da)
 
     b = c.E2 * v + c.Q * Na
     db = c.E2[None, :, :] * dV + c.Q[None, :, :] * dNa
-    u_x_b, u_y_b, Nb = base_nl(b)
-    dNb = tangent_nl(u_x_b, u_y_b, db)
+    bb, Nb = base_nl(b)
+    dNb = tangent_nl(bb, db)
 
     cc = c.E2 * a + c.Q * (2.0 * Nb - Nv)
     dcc = c.E2[None, :, :] * da + c.Q[None, :, :] * (2.0 * dNb - dNv)
-    u_x_c, u_y_c, Nc = base_nl(cc)
-    dNc = tangent_nl(u_x_c, u_y_c, dcc)
+    bc, Nc = base_nl(cc)
+    dNc = tangent_nl(bc, dcc)
 
     v_next = c.E * v + Nv * c.f1 + 2.0 * (Na + Nb) * c.f2 + Nc * c.f3
     dV_next = (
@@ -296,11 +369,12 @@ def step_with_tangent2d(
     return v_next, dV_next
 
 
-def spinup2d(cfg: KSConfig2D, rng: np.random.Generator, *, M: int = 32) -> np.ndarray:
-    """Discard `cfg.spinup_time` of transient, return the resulting `(NX,NY)` state."""
+def spinup2d(cfg: KSConfig2D, rng: np.random.Generator, *, M: int = 32, cubic: float = 0.0) -> np.ndarray:
+    """Discard `cfg.spinup_time` of transient, return the resulting `(NX,NY)` state. `cubic`: J17A's
+    missing-process strength (see `cubic_term2d`)."""
     u0 = default_initial_condition2d(cfg, rng)
     n_spinup_steps = int(round(cfg.spinup_time / cfg.dt))
     if n_spinup_steps == 0:
         return u0
-    traj = integrate2d(u0, cfg, n_spinup_steps, snapshot_every=n_spinup_steps, M=M)
+    traj = integrate2d(u0, cfg, n_spinup_steps, snapshot_every=n_spinup_steps, M=M, cubic=cubic)
     return traj[-1]
