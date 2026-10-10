@@ -77,4 +77,22 @@ the PDE at $L=400$, 35~min; a 120-unit Kolmogorov truth at $3\times$, several
 hours; a model spectrum at $3\times$ or $88^2$, about 7~min; training a 2D
 propagator, 17~min to 2~h; a data assimilation run of 100 cycles,
 seconds to minutes up to $88^2$ and 0.4--1.8~h of CPU time at $220^2$--$440^2$
-(Table~\ref{tab:da_cost}).
+(Table~\ref{tab:da_cost}) \placeholder{P2: Part~II timings from I14}.
+
+\subsection{Part~II code}
+
+The Part~II experiments are run by \texttt{scripts/exp\_h9\_tiled\_da.py} (the latent filter with
+shifted tilings, forecasts and the robustness options), \texttt{scripts/exp\_i11\_pde\_letkf.py} (the
+physics-based filter with wrong models, parameter estimation, bias correction and the hidden-field
+truth), \texttt{scripts/exp\_i24\_phys\_emulator.py} (the learned model inside a physical-space
+filter), \texttt{scripts/exp\_j16\_estimate\_pde\_model\_error.py} (offline one-cycle residuals),
+\texttt{scripts/exp\_j17h\_fit.py} (best fits of the wrong-damping models) and
+\texttt{scripts/exp\_j18b\_roundtrip.py} (the round-trip test). The noisy-data model is trained by
+\texttt{scripts/train\_kolmogorov\_crop.py --data-noise 0.1}. The library modules are
+\texttt{ks\_latent/da/letkf\_local.py} (per-site filter with RTPS), \texttt{letkf\_phys.py}
+(physical-space filter, multi-field states), \texttt{param\_est.py} (parameter estimation),
+\texttt{model\_error.py}, and in \texttt{ks\_latent/solver/} the wrong-model operators of
+\texttt{ks2d.py}, the cached imperfect-model truths of \texttt{twin.py} and the hidden-field system of
+\texttt{ks2d\_memory.py}, each with unit tests (the hidden-field solver against the exact solution of
+its linearization; the joint parameter update against the ensemble Kalman regression). The queues
+that ran every Part~II experiment are kept as \texttt{scripts/run\_*.sh}.

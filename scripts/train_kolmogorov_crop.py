@@ -119,7 +119,8 @@ def main() -> None:
         print(f"[crop] I33: added fixed Gaussian data noise, std {args.data_noise} (standardized units)", flush=True)
     u_train, u_val = traj[:n_train].to(dev), traj[n_train:].to(dev)
     norm = {"normalization_mean": float(md["normalization_mean"]),
-            "normalization_std": float(md["normalization_std"]), "train_dataset": args.dataset}
+            "normalization_std": float(md["normalization_std"]), "train_dataset": args.dataset,
+            "data_noise": float(args.data_noise), "data_noise_seed": int(args.data_noise_seed)}  # provenance (2026-10-10)
     print(f"[crop] {args.dataset}: train {tuple(u_train.shape)} val {tuple(u_val.shape)} alpha={md.get('alpha', 'n/a')}", flush=True)
 
     NYc = args.crop_sites_y * 16 if args.crop_sites_y else NY

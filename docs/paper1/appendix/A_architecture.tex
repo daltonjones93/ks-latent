@@ -21,10 +21,13 @@ the propagator with forced-halo rollouts (2D) or on whole periodic
 domains (1D); the rollout length is ramped $2\to k_{\mathrm{mid}}$ over
 the first $58\%$ of Stage~B and to $k_{\max}$ by $70\%$. All runs use
 AdamW with linear warm-up and cosine decay, weight decay $10^{-5}$,
-gradient clipping at 1, and training seed 0.
+gradient clipping at 1, and training seed 0. ``2D KS, Part~II'' is the
+model of the data assimilation experiments (Sec.~\ref{sec:da_setting}): the 2D KS recipe with 12
+channels, trained on fields carrying one fixed realization of Gaussian noise of standard deviation
+$0.1$ (standardized units), against which its validation error is also measured.
 $^a$A signed latent spatial-coherence penalty (weight 0.01).}
 \label{tab:architecture}
-\widetabular{lccccc}{\tabinput{tables/tabA_architecture}}
+\widetabular{lcccccc}{\tabinput{tables/tabA_architecture}}
 \end{table*}
 
 \para{Selection of the $\alpha=0.1$ model.} Six variants were trained at

@@ -19,6 +19,14 @@ evaluation, several of which were later revised (Sec.~\ref{sec:truth_uncertainty
 and are not used anywhere in this paper. The 1D evaluations are complete
 in Table~\ref{tab:transfer1d}.
 
+\para{The 12-channel models of Part~II.} The data assimilation experiments use a 12-channel sibling
+of the 2D KS model, trained on noisy fields (Appendix~\ref{app:architecture}). Its $\DKY$ is $84.7$ at
+$44^2$ and $188.5$ at $66^2$, against truths of $81.8$ and $192.5$ ($3.6\%$ and $2.1\%$); a 12-channel model
+trained on clean fields gives $83.5$ and $190.4$ ($2.1\%$ and $1.1\%$), and the 6-channel model of Part~I
+$1.7\%$ and $2.4\%$. Doubling the channels and training on noisy data leave the transfer of the dimension
+within the spread of the truth runs (\texttt{artifacts/experiments/crop/p7c12*\_ks2d\_x*.json}; one
+initial condition each).
+
 Table~\ref{tab:spectra} gives, for the main-text models, the
 reconstruction error of the autoencoder, the ratio of the decoded
 rollout's standard deviation to the truth's, and the share of energy in

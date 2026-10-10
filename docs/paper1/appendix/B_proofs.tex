@@ -235,3 +235,12 @@ and the innovation of the ensemble mean on $O_s$, so the same conclusion
 holds for it. With $\Rdec>0$ the rows $J_{O_s,:}$ are non-zero on every site
 within $\Rdec$ of $U_s$, and the same identities hold only after replacing
 $U_s$ by that larger set. \qed
+
+\para{Shifted tilings preserve exactness.} Let tiling $k$ act on $\Tr_{o_k}u$. Its observation operator
+is $h_k = \Hobs\circ\Tr_{o_k}^{-1}\circ\Dec$, and $\Tr_{o_k}^{-1}$ only relabels grid points, so each $h_k$ is
+again a grid-point selection composed with a per-patch decoder, and the proposition applies to
+each tiling separately: every tiling's analysis is exactly local in its own lattice. The blend of
+Eq.~\eqref{eq:blend} is a fixed linear map of the $K$ decoded analyses, with weights that depend only
+on position, so the value of the blended analysis at a grid point depends only on the $K$ sites, one per
+tiling, whose patches contain it, and through them only on the observations within the taper
+supports of those sites. No approximation enters at any step.
