@@ -23,7 +23,10 @@ from ks_latent.da.jacobian_coloring import coloured_obs_jacobian_2d_compact, obs
 from ks_latent.models import load_autoencoder_checkpoint_resized_2d
 
 torch.set_num_threads(4)
-AE = "artifacts/stage1_ae_kolmogorov_crop_p7b_ks2d.pt"
+import os  # K10d (2026-10-10): model via KS_TAG (default p7b_ks2d, the original outputs unchanged)
+TAG_ = os.environ.get("KS_TAG", "p7b_ks2d")
+AE = f"artifacts/stage1_ae_kolmogorov_crop_{TAG_}.pt"
+SUFFIX_ = "" if TAG_ == "p7b_ks2d" else f"_{TAG_}"
 STRIDE = 8
 SIZES = [44, 66, 88, 132, 220, 330, 440]
 JACREV_MAX = 132
@@ -69,5 +72,5 @@ for L in SIZES:
     res.append(rec)
     print({k: (round(v, 4) if isinstance(v, float) else v) for k, v in rec.items()}, flush=True)
     del ae
-with open("artifacts/experiments/da2d/jacobian_timing_F4.json", "w") as f:
+with open(f"artifacts/experiments/da2d/jacobian_timing_F4{SUFFIX_}.json", "w") as f:
     json.dump(res, f, indent=2)

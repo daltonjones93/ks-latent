@@ -12,7 +12,10 @@ import torch
 from ks_latent.da.jacobian_coloring import obs_site_map_2d
 from ks_latent.models import load_autoencoder_checkpoint_resized_2d
 
-AE = "artifacts/stage1_ae_kolmogorov_crop_p7b_ks2d.pt"
+import os  # K10d (2026-10-10): model via KS_TAG (default p7b_ks2d, the original outputs unchanged)
+TAG_ = os.environ.get("KS_TAG", "p7b_ks2d")
+AE = f"artifacts/stage1_ae_kolmogorov_crop_{TAG_}.pt"
+SUFFIX_ = "" if TAG_ == "p7b_ks2d" else f"_{TAG_}"
 NX, NS, STRIDE = 128, 8, 8
 ck = torch.load(AE, map_location="cpu", weights_only=False)
 ae = load_autoencoder_checkpoint_resized_2d(AE, new_n_sites_x=NS, new_n_sites_y=NS, new_NX=NX, new_NY=NX)[0].eval()
@@ -34,5 +37,5 @@ c = z.shape[0] // (NS * NS)
 off_block = np.array([[J[i, j] for j in range(J.shape[1]) if j // c != site[order][i]] for i in range(J.shape[0])])
 print(f"J {J.shape}, channels {c}; max |J| off the site blocks = {np.abs(off_block).max():.3e}, "
       f"max |J| = {np.abs(J).max():.3e}")
-np.savez("artifacts/experiments/da2d/jacobian_sparsity_L44.npz", J=J, site=site[order], channels=c,
+np.savez(f"artifacts/experiments/da2d/jacobian_sparsity_L44{SUFFIX_}.npz", J=J, site=site[order], channels=c,
          max_off_block=float(np.abs(off_block).max()), max_abs=float(np.abs(J).max()))

@@ -2534,7 +2534,17 @@ JSONs) and, where a result is still running, the text options for each outcome.
 seeds 1–2, RTPS 0.6 follow-up; ~18:00), J17B ε = 0.1 (physics done ~16:00; latent after training
 ~16:30) and ε = 0.2 (~20:00), J18a σ = 0.3 (~23:00), I7 + I16 (~20:30), I14 (overnight), J5 (~06:00).
 
-### K0 `[ ]` The Part II narrative (write this first; everything else serves it)
+### K0 `[~]` The Part II narrative (write this first; everything else serves it)
+- **Drafted 2026-10-10** → `docs/paper1/partII_narrative.md`: claims 1–6 with numbers and sources, draft
+  abstract / Key Point 3 / §10 text with branch options, and a **placeholder table P1–P12** (run, file,
+  ETA) to fill as runs land.
+- **Correction found while drafting:** the "decoder floor ≈ 0.25" is the single-tiling floor; the
+  blended (K = 4) decoder floor is 0.13, so the 0.31 analysis is mostly filter error. Claim 6 below and
+  K5.3 must say this.
+- **K1 decisions (user):** (1) unlocalized failure rerun with the Part II model (`run_k1_unloc.sh`:
+  44²/66²/88², N = 64/128, K = 1/4, taper ≡ 1; plus localized 66² points); (2) 1D results stay in §7 only
+  if remarkably good — assessment: keep one compact subsection (required-ensemble doubling vs 16
+  members; GC beats distance-free SEC up to 3.5×), rest to App. E.
 Order of claims, each with its one-line evidence, to be used verbatim as the skeleton of §7, the
 abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
 1. **Exactly local latent DA, now with shifted tilings.** With a per-patch decoder the latent
@@ -2825,7 +2835,7 @@ Each subsection lists its inputs; text options are given where a result is pendi
   spinning (Coifman & Donoho 1995). Add a column "vs physics-based DA" to tab:prior_work and rows for
   ROAD-EnKF, LAE-EnKF, Brajard 2020. ~0.5 day (J13's verification list absorbed here).
 
-### K10 `[ ]` Small gap-filling runs (cheap; queue tonight after I16)
+### K10 `[~]` Small gap-filling runs — QUEUED 2026-10-10 15:10 (`scripts/run_k10.sh`, log `artifacts/logs/k10.log`, caffeinated)
 - (a) Observation density with the Part II model: strides 4 / 8 / 16 at 44², K = 1 and 4, seed 0,
   100 cycles (+ stride 16 with 300 cycles to document the drift). ~20 min.
 - (b) One-cycle model error for the J1 cases that lack a J16 file (coefficient 1.1/1.25, mean flow
