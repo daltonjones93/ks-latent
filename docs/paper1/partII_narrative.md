@@ -220,3 +220,14 @@ latent filter error by a third without retraining, and one setting holds over a 
   true: 0.351 (cal. 0.58) / 0.338 (cal. 1.40) vs 0.324 (0.92): 4–8% worse, calibration moves as expected.
 - Still pending: P1 (~21:00), P2 (overnight), P3 (I16c 300 cycles at 220², running), P4 (~23:00), P7 (J17B:
   ε = 0.1 model trained 15:54, latent runs next; ε = 0.2 later), P9 (overnight).
+
+## Filled 2026-10-10 ~16:50
+- **P6 final (J17H, 3 seeds, best config incl. joint (a,b,g) estimation):** order 5: 0.263 (0.255–0.267) →
+  physics 1.19×; order 6: 0.322 (0.321–0.323) → tie (1.03); order 8: 0.409 (0.402–0.420, RTPS 0.6, estimation
+  does not help) → latent 1.31×. State-dependent one-cycle errors 0.069 / 0.123 / 0.201. The crossover sits at
+  order 6 (≈ 0.12 field units ≈ σ_obs/5). §7.5 text and Table/Fig. 14 updated.
+- **P7 partial (J17B ε = 0.1):** latent 0.483 / 0.481 / 0.465 (mean 0.476; σ_obs = 0.86 in this system's units;
+  interpolation 1.10–1.15). Physics seed 0: tuned 0.486, bias correction 0.491–0.500, ∇² estimation 0.447 (best),
+  estimation + bias correction 0.462. State-dependent one-cycle error 0.152 ≈ 0.18 σ_obs — at the crossover, and
+  the seed-0 result is a near-tie (physics 8% better), consistent with the rule. Seeds 1–2 of the best physics
+  config and the true-model floor are running; ε = 0.2 (0.349 ≈ 0.40 σ_obs, predicted clear latent win) ~20:00.
