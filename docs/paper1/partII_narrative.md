@@ -93,16 +93,16 @@ set by the physics model's irreducible one-cycle forecast error relative to the 
 
 *Evidence* (3-seed means; latent 0.312, range 0.302–0.324) [`i11_I28*`, `i11_J16*`, `i11_J17H*`]:
 
-| physics model error | one-cycle error | physics, best incl. remedies | outcome |
+| physics model error | one-cycle error: total / state-dependent part | physics, best incl. remedies | outcome |
 |---|---|---|---|
-| none (true equations) | 0 | 0.076 | floor |
-| 64² grid | [[P5]] | 0.083 | physics |
-| 32² grid | 0.037 | 0.18 (bias correction no help) | physics 1.7× |
-| ∇² coefficient 1.1 | [[P5]] | 0.225 (with estimation) | physics 1.4× |
-| fixed forcing 0.2 / 0.4 | 0.10 / 0.20 | 0.225 / 0.225 (bias correction) | physics 1.4× |
-| ∇² coefficient 1.25 | [[P5]] | 0.420 (with estimation) | latent 1.35× |
-| spurious mean flow 1 / 2 | [[P5]] | 0.44 / 0.55–0.61 (with estimation) | latent 1.4× / 1.8× |
-| damping order 5 / 6 / 8, (a, b, g) estimated online | 0.072 / 0.129 / 0.210 | seed 0 tuned: 0.296 / 0.351 / 0.432 | [[P6]] |
+| none (true equations) | 0 / 0 | 0.076 | floor |
+| 64² grid | 0.000 / 0.000 | 0.083 | physics |
+| 32² grid | 0.037 / 0.036 | 0.18 (bias correction no help) | physics 1.7× |
+| ∇² coefficient 1.1 | 0.082 / 0.077 | 0.225 (with estimation) | physics 1.4× |
+| fixed forcing 0.2 / 0.4 | 0.101 / 0.008; 0.203 / 0.016 | 0.225 / 0.225 (bias correction) | physics 1.4× |
+| ∇² coefficient 1.25 | 0.210 / 0.199 | 0.420 (with estimation) | latent 1.35× |
+| spurious mean flow 1 / 2 | 0.78 / 0.72; 1.53 / 1.42 | 0.44 / 0.55–0.61 (with estimation) | latent 1.4× / 1.8× |
+| damping order 5 / 6 / 8, (a, b, g) estimated online | 0.072 / 0.069 (p = 5); 0.129, 0.210 total (p = 6, 8; state part [[P5b]]) | seed 0 tuned: 0.296 / 0.351 / 0.432 | [[P6]] |
 | hidden memory field ε = 0.1 / 0.2 (own latent model) | 0.165 / 0.377 | [[P7]] | [[P7]] |
 
 - Robustness: the physics filter diverges or loses to interpolation outside a narrow RTPS window
@@ -110,7 +110,16 @@ set by the physics model's irreducible one-cycle forecast error relative to the 
   over-dispersed (spread/error 1.7–2.0). The latent filter uses one default throughout.
 - Bias correction does nothing for the state-dependent errors (orders 5/6/8: 0.297 / 0.361 / 0.440 vs
   0.296 / 0.351 / 0.432 without).
-- Crossover statement: [[P8]].
+- **Organizing variable (found 2026-10-10 15:15 from the P5 files):** the *state-dependent* part of the
+  physics model's one-cycle error (the std of the residual after removing its mean, which bias
+  correction removes). Every case where it is ≤ 0.077 (64², 32², forcing 0.008–0.016, coefficient 1.1,
+  order 5) is a physics win or tie; every case where it is ≥ 0.2 (coefficient 1.25, mean flow, order 8
+  pending) is a latent win. Order 6 (total 0.129) sits in between. So the crossover is near 0.1 field
+  units ≈ 0.27 σ_obs (σ_obs ≈ 0.375 at 44²). Caveat: for the estimated cases the offline value is at
+  the wrong starting parameter; estimation lowers the effective error, so the true crossover can only
+  be lower than these points suggest for those rows. The forcing cases show why the total error is the
+  wrong axis: 0.2 total, but almost all bias.
+- Crossover statement: [[P8]] (fill the order-6/8 and memory points, then state the threshold).
 - Same comparison at 220²: [[P9]].
 
 ## Claim 6 — Honest frame
@@ -159,7 +168,8 @@ latent filter error by a third without retraining, and one setting holds over a 
 | P2 | wall time and peak memory vs area, K = 1 and 4 | I14 → `h9_I14_*` | ~03:00 |
 | P3 | 300-cycle run at 220² (drift or not) | I16c → `h9_I16c_L220_300cyc_T4` | ~20:30 |
 | P4 | σ = 0.3 training-noise point (44² seeds 0–2, 220²) and its round-trip ratios | J18a → `h9_J18a_*`, `j18b_roundtrip.json` | ~23:00 |
-| P5 | one-cycle error for coefficient 1.1/1.25, mean flow 1/2, 64² | K10(b) → `j16_model_error_{lap1.1,lap1.25,adv1,adv2,M64}.json` | ~15:30 |
+| P5 | ~~one-cycle error for coefficient 1.1/1.25, mean flow 1/2, 64²~~ FILLED 15:08 (K10b) | `j16_model_error_*.json` | done |
+| P5b | state-dependent part for orders 6 and 8 (`j16_model_error_hyp{6,8}.json`, written by run_j17h.sh) | J17H | ~16:00 |
 | P6 | damping orders 5/6/8: 3-seed best incl. (a,b,g) estimation and RTPS 0.6; outcome per the pre-registered rule | J17H → `i11_J17H_*`, `j17h.log` | ~18:30 |
 | P7 | hidden memory ε = 0.1 / 0.2: physics best incl. remedies, floor (true (u,v) model), latent K = 4 seeds 0–2, in RMSE and RMSE/σ_obs | J17B → `i11_J17B_*`, `h9_J17B_*` | ~16:30 / ~20:00 |
 | P8 | crossover sentence: the one-cycle error (in σ_obs units) where the latent filter starts to win; abstract branch A/B/C | P5–P7 | after P7 |
