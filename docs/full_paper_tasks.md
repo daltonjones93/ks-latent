@@ -2731,6 +2731,12 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
 - ~0.5 day.
 
 ### K5 `[~]` §7 rewrite, subsection by subsection (replace `07_data_assimilation.tex`)
+- **K5.6 + K5.7 drafted 2026-10-10:** §7.6 "Trained only on noisy data" (P4 placeholder for σ = 0.3);
+  §7.7 "Forecasts, robustness and observation density" with Fig. 16 (`fig16_forecasts.py`), Table
+  `tab:da_forecast` (K2h) and Table `tab:da_robust` (K2f, `tabE_p2_robustness.py`; P3 placeholder for the
+  220² 300-cycle row); §7.8 "The one-dimensional results" (compact: required-ensemble doubling; GC beats
+  SEC), details and `tab:da_1d` moved to App. E. K2c generated (`tab07_p2_model_error.py`) and K3c Fig. 14
+  (`fig14_model_error.py`) added to §7.5. **Remaining: K5.8 cost (after I14).**
 - **K5.1–K5.5 drafted 2026-10-10** (`sections/07_data_assimilation.tex`, compiles with no undefined refs):
   §7.1 setting (model, twin protocol, filter, metrics/baselines); §7.2 shifted tilings (Fig. 13, Table
   `tab:da_2d_ensemble` = `tab07_p2_members`); §7.3 accuracy, decoder-not-the-limit, latent vs physical
@@ -2807,7 +2813,14 @@ Each subsection lists its inputs; text options are given where a result is pendi
   differences (state per member 43× smaller; 64 sites vs 1024 blocks; forecast cost); the Jacobian
   cost (c = 12 passes). ~0.5 day.
 
-### K6 `[ ]` Appendices
+### K6 `[~]` Appendices
+- **K6b/K6c/K6d done 2026-10-10:** App. F "Part II code" subsection (scripts, modules, tests) with a P2
+  timing placeholder; App. A architecture table gains the "2D KS, Part II" column and a "training-data
+  noise" row (`tabA_architecture.py`; data noise now also stored in new checkpoints by
+  `train_kolmogorov_crop.py`); App. D paragraph on the 12-channel models' D_KY (noisy 3.6%/2.1%, clean
+  2.1%/1.1%); App. B remark that the blend preserves exactness. **K6a partly done:** networks table,
+  1D-experiments subsection (moved from §7) and the round-trip test; still to do: wrong-model equations,
+  remedies, the per-site ETKF/RTPS/tiling equations, run-to-run spread for the new filter.
 - **K6a App. E rewrite:** networks table (K2g); the per-site ETKF as used (equations, R-localization,
   RTPS); the tiling blend (offsets, weights, exactness); the PFF, dense filter and SEC paragraphs
   demoted to "1D"; the physics-space LETKF comparator; the wrong-model definitions (each case's
@@ -2867,7 +2880,12 @@ Each subsection lists its inputs; text options are given where a result is pendi
 - **§10:** replace the DA paragraph with K0's claims 1, 2, 4, 5 in four sentences.
 - ~0.5 day.
 
-### K9 `[ ]` §2 background and the prior-work table
+### K9 `[~]` §2 background and the prior-work table
+- **Citation verification done 2026-10-10** for the seven entries added in K4 (whitakerhamill2012,
+  coifmandonoho1995, anderson2001, ruiz2013, dee2005, brajard2020, bocquet2020): authors, title, journal,
+  volume, pages and DOI confirmed via Crossref, publisher or author records; Coifman & Donoho's series volume
+  (often given as LNS 103) is not listed by Crossref/Springer, so it was removed and the editors added.
+  **Still to do:** the §2.5 text additions and the prior-work table column/rows.
 - Add to §2.5: learned-model DA (Brajard et al. 2020; Bocquet et al. 2020; Farchi et al. 2021 —
   verify), model-error treatments in EnKFs (parameter estimation: Anderson 2001; Ruiz et al. 2013;
   RTPS: Whitaker & Hamill 2012; additive inflation/bias correction: Dee 2005 — verify), cycle
