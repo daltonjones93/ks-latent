@@ -10,7 +10,8 @@ Table~\ref{tab:da_networks} lists every configuration. The grid spacing
 is that of the training data at every size, so a fixed stride is a fixed
 physical spacing: two observations per site in 1D and four in 2D.
 Observation errors are independent with standard deviation $0.1$ in
-standardized units; $R=0.01\,I$.
+standardized units, $R=0.01\,I$; for 2D KS this is $0.62$ in field units. In 2D every
+observation is assimilated by each of the $K=4$ tilings, whose offsets are listed in grid points.
 
 \begin{table}[htbp]
 \caption{Data assimilation configurations: grid, sites, latent dimension
@@ -29,11 +30,32 @@ system & size & grid & sites & $c$ & $\dlat$ & $K$ & offsets & stride & spacing 
 \subsection{Analysis schemes}
 \label{app:da_filters}
 
-Let $Z\in\R^{\Nens\times\dlat}$ be the forecast ensemble, $\bar z$ its mean,
-$X=Z-\bar z$ the (optionally inflated) perturbations, $B=X^\top X/(\Nens-1)$,
-$J$ the Jacobian of $h=\Hobs\circ\Dec$ at $\bar z$, and $\rho$ the
-Gaspari--Cohn taper \citep{gaspari1999} of half-width $3$ sites, which
-vanishes at site distances of 6 and more.
+Let $Z\in\R^{\Nens\times\dlat}$ be the forecast ensemble of one tiling, $\bar z$ its mean,
+$X=Z-\bar z$ the perturbations, $B=X^\top X/(\Nens-1)$, $J$ the Jacobian of $h=\Hobs\circ\Dec$ at
+$\bar z$, and $\rho$ the Gaspari--Cohn taper \citep{gaspari1999} of the site distance, of half-width
+$1.5$ sites in 2D (zero at 3 sites and beyond) and 3 sites in 1D.
+
+\para{The Part~II filter.} Each tiling runs the deterministic local transform below at every site,
+followed by relaxation to prior spread \citep{whitakerhamill2012}: for every latent coordinate $j$,
+with forecast and analysis spreads $\sigma^f_j$ and $\sigma^a_j$, the analysis perturbations are
+multiplied by $1+\alpha(\sigma^f_j-\sigma^a_j)/\sigma^a_j$, $\alpha=0.7$. The forecast is $\Fp$ applied
+five times, each time adding independent Gaussian noise of standard deviation $0.02$ to every latent
+coordinate. The initial ensemble of a tiling is its encoding of the initial truth plus independent
+noise of standard deviation $0.1$ per coordinate (or, in the robustness test of
+Table~\ref{tab:da_robust}, the encodings of 64 states of an independent trajectory, two time units
+apart).
+
+\para{Shifted tilings.} Tiling $k$ works on the field translated by $o_k\in\{0,8\}^2$ grid points
+(half a 16-point patch): it encodes $\Tr_{o_k}u$, and its observation operator reads the observations
+at their translated positions, so all tilings assimilate the same data. Each member $e$ of tiling $k$
+is decoded and translated back, $u^{(e)}_k=\Tr_{o_k}^{-1}\Dec(z^{(e)}_k)$, and the blended ensemble is
+$u^{(e)}=\sum_k w_k\,u^{(e)}_k$ with the weights of Eq.~\eqref{eq:blend}, pairing member $e$ of every
+tiling; its mean is the blended analysis and its spread the reported spread. With uniform weights,
+$w_k=1/K$. The blended fields are output only: each tiling's next forecast starts from its own
+analysis ensemble.
+
+\para{Filters used in 1D.} The 1D experiments use a single tiling, no RTPS, model noise $0.08$, and
+one of the following analyses.
 
 \para{Dense filter.} With perturbed observations
 $y^{(e)}=y+\varepsilon^{(e)}$, $\varepsilon^{(e)}\sim\mathcal N(0,R)$,
@@ -72,7 +94,9 @@ $Y=X_{N_s}J_s^\top\in\R^{\Nens\times|U_s|}$,
 and site $s$'s analysis ensemble is $\bar z_s + (\bar w\mathbf 1^\top+W)^\top X_s$
 \citep{hunt2007}. For a linear $h$ without localization it reproduces
 the Kalman update computed with the ensemble covariance exactly (unit
-test). It is the analysis used in all 2D experiments of Part~II. With the earlier single-tiling filter at $44^2$ its skill was within $0.15$ of the perturbed-observation version at every ensemble size, at about $40\%$ lower CPU time.
+test). It is the analysis of every 2D experiment. Its stochastic counterpart, the per-site filter
+above, gave the same skill to within $0.15$ at every ensemble size with an earlier single-tiling
+filter at $44^2$, at about $40\%$ higher CPU time.
 
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
@@ -88,6 +112,60 @@ least $10^{-10}$ times the largest. The \emph{serial form} assimilates the
 observations one at a time on the augmented state $[Z,h(Z)]$ and applies
 the correction to each scalar regression coefficient,
 $\beta_k=\mathrm{SEC}\big(\mathrm{corr}(x_k,\hat y_j)\big)\,\sigma_{x_k}\sigma_{\hat y_j}/(\sigma^2_{\hat y_j}+R_{jj})$.
+
+\subsection{The physics-based comparator}
+\label{app:da_comparator}
+
+\para{Filter.} The state is the field on the PDE grid ($128^2$ at $44^2$), integrated with ETDRK4 at
+$\Delta t=0.02$. The analysis is a local ensemble transform Kalman filter on blocks of $4\times4$ grid
+points: every point of a block receives the transform computed at the block centre from the
+observations whose Gaspari--Cohn weight, now a function of physical distance with half-width $c$, is
+positive, each with its error variance divided by that weight \citep{hunt2007}, followed by RTPS. The
+observations, their errors and their random draws are those of the latent experiments. The
+64-member initial ensemble is the true initial field plus independent smooth perturbations (Gaussian
+correlation over 4 grid points) of standard deviation $0.5$ in standardized units. With the true
+equations and its best setting ($c=24$ length units, no RTPS) it reaches $0.076$.
+
+\para{Wrong models.} Every wrong model is a modification of the forecast model only; the truth is the
+2D KS equation $u_t=-\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$ throughout, except in the hidden-field cases.
+\begin{itemize}
+\item \emph{Coefficient:} $u_t=-a\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$, $a=1.1$ or $1.25$; the most unstable
+  wavenumber moves from $1/\sqrt2$ to $\sqrt{a/2}$.
+\item \emph{Advection:} the KS right-hand side plus $-c\,\partial_xu$, $c=1$ or $2$, applied exactly as a Fourier
+  phase shift after every step.
+\item \emph{Forcing:} the KS right-hand side plus a fixed field $f(x,y)$: white noise smoothed with a
+  Gaussian kernel of correlation length $5$, zero mean, scaled to standard deviation $0.2$ or $0.4$ (one
+  realization, the same in every run).
+\item \emph{Resolution:} the KS equation on a $64^2$ or $32^2$ grid; the initial ensemble and the analyses
+  are spectrally truncated to that grid, the observations are taken at the same physical points, and
+  the error is measured after zero-padding back to $128^2$.
+\item \emph{Damping order:} $u_t=-a\nabla^2u-b(-\nabla^2)^{p/2}u-\tfrac g2|\nabla u|^2$ with $p=5$, $6$ or $8$. For each
+  $p$, $(a,b,g)$ start from the values that minimize the one-cycle forecast error on an independent
+  trajectory (40 starts, Nelder--Mead): $(0.640, 0.634, 0.996)$, $(0.436, 0.426, 0.980)$ and
+  $(0.210, 0.203, 0.938)$; no $(a,b,g)$ gives the KS growth rate $K^2-K^4$ at all wavenumbers. The
+  remaining one-cycle errors, $0.072$, $0.129$ and $0.210$, are the irreducible errors of the three forms.
+\item \emph{Hidden field:} the truth is $u_t=\mathrm{KS}(u)+\varepsilon v$, $v_t=-v/\tau+\kappa\nabla^2u$ with $\tau=2$,
+  $\kappa=-1$ and $\varepsilon=0.1$ or $0.2$, integrated with ETDRK4 on the pair; $v$ is never observed and never
+  seen by the learned model, which is trained on $u$ alone. The physics-based filter's model is KS
+  without $v$. The reference filter with the true equations carries its own $v$, started at zero and
+  updated through its ensemble covariance with the observed $u$.
+\end{itemize}
+
+\para{Remedies.} \emph{Tuning:} RTPS $\alpha\in\{0,0.3,0.5,0.6,0.7,0.8,0.9,1.0\}$ and
+$c\in\{8.25,16,24\}$ (and $4$ for advection), and multiplicative inflation $1.1$ and $1.2$ without RTPS.
+\emph{Online parameter estimation:} each member carries its own value of the parameter that is wrong
+(the coefficient $a$, the speed $c$, or $(a,b,g)$ jointly), started from the wrong or best-fit value
+with a spread of $0.05$ ($0.3$ for the speed; $5\%$ of each value for $(a,b,g)$), and is forecast with it.
+The parameters are updated with a global ensemble transform using all observations,
+$\theta_a=\bar\theta+W^\top(\theta-\bar\theta)$ with the transform $W$ of the unlocalized filter computed from
+the prior observation perturbations, so that the analysis mean equals the ensemble Kalman regression
+of the parameters on the innovations \citep{anderson2001,ruiz2013}; the parameter spread is relaxed to
+its prior with weight $0.9$ and kept above $0.005$ ($0.5\%$ for $(a,b,g)$). \emph{Bias correction and
+additive model error:} on an independent trajectory, the one-cycle residuals
+$r=u(t+T)-M\big(u(t)\big)$ of the wrong model $M$ from 100 true states give the bias $\bar r$, added to
+every forecast, and the spectrum and standard deviation of $r-\bar r$, from which additive noise with
+the same spatial spectrum is drawn and scaled by $q\in\{0,0.5,1,2\}$ \citep{dee2005}. The state-dependent
+one-cycle error of Table~\ref{tab:da_model_error} is the standard deviation of $r-\bar r$.
 
 \subsection{Cost of the observation Jacobian}
 \label{app:da_jacobian}
@@ -165,37 +243,17 @@ smooth noise (correlation length 4 grid points) it is $1.35$, $1.09$, $1.02$ and
 $1.01$ and $0.99$; for latent-space noise of standard deviation $0.05$--$0.2$ it is $1.00$--$1.05$ for both. The
 reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_j18b\_roundtrip.py}).
 
-\subsection{Inflation, run-to-run spread and transients}
+\subsection{Run-to-run spread and transients}
 \label{app:da_tuning}
 
-Multiplicative inflation of the forecast perturbations has little
-effect (Table~\ref{tab:da_inflation}): the unlocalized filter is
-unchanged to $1\%$, the per-site filter loses $4\%$ of its skill at
-inflation $1.2$ and the dense localized filter $9\%$, and calibration moves
-by at most $0.02$. With four observations per site and $R=0.01\,I$ the
-analysis is dominated by the observations. All other runs use no
-inflation.
+Seeds change the initial ensemble, the observation noise and the model noise; seeds 1 and 2 also
+change the truth's initial state. At $44^2$ the three seeds give $0.302$--$0.324$, and second seeds at $220^2$
+and $330^2$ are within $0.01$ of the first (Table~\ref{tab:da_2d_sizes}); differences below about $0.02$ are
+within run-to-run variation. Started from the encoded truth, the analysis error rises over the first
+cycles as the ensemble spreads, and is within $10\%$ of its steady value from cycle 4 at every size.
+Its 10-cycle means over cycles 51--100 vary by up to $\pm6\%$ at $44^2$, $\pm2\%$ at $88^2$ and $\pm1\%$ or less at $220^2$ and
+beyond, the smaller domains averaging over fewer independent regions. Long runs with sparse
+observations are not bitwise reproducible from run to run (multithreaded floating-point reductions,
+amplified by chaos), so differences between methods smaller than the seed spread are not
+significant there. The per-cycle values of every run are stored with its summary.
 
-A second seed, which changes the initial ensemble, the observation
-noise and the model noise, changes the steady-state skill of the
-per-site filter by $0.02$--$0.15$ at every size from $44^2$ to $330^2$ and that of the
-unlocalized filter by $0.03$--$0.23$; differences below about $0.2$ in skill
-are within run-to-run variation. The initial ensemble starts close to the
-truth, so the analysis error first rises; it reaches its steady level
-within $10$--$20$ cycles, after which its 10-cycle means vary by about
-$\pm10\%$ at $44^2$ and $\pm3\%$ at $88^2$ and larger, the smaller domains averaging over
-fewer independent regions. The per-cycle values of every run are stored
-with its summary.
-
-\begin{table}[htbp]
-\caption{Steady-state skill (calibration) against multiplicative
-inflation, 2D KS at $44^2$, 64 members.}
-\label{tab:da_inflation}
-\begin{ruledtabular}
-\begin{tabular}{lcccc}
-filter & 1.0 & 1.05 & 1.1 & 1.2 \\
-\hline
-\tabinput{tables/tabE_inflation}
-\end{tabular}
-\end{ruledtabular}
-\end{table}

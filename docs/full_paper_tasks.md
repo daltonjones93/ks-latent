@@ -2820,7 +2820,16 @@ Each subsection lists its inputs; text options are given where a result is pendi
   `train_kolmogorov_crop.py`); App. D paragraph on the 12-channel models' D_KY (noisy 3.6%/2.1%, clean
   2.1%/1.1%); App. B remark that the blend preserves exactness. **K6a partly done:** networks table,
   1D-experiments subsection (moved from §7) and the round-trip test; still to do: wrong-model equations,
-  remedies, the per-site ETKF/RTPS/tiling equations, run-to-run spread for the new filter.
+  remedies, the per-site ETKF/RTPS/tiling equations, run-to-run spread for the new filter. **Done
+  2026-10-10:** Part II filter (ETKF + RTPS + model noise + initial ensembles), shifted-tiling definition
+  (offsets, member pairing, output-only blend), the physics-based comparator subsection (filter, every
+  wrong model's equation incl. damping order with best fits and the hidden field, remedies with their
+  grids and equations), and run-to-run spread/transients for the Part II filter (inflation table removed).
+- **Parameter count (user, 2026-10-10):** §3 sentence after Cor. transfer (63,812 / ~135,000, domain-
+  independent; global-latent layers scale with the field), §1 contribution clause, §9 paragraph "The
+  parameters describe the law, not the state" (D_KY 188 at 66² within 0.6%; ~8,000 at 440² by the measured
+  density; data efficiency; not new by itself — CNNs/neural operators share weights — the Lyapunov check
+  is what shows the shared rule is right), App. A "parameters" row generated from the checkpoints.
 - **K6a App. E rewrite:** networks table (K2g); the per-site ETKF as used (equations, R-localization,
   RTPS); the tiling blend (offsets, weights, exactness); the PFF, dense filter and SEC paragraphs
   demoted to "1D"; the physics-space LETKF comparator; the wrong-model definitions (each case's
@@ -2885,7 +2894,10 @@ Each subsection lists its inputs; text options are given where a result is pendi
   coifmandonoho1995, anderson2001, ruiz2013, dee2005, brajard2020, bocquet2020): authors, title, journal,
   volume, pages and DOI confirmed via Crossref, publisher or author records; Coifman & Donoho's series volume
   (often given as LNS 103) is not listed by Crossref/Springer, so it was removed and the editors added.
-  **Still to do:** the §2.5 text additions and the prior-work table column/rows.
+  - **§2.5 done 2026-10-10:** paragraph on learned models trained with DA (Brajard 2020, Bocquet 2020;
+    their 2.4× gap to the true model verified from the paper), model-error remedies (RTPS, parameter
+    estimation, bias correction) and cycle spinning; novelty sentence extended; prior-work table gains the
+    Brajard/Bocquet row. No "vs physics DA" column was added: other works' setups could not all be verified.
 - Add to §2.5: learned-model DA (Brajard et al. 2020; Bocquet et al. 2020; Farchi et al. 2021 —
   verify), model-error treatments in EnKFs (parameter estimation: Anderson 2001; Ruiz et al. 2013;
   RTPS: Whitaker & Hamill 2012; additive inflation/bias correction: Dee 2005 — verify), cycle

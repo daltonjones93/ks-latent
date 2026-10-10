@@ -75,6 +75,17 @@ record["section224"] = {"source": "checkpoints + scripts/section224_ks_localfiel
                                    "k_mid_epochs": 175, "k_warmup_epochs": 210, "noise_in_start": s2.noise_in_start,
                                    "noise_in_end": s2.noise_in_end, "weight_decay": s2.weight_decay}}
 # ---------------- 2D ----------------
+def nparams(sd):
+    return sum(v.numel() for v in sd.values() if hasattr(v, "numel"))
+
+
+def pcount(ae, pr):
+    """Trainable parameters (autoencoder + propagator), read from the checkpoints. They do not depend on the
+    domain: the same tensors are used on every deployment grid."""
+    a, p = nparams(ae["ae_state_dict"]), nparams(pr["prop_state_dict"])
+    return f"{a:,} + {p:,} = {a + p:,}".replace(",", "{,}")
+
+
 def data_noise(tag, ae):
     """Std of the fixed Gaussian noise added to the training fields (I33). Stored in checkpoints from 2026-10-10;
     for earlier ones read from the training log (the log line is written only when noise was added)."""
@@ -119,6 +130,7 @@ for name, tag in MODELS_2D:
         "$w_{\\rm rank}$": f"{cp.get('w_rank', 0.0):g}" + ("$^b$" if cp.get("w_rank", 0.0) else ""),
         "val. recon / val. $k_{\\max}$ MSE": f"{ae['val_recon_interior']:.1e} / {pr['best_val_kmax_mse']:.3f}",
         "training-data noise": f"{data_noise(tag, ae):g}",
+        "parameters (AE + propagator)": pcount(ae, pr),
     }
     record[tag] = {"source": "checkpoints + crop_train log", "ae_config": a, "crop_ae_config": ca,
                    "prop_config_relevant": {k: p[k] for k in ("backbone", "attn_window", "local_mlp2d_n_layers",
@@ -128,6 +140,7 @@ for name, tag in MODELS_2D:
                    "train_dataset": ae["train_dataset"], "train_shape": sh,
                    "k_mid_reached_at_pct_of_steps": kmid_pct}
 
+cols["1D KS"]["parameters (AE + propagator)"] = pcount(ae1, pr1)
 for c in cols.values():
     c.setdefault("training-data noise", "0")
 names = list(cols)

@@ -153,6 +153,19 @@ score-based filters note that a generic encoding destroys the local
 structure that LETKF-type methods exploit \citep{si2025latentensf}. That observation is the starting point of
 Part~II: a latent built to be local keeps that structure, exactly.
 
+A separate line of work learns the forecast model itself from sparse, noisy observations, by
+alternating ensemble data assimilation and network training \citep{brajard2020,bocquet2020}. There,
+as in Part~II, the comparison that matters is with data assimilation run with a physical model:
+\citet{brajard2020} report that on the 40-variable Lorenz-96 system their learned
+convolutional surrogate, trained and used at that one size, recovers the positive Lyapunov
+exponents, and that an ensemble filter with it has an analysis error $2.4$ times that of the same
+filter with the true model, and well below interpolation. With an imperfect physical model the standard remedies are
+inflation and relaxation to prior spread \citep{whitakerhamill2012}, online estimation of model
+parameters by state augmentation \citep{anderson2001,ruiz2013}, and bias correction
+\citep{dee2005}; in Part~II the physics-based filter is given all of them. The shifted tilings of
+Part~II are cycle spinning \citep{coifmandonoho1995} on the patch lattice: averaging estimates
+computed on shifted copies of a grid removes the artefacts tied to the grid.
+
 %----------------------------------------------------------------------
 \subsection{What is and is not new here}
 \label{sec:bg_novelty}
@@ -172,7 +185,9 @@ against the true Lyapunov spectra at several domain sizes in three
 systems; a training procedure on windows of one simulation, with a proof
 that it trains the limited-area problem exactly; and a latent observation
 operator that is exactly local, so that a localized ensemble filter in
-latent space is exact and keeps working at any domain size.
+latent space is exact and keeps working at any domain size, made accurate
+by shifted tilings, and compared with physics-based filters whose models
+are wrong in ways that their standard remedies can and cannot correct.
 
 \begin{table*}[htbp]
 \caption{Closest prior work. ``Local'': weight-shared operators of finite
@@ -195,5 +210,6 @@ work & learned & local & other sizes & Lyapunov & windows & local DA \\
 \citet{devilleroche2026} & \checkmark & \checkmark & \checkmark & --- & --- & --- \\
 \citet{oskarsson2023} & \checkmark & $\circ$ & --- & --- & \checkmark & --- \\
 \citet{chen2023roadenkf,tong2026laeenkf} & \checkmark & --- & --- & --- & --- & --- \\
+\citet{brajard2020,bocquet2020} & \checkmark & $\circ$ & --- & $\circ$ & --- & --- \\
 This work & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\}
 \end{table*}

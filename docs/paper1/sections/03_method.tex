@@ -162,6 +162,13 @@ throughout this paper: a checkpoint trained at one size is loaded at a
 new $(N_x,P)$, with every weight copied unchanged. A global latent vector
 admits no such map, because its bottleneck and propagator are tied to
 one value of $\dlat$.
+The parameter count is therefore that of the local rule alone. The 1D
+model has $63{,}812$ parameters and every 2D model about $135{,}000$
+(Appendix~\ref{app:architecture}); the same tensors run the $44^2$ domain and
+the $440^2$ one, whose field has $1.6$ million grid values and whose latent
+has $76{,}800$ coordinates. In a global latent model the layers into and out
+of the bottleneck scale with the size of the field, so its parameter count
+grows with the domain even before its latent dimension does.
 
 A local model is also extensive by construction, which explains both
 what transfer can achieve and how it fails.

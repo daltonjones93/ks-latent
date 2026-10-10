@@ -46,6 +46,27 @@ shared stencil of increasing width, and to give the encoder and
 propagator a reach that covers it with a margin. The reach then sets the
 smallest domain the model can be used on, which is what fails at $L=25$.
 
+\para{The parameters describe the law, not the state.} Because every
+operator is shared by all sites, the trained parameters encode one local
+rule, and their number is fixed by that rule rather than by the domain.
+The 2D models have about $135{,}000$ parameters. At $66^2$ such a model
+reproduces a Kaplan--Yorke dimension of $188$ to within $0.6\%$ of the truth
+(Table~\ref{tab:transfer2d}), and extrapolating the measured density of
+$0.043$ per unit area, the attractor at $440^2$, on which the same model is used
+for data assimilation in Part~II, has a dimension of roughly $8{,}000$. A
+model whose size is set by the state would have to grow with that number;
+this one does not. The same weight sharing makes training cheap in data:
+every window, and every site within it, is a training example of the same
+rule, and the 2D KS models are trained on five trajectories of $25$ time
+units. Neither a small absolute parameter count nor size independence is
+new by itself: convolutional surrogates and neural operators share weights
+too \citep{barsinai2019,kochkov2021}. What the dimension comparison adds is
+evidence that the shared rule is the right one, in the sense that its
+extension to a larger domain carries the right density of chaos. This is
+the inductive bias that extensive chaos calls for: a system made of many
+copies of one local process is described most economically by learning
+that process once.
+
 \para{Transfer error as a probe of the physics.} Because a local model
 is extensive by construction, the difference between its dimension
 density and the truth's on a larger domain measures how far the truth is
