@@ -2520,6 +2520,354 @@ J5 runs overnight if wanted.
 
 ---
 
+## Block K — Rewrite Part II of the paper around the new results (2026-10-10)
+
+**Scope.** Everything Part II says in `docs/paper1/` was written for the superseded setup: the
+6-channel model `p7b_ks2d`, one tiling, a stochastic per-site EnKF with no RTPS, model noise 0.08,
+GC half-width 3 sites, "skill against the free run" as the metric, calibration 0.33, physical RMSE
+≈ 1.0 against a decoder floor of 0.65, seams 3.6×, dense/unlocalized comparisons, and a cost table
+from those runs. None of those numbers describe the method we now report. Block K supersedes Blocks
+E, F and J6–J14 (kept above as history). Every task names its inputs (`artifacts/experiments/da2d/`
+JSONs) and, where a result is still running, the text options for each outcome.
+
+**Still running when this block was written (2026-10-10 15:00):** J17H (orders 5/6/8 with remedies,
+seeds 1–2, RTPS 0.6 follow-up; ~18:00), J17B ε = 0.1 (physics done ~16:00; latent after training
+~16:30) and ε = 0.2 (~20:00), J18a σ = 0.3 (~23:00), I7 + I16 (~20:30), I14 (overnight), J5 (~06:00).
+
+### K0 `[ ]` The Part II narrative (write this first; everything else serves it)
+Order of claims, each with its one-line evidence, to be used verbatim as the skeleton of §7, the
+abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
+1. **Exactly local latent DA, now with shifted tilings.** With a per-patch decoder the latent
+   observation operator is block-diagonal (Prop. blockdiag, c = 12 forward passes at any size). New:
+   running K independent per-site filters on half-patch-shifted tilings and blending their decoded
+   analyses with Hann weights (cycle spinning on the patch lattice, Coifman & Donoho 1995) cuts the
+   error by ~30% (0.46 → 0.31 at 44²; 0.43 → 0.31 at 440²) with no retraining, removes the seams
+   (edge/interior gradient ratio 1.02 = truth), and is a better use of members than one larger
+   ensemble (4 × 16 beats 1 × 64 by 23–31% at 44² and 220²). Mechanism: the single-tiling error is
+   grid-tied (inter-tiling error correlation 0.1–0.4 in every wavenumber band), so independent
+   tilings average it down. *This is the paper's new DA mechanism; lead with it.*
+2. **One model, one setting, a hundredfold area.** Physical analysis RMSE 0.304–0.326 from 44² to
+   440² (seed 1 agrees within 0.01), against interpolation 0.81–0.83, climatological OI 0.80 and a
+   decoder floor of 0.25; spread/error 0.92–0.99. The members needed per tiling saturate by ≈ 32 at
+   both 44² and 220² (I3). Memory and time grow no faster than the area (I14).
+3. **The latent space earns its place in the analysis, not only the forecast.** With the same
+   learned model used as a physical-space emulator inside a physical-space LETKF, the error is
+   0.338–0.354 (calibration 1.2–1.3) against 0.302–0.324 (0.85–0.99) for the latent analysis, on
+   every seed (I24).
+4. **Trained only on noisy data, and better for it.** Part II's model never sees a clean field: it
+   is trained on one fixed realization of observation-level noise (σ = 0.1). It is 4–5% more accurate
+   than the clean-data model at every size, better calibrated, reconstructs clean states 15% better
+   and removes grid-scale noise 15–20% better; it does not project smooth errors back onto the
+   attractor (J18b). [J18a adds the σ = 0.3 point.]
+5. **Against physics-based DA with an imperfect model, with every standard remedy.** The physics
+   filter (same observations, local ETKF, tuned RTPS and c, online parameter estimation, bias
+   correction, additive model error) beats the latent filter when its model error is small or
+   fixable (one coefficient 10% off: 0.225; fixed forcing after bias correction: 0.225; coarse grid:
+   0.18; perfect model: 0.076) and loses when the error is large or structural (coefficient 25% off:
+   0.42; spurious mean flow: 0.44–0.60; wrong damping order p = 6: 0.35, p = 8: 0.43 [J17H, all
+   coefficients estimated online]; hidden memory field: [J17B]). The crossover is set by the physics
+   model's irreducible one-cycle forecast error relative to the observation error, at ≈ 0.1–0.2 (σ_obs
+   ≈ 0.4 in field units): a usable rule for when a learned filter is the better choice. The physics
+   filter also diverges outside a narrow RTPS window; the latent filter uses one default everywhere.
+6. **Honest frame.** The latent filter's floor (≈ 0.25) is the decoder's; a correct or correctable
+   physics model gets well below it. The method is for systems without a trustworthy model (CM1,
+   Paper 3). Long sparse-observation cycling is limited by the learned model's stability (one
+   paragraph; follow-up paper). Twin experiments, one system in 2D.
+- Write K0 as a half-page `docs/paper1/partII_narrative.md`, with the final numbers filled from K2,
+  and keep it in sync as J17B/J18a/I7/I16 land. ~1 h.
+
+### K1 `[ ]` Scope decisions: what Part II drops, keeps as reference, or moves (decide before writing)
+- **Drop from §7** (they describe the old filter): the "skill" metric as the primary number (keep
+  free-run skill as one column only); the dense Schur-product filter and its memory comparison; model
+  noise 0.08 / inflation sweep (tabE_inflation); calibration 0.33–0.37 and the "spread is a third of
+  the error" paragraph; the 3.6× seam numbers; the 11–14% dense-vs-per-site comparison; the
+  "per-site filter needs 32–64 members, dense reaches 3.5 with 16" paragraph; the old
+  observation-density numbers (7.8 / 4.2 / 1.2 / 1.0).
+- **Unlocalized failure at n₊ > N** (abstract, KP3, §1, §7.2, §10): measured with the 6-channel model
+  and old filter only. Options: (a) keep as one clearly labelled paragraph "with the Part I model and
+  a single tiling, an unlocalized 64-member filter…" (zero cost; recommended unless (b) is cheap);
+  (b) rerun unlocalized N = 64/128 at 44², 66², 88² with `p7c12d10_ks2d` (needs the dense script to
+  accept the tag; ~1–2 h). Decide after checking `scripts/run_da_*` for a `--tag` option.
+- **1D results (§7.3, Fig. 8, Table tab:da_1d, SEC):** valid as they stand (1D model, PFF/EnKF), but
+  they use skill and the old framing. Options: (a) compress to one paragraph + Fig. 8 in §7.6
+  "Observation density, 1D, and limitations"; (b) move Fig. 8/Table to App. E and keep two sentences
+  in §7. Recommended: (b), so §7 is one method on one system, and 1D is the supporting appendix.
+- **Observation density:** replace the old sweep by K10(a) (new model, strides 4/8/16, 100 cycles)
+  and state that stride 16 has no steady state within 100 cycles (I5 warning) → limitation paragraph.
+- **Sparse-observation stability, gates, resets (I30–I32):** one limitation paragraph in §7.6 and
+  §9; everything else to the follow-up paper.
+- **Part I untouched** except: the two-model statement (K6c), App. D's 12-channel D_KY note, and
+  the §6 seam sentence gaining "removed by the tilings of Part II (Sec. 7.2)".
+- Record the decisions in `docs/paper1/decisions.md`. ~1 h.
+
+### K2 `[ ]` Tables (regenerate every Part II table from JSONs; scripts in `scripts/paper_figures/`)
+- **K2a `tab07_2d_sizes` → "accuracy across sizes".** Rows 44², 88², 220², 330², 440²; columns: d,
+  K = 1 RMSE, K = 4 RMSE (seed 0, seed 1), spread/error, interpolation, climatological OI, decoder
+  floor (K = 4 blend), free-run skill. Inputs: `h9_D10_L{44,88,220,330,440}_I1_T{1,4}*.json`,
+  `h9_I33_d10_T4_s*.json`, `h9_D10_L44_diag_T4.json` (floorK). ~1 h.
+- **K2b `tab07_2d_ensemble` → "members and tilings".** (i) members per tiling N ∈ {8, 16, 32, 64, 128}
+  at 44² and 220² (K = 4), with spread/error (`h9_D10_L44_I3_N*.json`, `h9_D10_L220_I3_N*.json`);
+  (ii) equal total of 64: 1 × 64, 2 × 32, 4 × 16, seeds 0–2 (`h9_D10_L44_I2_*`); (iii) K ∈ {1, 2, 4,
+  16} Hann and K = 4 uniform (`h9_D10_L44_I4_*`). ~1 h.
+- **K2c new `tab07_model_error`.** One row per physics-model error: description; physics filter tuned
+  only (RTPS, c); + best remedy (name it: estimation / bias correction / Q); 3-seed mean ± range;
+  latent 0.312 (0.302–0.324); outcome. Rows: coefficient 1.1, 1.25; mean flow 1, 2; forcing 0.2, 0.4;
+  grid 64², 32²; J17H p = 5, 6, 8 (with the irreducible one-cycle error column); J17B ε = 0.1, 0.2
+  (own latent model, own units: report RMSE/σ_obs as well); perfect model (floor). Inputs:
+  `i11_I28W_*`, `i11_I28R_*`, `i11_J16a_*`, `i11_J16b_*`, `i11_J17H_*`, `i11_J17B_*`, `h9_J17B_*`,
+  `j17h_fit_order*.json`, `j16_model_error_*.json`, `i11_*floor*`. **Add a column "one-cycle error of
+   the physics model" for every row** (from the J16 estimator; run it for the J1 cases that lack it,
+  ~10 min) — this is the x-axis of K3c. ~2 h.
+- **K2d new `tab07_noisy_training`.** Clean / σ = 0.1 / σ = 0.3 × {44² seeds 0–2, 220², 440²} RMSE and
+  spread/error, plus decoder floor, D_KY error at 44²/66², round-trip ratios (J18b). Inputs:
+  `h9_P2_L44_*`/`h9_D10_*`/`h9_J18a_*`, `j18b_roundtrip.json`, `crop/*.json`. ~1 h [after J18a].
+- **K2e `tab_da_cost`** from I14 (wall time and peak RSS, K = 1 and 4, 44²–440²; parallel wall time
+  = serial / K noted). Replace the dense columns with the physical-space LETKF's state size per
+  member (grid points vs 12 × sites) and analyses per cycle (blocks vs sites). Inputs: `h9_I14_*`,
+  `i11_*` wall_s/peak_rss. ~1 h [after I14].
+- **K2f new `tabE_robustness`** (App. E): I16 (a) climatological start: cycles to steady state and
+  steady RMSE, K = 1 and 4; (b) assumed R 0.5× / 1× / 2×; (c) 300 cycles at 220²: means over cycles
+  51–100, 101–200, 201–300; RTPS 0.5 / 0.7 / 0.9. Inputs: `h9_I16*`, `h9_D10_L44_rtps*`. ~1 h [after I16].
+- **K2g `tabE_networks`:** c = 12, d = 768 … 76 800; add K and the tiling offsets; `tabE_inflation` →
+  delete. ~0.5 h.
+- **K2h new `tab07_forecast`** (or fold into K3e): error at leads 1, 5, 10, 20, 40, 60 cycles for
+  blend / single tiling / true-init / persistence / climatology, 3 seeds. ~0.5 h [after I7].
+- **K2i** Every table script reads only JSONs, writes `.meta.json`, and registers its numbers with
+  `check_numbers.py` (K11).
+
+### K3 `[ ]` Figures (contract §F; one script each in `scripts/paper_figures/`)
+- **K3a Fig. 9 (replace `fig09_2d_da`): the headline.** (a) block-diagonal Jacobian at 44² with
+  12-column blocks (regenerate `exp_f2_jacobian_sparsity.py` for the Part II model); (b) RMSE vs
+  area, K = 1 and K = 4 with seed markers, interpolation, OI, decoder floor and the perfect-model PDE
+  floor as reference lines; (c) RMSE vs members per tiling at 44² and 220², with the equal-member
+  points (1 × 64, 2 × 32, 4 × 16) marked; (d) per-cycle error and spread at 440² (shaded steady
+  window); (e) memory and wall time vs d from I14 with area-proportional guides; (f) K and weights:
+  RMSE vs K with spread/error on a second row (accuracy–calibration trade-off). ~1 day.
+- **K3b new Fig. 13: shifted tilings.** (a) schematic: the patch lattice, the four half-patch
+  offsets, the Hann partition of unity (1D cut); (b) error vs position within a patch for one tiling
+  and the blend, clean and noisy models (from `fig_j18c_seams.py`, moved under the contract); (c)
+  error variance by wavenumber band: single tiling, blend, uniform average, prediction 1ᵀC1/K²,
+  decoder floors, interpolation (I8/I10 diagnostics, `h9_D10_L44_diag_T4.json`); (d) inter-tiling
+  error correlation by band. Caption states the mechanism in one sentence. ~1 day.
+- **K3c new Fig. 14: learned vs physics-based DA under model error.** (a) bars per case: physics
+  tuned, physics + best remedy, latent band, perfect-model floor, interpolation; (b) **the crossover
+  plot**: physics-filter RMSE (best, with remedies) against the physics model's irreducible one-cycle
+  forecast error (x, in units of σ_obs), every case as a point (J1/J16 cases, J17H orders, J17B
+  levels), the latent filter as a horizontal band, the floor as a dashed line — the reader sees
+  where the learned filter wins; (c) RTPS sensitivity for three cases with divergence marked (log
+  y), the latent default as one point; (d) [J17B] error of both filters and the floor against ε,
+  with the unpredictable fraction of v annotated. ~1 day.
+- **K3d new Fig. 15: noisy training.** (a) RMSE vs training noise σ ∈ {0, 0.1, 0.3} at 44² (3 seeds)
+  and 220²; (b) round-trip ratio vs perturbation std for white and smooth noise, both/all models
+  (J18b); (c) decoder floor and D_KY error vs σ. Small figure (single column, two rows). ~0.5 day
+  [after J18a].
+- **K3e new Fig. 16: forecasts from the analyses** (I7). Error vs lead time (time units and
+  Lyapunov times on a top axis) for the blended analysis, single-tiling analysis, true-state
+  initialization, persistence and climatology; mark the leads where error reaches 50% and 100% of
+  climatology. ~0.5 day [after I7].
+- **K3f Fig. 11 (snapshot): regenerate with the Part II filter at 440²** (add `--save-fields 3` to
+  the I14 440² K = 4 run or rerun once, ~1.5 h on a quiet machine): truth, single-tiling analysis,
+  blended analysis, errors, with patch edges in the window, so the seam removal is visible. ~0.5 day.
+- **K3g Fig. 12 (Jacobian timing):** rerun `exp_f4_jacobian_timing.py` for c = 12 or state the
+  scaling with c in the caption. ~1 h.
+- **K3h Fig. 8 (1D):** unchanged; moves with K1's choice.
+- **K3i** Each figure: grayscale and 50%-zoom check; captions "what is plotted, what to see".
+
+### K4 `[ ]` §3.8 "Latent ensemble data assimilation" (method) — rewrite
+- State the Part II filter as used: per-site local ETKF (deterministic transform, Hunt et al. 2007)
+  with R-localization (GC, half-width 1.5 sites), RTPS α = 0.7 (Whitaker & Hamill 2012), model noise
+  0.02 per latent coordinate per step, 5 steps per cycle. Move the PFF and the dense Schur-product
+  filter to "used in 1D (App. E)".
+- **New paragraph: shifted tilings.** Define offsets o_k ∈ {0, p/2}², the encoder/decoder on the
+  rolled field, K independent filters, the Hann partition of unity w_k, the blended analysis
+  ū = Σ w_k D(z̄_k); state that no information passes between tilings (no feedback; I8 showed
+  re-encoding the blend hurts) and that the composite is still exactly local (each filter is, and the
+  blend is a fixed linear map). One sentence on cycle spinning.
+- **Extend Prop. blockdiag's remark:** c = 12 passes; per-tiling exactness; the blend.
+- **Replace the n₊ paragraph's role:** keep Eq. nens_local but add the measured saturation (≈ 32
+  members per tiling at 44² and 220²).
+- **New paragraph: the physics-space comparator** (so §7.5 can refer to it): local ETKF on 4 × 4
+  blocks of the PDE grid, same observations, RTPS and c tuned per case; online parameter estimation
+  by state augmentation with a global transform (param_est), bias correction and additive model
+  error from offline one-cycle residuals (Eq. for r = R(u(t+T)) − M(R(u(t)))).
+- ~0.5 day.
+
+### K5 `[ ]` §7 rewrite, subsection by subsection (replace `07_data_assimilation.tex`)
+Each subsection lists its inputs; text options are given where a result is pending.
+- **K5.1 §7.1 Setting.** Twin protocol with the Part II numbers (stride 8 = 2.75 units = half the
+  patch; σ_obs 0.1 standardized = 0.40 field units; 64 members per tiling; 100 cycles; steady =
+  51–100; the free run); the metric is physical RMSE in field units, with the no-model baselines
+  defined (interpolation of the observations; climatological OI 0.80; decoder floor ‖D(E(u)) − u‖
+  single and blended) and the perfect-model PDE LETKF (0.076) as the floor. The two-model statement
+  (Part I 6-channel clean; Part II 12-channel noisy; same architecture class; D_KY transfer 3.6% /
+  2.1%). ~0.5 day.
+- **K5.2 §7.2 Shifted tilings.** Method recap (one paragraph, pointing to §3.8); results at 44²:
+  K = 1 0.457 → K = 4 0.324 (seeds 0.302–0.324), K = 16 0.287 (calibration 0.51), K = 2 0.369;
+  uniform vs Hann; equal members 4 × 16 vs 1 × 64 (23–31%); controls (4 ensembles on one tiling
+  0.943 → no gain, i.e. it is the offsets, not the members); seams 1.73 → 1.02; mechanism (I8
+  correlations by band; the uniform-average prediction); cost ×K serial, ×1 in parallel. Fig. 13,
+  Table K2b. ~1 day.
+- **K5.3 §7.3 Accuracy and calibration at the native size.** 0.31 vs 0.82 / 0.80 / floor 0.25;
+  RTPS sweep (0.5 / 0.7 / 0.9: 0.322 / 0.324 / 0.340; 0.7 kept for calibration); latent vs
+  physical-space analysis with the same model (I24, 5–10% on every seed, calibration 0.85 vs 1.2);
+  error anatomy by band (I10, in Fig. 13c); Gaussianity note (no detectable non-Gaussianity at this
+  cycle length; one sentence). ~0.5 day.
+- **K5.4 §7.4 One model from 44² to 440².** Table K2a and Fig. 9b–d; members per tiling saturate by
+  32 at both sizes; seed agreement; the unlocalized paragraph per K1; [I16c] the 300-cycle run at
+  220² shows no drift (options: "steady to within x% over 300 cycles" / "a slow drift of x% per 100
+  cycles, within the run-to-run spread" / if it diverges: report, and the limitation paragraph grows).
+  ~0.5 day.
+- **K5.5 §7.5 Learned versus physics-based filters under model error.** Structure: (i) why (no
+  perfect model; measurement noise is characterized, model error is not); (ii) design (truth =
+  standard KS; physics model wrong in eight ways + two structural families; each filter tuned
+  fairly; the physics filter gets estimation, bias correction, Q); (iii) results by increasing
+  difficulty for the physics filter, Table K2c and Fig. 14; (iv) the crossover rule in units of
+  one-cycle error / σ_obs; (v) fragility (divergence without RTPS, narrow window) vs one default;
+  (vi) caveats (floor is the decoder's; resolution error favours physics; chosen error sizes; full
+  noisy-field training data; one system; twin experiments). **Text options:**
+  - J17H: (A) latent wins at p = 6 and 8 after all remedies → "when the damping operator has the
+    wrong order, no setting of its three coefficients, estimated online, closes the gap: 0.35 and
+    0.43 against 0.31"; (B) remedies close p = 6 but not p = 8 → crossover between 0.13 and 0.21
+    one-cycle error; (C) remedies close all → "a structurally wrong but fully tunable model still
+    wins; the latent filter's advantage needs an error that estimation cannot reach (J17B / mean
+    flow)". Also report that bias correction does nothing (state-dependent error) and whether
+    estimation moved (a, b, g) from the offline fit.
+  - J17B: (A) latent wins at both ε → the most CM1-like sentence: "with an unobserved slow process
+    feeding back on the field, the learned filter is ahead by x× at ε = 0.1 and y× at 0.2, although
+    ≈ 20% of the hidden field is not inferable from the current state"; (B) wins only at ε = 0.2 →
+    add the point to the crossover plot and say so; (C) physics wins or ties → "memory that leaves
+    little trace in the current field is a limit for a Markovian learned model; history-aware
+    propagators are the follow-up"; report the floor (true (u, v) model, v unobserved) in all cases.
+  - J5: if run, one sentence "the ordering is unchanged at 220² (coefficient 1.25: x vs 0.312; mean
+    flow 1: y)"; if not, omit.
+  ~1.5 days.
+- **K5.6 §7.6 Noisy training.** Short highlighted subsection: the 4–5% gain at every size, better
+  calibration, the mechanism (denoising and reconstruction, not projection; J18b), seams 1.94 → 1.73;
+  [J18a options: (A) σ = 0.3 better still → "the gain grows with the training noise up to 0.3";
+  (B) plateau → "the gain saturates by σ = 0.1"; (C) worse → "an optimum near the observation
+  noise, σ ≈ 0.1"]; one sentence linking to the physics comparison (the comparator's data are the
+  equations; ours are noisy fields). Fig. 15, Table K2d. ~0.5 day.
+- **K5.7 §7.7 Forecasts, robustness, observation density and limitations.** I7 [options: (A) the
+  blend's gain persists to ≥ 2 Lyapunov times → "the analysis is a better initial condition, not
+  only a smoother picture"; (B) it fades within 1 → say so and attribute to the decoder floor];
+  I16 (a–c) in one paragraph + Table K2f; observation density from K10(a) with the stride-16
+  non-steady statement; the sparse-observation limitation and the follow-up (gates, resets, fine-
+  tuned propagators: one sentence each); 1D per K1. ~0.5 day.
+- **K5.8 §7.8 Cost and memory.** From I14: wall and peak RSS vs area for K = 1 and 4, serial and
+  parallel; no asymptotic advantage over a physical LETKF (both linear in area), the measured
+  differences (state per member 43× smaller; 64 sites vs 1024 blocks; forecast cost); the Jacobian
+  cost (c = 12 passes). ~0.5 day.
+
+### K6 `[ ]` Appendices
+- **K6a App. E rewrite:** networks table (K2g); the per-site ETKF as used (equations, R-localization,
+  RTPS); the tiling blend (offsets, weights, exactness); the PFF, dense filter and SEC paragraphs
+  demoted to "1D"; the physics-space LETKF comparator; the wrong-model definitions (each case's
+  equation: ∇² coefficient a; advection c; terrain forcing f(x, y) with its correlation length;
+  coarse grid with spectral resampling; damping order p with (a, b, g) best fits; the memory system
+  (ε, τ, κ, C)); the remedies (estimation update, bias, Q); noisy-data training (one fixed noise
+  realization, σ, seed); the robustness table (K2f); run-to-run spread and transients for the new
+  filter; the reproducibility note for long runs. ~1 day.
+- **K6b App. F:** scripts and modules (`exp_h9_tiled_da.py`, `exp_i11_pde_letkf.py`,
+  `exp_i24_phys_emulator.py`, `exp_j16_estimate_pde_model_error.py`, `exp_j17h_fit.py`,
+  `exp_j18b_roundtrip.py`, `train_kolmogorov_crop.py --data-noise`, `run_partII_d10.sh`,
+  `run_j16.sh`, `run_j17h*.sh`, `run_j17b*.sh`, `run_j18a.sh`; modules `letkf_local.py` (RTPS),
+  `letkf_phys.py`, `param_est.py`, `model_error.py`, `solver/twin.py`, `solver/ks2d_memory.py`,
+  `ks2d.hyper_operator2d`); run times for a 100-cycle run at each size. ~0.5 day.
+- **K6c App. A and App. D:** architecture table gains the 12-channel column (channels, noise
+  training); App. D gains the sentence on the 12-channel sibling's D_KY transfer (3.6% / 2.1%) and
+  the clean 12-channel model (2.1% / 1.1%). ~1 h.
+- **K6d App. B:** add the one-paragraph remark that the blend preserves exact locality (a fixed
+  linear map of exactly local analyses). ~0.5 h.
+
+### K7 `[ ]` Front matter: title, Key Points, abstract, Plain Language Summary, §1
+- **Title options** (decide with the coauthor): (a) keep; (b) "…and exactly local ensemble data
+  assimilation learned from noisy data"; (c) "…and localized latent data assimilation that rivals
+  physics-based filters with imperfect models" — (c) only if J17H/J17B give scenario A.
+- **Key Point 3 options** (≤ 140 characters): (a) "A latent filter learned only from noisy data keeps
+  its accuracy from 44² to 440² and beats a physics filter whose model is wrong"; (b) "Shifted
+  tilings cut latent filter error by a third without retraining, and one setting holds over a
+  hundredfold area"; choose (a) under J17 scenario A/B, (b) under C.
+- **Abstract:** replace the Part II sentences (currently "…keeps 90% of its skill… memory grows no
+  faster than the area, while an unlocalized filter…"). New: three sentences — the tilings mechanism
+  and the 0.31 against 0.82 / 0.25; one model and setting to 440²; the physics comparison worded per
+  J17 scenario (A: "…outperforms a physics-based ensemble filter with every standard model-error
+  remedy whenever the model's structure is wrong"; B: "…outperforms it once the model's one-cycle
+  forecast error exceeds about a third of the observation error"; C: "…is competitive with it, and
+  better when its model error is large") and "trained only on noisy data". Every number in a table.
+- **Plain Language Summary:** add "we never have a perfect model of the weather; a surrogate learned
+  from noisy measurements can do as well as, and when the equations are wrong better than, a filter
+  built on those equations".
+- **§1:** the motivation paragraph (no perfect model; measurement noise is characterized, model
+  error is not, so noise can be handled in training); the Part II bullet rewritten from K0 (tilings,
+  440², noisy data, physics comparison); the "what is not new" sentence gains learned-model DA
+  (Brajard et al. 2020; Bocquet et al. 2020) and cycle spinning (Coifman & Donoho 1995).
+- ~0.5 day.
+
+### K8 `[ ]` §9 Discussion and §10 Conclusions
+- **§9 "What locality buys in DA" → rewrite:** exact locality + tilings; the latent analysis beats
+  the physical one; the floor is the decoder's and what would lower it (decoder capacity, more
+  tilings, I10's band anatomy); the physics comparison's meaning for CM1 (Paper 3) and the
+  crossover rule; noisy training as a regularizer; the sparse-observation limit and the follow-up
+  (history-aware propagators, gates, resets); the reproducibility note.
+- **§9 Limitations list:** replace the DA bullet: twin experiments; one 2D system; chosen (not
+  calibrated) model errors; the physics comparator has full-field noisy training data on its side
+  of the ledger as "data" and the equations on the other; dense observations only; the learned
+  model's stability under sparse cycling; absolute accuracy 4× above a perfect-model filter.
+- **§9 Outlook:** CM1 squall line as the stated next target (no closed-form model; unobserved
+  microphysics = J17B in miniature).
+- **§10:** replace the DA paragraph with K0's claims 1, 2, 4, 5 in four sentences.
+- ~0.5 day.
+
+### K9 `[ ]` §2 background and the prior-work table
+- Add to §2.5: learned-model DA (Brajard et al. 2020; Bocquet et al. 2020; Farchi et al. 2021 —
+  verify), model-error treatments in EnKFs (parameter estimation: Anderson 2001; Ruiz et al. 2013;
+  RTPS: Whitaker & Hamill 2012; additive inflation/bias correction: Dee 2005 — verify), cycle
+  spinning (Coifman & Donoho 1995). Add a column "vs physics-based DA" to tab:prior_work and rows for
+  ROAD-EnKF, LAE-EnKF, Brajard 2020. ~0.5 day (J13's verification list absorbed here).
+
+### K10 `[ ]` Small gap-filling runs (cheap; queue tonight after I16)
+- (a) Observation density with the Part II model: strides 4 / 8 / 16 at 44², K = 1 and 4, seed 0,
+  100 cycles (+ stride 16 with 300 cycles to document the drift). ~20 min.
+- (b) One-cycle model error for the J1 cases that lack a J16 file (coefficient 1.1/1.25, mean flow
+  1/2, 64²): `exp_j16_estimate_pde_model_error.py`, ~10 min. Needed for K2c/K3c's x-axis.
+- (c) Decoder floors (single and blended) at every size for K2a: from the `floor1`/`floorK` fields of
+  existing runs; no new runs.
+- (d) `exp_f2_jacobian_sparsity.py` and `exp_f4_jacobian_timing.py` for `p7c12d10_ks2d` (K3a, K3g).
+- (e) Save fields at 440² (K3f) if the I14 run did not.
+- (f) Unlocalized reruns only if K1 chooses option (b).
+
+### K11 `[ ]` Number provenance and consistency (absorbs J14)
+- Extend `check_numbers.py` to every Part II number in §1, §7, §9, §10, the abstract and the key
+  points; tables regenerated from JSONs only; a G2/G3-style pass on §7; the three decimal
+  conventions fixed (RMSE to 3 decimals in tables, 2 in text; ratios to 2). ~0.5 day.
+
+### K12 `[ ]` Decisions log, commit cadence, coauthor pass
+- `decisions.md` entries for K1 and for each outcome branch chosen (J17H, J17B, J18a, I7, I16).
+- Commit after each of K2, K3, K5, K6, K7/K8 (feedback: commit and push often).
+- Send the coauthor the K0 narrative and Fig. 14 first; the §7 draft second.
+
+### K13 Outcome branches (one place to look)
+| Pending result | Lands | Branch A | Branch B | Branch C |
+|---|---|---|---|---|
+| J17H (p = 5/6/8 + remedies) | ~18:00 | latent wins p = 6, 8 → claim 5 as written | wins p = 8 only → crossover 0.13–0.21 | remedies close all → claim 5 narrows to "estimation cannot reach" errors |
+| J17B (ε = 0.1, 0.2) | ~16:30 / ~20:00 | latent wins both → CM1 sentence, Fig. 14d | wins ε = 0.2 only → point on the crossover plot | physics wins/ties → Markovian-limit paragraph; follow-up |
+| J18a (σ = 0.3) | ~23:00 | better → "grows with σ" | plateau → "saturates by 0.1" | worse → "optimum near σ_obs" |
+| I7 forecasts | ~20:30 | gain persists ≥ 2 Lyapunov times | fades within 1 | — |
+| I16 robustness | ~20:30 | steady, insensitive → one paragraph | sensitive to R → report factor | drift at 300 cycles → limitation grows |
+| I14 cost | overnight | linear in area → §7.8 and Fig. 9e | superlinear → explain (threads, memory) | — |
+| J5 (220² model error) | ~06:00 | ordering unchanged → one sentence | changes → report and discuss | not run → omit |
+
+**Order and effort (after the runs land):**
+1. K0, K1 (day 1 morning); K10 queued tonight.
+2. K2a–c, K2g; K3a–c (days 1–2) — figures and tables first, from existing JSONs.
+3. K4, K5.1–K5.4 (day 2–3).
+4. K5.5 (day 3, once J17H/J17B are in), K5.6–K5.8, K2d–f, K3d–f (day 4).
+5. K6, K7, K8, K9 (day 5).
+6. K11, K12 (day 6).
+Total ≈ 6 working days of writing and figures; the runs finish by 2026-10-11 morning.
+
+---
+
 ## §F Figure contract (applies to every figure task)
 
 - Produced by one script in `scripts/paper_figures/`, reading only `artifacts/` and writing
