@@ -599,3 +599,29 @@ channels; the 6-channel Block I results stay as the record of the method on the 
 
 Part I check (08:34): `p7c12_ks2d` D_KY transfer error 2.1% at 44² (6-channel: 1.7%) and 1.1% at
 66² (2.4%). Mixed and within the truth spread, so not a significant benefit: Part I keeps `p7b_ks2d`.
+
+## 2026-10-09 (cont.) — Part II scope; sparse-observation stability moves to the DA follow-up
+Part II settings:
+- 12-channel `p7c12_ks2d`, 4 tilings, Hann blend, RTPS 0.7, GC c = 1.5 sites, 5 steps per cycle.
+- Dense observations (stride 8): 0.32–0.34 over 3 seeds, against interpolation 0.81–0.83 and
+  climatological OI 0.80; spread/RMSE 0.86; perfect-model floor 0.076.
+Sparse observations (stride 16):
+- Every method degrades over 600 cycles.
+- The original propagator blows up on some seeds; projection is bounded but erodes (≈ 2.0).
+- The noise fine-tuned propagator, the manifold-gated MoE propagator and a truth-free tiling-reset
+  failsafe each help. Original + reset is bounded on all seeds (1.5–1.8); gate + reset 1.2–1.7.
+- The long sparse runs are not run-to-run reproducible (multithreaded floating point, amplified
+  chaotically), so between-method differences under ~0.5 are noise.
+Decision (user): sparse-observation stability (I22, I23, I25, I27, I30–I32, sparse I5) goes to the
+DA follow-up paper. I28 (imperfect-model twin) stays in Part II.
+
+## 2026-10-09 (evening) — Part II's model is the noisy-data model `p7c12d10_ks2d`
+I33: the 12-channel model trained only on data with one fixed realization of observation-level
+noise (σ = 0.1) gives 0.324 / 0.310 / 0.302 (stride 8, K = 4, RTPS 0.7; clean truth). The clean-data
+model gives 0.338 / 0.322 / 0.320. Decoder floor 0.251 vs 0.287; D_KY at 44² 3.6% vs 2.1%.
+**Decision (user):** Part II uses `p7c12d10_ks2d`; all required Part II runs are redone with it
+(J15, `scripts/run_partII_d10.sh`). The clean model's results are kept as a reference row.
+σ = 0.3 later.
+Also today: the redesigned I28 (truth = the system the model was trained on; the physics filter's
+model is wrong). The learned filter ties or wins in 5 of 6 wrong-dynamics cases; resolution-only
+error favours the physics filter. 12-channel scaling 44²–440² is flat (0.32–0.34).

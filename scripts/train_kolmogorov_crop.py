@@ -98,6 +98,11 @@ def main() -> None:
     p.add_argument("--w-grad", type=float, default=0.0,
                    help="Stage A gradient-matching (H1) reconstruction weight; penalizes patch-edge seams.")
     p.add_argument("--stage-a-only", action="store_true", help="Train/load the autoencoder and stop.")
+    p.add_argument("--data-noise", type=float, default=0.0,
+                   help="I33 (2026-10-09): add ONE fixed realization of Gaussian noise (std in standardized units; "
+                        "0.1 = the DA observation-noise level) to the training AND validation fields, as real "
+                        "data would have. No clean data is used anywhere in training.")
+    p.add_argument("--data-noise-seed", type=int, default=12345)
     args = p.parse_args()
     set_seed(args.seed)
     dev = get_device(args.device)
@@ -107,6 +112,11 @@ def main() -> None:
         n_train, NX, NY = int(md["n_train"]), int(md["NX"]), int(md["NY"])
         traj = torch.tensor(f["trajectories"][:], dtype=torch.float32)
     traj = traj.reshape(traj.shape[0], traj.shape[1], NX, NY)
+    if args.data_noise > 0:
+        g = torch.Generator().manual_seed(args.data_noise_seed)
+        for i in range(traj.shape[0]):  # chunked: the full noise array is as large as the dataset
+            traj[i] += args.data_noise * torch.randn(traj[i].shape, generator=g)
+        print(f"[crop] I33: added fixed Gaussian data noise, std {args.data_noise} (standardized units)", flush=True)
     u_train, u_val = traj[:n_train].to(dev), traj[n_train:].to(dev)
     norm = {"normalization_mean": float(md["normalization_mean"]),
             "normalization_std": float(md["normalization_std"]), "train_dataset": args.dataset}

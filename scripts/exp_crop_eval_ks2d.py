@@ -17,6 +17,8 @@ p.add_argument("--ae-ckpt", required=True); p.add_argument("--prop-ckpt", requir
 p.add_argument("--scale", type=float, required=True); p.add_argument("--seed", type=int, default=0)
 p.add_argument("--tag", required=True)
 p.add_argument("--n-directions", type=int, default=None, help="default: all d_latent")
+p.add_argument("--cubic", type=float, default=0.0, help="J17A: the system's beta (IC spun up on that attractor)")
+p.add_argument("--true-dky", type=float, default=None, help="truth D_KY to compare against (default: standard KS table)")
 a = p.parse_args()
 ck = torch.load(a.ae_ckpt, map_location="cpu", weights_only=False)
 mean, std = ck["normalization_mean"], ck["normalization_std"]
@@ -25,7 +27,7 @@ ae = load_autoencoder_checkpoint_resized_2d(a.ae_ckpt, new_n_sites_x=ns, new_n_s
 prop, pcfg, _ = load_propagator_checkpoint_resized_2d(a.prop_ckpt, new_n_sites_x=ns, new_n_sites_y=ns)
 prop.eval()
 cfg = KSConfig2D(Lx=44.0 * a.scale, Ly=44.0 * a.scale, NX=N, NY=N, spinup_time=200.0, seed=a.seed)
-u0 = (spinup2d(cfg, np.random.default_rng(a.seed)) - mean) / std
+u0 = (spinup2d(cfg, np.random.default_rng(a.seed), cubic=a.cubic) - mean) / std
 t0 = time.time()
 with torch.no_grad():
     z0 = ae.encode(torch.tensor(u0.reshape(1, -1), dtype=torch.float32))[0].numpy().astype(np.float64)
@@ -33,8 +35,8 @@ res = lyapunov_spectrum_latent_propagator(prop, np.stack([z0, z0]), mode="single
                                           n_directions=a.n_directions or pcfg.d_latent,
                                           n_steps=2000, qr_every=10, dt_snap=cfg.dt * cfg.snapshot_every,
                                           warmup_steps=200, seed=a.seed, max_abs_state=1e3)
-truth = TRUTH.get(a.scale)
-out = {"system": "ks2d", "scale": a.scale, "seed": a.seed, "d_latent": pcfg.d_latent,
+truth = a.true_dky if a.true_dky is not None else (TRUTH.get(a.scale) if a.cubic == 0.0 else None)
+out = {"system": "ks2d" if a.cubic == 0.0 else f"ks2d_cubic{a.cubic:g}", "scale": a.scale, "seed": a.seed, "d_latent": pcfg.d_latent,
        "n_directions": a.n_directions or pcfg.d_latent,
        "model_D_KY": res.kaplan_yorke_dimension, "model_lambda1": float(res.exponents[0]),
        "model_n_positive": int(res.n_positive), "true_D_KY": truth,

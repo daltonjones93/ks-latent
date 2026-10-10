@@ -992,6 +992,11 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
 - If (1) fails at 220², the blend is a 44² result only. Report it in §7 as such and find out why (I8).
 
 ### I1 `[~]` Scaling with the blend (D6/D7 rerun)
+- **12-channel Part II runs (RTPS 0.7, stride 8, seed 0):** 88²: K = 4 0.321, K = 1 0.457 (interpolation
+  0.808), the same as at 44². **K = 4 across sizes (2026-10-09):** 44² 0.338, 88² 0.321, 220² 0.326,
+  330² 0.340, **440² 0.326** (interpolation 0.808–0.824). K = 1: 0.457 / 0.467 / 0.480 at 88² / 220² /
+  330². Accuracy is flat over a 100× area: **I0 conditions 1–3 met with the 12-channel model.** The 440²
+  wall time includes a ~4 h machine-sleep pause (15:30–19:20), so do not use it for I14 timing.
 - (a) K = 4 and K = 1 at 88², 220², 330², seed 0, same settings as 44². 220² was launched
   2026-10-09 06:40 (`run_h9_queue.sh l220`). One large domain at a time.
 - (b) Seed 1 at 220², 330², and seeds 1–2 at 88².
@@ -1007,6 +1012,12 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
   size, free-run skill, calibration, wall time and peak RSS. Apply I0.
 
 ### I2 `[~]` Equal-cost comparisons — is the blend an efficient use of members?
+- **12-channel, Part II settings (RTPS 0.7), 2026-10-09** (`P2_L44_I2_*`; seeds 0/1/2; spread/RMSE):
+  - 1 × 64: 0.483 / 0.459 / 0.458 (0.80–0.84);
+  - 2 × 32: 0.395 / 0.376 / 0.373 (0.85–0.90);
+  - **4 × 16: 0.366 / 0.344 / 0.337 (0.71–0.77)**, 25% better than 1 × 64 at equal members;
+  - 16 × 4: 0.96 / 0.84 / 0.83, collapsed (0.10). Four members per tiling is too few, so the
+    split has a floor.
 - **44² done 2026-10-09** (3 seeds, each paired on one cached truth; seed 2's spinup is now
   cached too, because an uncached 200-unit spinup is not bitwise reproducible across runs, as
   chaos amplifies floating-point differences):
@@ -1034,6 +1045,15 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
 - Plot the RMSE against the total member count, with the single-tiling curve and interpolation.
 
 ### I4 `[~]` Number of tilings and blend weights
+- **12-channel, RTPS 0.7, N = 64 per tiling, seed 0** (`P2_L44_I4_*`; spread/RMSE):
+  - K = 2: 0.387 (0.90);
+  - **K = 4 Hann: 0.338 (0.85)**;
+  - K = 16 Hann: 0.291 (0.49);
+  - K = 4 uniform: 0.334 (0.58);
+  - K = 16 uniform: 0.275 (0.35).
+  More tilings or uniform weights buy accuracy at the cost of calibration (independent spreads
+  average down). **Part II default: K = 4 Hann**, which is calibrated. K = 16 is reported as the
+  accuracy end of the trade-off.
 - **44² done 2026-10-09** (seed 0, N = 64 per tiling; analysis RMSE; wall time for 100 cycles):
   | | stride 8 | stride 16 | wall |
   |---|---|---|---|
@@ -1140,7 +1160,7 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
   - the perfect-model ceiling (I11).
 - Add the span-fraction panel from H3, recomputed for the blended prior.
 
-### I11 `[~]` Perfect-model ceiling (H7, now required)
+### I11 `[x]` Perfect-model ceiling (H7, now required)
 - **Code done 2026-10-09.**
   - `ks_latent/da/letkf_phys.py`: local ETKF on the grid, 4 × 4 analysis blocks, R-localization
     with Gaspari–Cohn, optional multiplicative inflation and RTPS.
@@ -1162,6 +1182,15 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
   **Implication for the latent filter:** its GC c was tuned without the blend (best 1.5–2 sites,
   H0 O3). With grid-tied errors averaged out, wider c may now help: add c ∈ {2, 3, 4} sites to the
   I21 sweep.
+- **Sweep complete 2026-10-09 09:25** (100 cycles each; ceiling = best steady RMSE over the declared +
+  extended grid):
+  - **stride 8: 0.076** (c = 24 units; 0.077 at 16, 0.083 at 12, 0.096 at 8.25, 0.131 at 4);
+  - **stride 16: 0.213** (c = 24; 0.218 at 16, 0.214 at 12, 0.243 at 8.25, 0.348 at 4).
+  Calibration 0.85–1.13 at the best settings. RTPS hurts at every c (over-dispersion; RTPS 0.9 is
+  catastrophic). **Unlocalized collapses even with the true model:** 0.314 (stride 8) and 0.529
+  (stride 16), spread/RMSE 0.24–0.31, because 64 members are not enough for n₊ ≈ 43. This
+  independently supports Part II's localization argument.
+  Framing (user): a floor, not a yardstick; one table row.
 - Physical-space local ETKF on the 128² PDE with 64 true-PDE members, same observations, at strides 8 and 16, at 44².
 - This is the only way to say how good 0.57 is, as a percentage of the best achievable with this network and ensemble size. Report "the latent filter reaches X% of the perfect-model error reduction over interpolation".
 - `exp_hybrid_da.py`'s per-patch physical ETKF is the analysis step; the PDE ensemble forecast is new (~half a day).
@@ -1227,7 +1256,7 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
 - Overlapping local analysis domains in operational ensemble filters, e.g. LETKF local volumes (Ott et al. 2004; Hunt et al. 2007) and domain-localized EnKFs with overlap and blending. Check how they treat overlap.
 - Latent-DA baselines ROAD-EnKF (arXiv:2301.11961) and LAE-EnKF (arXiv:2603.06752): compare setups and numbers only where the configurations match; otherwise state that the setups differ.
 
-### I18 `[ ]` Rewrite Part II (absorbs H2, H8)
+### I18 `[→J9]` Rewrite Part II (absorbs H2, H8)
 - Proposed §7 order:
   - 7.1 setting and exactness: Prop. 4 extended. Each tiling's filter is exactly local and the blend is a fixed linear map in physical space, so the composite stays local, at K× the cost.
   - 7.2 accuracy at 44² against interpolation, climatological OI and the perfect-model ceiling, with the controls (I2) and the error anatomy (I10).
@@ -1328,7 +1357,7 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
   accuracy cost, adopt it. If calibration and accuracy improve together, that is the headline
   form of I6.
 
-### I22 `[ ]` Model-error statistics from training data (replace isotropic 0.02 noise)
+### [Paper 2] I22 `[ ]` Model-error statistics from training data (replace isotropic 0.02 noise)
 - **Measured 2026-10-09** (`scripts/exp_i22_model_error.py`, `ks_latent/da/model_error.py` + 4 tests;
   independent truth, seed 3; 25,600 pooled site samples): one-cycle residual rms 0.038 per
   coordinate, bias rms 0.0017, neighbour correlation 0.13 (block-diagonal Q is a fair
@@ -1350,7 +1379,7 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
 - This is standard in DA (additive model error estimated offline); here locality makes Q
   site-local and size-independent.
 
-### I23 `[ ]` Ensemble observation perturbations instead of the mean Jacobian
+### [Paper 2] I23 `[ ]` Ensemble observation perturbations instead of the mean Jacobian
 - `LETKFLocal2D` forms HBHᵀ from the decoder Jacobian at the ensemble mean (coloured JVPs). The
   standard nonlinear EnKF uses the ensemble itself: Y = h(Z) − mean, and Cov(z_s, Y_used).
 - With the per-patch decoder this stays exactly local: each observation depends only on its own
@@ -1359,7 +1388,21 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
 - Code: a `method="letkf_local2d_ens"` variant plus a unit test (for a linear decoder it equals the
   Jacobian version). Test at 44² with K = 1 and 4.
 
-### I24 `[ ]` "No equations needed": framing, the right baseline, and an honest cost comparison
+### I24 `[~]` "No equations needed": framing, the right baseline, and an honest cost comparison
+- **Code done 2026-10-09** (`scripts/exp_i24_phys_emulator.py`):
+  - learned model used as a physical-space emulator (encode on K tilings, propagate, decode, blend);
+  - analysis by the I11 physical local ETKF;
+  - same truth and observation draws as the latent runs; supports `--truth-lap-coef` (I28).
+  - Smoke test (10 cycles): 0.49, against interpolation 0.78.
+  - **Sweep running** (`scripts/run_i24.sh`): K ∈ {4, 1} × c ∈ {8.25, 16} units × RTPS ∈ {0, 0.5, 0.7},
+    seed 0; then 3 seeds at the best setting.
+- **Sweep done 2026-10-09 (seed 0, stride 8).** Best physical-space analysis with the learned model:
+  - K = 4: **0.378** (c = 8.25, RTPS 0.5, calibration 1.19);
+  - K = 1: 0.505 (c = 8.25, RTPS 0.5).
+  Latent analysis (Part II method): K = 4 0.338 (calibration 0.85); K = 1 0.46–0.48. **The latent
+  analysis is ~11% more accurate at fixed model** and better calibrated. The latent space earns its
+  place in the analysis, not only in the forecast (single seed; seeds 1–2 at the best settings to
+  come).
 - **Framing (for I18).** The latent filter needs trajectory data of the full state, not the
   equations. I11 measures what that costs: 0.13 (equations known) vs 0.43–0.56 (learned). Say
   both halves: no equations, but full-state training data, and a 3–4× accuracy price at this
@@ -1388,7 +1431,7 @@ noise 0.02, GC half-width c = 1.5 sites, observation noise 0.1 standardized (0.6
      becomes exact and meaningful in latent space, and the same model transfers across sizes.
   2. Against physical-space DA: no equations needed, at a measured accuracy price.
 
-### I25 `[ ]` Non-Gaussian errors: what the latent formulation can and cannot claim
+### [Paper 2] I25 `[ ]` Non-Gaussian errors: what the latent formulation can and cannot claim
 - **Honest status.** The filters used (LETKF and variants) are Gaussian. The latent formulation
   does not by itself make the analysis non-Gaussian, and in today's regime the priors are
   Gaussian to within sampling error in both spaces (measured above).
@@ -1439,7 +1482,7 @@ closed-form evolution equations: the learned surrogate is the model. What that c
 - **Down-weighted:** results that rely on periodicity, homogeneity or extensivity specifically
   (D_KY-based arguments for the DA part; pooling statistics over all sites).
 
-### I27 `[ ]` Shifted tilings on a non-periodic domain
+### [Paper 2] I27 `[ ]` Shifted tilings on a non-periodic domain
 - The blend uses periodic rolls, but a squall-line domain is not periodic. On a bounded domain,
   shifted tilings leave partial patches at the edges.
 - Options:
@@ -1452,7 +1495,104 @@ closed-form evolution equations: the learned surrogate is the model. What that c
   - the same with the boundary strip treated as observed.
 - The crop-trained model was trained on non-periodic windows, so this should need no retraining.
 
-### I28 `[ ]` Imperfect-model twin (the CM1 situation in miniature)
+### I28 `[~]` Imperfect-model twin (the CM1 situation in miniature)
+- **Code done 2026-10-09:**
+  - `modified_operator2d` and an optional `op=` argument on `integrate2d` (`ks_latent/solver/ks2d.py`;
+    3 tests in `tests/unit/test_solver2d_modified.py`: a = 1 is bitwise standard, k* = √(a/2), truths
+    differ);
+  - `ks_latent/solver/twin.py`: cached truth on the modified attractor, after 100 units of adjustment
+    from the standard spin-up;
+  - `--truth-lap-coef` on `exp_h9_tiled_da.py` and `exp_i11_pde_letkf.py`. Truth: u_t + a∇²u + ∇⁴u +
+    ½|∇u|² = 0; both filters use a = 1.
+- **Stage 1 running** (`scripts/run_i28.sh`): a ∈ {1.1, 1.25}, seed 0, stride 8.
+  - latent filter (12-channel, K = 4) with RTPS {0.5, 0.7, 0.9};
+  - PDE filter (c = 16) with RTPS {0, 0.3, 0.5, 0.7}; each filter gets its own tuning.
+  Stage 2: 3 seeds at each filter's best setting.
+  - 3-cycle smoke test at a = 1.2: PDE filter 0.49 vs latent 0.74 (meaningless at 3 cycles).
+- **Stage 1 results 2026-10-09 12:15** (seed 0, stride 8, 100 cycles; analysis RMSE):
+  - **a = 1.1:**
+    - latent (K = 4), RTPS 0.5 / 0.7 / 0.9: 0.587 / 0.554 / **0.524**;
+    - PDE filter (wrong equation), RTPS 0 / 0.3 / 0.5 / 0.7: 3.11 (diverged) / 1.12 / 0.655 / **0.342**;
+    - interpolation 0.963.
+  - **a = 1.25:**
+    - latent, RTPS 0.5 / 0.7 / 0.9: 1.202 / 1.071 / **0.939**;
+    - PDE, RTPS 0 / 0.3 / 0.5 / 0.7: 5.18 / 4.36 / 1.49 / **0.642**;
+    - interpolation 1.191.
+  **Reading:**
+  - A tuned wrong-equation PDE filter still beats the latent filter, by ~1.5× at both levels. The gap
+    shrinks from 4.5× with a perfect model.
+  - The PDE filter is far more fragile: it diverges or loses to interpolation unless its RTPS is
+    ≥ 0.5–0.7. The latent filter beats interpolation at every setting tried at a = 1.1, and at
+    RTPS ≥ 0.7 at a = 1.25.
+  - Both optima sit at the edge of their sweeps. Stage 1b extends them: latent RTPS 1.0 and
+    inflation 1.2 on top; PDE RTPS 0.8 / 0.9.
+- **Realism upgrade (user, 2026-10-09):** the parametric error above is the most benign kind for
+  the physics filter: right structure, one wrong coefficient. Real model error is structural. Added:
+  - **Option 1, resolution error:** `--model-nx M` on `exp_i11_pde_letkf.py`. The PDE filter runs
+    the correct equation on an M² grid; observations at the same physical points; scored after
+    exact spectral upsampling (Nyquist dropped, round trip 1e-16). 64² barely under-resolves KS
+    (smoke: 0.18 vs 0.13). 32² (~6.5 points per characteristic wavelength) is the realistic case.
+  - **Option 2, missing processes in the truth only:**
+    - uniform mean-flow advection (`--truth-advect-x c`), exact as a Fourier phase shift;
+    - fixed terrain-like forcing f(x, y) (`--truth-forcing-amp`): smooth random field,
+      correlation length 5. Amplitude 0.2 raises the field std 3.9 → 4.2, with a fixed pattern of
+      std 1.9; amplitude 0.4 raises it to 5.0.
+    `integrate2d(advect=, forcing=)` and `twin_truth()` in `ks_latent/solver/twin.py`; tests:
+    advection = exact roll, zero forcing = standard, and both together are rejected.
+    Parametric-only truths reuse the original cache, so every I28 run shares one truth.
+  - **REDESIGN (user, 2026-10-09 ~13:00) — the realistic comparison.** The truth is the standard
+    2D KS, i.e. the system whose data the latent model was trained on (as a CM1 surrogate is trained
+    on the real system's data). The **physics filter's model is wrong**: wrong coefficient
+    (`--model-lap-coef`), spurious mean flow (`--model-advect-x`), spurious terrain forcing
+    (`--model-forcing-amp`), or coarse grid (`--model-nx`, option 1, already this design). This is
+    option 3 without retraining. The latent filter's numbers are the standard-truth runs (0.338 /
+    0.322 / seed 2). The truth-modified option-2 runs were killed and deleted (they had both models
+    wrong, a different question). The stage-1/1b parametric runs above remain as the "both models
+    wrong" variant. Running: `scripts/run_i28d.sh` (4 lanes). `step_batch` wrong-model terms are
+    tested equal to the solver's (`test_pde_filter_step_batch_matches_solver_with_model_errors`).
+- **REDESIGNED I28 RESULTS 2026-10-09 14:17** (seed 0, stride 8, 100 cycles; PDE filter c = 16 units;
+  analysis RMSE at RTPS 0 / 0.5 / 0.7 / 0.9; best in bold; spread/RMSE at best).
+  **Latent filter: 0.338 / 0.322 / 0.320** (seeds 0–2, RTPS 0.7, default settings, calibration ≈ 0.85).
+  Interpolation 0.83. Correct PDE 0.076.
+  | PDE model error | RTPS 0 | 0.5 | 0.7 | 0.9 | best vs latent |
+  |---|---|---|---|---|---|
+  | coefficient 1.1 | 4.35 | 0.90 | **0.325** (1.59) | 0.46 | tie |
+  | coefficient 1.25 | 4.86 | 1.96 | **0.538** (1.38) | 0.59 | latent 1.6× |
+  | spurious mean flow 1 | 4.66 | 3.53 | 1.37 | **0.698** (3.43) | latent 2.1× |
+  | spurious mean flow 2 | 5.01 | 3.78 | 2.30 | **1.25** (2.04) | latent 3.7×; PDE worse than interpolation |
+  | spurious forcing 0.2 | 1.88 | 0.42 | **0.251** (1.67) | 0.44 | PDE 1.35× |
+  | spurious forcing 0.4 | 3.75 | 0.80 | **0.313** (1.34) | 0.45 | tie |
+  | coarse grid 64² | **0.077** (1.13) | 0.12 | 0.23 | — | PDE 4.4× (64² resolves KS) |
+  | coarse grid 32² | 0.52 | **0.187** (0.94) | 0.24 | — | PDE 1.8× |
+  **Reading.**
+  - Against a physics model with wrong *dynamics* (coefficient, spurious advection or forcing), the
+    learned filter ties or wins in 5 of 6 cases, by up to 3.7×. The physics filter wins only for
+    mild forcing (1.35×).
+  - Against *resolution* error the physics filter keeps the edge: 32² is still 1.8× better, because
+    KS's energy-carrying scales are resolved at 32². This would not carry over to convection-
+    resolving CM1, but it is a fair loss here.
+  - Robustness: the physics filter diverges without RTPS in every wrong-dynamics case. Its best
+    RTPS varies with the error (0.7 or 0.9), it is overdispersed at its best (1.3–3.4), and one
+    step off its optimum costs 2–4×. The latent filter uses one default setting throughout and is
+    calibrated.
+  - Caveats: one seed for the PDE runs; RTPS grid coarse (0.6/0.8 untested); the latent model was
+    trained on clean data (I33 tests noisy training).
+  - Paper sentence (draft): "Against an ensemble filter run with a physics model whose dynamics
+    are modestly wrong, the learned latent filter matches or exceeds its accuracy in most cases
+    and needs no model-error tuning; a physics model whose only error is resolution keeps its
+    advantage."
+  - Next: seeds 1–2 at each PDE best setting; RTPS 0.6/0.8 refinement for the close cases
+    (coefficient 1.1, forcing 0.2/0.4, 32²).
+  - **Option 3 (planned): retrain the latent model on the truth system's data.** This is the
+    equation-free advantage the CM1 claim rests on.
+  - Running: `scripts/run_i28c.sh`.
+  Honest framing for Part II: model error narrows the learned model's accuracy deficit a lot and
+  the learned filter is more robust to tuning, but a physics model with modest errors remains
+  more accurate in this twin.
+- **Tier A (user, 2026-10-09).** The perfect-model filter (I11) is a floor, not a yardstick: no perfect
+  model exists for CM1 or most real systems. The paper's claims rest on the no-model baselines and
+  I24, with I28 as the realism check; I11 appears as one table row ("price of learning the model
+  in an idealized twin").
 - The truth comes from a slightly different system than the one the surrogate was trained on:
   2D KS with a modified coefficient (e.g., a damping term or a different ratio of the ∇² and ∇⁴
   terms), or Kolmogorov flow at a different drag.
@@ -1478,7 +1618,7 @@ closed-form evolution equations: the learned surrogate is the model. What that c
   - If it is latent error, the fix is how the ensemble is generated: I30(c).
 - Effort: ~2 h code, minutes to run. `exp_hybrid_da.py --diag` has the global version.
 
-### I30 `[ ]` Training-side options (only after I29 says which part dominates)
+### [Paper 2] I30 `[ ]` Training-side options (only after I29 says which part dominates)
 - (a) **Capacity:** the 12-channel model (I12, running). Lowers the representation part directly
   (floor 0.276 → 0.112 with 16 tilings).
 - (b) **Blend-aware autoencoder fine-tuning.** Add a loss on the Hann-blended reconstruction over
@@ -1506,6 +1646,34 @@ closed-form evolution equations: the learned surrogate is the model. What that c
   - log `artifacts/logs/crop_train_p7c12n15_ks2d.log`.
   Then rerun: the degradation test, K = 4 at stride 8 and 16 (RTPS 0.5, 300 cycles), and a free
   rollout screen, since noise training can damp the dynamics (Lemma 1).
+- **Fine-tune evaluated 2026-10-09 09:43** (`p7c12n15_ks2d`, seed 0, K = 4):
+  - stride 8, RTPS 0.7: 0.350 (original 0.338), calibration 0.76 (0.86);
+  - **stride 16, RTPS 0.5, 300 cycles: 0.87, bounded**: block means stay 0.7–1.1 and end at 0.78
+    (original 1.25, still climbing to 1.34);
+  - stride 16 without RTPS: 2.27 (original 2.06). **Neither fix works alone; the combination does.**
+  - D_KY at 44²: 82.3 against true 81.8 (**0.6%**; original 2.1%), so no damping from noise training.
+  - Degradation test: from analysis means 0.095 (truth 0.062); from random perturbations 0.67,
+    *unchanged* from the original (0.67).
+  **Correction to the I30(d) reading:** the random-perturbation number does not measure "the
+  propagator breaks". E(PDE(D(z))) lies on the manifold whatever z is, so any off-manifold part
+  of z that the propagator carries forward counts as error. That number mainly says neither
+  propagator projects perturbations back onto the manifold. So the fine-tune's sparse-observation
+  gain is real (one seed), but its mechanism is **not** established by this test.
+  Next: 2 more seeds at stride 16 (RTPS 0.5, both propagators), and a projection baseline
+  (z ← E(D(z)) on members after the model noise), which tests the manifold idea directly.
+- **3-seed check, 2026-10-09 10:30** (12-channel, K = 4, stride 16, RTPS 0.5, 300 cycles; median blend
+  error over cycles 151–300; interpolation 2.79–2.89):
+  - original propagator: 1.25 (drift +18%) / **blow-up** (seed 1, from cycle ~142) / 1.60 (+20%);
+  - noise fine-tuned: 0.84 / **blow-up** (seed 1, from cycle ~239) / 1.40;
+  - **member projection** z ← E(D(z)) after each forecast, original propagator: **1.46 / 1.54 / 1.66,
+    steady on every seed** (drift ≤ 5%), with no new model.
+  - Projection without RTPS: 2.62.
+  Seed 0's fine-tune success was partly luck. RTPS 0.5 at sparse observations inflates members into
+  regions where neither propagator is bounded; projection keeps them bounded. Note: a blow-up in one
+  tiling was averaged silently into the blend. `exp_h9_tiled_da.py` now stops a run when any tiling's
+  error exceeds 5× the field std and records `diverged_at_cycle`.
+  Next: fine-tuned + projection, and the I31 gates (on = original; off = project or fine-tuned),
+  3 seeds each.
 - (d) **Robustness to off-manifold analysis states.** Analysis latents need not lie in the
   encoder's image. Train the propagator and decoder on perturbed latents ("analysis-like"
   inputs; Stage 2 already anneals input noise 0.10 → 0.02, so check first whether raising its
@@ -1515,6 +1683,155 @@ closed-form evolution equations: the learned surrogate is the model. What that c
   Paper 2/3, not Paper 1.
 - Not proposed: anything that adds decoder reach (it breaks the exact block-diagonal Jacobian,
   which is Part II's structural result), and the banded latent regularizer (known to collapse).
+
+### [Paper 2] I31 `[~]` Manifold-gated propagators (user idea, 2026-10-09)
+- **Gate option 1 implemented** (`ks_latent/da/gated.py`, 4 tests; `--gate [--gate-off-tag]` on
+  `exp_h9_tiled_da.py`). It is not learned: per-site round-trip score ‖E(D(z)) − z‖ with threshold
+  d₀ = 95th percentile of clean scores on the independent seed-3 truth (0.132), width 0.008. About 8%
+  of site-states are routed off.
+- **3 seeds, stride 16, RTPS 0.5, 300 cycles (median over 151–300; drift; spread/RMSE):**
+  - original: 1.25 / blow-up / 1.60;
+  - fine-tuned: 0.84 / blow-up / 1.40;
+  - projection: 1.46 / 1.54 / 1.66 (calibration 0.33–0.39);
+  - fine-tuned + projection: 1.52 / 1.59 / 1.52;
+  - gate original/projection: 1.48 / 1.40 / 1.46;
+  - **gate original/fine-tuned: 1.15 (+43%, cal 0.88) / 0.74 (+7%, 1.02) / 1.32 (+6%, 0.41)**.
+  The MoE gate is the most accurate (mean ≈ 1.07 vs ≈ 1.55 for projection), has no blow-ups, and is
+  best calibrated on 2 of 3 seeds. Seed 0 is still rising late. Interpolation 2.79–2.89.
+  Next: 600-cycle runs (gate, projection; 3 seeds), and the gate at stride 8.
+- **Problem.** Training the propagator on noisy inputs makes it robust to off-manifold states, but a
+  squared-error loss on noisy inputs favours contraction (Lemma 1), which damps the dynamics and
+  can collapse the spread. The noise-free propagator keeps the dynamics but fails badly on
+  perturbed states: 10× its usual error for random latent perturbations of the analysis-error size
+  (I30(d)).
+- **Idea.** Route each state, mixture-of-experts style, between an accurate propagator M_c (the
+  current one) and a noise-robust one M_r (the I30(d) fine-tune), using a gate that measures
+  closeness to the data manifold:
+  z' = g ⊙ M_c(z) + (1 − g) ⊙ M_r(z), with g ∈ [0, 1] **per site**.
+  - The gate must be local and weight-shared (computed from a site's neighbourhood), or exact
+    locality and size transfer are lost.
+  - A soft blend avoids members jumping between models.
+- **Gate options, cheapest first:**
+  1. No training: the per-site round-trip distance ‖E(D(z)) − z‖ (truth ≈ 0.08, analysis means
+     ≈ 0.09, members ≈ 0.10 at 44²), passed through a logistic with threshold and width set from the
+     clean-encoding distribution.
+  2. Per-site density: Mahalanobis distance in the c-dimensional site latent (and neighbours),
+     fitted on clean encodings.
+  3. A learned per-site classifier: clean encodings vs perturbed ones. Or train the gate jointly
+     with M_c and M_r, a real mixture of experts.
+- **Test (after the fine-tune lands; both models then exist, so option 1 needs no training):**
+  - K = 4 DA at strides 8 and 16 (300 cycles, drift test), against M_c alone and M_r alone;
+  - error, spread/RMSE and the I30(d) degradation numbers;
+  - a free-rollout Lyapunov check (D_KY) of the gated model, which must stay at M_c's value on
+    clean trajectories.
+- **Watch:** the gate will mostly fire on ensemble *members* (means stay near the manifold). Members
+  set the spread, and a contracting M_r shrinks it, worsening under-dispersion. Calibration is
+  the key output, not just RMSE.
+- **Baselines it must beat:**
+  - (a) project members back after the model noise, z ← E(D(z)), with no second model;
+  - (b) model noise drawn from the data-estimated, on-manifold Q (I22) instead of isotropic latent
+    noise;
+  - (c) M_r alone.
+- **Prior art to check:** mixture-of-experts routing; hybrid physics/ML models that switch on ML
+  uncertainty or out-of-distribution detection; manifold-projection steps in latent DA.
+- **Relevance to Paper 3:** CM1 analysis states will be further from a surrogate's training
+  distribution than KS states are, so an explicit in/out-of-distribution routing may matter more
+  there.
+
+### [Paper 2] I32 `[~]` Tiling-reset failsafe (user, 2026-10-09)
+- **Observation.** Over 600 cycles at stride 16 (RTPS 0.5), every method eventually degrades:
+  - projection 1.91 / 2.22 (seeds 0/1, cycles 301–600);
+  - the MoE gate diverged at cycle 593 (seed 0).
+  Blow-ups always start in ONE tiling while the others stay healthy: at divergence the tiling errors
+  were 1.25 / 0.70 / **18.6** / 0.66.
+- **Fix** (`--tiling-reset` on `exp_h9_tiled_da.py`). It uses no truth:
+  1. Each cycle, compute each tiling's disagreement with the median of the other tilings' analysis
+     means.
+  2. If a disagreement exceeds 3× the median disagreement and 1.0 field units, drop that tiling from
+     this cycle's blend.
+  3. Re-initialize it from the blend of the healthy tilings, with members re-encoded in its frame.
+  Resets are logged as (cycle, tiling, disagreement, median). Unlike `--feedback` (every tiling,
+  every cycle, which hurt: 0.811), it acts only on outliers, rarely. A single-model filter has no
+  analogue: the K tilings are a built-in consistency check.
+- Healthy disagreement at stride 8 is ≈ 0.34, so the defaults should never fire there (checked by
+  `L44_C12GR_st8`).
+- **Running 2026-10-09 10:50** (`scripts/run_reset.sh`): MoE gate + reset and original + reset;
+  stride 16, RTPS 0.5, 600 cycles, seeds 0–2; plus gate + reset at stride 8.
+- **Results 2026-10-09 11:08** (stride 16, RTPS 0.5, 600 cycles; mean blend error over cycles 301–600;
+  interpolation 2.74–2.87):
+  - projection: 1.91 / 2.22 / 1.93;
+  - MoE gate alone: **diverged (cycle 593)** / 2.07 / 1.14;
+  - original + reset: 1.60 / 1.81 / 1.52, **bounded on all seeds** (seed 1 blew up without reset);
+  - **gate + reset: 1.17 / 1.66 / 1.58** (mean 1.47), bounded on all seeds.
+  - Resets fired: original + reset 1 / 7 / 3; gate + reset 2 / 0 / 0.
+  - **Reproducibility caveat:** gate + reset on seeds 1 and 2 fired no reset, so it is the same
+    configuration as gate alone, yet gave 1.66 vs 2.07 and 1.58 vs 1.14. The long sparse runs are
+    not run-to-run reproducible: tiny floating-point differences (multithreaded BLAS / thread
+    count) grow chaotically over 600 cycles. The dense stride-8 pair matched exactly. So
+    between-method differences at stride 16 / 600 cycles below ~±0.5 are within noise.
+    Comparisons need ≥ 5 seeds and fixed threads (OMP_NUM_THREADS=1 or deterministic torch);
+    blow-up vs no blow-up remains a robust distinction.
+  At stride 8: 0 resets in 100 cycles, error unchanged (0.341). The reset prevents every blow-up
+  seen so far at no cost where nothing is wrong. Remaining issue: slow late creep in all methods
+  (error still rising in the last 100–200 cycles), so long-run sparse cycling is contained, not
+  solved.
+- Paper framing if it works: the tilings serve as an ensemble of models (I8) *and* as a divergence
+  detector; worth a sentence in §7 and possibly a figure panel showing a reset event.
+
+### Scope decision (user, 2026-10-09 ~11:10): Part II vs. the DA follow-up paper
+**Part II of Paper 1:**
+- exact locality and per-site filtering;
+- shifted-tiling blending (I8, I9, I2, I4);
+- scaling with domain size (I1, I3);
+- dense-observation accuracy and calibration with the 12-channel model (RTPS 0.7);
+- no-model baselines and the perfect-model floor (I11);
+- the equation-free baseline (I24);
+- **the imperfect-model twin (I28: kept in Part II, user)**;
+- cost (I14); figures and rewrite (I9, I10, I18).
+Sparse observations get one honest paragraph: long-run sparse cycling is limited by the learned
+model's stability; failsafes exist and are promising (pointer to the follow-up).
+
+**Moved to the DA follow-up paper (Paper 2; bridge to CM1, Paper 3):**
+- I30 (noise fine-tuning, projection);
+- I31 (manifold-gated MoE propagators);
+- I32 (tiling-reset failsafe);
+- the sparse half of I5 (stride ≥ 16, long cycling);
+- I25 (non-Gaussian, nonlinear observations);
+- I22 (model-error Q), I23 (ensemble observation perturbations), I27 (non-periodic tilings).
+Their results so far stay recorded here. Before any claim in that paper, the sparse runs need ≥ 5
+seeds and deterministic threading (see the I32 reproducibility caveat).
+
+### I33 `[x]` Latent model trained on noisy data (user, 2026-10-09) — Part II
+- **Why.** In the I28 redesign the latent model was trained on clean, exact data from the true
+  system, which is idealized. Measurement noise is far better characterized than model error, and
+  a squared-error loss on noisy targets learns the clean conditional mean (noise2noise). So a
+  learned model trained only on noisy data should stay close to the clean one, while a physics
+  model's structural error has no such remedy.
+- **Existing latent-noise training is different.** It only adds noise to the propagator's inputs;
+  the training data itself was clean.
+- **Setup.** `--data-noise σ` on `train_kolmogorov_crop.py`: one fixed Gaussian realization added
+  to training and validation fields; no clean data anywhere in training. Run `p7c12d10_ks2d`,
+  σ = 0.1 (= the DA observation noise), same recipe as `p7c12_ks2d`, launched 2026-10-09 ~13:50
+  (nice 10). Auto-evaluation `scripts/run_i33_eval.sh`: K = 4 seeds 0–2 and K = 1 at stride 8,
+  RTPS 0.7; D_KY at 44²; always scored against the CLEAN truth.
+- **RESULT 2026-10-09 20:59 — benign; if anything slightly better.** Scored against the clean truth,
+  stride 8, RTPS 0.7:
+  | | seed 0 | seed 1 | seed 2 | K = 1 | decoder floor (1 / 4 tilings) |
+  |---|---|---|---|---|---|
+  | noisy-data model `p7c12d10` | **0.324** | **0.310** | **0.302** | 0.457 | 0.251 / 0.137 |
+  | clean-data model `p7c12` | 0.338 | 0.322 | 0.320 | 0.46–0.48 | 0.287 / 0.164 |
+  Better on all three seeds (by 4–6%) with a lower decoder floor. This is consistent with
+  squared-error training on noisy targets learning the clean conditional mean, plus a
+  regularizing effect. D_KY at 44²: 84.7 vs 81.8 (**3.6%**; clean 12-channel 2.1%, 6-channel
+  1.7%): slightly more dimension error, still within ~4%. Note it as a caveat (DA does not
+  depend on it).
+  **Consequence for the claims:** "trained on clean data" can be replaced by "trained only on
+  data with observation-level noise" for the model-error comparison.
+- **Next:** σ = 0.3 (~2–3 h of training) to map where noise starts to hurt; optionally make
+  `p7c12d10` Part II's model. Decide after J1/J2.
+- **Caveat for the paper.** For CM1 the training data will be high-resolution simulations or
+  reanalysis (with their own model error), not noisy full fields. This test is a step toward
+  realism, not the end.
 
 ### Block I priorities and estimates (2026-10-09, with the Paper 3 / CM1 steering)
 Part II stays in Paper 1 for now; it may later become its own paper. "Machine" is unattended run
@@ -1532,13 +1849,14 @@ time, with large domains one at a time; "work" is coding, analysis and writing.
 | A | I9 Fig. 11 redo, I14 cost table, I17 citations | — | ~0.5 day | Paper. |
 | A | I18 rewrite §7, abstract, key points, §9, §10 | — | ~2 days | Paper. |
 | B | I23 ensemble observation perturbations | ~1 h | ~3 h | Nonlinear observations (radar) in Paper 3. |
-| B | I28 imperfect-model twin | ~2 h | ~2 h | CM1 in miniature; strong if I22 works. |
+| A | I28 imperfect-model twin | ~2 h | ~2 h | The fair comparison: the physical model is wrong too, as for CM1 and any real model. Promoted to A (user, 2026-10-09). |
 | B | I27 non-periodic blend | ~1 h | ~3 h | Needed for CM1; could move to Paper 3. |
 | B | I20 cycle length | ~1 h | small | Cheap. The forecast sets the error. |
 | B | I3 ensemble-size sweep | ~1 h | small | Completes the "efficient ensemble" story. |
 | B | I7 forecasts from analyses | ~1 h | ~2 h | Reviewers will ask. |
 | B | I10 error-anatomy figure | — | ~0.5 day | Explains the mechanism. |
 | B | I15 1D vs interpolation | ~0.5 h | ~1 h | Consistency of claims. |
+| B | I31 manifold-gated propagators (after the I30(d) fine-tune) | ~1 h | ~3 h | Gate option 1 needs no training; tests calibration and D_KY, not just RMSE. |
 | C | I13 joint filter, I16 robustness, I19 Kolmogorov DA, I26 granularity, I25 experiment (I25 paragraph is A, ~1 h) | — | — | Only if time; I25 experiment → Paper 2/3. |
 
 Totals:
@@ -1566,6 +1884,488 @@ I2 (4×16, 2×32) and I8+I9 (K = 4). Seam ratios via `scripts/exp_i9_seams.py` �
 8. I18.
 
 I13, I16 and I19 can wait.
+
+---
+
+## Block J — Finalize Part II: learned latent DA vs physics-based DA under model error (2026-10-09)
+
+**New perspective (user, 2026-10-09).** We will never have a perfect dynamical model. A learned
+latent model trained on data from the true system is compared against a physics-based ensemble
+filter whose model is (modestly) wrong. Measurement noise is far better characterized than model
+error, so it can be accounted for when training the learned model (I33). Together with exact
+locality and size transfer, this is Part II's central argument.
+
+What Part II now claims (to be confirmed by J1–J5):
+1. Exact locality and size transfer:
+   - one model and one filter setting from 44² to 440²;
+   - 12-channel, K = 4: 0.338 / 0.321 / 0.326 / 0.340 at 44² / 88² / 220² / 330²;
+   - interpolation 0.81–0.83.
+2. Shifted-tiling blending (cycle spinning on the patch lattice):
+   - ~30% lower error at no retraining;
+   - at equal total members, 4 × 16 beats 1 × 64 by 25%;
+   - the seams vanish;
+   - the mechanism is grid-tied error.
+3. Accuracy and calibration with dense observations:
+   - ≈ 0.32–0.34, about 2.5× better than interpolation and climatological OI;
+   - spread/RMSE ≈ 0.85 with RTPS 0.7;
+   - the latent analysis beats a physical-space analysis with the same model (I24: 0.338 vs 0.378).
+4. **Against physics-based DA with model error (I28 redesign):**
+   - wrong dynamics: the latent filter ties or wins in 5 of 6 cases (up to 3.7×) with no model-error tuning;
+   - the physics filter diverges without RTPS, has a narrow tuning window, and is overdispersed at its best;
+   - resolution-only error: the physics filter keeps its edge (KS resolved at 32²);
+   - perfect model: 0.076 (the floor, one table row).
+5. Limitation, stated: long sparse-observation cycling is limited by the learned model's stability;
+   failsafes exist (pointer to the DA follow-up paper).
+
+### J1 `[x]` Seeds for the PDE filter (model-error comparison)
+- Seeds 1–2 for the PDE filter at its best RTPS for each of the 8 model errors (coefficient
+  1.1/1.25, mean flow 1/2, forcing 0.2/0.4, grid 64²/32²): 16 runs, ~3–5 min each with thread caps
+  (`OMP_NUM_THREADS=2`, `--workers 2`; never uncapped, see the 12:40 oversubscription incident).
+- Latent seeds 0–2 exist (0.338 / 0.322 / 0.320).
+- Report mean ± range per case. A case counts as a "tie" if the ranges overlap.
+- ~1.5 h machine.
+
+### J2 `[x]` Fair tuning of the PDE filter
+- RTPS 0.6 and 0.8 for every case, and 1.0 for the mean-flow cases, where 0.9 was best (edge of
+  grid).
+- Localization c ∈ {8.25, 24} at the best RTPS for the closest cases (coefficient 1.1, forcing 0.2
+  and 0.4, 32²).
+- Multiplicative inflation 1.1 / 1.2 as an alternative to RTPS for one case per error type.
+- Rule (pre-registered): the PDE filter's number in the paper is its best over this whole grid on
+  seed 0, then confirmed on seeds 1–2. The latent filter keeps its single default.
+- ~2 h machine.
+
+- **J1 + J2 launched 2026-10-09 14:36** (`scripts/run_j12.sh`, 2 lanes, nice 10, 2 threads, so the J4
+  evaluation always takes priority; log `artifacts/logs/j12.log`). Per case:
+  1. RTPS 0.6 / 0.8 (1.0 for the mean-flow cases);
+  2. the best RTPS is picked automatically from all seed-0 c = 16 runs;
+  3. c ∈ {8.25, 24} at that RTPS, and inflation 1.1 / 1.2 without RTPS;
+  4. seeds 1–2 at the best RTPS (c = 16).
+  If J2 finds a better c or inflation for a case, rerun its seeds at that setting before quoting it.
+
+- **J1/J2 RESULTS 2026-10-09 22:15** (c = 16, best RTPS, seeds 0/1/2; Part II latent filter
+  `p7c12d10` 0.324 / 0.310 / 0.302, mean 0.312):
+  - coefficient 1.1: RTPS 0.7, 0.325 / 0.323 / 0.318 → **tie**;
+  - coefficient 1.25: RTPS 0.8, 0.475 / 0.488 / 0.480 → **latent 1.5×**;
+  - mean flow 1: RTPS 0.9, 0.698 / 0.707 / 0.697 → **latent 2.2×**;
+  - mean flow 2: RTPS 1.0, 1.175 / 1.112 / 1.133 → **latent 3.7×**;
+  - forcing 0.2: RTPS 0.7, 0.251 / 0.249 / 0.244 → **PDE 1.26×**;
+  - forcing 0.4: RTPS 0.7, 0.313 / 0.310 / 0.315 → **tie**;
+  - 64² grid: RTPS 0, 0.077 / 0.088 / 0.085 → PDE;
+  - 32² grid: RTPS 0.6, 0.184 / 0.180 / 0.180 → **PDE 1.7×**.
+  Seed spread < 0.02 in every case. Multiplicative inflation alone diverges or is far worse in every
+  wrong-dynamics case.
+  - **Fair-tuning follow-up:** c = 8.25 beat c = 16 on seed 0 for mean flow 1 (0.584), mean flow 2
+    (0.863) and forcing 0.4 (0.297). Per the pre-registered rule these are reported at c = 8.25 once
+    seeds 1–2 exist. Queued `scripts/run_j1b.sh` (after J16): seeds 1–2 at c = 8.25; c = 4 for the
+    mean-flow cases (8.25 is the grid edge); J16(a) mean-flow parameter estimation at c = 8.25.
+  - The latent filter still wins the mean-flow cases at c = 8.25 (0.58 / 0.86 vs 0.31).
+
+### J3 `[ ]` The latent side of the comparison at full strength
+- Also report K = 16 (0.29, the accuracy end; calibration 0.49) as the latent filter's accuracy
+  ceiling, so the reader sees both ends of its trade-off.
+- Latent seeds are done.
+- ~0.5 h.
+
+### J4 `[x]` I33 — the latent model trained on noisy data (done 2026-10-09; see I33)
+- `p7c12d10_ks2d`, data noise 0.1; auto-evaluation queued.
+- If its DA error stays within ~15% of the clean model's, replace "trained on clean data" in the
+  claims with "trained on noisy data". Then train σ = 0.3 (~1 h) to map the degradation.
+- If it degrades badly, say so; this is the most likely reviewer objection to claim 4.
+
+### J5 `[ ]` (B) Model error and transfer together
+- One or two wrong-dynamics cases (coefficient 1.25, mean flow 1) at 220²: the PDE filter on 640²
+  against the latent filter (0.326). Shows that claim 4 holds at a transferred size.
+- PDE ensemble at 640² is ~25× the 44² cost (~1–2 h per run), so run overnight, one at a time.
+
+### J6 `[ ]` Figure: learned vs physics-based DA under model error (new §7 figure)
+- **Panel (a):** analysis RMSE per model-error case (8 cases), for:
+  - the PDE filter at its best setting, with seed ranges;
+  - the latent filter (seed range, horizontal band);
+  - the perfect-model PDE floor (dashed);
+  - interpolation (dotted).
+- **Panel (b):** tuning sensitivity, i.e. RMSE against RTPS for the PDE filter in three
+  representative cases, log y-axis, marking divergence; the latent filter's single default as a point.
+- **Panel (c, optional):** spread/RMSE at the best settings.
+- Data: `artifacts/experiments/da2d/i11_I28W_*`, `i11_I28R_*`, `h9_L44_C12_st8_rtps0.7_s*`.
+- Script: `scripts/paper_figures/fig13_model_error.py`, following the §F figure contract.
+
+### J7 `[ ]` Tables for Part II (regenerated with the 12-channel model)
+- `tab07_2d_da` (scaling): 12-channel, K = 1 and 4, 44²–440², with interpolation, climatological
+  OI, spread/RMSE, wall time and peak RSS (I1, I14).
+- New `tab07_model_error`: the J1/J2 numbers.
+- `tab07_2d_ensemble` (equal cost / number of tilings): I2, I4.
+- `tabE_da`: settings (RTPS 0.7, Hann blend, K = 4, c = 1.5 sites).
+
+### J8 `[ ]` Write the new §7 subsection: "Learned versus physics-based models under model error"
+- **Framing to carry in J8** (user, 2026-10-09). The result is significant because it combines
+  four things:
+  1. a latent model learned **only from noisy data** of the system (J15 / I33: never sees a clean
+     field or an equation);
+  2. that **matches or beats** a physics-based ensemble filter whose dynamics are modestly wrong, in
+     5 of 6 wrong-dynamics cases;
+  3. with **one default setting**, while the physics filter needs per-case tuning and diverges
+     without it;
+  4. **at any domain size** (44²–440², no retraining).
+  State it in that order, then the caveats.
+- **Caveats that must appear in §7.5 (not only in §9):**
+  - the physics filter had RTPS only, and J16 adds parameter estimation / additive model error;
+    word the claim according to J16's decision rule;
+  - the model-error sizes were chosen, not calibrated to a real model (illustrative); real
+    structural errors such as convection microphysics are often larger and non-parametric;
+  - the learned model's training data is complete noisy fields, plentiful, from the exact system,
+    whereas real data is sparse observations or reanalysis;
+  - resolution-only error favours the physics filter here (KS is resolved at 32²);
+  - one system, twin experiments.
+- **Table row:** the clean-data model `p7c12_ks2d` (0.338 / 0.322 / 0.320), showing that noisy
+  training costs nothing (slightly better).
+- **Design:** the truth is the system the latent model was trained on. The physics filter's model
+  has a parametric error (∇² coefficient), a structural error (spurious mean flow, spurious
+  terrain-like forcing), or a resolution error (coarse grid). Each filter is tuned fairly (J2).
+- **Results:** J6 figure, J7 table.
+- **Robustness:** divergence without RTPS, the tuning window, overdispersion at the best setting.
+- **Honest scope:**
+  - resolution error favours the physics model here, because KS is smooth;
+  - the latent model's own data-related error (I33);
+  - one system;
+  - twin experiments.
+- The "perfect model" result appears as the floor only.
+- ~1 day.
+
+### J9 `[ ]` Restructure and rewrite §7 (absorbs I18)
+- Proposed order:
+  - 7.1 setting, exact locality and the per-site filter. Extend the exactness statement: each
+    tiling's filter is exactly local and the blend is a fixed linear map, so the composite stays
+    local.
+  - 7.2 shifted-tiling blending: method, mechanism (I8 grid-tied error), seams (I9), equal-cost (I2), K and weights (I4).
+  - 7.3 accuracy and calibration at dense observations: no-model baselines, RTPS, latent vs
+    physical-space analysis (I24), error anatomy (I10).
+  - 7.4 transfer and scaling: 44²–440² (I1), ensemble size (I3).
+  - **7.5 learned versus physics-based models under model error (J8).**
+  - 7.6 observation density, the 1D results, and the sparse-observation limitation paragraph,
+    pointing to the follow-up.
+  - 7.7 cost and memory (I14).
+- Replace every 6-channel Part II number with 12-channel ones. Keep the 6-channel single-tiling
+  results only where they explain the motivation (H0 diagnosis).
+- ~1.5 days.
+
+### J10 `[ ]` Two-model statement
+- Part I uses `p7b_ks2d` (6 channels); Part II uses `p7c12_ks2d` (12 channels, same architecture
+  class, more capacity for DA).
+- Text in §7.1 and App. A; App. D sentence: the 12-channel sibling's D_KY transfer errors are
+  2.1% / 1.1% at 44² / 66² (robustness of Part I to capacity).
+- ~1 h.
+
+### J11 `[ ]` Abstract, Key Points, Plain Language Summary, §1 bullet, §9 discussion, §10 conclusions
+- **Carry the J8 framing into these** (user, 2026-10-09):
+  - Abstract: one sentence. "Trained only on noisy data, the latent model matches or exceeds an
+    ensemble filter run with a modestly wrong physical model, without model-error tuning, and keeps
+    its accuracy on domains up to 100× larger." Word it per J16's outcome.
+  - Key Point 3: fold in "learned only from noisy data".
+  - Plain Language Summary: "we never have a perfect model of the weather; a model learned from
+    (noisy) data can do as well."
+  - §1: add the motivation (no perfect dynamical model in practice; measurement noise is better
+    understood than model error, so it can be handled in training).
+  - §9: the caveat list from J8, CM1 as the target (Paper 3), and J16 if it is not yet done.
+  - §10: one sentence.
+- Abstract and Key Point 3: accuracy against no-model baselines, transfer to 440², and the
+  model-error comparison sentence.
+- §9:
+  - CM1 motivation (no perfect model; learned surrogate from data);
+  - the noise-trained model (I33);
+  - resolution vs dynamics error;
+  - the sparse-observation limitation and follow-up paper;
+  - the reproducibility note for long sparse runs.
+- §10: one paragraph for Part II.
+- ~0.5 day.
+
+### J12 `[ ]` App. E and App. F updates
+- **App. E:**
+  - tiling blend (Hann weights, K, offsets);
+  - RTPS (Whitaker & Hamill 2012);
+  - the physical-space LETKF used as the comparator (blocks, R-localization, c);
+  - wrong-model definitions (equations for each case);
+  - noisy-data training (I33).
+- **App. F:**
+  - new scripts: `exp_h9_tiled_da.py`, `exp_i11_pde_letkf.py`, `exp_i24_phys_emulator.py`,
+    `run_i28d.sh`, `run_partII_c12.sh`, `train_kolmogorov_crop.py --data-noise`;
+  - modules: `letkf_phys.py`, `ks_latent/solver/twin.py`, `gated.py` (follow-up).
+- ~0.5 day.
+
+### J13 `[ ]` Citations (verify every one against the primary source)
+- Cycle spinning: Coifman & Donoho 1995.
+- RTPS: Whitaker & Hamill 2012.
+- LETKF: Hunt et al. 2007; Ott et al. 2004.
+- Additive and multiplicative inflation for model error: e.g. Houtekamer & Mitchell; Anderson.
+- Data-driven DA: Brajard et al. 2020; Bocquet et al. 2020.
+- Noise2noise: Lehtinen et al. 2018.
+- Latent DA: ROAD-EnKF, LAE-EnKF.
+- ~0.5 day.
+
+### J14 `[ ]` Number provenance and consistency
+- Add every new Part II number to `check_numbers.py` (EXPLAINED dict where needed), regenerate the
+  tables from JSONs only, rerun G2/G3-style passes on §7.
+- ~0.5 day.
+
+### J15 `[~]` **Part II switches to the noisy-data model `p7c12d10_ks2d` (user, 2026-10-09 ~21:10)**
+- **Decision.** Part II's latent model is the 12-channel model trained ONLY on data with one fixed
+  realization of observation-level noise (σ = 0.1, I33). It is slightly more accurate than the
+  clean-trained `p7c12_ks2d` on every seed (0.302–0.324 vs 0.320–0.338) and is the more realistic
+  setting: real training data is noisy, and measurement noise is better characterized than model
+  error. This strengthens the model-error claim (J8).
+- Part I keeps `p7b_ks2d` (6 channels, clean).
+- `p7c12_ks2d`'s Part II results stay recorded as the clean-data reference: one sentence and a
+  table row ("training on clean data instead gives …").
+- **Reruns, all with `scripts/run_partII_d10.sh`** (launched 21:10; log `artifacts/logs/partII_d10.log`).
+  Settings are unchanged (K = 4, Hann, RTPS 0.7, c = 1.5 sites, stride 8, 100 cycles).
+  - [~] RTPS check 0.5 / 0.9 at 44². Pre-registered: keep 0.7 unless another value is > 5% better
+    and calibrated (0.7–1.2).
+  - [x] 44² K = 4 seeds 0–2, K = 1 (I33: 0.324 / 0.310 / 0.302; 0.457).
+  - [~] I2 equal members (1 × 64, 2 × 32, 4 × 16; seeds 0–2).
+  - [~] I4 K = 2 / 16, uniform weights.
+  - [~] I3 ensemble size N ∈ {8, 16, 32, 128} at 44²; {16, 32, 128} at 220².
+  - [~] I8 / I9 / I10 diagnostics and saved fields at 44² and 220² (for figures).
+  - [~] I24 physical-space analysis with the same model (seeds 0–2, K = 4; K = 1).
+  - [~] I1 scaling 88² / 220² / 330² / 440², K = 4 and K = 1; seed 1 at 220² and 330².
+  - [~] D_KY at 66² for the Part II model (44²: 3.6%).
+  - [ ] I14 cost and memory: take wall time / peak RSS from these runs, excluding any run
+    interrupted by machine sleep (check `pmset -g log`), or rerun one size cleanly.
+  - [ ] J5 (optional, model error + transfer at 220²): use this model.
+  - [ ] J8 / J9 / J11 text and J6 / J7 figures and tables: quote `p7c12d10` numbers throughout Part II.
+- **Lane A results (44², seeds 0/1/2; error / spread-to-error), 2026-10-09 21:31:**
+  - RTPS 0.5 / 0.7 / 0.9: 0.322 / 0.324 / 0.340, so **0.7 is kept** (pre-registered rule).
+  - **I2, equal 64 members:**
+    - 1 × 64: 0.457 / 0.431 / 0.418 (0.86–0.93);
+    - 2 × 32: 0.376 / 0.359 / 0.350 (0.92–0.99);
+    - **4 × 16: 0.352 / 0.334 / 0.318 (0.77–0.85)**, 23–24% better than 1 × 64.
+  - **I4 (N = 64 per tiling):** K = 2 0.369 (0.97); K = 4 0.324 (0.85); K = 16 0.287 (0.51); K = 4
+    uniform 0.313 (0.63). Same trade-off as before.
+  - **I3 (K = 4, N per tiling):** 8 → 0.450 (0.53); 16 → 0.352 (0.77); 32 → 0.330 (0.87); 64 → 0.324;
+    128 → 0.322 (0.94). Saturates by N ≈ 32.
+  - **I8:** inter-tiling error correlation by band 0.42 / 0.39 / 0.41 / 0.11 (more correlated than the
+    clean model's 0.26 / 0.48 / 0.32 / 0.12 at large scales).
+  - **I9 seams (edge/interior gradient ratio):** truth 1.02; single tiling **1.73** (clean model 3.7:
+    noisy training roughly halves the seams by itself); blend 1.02.
+  - **I24, physical-space analysis with the same model:** 0.354 / 0.345 / 0.338 (calibration
+    1.22–1.27), against latent 0.324 / 0.310 / 0.302 (0.85). **The latent analysis is 5–10% better on
+    every seed and better calibrated** (clean model: 11%). K = 1: physical 0.461 vs latent 0.457.
+  - **D_KY:** 44² 3.6%, **66² 2.1%** (188.5 vs 192.5; 6-channel model 2.4%).
+  - Scaling so far: 88² 0.304 (K = 1 0.423); 220² 0.312 (K = 1 0.434).
+  - **Not rerun:** the PDE-filter model-error runs (J1 / J2 / I28: independent of the latent
+    model); the perfect-model floor (I11).
+- **Later (user: "we can do 1 later"):** train σ = 0.3 (`--data-noise 0.3`, ~2–3 h) to map
+  where data noise starts to hurt; one table row in §7.5.
+- Paper text: state that Part II's model never sees clean data, and give D_KY caveats (44²: 3.6%,
+  66²: pending) in App. D/E.
+
+### J16 `[~]` Give the physics filter its standard model-error remedies (reviewer-critical; run when time allows)
+- **Code done 2026-10-09 (runs not yet queued):**
+  - `ks_latent/da/param_est.py`, `global_param_update`: global ETKF update of an augmented scalar
+    parameter, with RTPS and a spread floor. 5 tests: the mean and variance equal the ensemble
+    Kalman regression to 1e-10; RTPS 1 restores the spread; the floor is respected.
+  - `exp_i11_pde_letkf.py`:
+    - `--estimate-param {lap,adv}` (`--param-init-std`, `--param-rtps`, `--param-min-std`), with
+      member-specific operators or advection speeds;
+    - `--model-error-file` plus `--bias-correct` / `--q-scale`.
+  - `scripts/exp_j16_estimate_pde_model_error.py`: offline one-cycle residuals on the independent
+    seed-3 truth, giving bias, spectral shape and sigma. A perfect-model control gives a residual
+    of 1e-15.
+  - Also fixed: dotted tags were truncated by `Path.with_suffix`.
+- **Smoke tests (20 cycles, seed 0):**
+  - coefficient 1.25 + estimation: the estimate moves 1.25 → 1.12 (true 1.0, still converging);
+    analysis 0.372 vs 0.475 for the best fixed-parameter setting;
+  - mean flow 1 + estimation: the estimate moves 1 → ~0.08 (true 0) in ~10 cycles; 0.452 vs 0.698;
+  - forcing 0.2: the residual is almost entirely bias (0.101 of 0.1014); bias correction gives
+    0.297 vs 0.305 over 20 cycles.
+  **Expectation: parameter estimation recovers much of the physics filter's accuracy for the
+  parametric and advection cases**, so the pre-registered rule may narrow the claim to
+  non-parameterizable structural error. That is still the realistic CM1 case, and it is honest.
+- **Runs QUEUED 2026-10-09 21:25** (`scripts/run_j16.sh`, log `artifacts/logs/j16.log`). It waits for
+  J1/J2, reruns the 12 J2 forcing runs that crashed at 21:13–21:19 from a since-fixed print bug,
+  estimates the model-error files, then runs the plan below (seeds 0–2, 100 cycles; best RTPS from J2):
+  - (a) coefficient 1.1 / 1.25 and mean flow 1 / 2 with `--estimate-param`;
+  - (b) forcing 0.2 / 0.4 and 32² with estimated `--bias-correct` ± `--q-scale` {0.5, 1, 2};
+    estimate the files first: `exp_j16_estimate_pde_model_error.py --out <case>`.
+  ~40 runs, ~3 h at low priority.
+- **Why.** In I28/J1/J2 the physics filter's only model-error treatment is RTPS. Operational and
+  research DA also estimate model error online. A parametric or advection error is exactly what
+  parameter estimation can recover, so the physics filter could close much of the gap there. Without
+  this test the model-error claim is open to the objection "you didn't let the physics filter
+  correct itself".
+- **Do** (`exp_i11_pde_letkf.py`, new options; seed 0 first, then seeds 1–2 at the best setting):
+  - (a) **State-augmented parameter estimation** for the parametric and advection cases: append the
+    ∇² coefficient a (cases coefficient 1.1 / 1.25) or the mean-flow speed c (cases mean flow 1 / 2)
+    to each member as a global scalar. Members draw it from N(wrong value, σ_p²) initially. The
+    LETKF updates it through its ensemble covariance with the observations; use a global (not
+    localized) update for the scalar, plus parameter-spread relaxation so it does not collapse.
+    Standard references: Anderson (2001) and Ruiz, Pulido & Miyoshi (2013) on parameter estimation
+    with EnKFs (verify).
+  - (b) **Additive model-error noise** for the forcing and resolution cases: add N(0, Q) to each
+    member's forecast, with Q estimated offline from one-cycle model-minus-truth residuals on an
+    independent trajectory (as `ks_latent/da/model_error.py` does for the latent model). Tune Q's
+    scale.
+  - (c) Optional: offline bias correction, i.e. subtract the mean one-cycle residual.
+  Unit test: the parameter estimator recovers a known coefficient in a perfect-model twin to < 2%.
+- **Decision rule (pre-registered):**
+  - If (a) brings the physics filter below the latent filter in the parametric/advection cases,
+    restate the claim as "for structural errors that cannot be parameterized" and lead with the
+    forcing and resolution cases.
+  - If it does not, the claim stands, with "even with online parameter estimation".
+- **Effort:** ~1 day of code (state augmentation in `LocalETKFPhys2D`, Q estimation for the PDE),
+  ~3 h of runs.
+
+### J17 `[ ]` Missing dynamics: no setting of the physics model's parameters reproduces the truth (user, 2026-10-09)
+**Why.** In J1/J2/J16 every physics-model error is either a wrong parameter (which online parameter
+estimation can recover) or a fixed pattern (which bias correction can remove). The fairest, and the
+most CM1-like, comparison is a truth containing a process that **no configuration of the physics
+model can represent**, so the physics filter has a state-dependent error that no remedy removes. The
+learned model is trained on data from that true system, as a CM1 surrogate would be. This requires
+a new truth system **and retraining the latent model on its data**.
+
+**Common protocol for both variants:**
+- The physics filter is the standard 2D KS PDE filter, given ALL J16 remedies:
+  - J2-style tuning (RTPS, c);
+  - bias correction and additive model error estimated offline on an independent seed-3 truth of
+    the new system;
+  - online estimation of the ∇² coefficient as a *surrogate* parameter (the best-fitting KS, which
+    is what a practitioner would tune).
+- The latent filter uses the Part II settings (K = 4, Hann, RTPS 0.7, c = 1.5 sites, stride 8),
+  a 12-channel model trained ONLY on σ = 0.1 noisy data from the new system, never re-tuned.
+- Baselines: interpolation; the perfect-model PDE filter (true equations) as the floor.
+- Seeds 0–2. Pre-register the decision rule and the process strength before any DA run.
+
+#### Variant A — a missing state-dependent process that the data fully determine (do first)
+Truth: u_t = KS(u) − β u³ (local, nonlinear, saturating). The KS family has no u³ term, and it is
+state-dependent and odd in u, so its mean contribution is ~0 and **bias correction can remove almost
+none of it**. It depends only on the current field, so a learned model can in principle capture it
+completely.
+
+- **A1 Choose β (pre-registered, no DA).** Set β so that rms(β u³) ≈ 15% of the rms KS tendency on
+  the standard attractor. Also report 30% as a second level for A9. Check that the new system stays
+  chaotic and bounded over 2000 time units.
+  - *Expected:* β ~ 10⁻³ in field units (to be measured).
+- **A2 Solver.** Add `cubic_coef` to `ks_latent/solver/ks2d.py` (an explicit term in N, like the
+  forcing) and the matching option to `twin.py`, `exp_i11_pde_letkf.py` (`--model-cubic-coef` for the
+  perfect-model floor) and `exp_j16_estimate_pde_model_error.py`. Tests:
+  - β = 0 equals the standard solver;
+  - the term's tendency matches a direct evaluation;
+  - a spatially constant field decays as du/dt = −β u³ (analytic).
+- **A3 Characterize the new truth.** Field std, energy spectrum and D_KY at 44² (truth Lyapunov
+  pipeline) against standard KS, so the paper can state how different the system is.
+- **A4 Training data.** `scripts/gen_ks2d_wide_dataset.py` with the new term (same size as
+  `ks2d_wide6`: 5 trajectories, 264², 768², 25 time units, dt_snap 0.1). ~30 min.
+- **A5 Train the latent model** (`p7c12d10_cubA`, `--data-noise 0.1`, same recipe): ~5 h.
+  Screens: free-rollout statistics; D_KY at 44² against A3 within the usual ~4%.
+- **A6 Physics-filter runs.** KS model (no u³): RTPS sweep; bias correction ± additive noise; ∇²
+  coefficient estimation as surrogate. Seeds 0–2 at the best. ~3 h.
+- **A7 Latent-filter runs.** K = 4 seeds 0–2, K = 1, plus a 220² transfer check. ~1 h.
+- **A8 Floor and baseline.** Perfect-model PDE filter (with u³) and interpolation.
+- **A9 (if A6–A7 are close) Strength sweep:** the 30% level (one more dataset and model) to locate
+  the crossover process strength.
+- **Expected outcome:**
+  - The physics filter's error stays above its usual 0.08–0.3, and bias correction and parameter
+    estimation recover little, because the error is state-dependent and not KS-shaped.
+  - The latent filter stays near its usual 0.30–0.35 if training captures the term.
+  - Most likely the latent filter wins after all remedies, provided the process is strong enough;
+    A9 finds the threshold.
+- **Implications for the paper (Part II, §7.5):**
+  - If the latent filter wins: the headline structural-error result. "When the equations lack a
+    process that the data contain, a latent model learned only from noisy data outperforms a
+    physics-based filter equipped with online parameter estimation, bias correction and additive
+    model error, and does so at any domain size."
+  - If it does not: report the crossover strength. The claim becomes "beyond a missing-process
+    strength of X% of the tendency."
+  - Either way it replaces the parametric cases as the section's main comparison, with those kept
+    as the easier cases.
+
+#### J17A progress and pre-registration (2026-10-10, written before any J17A DA run)
+- **A2 done.** `ks2d.cubic_term2d` (−β P[u′³] on the mean-removed field u′, so the system keeps
+  KS's u → u + c invariance and the k = 0 gauge fix stays exact); `cubic=` on `step2d`,
+  `integrate2d`, `spinup2d`, `step_with_tangent2d` (exact tangent −3β P[u′² δu′]), `twin_truth`,
+  `gen_ks2d_wide_dataset.py --cubic`, `exp_h9_tiled_da.py --truth-cubic`,
+  `exp_i11_pde_letkf.py --truth-cubic/--model-cubic-coef/--norm-std`,
+  `exp_j16_estimate_pde_model_error.py --truth-cubic`. Tests (`test_solver2d_modified.py`, 12 pass):
+  β = 0 bitwise equals the standard solver; the term equals a direct evaluation and is invariant
+  under u → u + c; single-mode projection −(3/4)βA³ (analytic); tangent vs finite difference
+  (1e-6); batched PDE-filter stepper equals the solver; advect + cubic refused.
+  - Note: a "constant field decays as −βu³" test is not meaningful here, because the mean is gauge.
+- **A1 β (measured on the standard attractor, 44², seed 3, 40 snapshots over 200 units).**
+  - rms KS tendency 1.278; rms P[u′³] 168.8; field std 3.75.
+  - 15% level: β = 1.14 × 10⁻³. **Pre-registered β = 1.1 × 10⁻³** (14.5%).
+  - 30% level (A9): β = 2.2 × 10⁻³.
+  - Boundedness and chaos check (2000 units, twin-start separation): `j17a_check_bounded.py`,
+    results in `artifacts/experiments/da2d/j17a_bounded_beta*.json`. **Passed at both levels:**
+    - β = 1.1e-3: field std 3.14–3.39 per 100-unit window over 2000 units (standard KS 3.75, i.e.
+      13% lower), max |u| 13.3; twin starts 1e-8 apart separate to 0.66 in 100 units (chaotic).
+    - β = 2.2e-3: std 2.92–3.07 (20% lower), max 10.1; separation 1e-8 → 0.06 in 100 units (still
+      chaotic, weaker growth).
+  - Truth D_KY at 44² (A3): `j17a_truth_lyap.py`, G1 settings (150 directions), running.
+- **Pre-registered decision rule.**
+  - Physics filter: the best configuration over the A6 grid (RTPS, c; bias correction ± Q;
+    ∇²-coefficient estimation), **selected on seed 0**, then run on seeds 0–2.
+  - Latent filter: Part II settings unchanged (K = 4, Hann, RTPS 0.7, c = 1.5 sites, stride 8),
+    seeds 0–2, model `p7c12d10_cubA`, no tuning.
+  - Metric: steady-state analysis RMSE (cycles 51–100), field units, same truths, obs and noise
+    (σ_obs = 0.1 × the new training-data std, via `--norm-std`).
+  - **Latent wins** if its 3-seed mean is ≥ 10% below the physics filter's AND it is lower on every
+    seed. **Physics wins** under the mirror condition. Otherwise **tie** → run A9 (β = 2.2 × 10⁻³).
+- **Launched 2026-10-10 ~10:00:** A4 data (5 trajectories in parallel, `--only`) and the A1
+  boundedness checks at both β levels.
+
+#### Variant B — a hidden process with memory (realistic; probably the DA follow-up paper)
+Truth: u_t = KS(u) + ε v, and v_t = −v/τ + κ ∇²u (or κ u). Here v is an unobserved field with its own
+slow dynamics, τ ≈ 1–5 time units (longer than a 0.5-unit DA cycle). v is a memory integral of past
+u, not a function of the current u, so **neither model can represent it fully**:
+- the physics filter lacks it entirely;
+- the learned model sees only u and is Markovian, so it captures v only as far as v leaves a trace in
+  u's spatial structure.
+This mirrors unobserved moisture or microphysics in CM1.
+
+- **B1 Design (pre-registered).** Choose κ, ε, τ so that rms(ε v) ≈ 15% of the KS tendency, and v's
+  autocorrelation time is ≥ 2 DA cycles. Check boundedness and chaos.
+- **B2 Coupled solver.** A two-field ETDRK4 (u, v), with v's linear part −1/τ and its explicit part
+  κ∇²u (or κ u); u's explicit part gains + ε v. Tests:
+  - ε = 0 gives the standard u;
+  - for a prescribed u, v matches the analytic linear-ODE solution;
+  - energy and boundedness over long runs.
+- **B3 Characterize the truth.** u statistics against KS; v autocorrelation; how much of v is
+  predictable from the current u (regress v on local u features; this bounds what a Markovian
+  learned model can capture).
+- **B4 Training data.** u only (v saved separately for diagnostics, never used in training);
+  σ = 0.1 noise.
+- **B5 Train the latent model** (`p7c12d10_hidB`): ~5 h. Optional ablation: the `history` /
+  `two_step` propagator modes, giving the learned model access to the past, which can carry the
+  memory.
+- **B6 Physics filter.** KS without v, plus all J16 remedies. Optional extra: a physics model that
+  includes v but with a wrong τ (structurally right, parametrically wrong).
+- **B7 Latent-filter runs and floor.** The perfect-model filter with (u, v) observing u only, with v
+  inferred through ensemble covariances.
+- **Expected outcome:** both filters are imperfect. The learned filter's error rises above its usual
+  ~0.32 by the unpredictable part of v (B3 bounds it); the physics filter's rises by the whole εv
+  effect. The learned filter is likely ahead, by less than in A. History-aware propagators should
+  narrow its gap.
+- **Implications for the paper:** the most realistic comparison, with error on both sides. Best
+  placed in the DA follow-up paper together with history-aware propagators, unless the result is
+  crisp and the paper has room. In Part II it would be one paragraph pointing forward. It directly
+  motivates the CM1 study (Paper 3).
+
+**Effort:**
+- Variant A: ~0.5 day of code, ~30 min of data, ~5 h of training, ~4 h of runs, plus ~5 h per extra
+  strength level for A9.
+- Variant B: ~1 day of code, ~30 min of data, ~5 h of training (+5 h per ablation), ~4 h of runs.
+- Order: A1–A8 after J16; B after A.
+
+**Order:**
+1. J1 and J2 (runs, ~3–4 h).
+2. J4 (lands ~15:05).
+3. J7 and J6 (figures and tables).
+4. J10.
+5. J9, which includes J8.
+6. J11, J12, J13, J14.
+
+J5 runs overnight if wanted.
+
+**Estimate:** ~4–6 h of machine time (plus J5 overnight) and ~4 days of writing.
 
 ---
 

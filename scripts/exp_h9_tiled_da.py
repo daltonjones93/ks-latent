@@ -71,6 +71,29 @@ def main() -> None:
                          "errors, the band error of tiling 0, of the Hann blend and of the uniform average, the "
                          "uniform-average prediction 1'C1/K^2, and the error of re-encoding the blended mean on "
                          "tiling 0 (what --feedback would restart from).")
+    ap.add_argument("--truth-lap-coef", type=float, default=1.0,
+                    help="I28 imperfect-model twin: truth uses coefficient a on the nabla^2 term "
+                         "(ks_latent/solver/twin.py); the models keep a = 1. Default 1: perfect-model twin.")
+    ap.add_argument("--truth-advect-x", type=float, default=0.0, help="I28: truth has mean-flow advection c (x); models do not")
+    ap.add_argument("--truth-forcing-amp", type=float, default=0.0, help="I28: truth has terrain-like forcing (std); models do not")
+    ap.add_argument("--truth-cubic", type=float, default=0.0,
+                    help="J17A: truth u_t = KS(u) - beta P[u'^3] (the latent model is trained on that system's data)")
+    ap.add_argument("--tiling-reset", action="store_true",
+                    help="Failsafe (2026-10-09): if one tiling's analysis mean disagrees with the median of the others "
+                         "by more than --reset-factor x the median disagreement (and > --reset-min field units), "
+                         "drop it from this cycle's blend and re-initialize it from the blend of the healthy "
+                         "tilings (members re-encoded in its frame). Uses no truth.")
+    ap.add_argument("--reset-factor", type=float, default=3.0)
+    ap.add_argument("--reset-min", type=float, default=1.0, help="field units")
+    ap.add_argument("--gate", action="store_true",
+                    help="I31: manifold-gated propagator (ks_latent/da/gated.py). Experts: this tag's propagator "
+                         "(on-manifold) and --gate-off-tag's (off-manifold), or 'project then on' if no off tag.")
+    ap.add_argument("--gate-off-tag", default=None)
+    ap.add_argument("--gate-quantile", type=float, default=0.95)
+    ap.add_argument("--gate-width-frac", type=float, default=0.25)
+    ap.add_argument("--project-members", action="store_true",
+                    help="I30(d) baseline: after each forecast (incl. model noise), project every member back onto "
+                         "the autoencoder's manifold, z <- E(D(z)), in its own tiling's frame. No second model.")
     ap.add_argument("--manifold-diag", action="store_true",
                     help="I30(d): per cycle, for tiling 0's analysis mean z_a: latent error |z_a - E(u)| (rms per "
                          "coordinate) and off-manifold distance |E(D(z_a)) - z_a|; same for one member.")
@@ -96,13 +119,32 @@ def main() -> None:
     ae = load_autoencoder_checkpoint_resized_2d(AE, new_n_sites_x=ns, new_n_sites_y=ns, new_NX=NX, new_NY=NX)[0].eval()
     prop = load_propagator_checkpoint_resized_2d(PR, new_n_sites_x=ns, new_n_sites_y=ns)[0].eval()
     mean, std = float(ck["normalization_mean"]), float(ck["normalization_std"])
+    if a.gate:
+        from ks_latent.da.gated import GatedPropagator, calibrate_gate
+        off = None
+        if a.gate_off_tag:
+            off = load_propagator_checkpoint_resized_2d(f"artifacts/stage2_prop_kolmogorov_crop_{a.gate_off_tag}.pt",
+                                                        new_n_sites_x=ns, new_n_sites_y=ns)[0].eval()
+        # calibrate on an independent truth (seed 3), never the DA truth
+        cal = np.load(f"artifacts/cache/ks2d_spinup_L{g.L:g}_NX{NX}_dt0.02_T200_seed3.npy")
+        ccfg = KSConfig2D(Lx=g.L, Ly=g.L, NX=NX, NY=NX, dt=0.02, snapshot_every=250, spinup_time=200.0, seed=3)
+        Ucal = integrate2d(cal, ccfg, n_steps=20 * 250)[1:]
+        with torch.no_grad():
+            Zcal = ae.encode(torch.tensor(((Ucal - mean) / std).reshape(20, -1), dtype=torch.float32))
+        d0, gw = calibrate_gate(Zcal, ae.encode, ae.decode, ns * ns, a.gate_quantile, a.gate_width_frac)
+        print(f"[gate] d0 {d0:.4f} width {gw:.4f} off={'project' if off is None else a.gate_off_tag}", flush=True)
+        prop = GatedPropagator(prop, off, ae.encode, ae.decode, ns * ns, d0, gw)
 
     dt = 0.02
     kcfg = KSConfig2D(Lx=g.L, Ly=g.L, NX=NX, NY=NX, dt=dt, snapshot_every=round(0.1 / dt), spinup_time=200.0,
                       seed=a.seed)
     cache = Path(f"artifacts/cache/ks2d_spinup_L{g.L:g}_NX{NX}_dt{dt:g}_T200_seed{a.seed}.npy")
-    u0 = np.load(cache) if cache.exists() else spinup2d(kcfg, np.random.default_rng(a.seed + 500))
-    truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * a.n_cycles * kcfg.snapshot_every)
+    if not cache.exists():
+        np.save(cache, spinup2d(kcfg, np.random.default_rng(a.seed + 500)))
+    from ks_latent.solver.twin import twin_truth
+    u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
+                             cubic=a.truth_cubic)
+    truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, **truth_kw)
     truth = ((truth.reshape(truth.shape[0], -1) - mean) / std).reshape(-1, NX, NX)
 
     s, N, hp = a.obs_stride, a.n_ensemble, patch // 2
@@ -155,13 +197,15 @@ def main() -> None:
 
     rec = {k: [] for k in ("tiling0", "blend", "blend_of_means", "floor1", "floorK", "interp", "spread0",
                            "spread_blend", "blend_obs", "free", "prior_tiling0", "prior_blend",
-                           "z_err0", "z_offman0", "z_offman_member0", "z_offman_truth")}
+                           "z_err0", "z_offman0", "z_offman_member0", "z_offman_truth", "gate_mean", "n_reset")}
+    resets = []  # (cycle, tiling, disagreement, median disagreement)
     Zfree_p, Zfree_c = Zp[0].clone(), Zc[0].clone()
     kk = 2 * np.pi * np.fft.fftfreq(NX, d=g.L / NX); KK = np.sqrt(kk[:, None] ** 2 + kk[None, :] ** 2)
     BANDS = [(0, 0.6), (0.6, 1.14), (1.14, 1.6), (1.6, 99)]
     bmask = [(KK >= lo) & (KK < hi) for lo, hi in BANDS]
     diag = {"C": [], "tiling0": [], "blend": [], "uniform": [], "reencode_err": [], "reencode_dist": []}
     late0 = a.n_cycles // 2
+    diverged_at = None
     save_at = set(np.linspace(late0, a.n_cycles - 1, a.save_fields).round().astype(int).tolist()) if a.save_fields else set()
     saved = {k: [] for k in ("truth", "tiling0", "blend", "floor1", "floorK", "cycle")}
     t = 0
@@ -170,6 +214,9 @@ def main() -> None:
         for k in range(len(offs)):
             fc = forecast_ensemble(prop, Zp[k], Zc[k], a.n_prop_steps, a.model_noise_std)
             Zp[k], Zf_k = fc.z_prev_final, fc.z_curr_final
+            if a.project_members:
+                with torch.no_grad():
+                    Zf_k = torch.cat([ae.encode(ae.decode(Zf_k[i:i + 32])) for i in range(0, len(Zf_k), 32)])
             Zf.append(Zf_k)
         if not a.no_free:
             fcf = forecast_ensemble(prop, Zfree_p, Zfree_c, a.n_prop_steps, 0.0)
@@ -187,12 +234,29 @@ def main() -> None:
             Zc[k] = Za
             Ua.append(dec(Za, o))  # (N, NX, NX)
         Ub = sum(w[None] * U for w, U in zip(W, Ua))  # member-wise blend
+        if a.tiling_reset and len(offs) > 2:
+            means = np.stack([U.mean(0) for U in Ua])  # (K, NX, NX), standardized units
+            dis = np.array([np.sqrt(np.mean((means[k] - np.median(np.delete(means, k, 0), axis=0)) ** 2)) * std
+                            for k in range(len(offs))])
+            med = float(np.median(dis))
+            bad = [k for k in range(len(offs)) if dis[k] > a.reset_factor * med and dis[k] > a.reset_min]
+            if bad and len(bad) < len(offs):
+                good = [k for k in range(len(offs)) if k not in bad]
+                wsum = sum(W[k] for k in good)
+                Ub = sum(W[k][None] * Ua[k] for k in good) / wsum[None]
+                for k in bad:
+                    Zc[k] = enc(Ub, offs[k]); Zp[k] = Zc[k].clone()
+                    Ua[k] = Ub.copy()
+                    resets.append((cyc + 1, k, float(dis[k]), med))
+            rec["n_reset"].append(len(bad) if bad and len(bad) < len(offs) else 0)
         if a.feedback and len(offs) > 1:
             for k, o in enumerate(offs):
                 Zc[k] = enc(Ub, o)
         f = lambda v: float(np.sqrt(np.mean((v - u) ** 2)) * std)  # noqa: E731  field units
         rec["tiling0"].append(f(Ua[0].mean(0)))  # tiling 0 alone: the current filter
         rec["blend"].append(f(Ub.mean(0)))
+        if a.gate:
+            rec["gate_mean"].append(prop.last_mean_gate)
         if a.manifold_diag:
             rms = lambda v: float(v.pow(2).mean().sqrt())  # noqa: E731
             za = Zc[0].mean(0, keepdim=True) if not a.feedback else Za.mean(0, keepdim=True)
@@ -228,16 +292,29 @@ def main() -> None:
                          ("floorK", sum(w * r for w, r in zip(W, recs)))):
                 saved[k].append((v * std + mean).astype(np.float32))
             saved["cycle"].append(cyc)
+        # Runaway check (2026-10-09): a tiling whose analysis error exceeds 5x the field's own std has
+        # diverged; stop and record it rather than averaging a blow-up into the blend.
+        tile_err = [f(U.mean(0)) for U in Ua]
+        field_sd = float(u.std() * std)
+        if max(tile_err) > 5 * field_sd:
+            diverged_at = cyc + 1
+            print(f"DIVERGED at cycle {diverged_at}: tiling errors {[round(e, 2) for e in tile_err]} "
+                  f"(field std {field_sd:.2f})", flush=True)
+            break
         if not np.isfinite(Ub).all():
             raise FloatingPointError(f"non-finite blended analysis at cycle {cyc}")
         if cyc % 10 == 9:
             print(f"cycle {cyc + 1}: " + " ".join(f"{k} {v[-1]:.3f}" for k, v in rec.items() if v), flush=True)
     late = slice(a.n_cycles // 2, None)
-    steady = {k: float(np.mean(v[late])) for k, v in rec.items() if v}
+    steady = {k: float(np.mean(v[late])) for k, v in rec.items() if v and len(v) > late0}
+    steady["diverged_at_cycle"] = diverged_at
+    if diverged_at is not None:
+        steady = {"diverged_at_cycle": diverged_at}
     if "free" in steady:
         steady["skill_blend"] = steady["free"] / steady["blend"]
         steady["skill_tiling0"] = steady["free"] / steady["tiling0"]
-    steady["calib_blend"] = steady["spread_blend"] / steady["blend"]
+    if "blend" in steady:
+        steady["calib_blend"] = steady["spread_blend"] / steady["blend"]
     import resource
     steady["peak_rss_GB"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2 ** 30
     if a.diag:
@@ -259,10 +336,13 @@ def main() -> None:
         np.savez_compressed(f"artifacts/experiments/da2d/h9_{a.out}_fields.npz",
                             **{k: np.stack(v) for k, v in saved.items()}, NX=NX, n_sites=ns, patch=patch,
                             offsets=np.array(offs), L=g.L)
-    out = {"args": vars(a), "steady": steady, "per_cycle": rec, "wall_s": time.time() - t0, "oi_climatological": 0.798}
+    if a.tiling_reset:
+        steady["n_resets_total"] = len(resets)
+    out = {"args": vars(a), "steady": steady, "resets": resets, "per_cycle": rec, "wall_s": time.time() - t0, "oi_climatological": 0.798}
     Path("artifacts/experiments/da2d").mkdir(parents=True, exist_ok=True)
     Path(f"artifacts/experiments/da2d/h9_{a.out}.json").write_text(json.dumps(out, indent=2))
-    print(a.out, {k: round(v, 3) for k, v in steady.items() if not isinstance(v, dict)}, f"{out['wall_s']:.0f}s")
+    print(a.out, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in steady.items() if not isinstance(v, dict)},
+          f"{out['wall_s']:.0f}s")
     if "diag" in steady:
         print("diag", {k: (np.round(v, 3).tolist() if k != "C" else "...") for k, v in steady["diag"].items()})
 
