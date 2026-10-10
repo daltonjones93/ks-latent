@@ -2653,10 +2653,21 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
   delete. ~0.5 h.
 - **K2h new `tab07_forecast`** (or fold into K3e): error at leads 1, 5, 10, 20, 40, 60 cycles for
   blend / single tiling / true-init / persistence / climatology, 3 seeds. ~0.5 h [after I7].
+- **K2g done 2026-10-10** (`tabE_p2.py` → `tables/tabE_p2_networks.tex`, c = 12, d = 768–76 800, K = 4 with offsets).
 - **K2i** Every table script reads only JSONs, writes `.meta.json`, and registers its numbers with
   `check_numbers.py` (K11).
 
-### K3 `[ ]` Figures (contract §F; one script each in `scripts/paper_figures/`)
+### K3 `[~]` Figures (contract §F; one script each in `scripts/paper_figures/`)
+- **K3a done 2026-10-10** (`fig09_p2_da.py` → `figures/fig09_p2_da.pdf`): (a) 12-column block-diagonal |J|;
+  (b) RMSE vs area, 1 and 4 tilings, interpolation, both decoder floors, perfect-model PDE point
+  (unlocalized and 66² points appear automatically when `run_k1_unloc.sh` lands — rerun the script);
+  (c) members per tiling, 44² and 220²; (d) per-cycle error/spread at 440²; (e) equal resources incl. the
+  same-tiling control; (f) K vs RMSE with spread/error labels. **Cost panel (I14) still to add** — swap it
+  for (e) or add a 7th panel once `h9_I14_*` exist.
+- **K3b done 2026-10-10** (`fig13_tilings.py` → `figures/fig13_tilings.pdf`): schematic, Hann weights,
+  error vs position in patch (clean/noisy, 1/4 tilings), error variance by band with the 1ᵀC1/K²
+  prediction, inter-tiling correlation by band (44², 220²), seam ratios. Band-error and error-anatomy
+  baselines (decoder floor, interpolation by band, I10) not stored per band — optional addition.
 - **K3a Fig. 9 (replace `fig09_2d_da`): the headline.** (a) block-diagonal Jacobian at 44² with
   12-column blocks (regenerate `exp_f2_jacobian_sparsity.py` for the Part II model); (b) RMSE vs
   area, K = 1 and K = 4 with seed markers, interpolation, OI, decoder floor and the perfect-model PDE

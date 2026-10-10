@@ -1,0 +1,15 @@
+{
+  "figure": "fig13_tilings",
+  "git_sha": "dac1cebee70b7793d14b2086f6cbd0c0e7fff907",
+  "timestamp_utc": "2026-10-10T21:27:52Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_D10_L220_diag_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L44_diag_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L44_diag_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L44_diag_T4_fields.npz",
+    "artifacts/experiments/da2d/h9_D10_L44_fields_T1_fields.npz",
+    "artifacts/experiments/da2d/h9_J18c_clean_T1_fields.npz",
+    "artifacts/experiments/da2d/h9_J18c_clean_T4_fields.npz",
+    "artifacts/experiments/da2d/seams_I9.json"
+  ]
+}

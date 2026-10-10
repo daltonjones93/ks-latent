@@ -1,0 +1,7 @@
+{
+  "inputs": [
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
+    "artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens64.json",
+    "artifacts/da_pff_ltransfer_d1_pff_L400_gaspari_cohn_nens64.json"
+  ]
+}
