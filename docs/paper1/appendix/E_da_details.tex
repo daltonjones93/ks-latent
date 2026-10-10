@@ -72,9 +72,7 @@ $Y=X_{N_s}J_s^\top\in\R^{\Nens\times|U_s|}$,
 and site $s$'s analysis ensemble is $\bar z_s + (\bar w\mathbf 1^\top+W)^\top X_s$
 \citep{hunt2007}. For a linear $h$ without localization it reproduces
 the Kalman update computed with the ensemble covariance exactly (unit
-test). At $44^2$ its skill is within $0.15$ of the perturbed-observation
-version at every ensemble size (Table~\ref{tab:da_2d_ensemble}) and its
-CPU time about $40\%$ lower.
+test). It is the analysis used in all 2D experiments of Part~II. With the earlier single-tiling filter at $44^2$ its skill was within $0.15$ of the perturbed-observation version at every ensemble size, at about $40\%$ lower CPU time.
 
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
@@ -114,6 +112,58 @@ used by the per-site filter (six forward passes). The two agree exactly
 where both were computed. Slopes are least-squares power-law fits.}
 \label{fig:jacobian_timing}
 \end{figure}
+
+
+\subsection{One-dimensional experiments}
+\label{app:da_1d}
+
+Table~\ref{tab:da_1d} gives the 1D results summarized in Sec.~\ref{sec:da_1d}. They use the 1D
+model of Part~I, a single tiling, and either the particle flow filter or the stochastic ensemble
+Kalman filter with Gaspari--Cohn localization of half-width 3 sites, without RTPS.
+
+\para{Observation density.} With the particle flow filter at $L=200$ the skill is $5.2$, $2.9$, $1.2$ and
+$1.0$ at observation spacings $1.6$, $3.1$, $6.25$ and $12.5$: with a single tiling, assimilation fails once
+the spacing reaches the site length ($6.25$), well below the pattern wavelength $2\sqrt2\,\pi\approx8.9$.
+An earlier version of the 1D experiment scaled the observation stride with the domain, which doubled
+the spacing with every doubling of $L$; at $L=200$ its localized skill was about $1.3$, against $2.9$ at the
+fixed spacing used here.
+
+\para{Sampling error correction.} At the training size $L=100$, in an earlier comparison with 40
+cycles, SEC applied to a global latent vector beat Gaspari--Cohn applied to the local field at every
+ensemble size, with errors $5$--$25\%$ lower. That comparison confounds the localization with the
+architecture (two different autoencoders), and at $L=100$ the taper is non-zero on 11 of the 16 sites
+of the ring, so it hardly localizes. At $L=200$ the comparison is made on one latent. The
+SEC-corrected covariance formed elementwise is indefinite at five of six ensemble sizes, and the
+particle flow filter, which factorizes it, fails; this is a property of the matrix form, not of SEC,
+and the projected and serial forms of Appendix~\ref{app:da_filters} run at every size.
+
+\begin{table*}[htbp]
+\caption{1D KS data assimilation after transfer: steady-state skill
+(free-run error over analysis error, cycles 51--100) at a fixed
+observation spacing of $3.125$, model trained at $L=100$. Pairs: no
+localization / Gaspari--Cohn (half-width 3 sites). Last two columns
+($L=200$ only): sampling error correction with the particle flow filter
+after projection onto the PSD cone, and in a serial ensemble Kalman
+filter. Skill below 1 means the filter is worse than no assimilation.}
+\label{tab:da_1d}
+\widetabular{ccccccc}{
+$\Nens$ & PFF, $L=200$ & PFF, $L=400$ & EnKF, $L=200$ & EnKF, $L=400$ & SEC-PSD & serial SEC \\
+\hline
+\tabinput{tables/tab07_1d_da}}
+\end{table*}
+
+
+\subsection{Noisy training: the round-trip test}
+\label{app:da_roundtrip}
+
+Forty true states of an independent 2D KS trajectory at $44^2$, standardized with each model's training
+statistics, are perturbed and passed through the encoder and decoder; the ratio of the error after the
+round trip to the error before it is below one when the round trip moves the field towards the truth.
+For white grid-point noise of standard deviation $0.05$, $0.1$, $0.2$ and $0.4$ the ratio is $0.95$, $0.53$, $0.35$
+and $0.29$ for the clean-trained model and $0.81$, $0.44$, $0.29$ and $0.23$ for the noisy-trained one; for
+smooth noise (correlation length 4 grid points) it is $1.35$, $1.09$, $1.02$ and $0.99$ against $1.26$, $1.07$,
+$1.01$ and $0.99$; for latent-space noise of standard deviation $0.05$--$0.2$ it is $1.00$--$1.05$ for both. The
+reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_j18b\_roundtrip.py}).
 
 \subsection{Inflation, run-to-run spread and transients}
 \label{app:da_tuning}

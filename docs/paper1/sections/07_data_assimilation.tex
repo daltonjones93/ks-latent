@@ -396,75 +396,169 @@ hidden slow field & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} & \pl
 \end{table*}
 
 %----------------------------------------------------------------------
-% K5.6-K5.8 (noisy training; forecasts, robustness, observation density and the 1D results; cost)
-% are still to be rewritten. The 1D subsection and the cost subsection below are the previous text.
+\subsection{Trained only on noisy data}
+\label{sec:da_noisy}
 %----------------------------------------------------------------------
-\para{\placeholder{To be rewritten (Block K5.6--K5.8): noisy training (J18), forecasts from the
-analyses (I7), robustness (I16), observation density with the Part~II model (K10a), and cost
-(I14). The two subsections below are the previous text.}}
+
+The model of this part was trained on fields that carry observation-level
+noise, and it is the better for it. A model with the same architecture and
+recipe trained on clean fields gives $0.338$, $0.321$, $0.326$, $0.340$ and $0.326$ at
+$44^2$ to $440^2$ (four tilings, seed 0), against $0.324$, $0.304$, $0.312$, $0.326$ and $0.311$
+for the noisy-trained model: $4$--$5\%$ lower error at every size, with the
+calibration rising from $0.85$--$0.90$ to $0.92$--$0.98$. At $44^2$ the gain holds on all
+three seeds ($0.338$, $0.322$, $0.320$ against $0.324$, $0.310$, $0.302$). The dynamics are
+preserved: the noisy-trained model's Kaplan--Yorke dimension is within
+$3.6\%$ and $2.1\%$ of the truth's at $44^2$ and $66^2$, against $2.1\%$ and $1.1\%$ for the
+clean-trained one, both within the truth's own spread.
+
+\para{Why.} The decoder floor falls from $0.27$--$0.29$ to $0.24$--$0.25$ with one tiling and
+from $0.15$--$0.16$ to $0.13$--$0.14$ with four, and the seam ratio of a single
+tiling from $1.94$ to $1.73$ (Fig.~\ref{fig:tilings}f). Passing perturbed true
+states through the encoder and decoder shows where this comes from
+(Appendix~\ref{app:da}): the noisy-trained autoencoder reconstructs clean
+states $15\%$ more accurately ($0.039$ against $0.046$ in standardized units) and
+removes $15$--$20\%$ more grid-scale noise (it leaves $44\%$ of white noise of
+standard deviation $0.1$, against $53\%$), while neither model pulls smooth or
+latent-space perturbations back towards the attractor; those pass through
+unchanged. The benefit is better reconstruction and small-scale
+denoising, not a projection of the analysis onto the attractor.
+\placeholder{P4: training noise $0.3$ --- does the gain grow, saturate, or
+reverse?}
+
+That a model of the dynamics can be learned from noisy fields without
+loss matters for the comparison of Sec.~\ref{sec:da_model_error}:
+measurement error is the part of the error budget that is usually well
+characterized, and it can be accounted for in training.
 
 %----------------------------------------------------------------------
-\subsection{Observation density and the one-dimensional results}
+\subsection{Forecasts, robustness and observation density}
+\label{sec:da_robust}
+%----------------------------------------------------------------------
+
+\para{Forecasts from the analyses.} A better analysis should give a better
+forecast, not only a smoother picture. From steady-state analyses at
+$44^2$ we forecast each tiling's analysis mean with the learned model,
+without noise, and blend the forecasts (Fig.~\ref{fig:forecasts},
+Table~\ref{tab:da_forecast}). The blended forecast's error is $26\%$ below
+that of the single-tiling forecast after one cycle and $15$--$17\%$ below it
+at $0.4$--$1.7$ Lyapunov times. It reaches half the field's standard
+deviation after $1.26$ Lyapunov times (seeds 0--2: $1.16$--$1.40$), against $1.10$ for
+the single-tiling analysis, $1.62$ for a forecast started from the encoded
+true state and $0.33$ for persistence, and the field's standard deviation
+after $2.39$, against $2.06$, $2.70$ and $0.74$. The tilings recover a third to a half
+of the forecast skill that separates the single-tiling analysis from a
+perfect initial condition for this model. Beyond about three Lyapunov
+times all forecasts are decorrelated from the truth; the blend's error
+then stays lower only because it averages four partly independent
+forecasts.
+
+\para{Robustness.} Started from an ensemble drawn from an independent
+climatology, with no knowledge of the truth, the filter's error falls
+from $1.33$ to within $10\%$ of its steady value in 8 cycles, and the analysis
+then converges onto the one started from the encoded truth: the
+difference between the two decays by a factor of about ten every ten
+cycles, to $10^{-8}$ by cycle 100 (Table~\ref{tab:da_robust}). With the
+observation error misspecified by a factor of two in either direction
+the error rises by $4$--$8\%$ ($0.351$ and $0.338$ against $0.324$), and the calibration
+moves the way it should ($0.58$ and $1.40$). \placeholder{P3: 300 cycles at $220^2$.}
+
+\para{Observation density.} Table~\ref{tab:da_robust} and Fig.~\ref{fig:da_2d}
+use observations every $2.75$ length units, four per site. With twice as
+many in each direction (spacing $1.4$) the error is $0.226$ with four tilings and
+$0.333$ with one, against $0.539$ for interpolation; with half as many (spacing
+$5.5$, one observation per site) it is $0.769$ and $0.990$, against $3.01$ for
+interpolation, a factor of four. At this sparse spacing the filter stays
+bounded over 300 cycles (means $0.77$, $0.77$ and $0.79$ over cycles 51--100,
+101--200 and 201--300), but its error relative to interpolation is no
+longer the whole story: the learned model must carry the state between
+sparse observations, and on longer runs with sparser networks the
+stability of the learned propagator becomes the limit. Failsafes for that
+regime, a propagator trained with latent noise, a gate that falls back to
+it off the attractor, and the reset of a tiling that departs from the
+others, are the subject of a follow-up study.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/fig16_forecasts.pdf}
+\caption{Forecasts from the analyses, 2D KS at $44^2$. (a) Forecast error
+against lead time, mean over seeds 0--2 (10 forecasts each from
+steady-state analyses), for the blended four-tiling analysis (shaded:
+range over seeds), the single-tiling analysis, the encoded true state,
+persistence of the analysis, and the field's standard deviation. Top axis
+in Lyapunov times of the truth. (b) Ratio of the blended to the
+single-tiling forecast error. The blended analysis is a better initial
+condition: its forecasts stay ahead for about two Lyapunov times.}
+\label{fig:forecasts}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Forecast error from the analyses (field units), 2D KS at $44^2$,
+mean over seeds 0--2. Lead in cycles of $0.5$ time units and in Lyapunov
+times; forecasts from the four-tiling analysis, the single-tiling
+analysis and the encoded true state; persistence; the field's standard
+deviation; ratio of the four-tiling to the single-tiling error.}
+\label{tab:da_forecast}
+\begin{ruledtabular}
+\begin{tabular}{cccccccc}
+cycles & $\lambda_1 t$ & 4 tilings & 1 tiling & true state & persistence & field std & ratio \\
+\hline
+\tabinput{tables/tab07_p2_forecast}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Robustness of the Part~II filter, 2D KS, four tilings, $44^2$ unless
+stated: steady-state analysis error (field units) and spread over error.
+The last column gives, for the initial ensembles, the cycles until the
+error first falls within $10\%$ of its steady value and, for the long runs,
+means over cycles 51--100, 101--200 and 201--300. ---: not run.}
+\label{tab:da_robust}
+\begin{ruledtabular}
+\begin{tabular}{lccc}
+case & error & calibration & \\
+\hline
+\tabinput{tables/tabE_p2_robustness}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+%----------------------------------------------------------------------
+\subsection{The one-dimensional results}
 \label{sec:da_1d}
 %----------------------------------------------------------------------
 
-\para{How dense the network must be.} In both systems the filter needs
-observations inside every patch. With the per-site filter at $44^2$ and
-$\Nens=64$, the steady-state skill is $7.8$ at an observation spacing of
-$1.4$ length units, $4.2$ at $2.75$, and $1.2$ and $1.0$ at $5.5$ and $11$. In
-1D at $L=200$ with the particle flow filter and Gaspari--Cohn
-localization it is $5.2$, $2.9$, $1.2$ and $1.0$ at spacings $1.6$, $3.1$,
-$6.25$ and $12.5$. Assimilation fails once the spacing reaches the site
-length ($5.5$ in 2D, $6.25$ in 1D), well below the pattern wavelength
-$2\sqrt2\,\pi\approx8.9$: a site whose patch holds no observation is
-corrected only through its neighbours' covariances, which the latent
-field carries poorly. All other runs use half the site length.
+Two results from 1D KS complete the picture (Fig.~\ref{fig:da_1d};
+details, the table and the observation-density sweep in
+Appendix~\ref{app:da_1d}). They use the 1D model of Part~I, deployed at
+$L=200$ and $400$ without retraining, a single tiling, and the particle flow
+filter or the stochastic ensemble Kalman filter at a fixed observation
+spacing of $3.125$; skill is the ratio of free-run to analysis error.
 
-\para{1D after transfer.} Table~\ref{tab:da_1d} and Fig.~\ref{fig:da_1d} give the 1D results at
-$L=200$ and $400$, two and four times the training size, at a fixed
-observation spacing of $3.125$. With localization, skill is $2.3$--$3.0$ for
-every ensemble of 16 or more members, at both sizes and with both
-filters. Without localization the filter makes the estimate worse than
-no assimilation (skill below 1) until the ensemble is large enough, and
-how large depends on the domain: at $L=200$, where $n_+=26$--$27$, it is marginal
-at 64 members ($1.1$--$1.3$) and works at 128 ($2.5$--$2.7$); at $L=400$, where
-$n_+=50$--$51$, it fails at 64 ($0.8$), is marginal at 128 ($1.2$--$1.4$) and
-works only at 256 ($2.5$--$2.7$). The number of members an unlocalized
-filter needs doubles with the domain, as the bound of
-Sec.~\ref{sec:da_setting} predicts, while the localized filter needs
-the same 16 at both sizes. The particle flow filter and the ensemble
-Kalman filter differ by at most $0.4$ in skill and show the same pattern
-at every point, so the result does not depend on the analysis scheme.
+\para{The ensemble an unlocalized filter needs doubles with the domain.}
+With localization, every ensemble of 16 or more members gives a skill of
+$2.3$--$3.0$ at both sizes and with both filters. Without it, the filter is
+worse than no assimilation until the ensemble is large enough, and how
+large depends on the domain: at $L=200$, where the truth has $n_+=26$--$27$, it is
+marginal with 64 members and works with 128; at $L=400$, where $n_+=50$--$51$, it
+fails with 64, is marginal with 128 and works only with 256. The two
+filters differ by at most $0.4$ in skill. This is Eq.~\eqref{eq:nens_local}
+and its unlocalized counterpart, measured.
 
-An earlier version of this experiment scaled the observation stride
-with the domain, which doubled the observation spacing with every
-doubling of $L$, to $6.25$ at $L=200$ and $12.5$ at $L=400$. At those spacings
-the localized filter's skill at $L=200$ was about $1.3$, against $2.9$ at
-the fixed spacing used here.
+\para{A distance beats a distance-free correction.} Sampling error
+correction \citep{anderson2012} localizes without a distance and is the
+natural alternative for a latent space that has none. On one latent at
+$L=200$, in the forms in which it runs (the corrected matrix projected onto
+the positive semidefinite cone, or the serial correction of each
+regression coefficient that \citet{anderson2012} uses), Gaspari--Cohn
+localization in the latent field beats it at every ensemble size below
+256, by a factor of up to $1.7$ against the projected form and up to $3.5$
+against the serial one, which does not help at all below 128 members.
+SEC removes sampling noise from correlations; a distance taper also
+removes the many weak true correlations between distant sites, which a
+small ensemble cannot afford to estimate. Giving the latent a geometry is
+what makes this possible.
 
-\para{Distance-free localization.} Sampling error correction
-\citep{anderson2012} needs no distance, and is therefore the natural
-competitor of a latent field that has one. At the training size, in an
-earlier comparison with 40 cycles, SEC applied to a global latent vector
-beat Gaspari--Cohn applied to the local field at every ensemble size,
-with analysis errors $5$--$25\%$ lower. That comparison confounds the
-localization with the architecture (two different autoencoders), and at
-$L=100$ the taper is non-zero on 11 of the 16 sites of the ring, so it
-hardly localizes. At the transfer size the comparison can be made
-on one latent. The SEC-corrected covariance, formed elementwise, is
-indefinite at five of six ensemble sizes, and the particle flow filter,
-which factorizes it, fails. This is a property of the matrix form, not of
-SEC: projecting the corrected matrix onto the positive semidefinite cone,
-or applying the correction to each regression coefficient in a serial
-filter, the form \citet{anderson2012} uses, both run at every ensemble
-size. Gaspari--Cohn beats both at every size below 256 members: by a
-factor of up to $1.7$ against the projected form (both with the particle
-flow filter) and up to $3.5$ against the serial form (both ensemble
-Kalman filters), and the serial form does not help at all below 128
-members (Table~\ref{tab:da_1d}). SEC removes
-sampling noise from correlations; a distance taper also removes the many
-weak true correlations between distant sites, and that is what the small
-ensemble cannot afford to estimate.
 
 \begin{figure*}[htbp]
 \centering
@@ -487,20 +581,10 @@ and that number doubles with the domain.}
 \label{fig:da_1d}
 \end{figure*}
 
-\begin{table*}[htbp]
-\caption{1D KS data assimilation after transfer: steady-state skill
-(free-run error over analysis error, cycles 51--100) at a fixed
-observation spacing of $3.125$, model trained at $L=100$. Pairs: no
-localization / Gaspari--Cohn (half-width 3 sites). Last two columns
-($L=200$ only): sampling error correction with the particle flow filter
-after projection onto the PSD cone, and in a serial ensemble Kalman
-filter. Skill below 1 means the filter is worse than no assimilation.}
-\label{tab:da_1d}
-\widetabular{ccccccc}{
-$\Nens$ & PFF, $L=200$ & PFF, $L=400$ & EnKF, $L=200$ & EnKF, $L=400$ & SEC-PSD & serial SEC \\
-\hline
-\tabinput{tables/tab07_1d_da}}
-\end{table*}
+
+\para{\placeholder{To be rewritten (Block K5.8): cost and memory from the clean I14 timing. The
+subsection below is the previous text, for the superseded single-tiling filter.}}
+
 %----------------------------------------------------------------------
 \subsection{Cost and memory}
 \label{sec:da_cost}

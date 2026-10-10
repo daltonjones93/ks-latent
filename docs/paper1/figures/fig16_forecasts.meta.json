@@ -1,0 +1,10 @@
+{
+  "figure": "fig16_forecasts",
+  "git_sha": "f3cda4c18b80a7f63c52c8655b96c1055f0c39b5",
+  "timestamp_utc": "2026-10-10T21:56:14Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_I7_T4_s0.json",
+    "artifacts/experiments/da2d/h9_I7_T4_s1.json",
+    "artifacts/experiments/da2d/h9_I7_T4_s2.json"
+  ]
+}
