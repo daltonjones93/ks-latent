@@ -228,7 +228,8 @@ at $44^2$, $66^2$, $88^2$; truth $n_+ = 42$--$44$ at $44^2$ and $93$--$101$ at $
 from the 6-channel record: works where $\Nens > n_+$, fails beyond;
 state whether the tilings rescue it.}
 
-\para{Long runs.} \placeholder{P3: 300 cycles at $220^2$ --- drift or not.}
+\para{Long runs.} Over 300 cycles at $220^2$ the error averages $0.31$ in each of cycles 51--100,
+101--200 and 201--300, at a calibration of $0.97$ (Table~\ref{tab:da_robust}): the filter does not drift.
 
 \begin{figure*}[htbp]
 \centering
@@ -343,9 +344,19 @@ case at $0.2$ or above (the $25\%$ coefficient, the advection, damping order
 sixth of the observation error: a physical model whose one-cycle error,
 after bias correction, exceeds about a sixth of the observation error is
 worth replacing by a model learned from data, and one below it is not.
-\placeholder{P7: J17B, an unobserved slow field feeding back on the
-observed one; both filters' errors, the floor with the true two-field
-model, and where the two levels fall on the crossover.}
+The hardest case for both filters is a truth with a process that neither can represent: an
+unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
+$v_t=-v/\tau+\kappa\nabla^2u$, $\tau=2$, whose memory (4--4.5 time units, eight to nine cycles) makes $v$ a
+function of the past of $u$, not of its present: about $20\%$ of its variance is not predictable from
+the current field. The latent model is trained on noisy $u$ alone; the physics-based filter's model
+is KS without $v$, given every remedy (Appendix~\ref{app:da_comparator}). At $\varepsilon=0.1$, where the
+state-dependent one-cycle error of the KS model is $0.15$, about $0.18$ of this system's observation
+error, the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
+the $\nabla^2$ coefficient estimated online, $0.442$ ($0.436$--$0.447$): a tie by the decision rule, as the
+crossover predicts. Neither is far from what the true equations achieve when $v$ is unobserved
+($0.405$, the same filter carrying its own $v$), and both are well below interpolation ($1.10$--$1.15$).
+\placeholder{P7: $\varepsilon=0.2$ (state-dependent one-cycle error $0.35$, about $0.4$ of the observation
+error), where the crossover predicts a clear win for the latent filter.}
 
 \para{Robustness.} The physics-based filter works only in a narrow window
 of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
@@ -467,7 +478,7 @@ difference between the two decays by a factor of about ten every ten
 cycles, to $10^{-8}$ by cycle 100 (Table~\ref{tab:da_robust}). With the
 observation error misspecified by a factor of two in either direction
 the error rises by $4$--$8\%$ ($0.351$ and $0.338$ against $0.324$), and the calibration
-moves the way it should ($0.58$ and $1.40$). \placeholder{P3: 300 cycles at $220^2$.}
+moves the way it should ($0.58$ and $1.40$). A 300-cycle run at $220^2$ holds $0.31$ throughout.
 
 \para{Observation density.} Table~\ref{tab:da_robust} and Fig.~\ref{fig:da_2d}
 use observations every $2.75$ length units, four per site. With twice as
