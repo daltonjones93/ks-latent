@@ -19,6 +19,21 @@ from __future__ import annotations
 import numpy as np
 
 
+def global_params_update(Theta: np.ndarray, Y: np.ndarray, d: np.ndarray, r_std: float,
+                         rtps: float = 0.0, min_std=0.0) -> np.ndarray:
+    """Joint version for p parameters (J17H, 2026-10-10): `Theta` (N, p). The same global ETKF weights W
+    update every column, so the analysis mean is the joint ensemble Kalman regression
+    theta_bar + Cov(theta, HX)[Cov(HX) + R]^{-1} d (one column at a time this is the scalar case: the
+    transform depends only on Y, not on theta). RTPS and the floor (`min_std`, scalar or (p,)) act per
+    column. Returns the (N, p) analysis."""
+    Theta = np.asarray(Theta, dtype=np.float64)
+    if Theta.ndim != 2:
+        raise ValueError(f"Theta must be (N, p), got {Theta.shape}")
+    floors = np.broadcast_to(np.asarray(min_std, dtype=np.float64), (Theta.shape[1],))
+    return np.stack([global_param_update(Theta[:, j], Y, d, r_std, rtps, float(floors[j]))
+                     for j in range(Theta.shape[1])], axis=1)
+
+
 def global_param_update(theta: np.ndarray, Y: np.ndarray, d: np.ndarray, r_std: float,
                         rtps: float = 0.0, min_std: float = 0.0) -> np.ndarray:
     """`theta`: (N,) prior parameter values; `Y`: (N, m) prior observation-space perturbations

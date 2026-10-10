@@ -57,3 +57,20 @@ def test_no_information_leaves_mean_unchanged():
 def test_shape_check():
     with pytest.raises(ValueError):
         global_param_update(np.zeros(5), np.zeros((4, 3)), np.zeros(3), 1.0)
+
+
+def test_joint_update_columns_equal_scalar_updates_and_joint_regression():
+    from ks_latent.da.param_est import global_params_update
+    theta, Y, d = _ens(seed=4)
+    rng = np.random.default_rng(9)
+    Theta = np.stack([theta, 2.0 + 0.3 * rng.standard_normal(theta.size), 0.5 * theta + 0.1 * rng.standard_normal(theta.size)], 1)
+    r = 0.4
+    Ta = global_params_update(Theta, Y, d, r)
+    for j in range(3):
+        assert np.allclose(Ta[:, j], global_param_update(Theta[:, j], Y, d, r), atol=1e-12)
+    N = Theta.shape[0]
+    Tp = Theta - Theta.mean(0)
+    K = (Tp.T @ Y / (N - 1)) @ np.linalg.inv(Y.T @ Y / (N - 1) + r ** 2 * np.eye(Y.shape[1]))
+    assert np.allclose(Ta.mean(0), Theta.mean(0) + K @ d, atol=1e-10)
+    Tb = global_params_update(Theta, Y, d, 0.01, min_std=np.array([0.05, 0.2, 0.0]))
+    assert Tb[:, 0].std(ddof=1) >= 0.05 - 1e-12 and Tb[:, 1].std(ddof=1) >= 0.2 - 1e-12

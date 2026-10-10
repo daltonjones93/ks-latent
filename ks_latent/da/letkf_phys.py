@@ -68,15 +68,26 @@ class LocalETKFPhys2D:
 
     def analyze(self, Xf: np.ndarray, y: np.ndarray, obs_idx: np.ndarray) -> np.ndarray:
         """`Xf`: `(N, NX*NY)` prior members; `y`: `(m,)`; `obs_idx`: `(m,)` flat indices of the
-        observed points. Returns the `(N, NX*NY)` analysis members."""
+        observed points. Returns the `(N, NX*NY)` analysis members.
+
+        Multi-field states (J17B, 2026-10-10): `Xf` may be `(N, k*NX*NY)`, k co-located fields stacked
+        (e.g. the observed u and an unobserved hidden field v); `obs_idx` then indexes the stacked
+        vector. Every field at a grid point gets that point's block transform, which is exactly the
+        local ETKF for the augmented state (unobserved fields are updated through their ensemble
+        covariances with the observed ones)."""
         N = Xf.shape[0]
+        n = self.NX * self.NX
+        if Xf.shape[1] % n:
+            raise ValueError(f"state length {Xf.shape[1]} is not a multiple of NX^2 = {n}")
+        k = Xf.shape[1] // n
         xm = Xf.mean(0)
         Xp = Xf - xm
         Y = Xp[:, obs_idx]
         d = y - xm[obs_idx]
         Xa = np.empty_like(Xf)
         eye = np.eye(N)
-        for pts, used, rho in zip(self.pts, self.used, self.rho):
+        for pts1, used, rho in zip(self.pts, self.used, self.rho):
+            pts = pts1 if k == 1 else np.concatenate([pts1 + j * n for j in range(k)])
             if used.size == 0:
                 Xa[:, pts] = Xf[:, pts]
                 continue

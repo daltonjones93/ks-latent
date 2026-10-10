@@ -175,3 +175,99 @@ def test_exp_i11_step_batch_matches_solver_with_cubic():
     got = step_batch(V.copy(), op, cubic=1.5e-3)
     for i in range(3):
         assert np.allclose(got[i], step2d(V[i].copy(), op, cubic=1.5e-3), atol=1e-11)
+
+
+def test_exp_i11_step_batch_per_member_cubic():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    from exp_i11_pde_letkf import step_batch
+    cfg = _cfg_small()
+    op = get_operator2d(cfg)
+    V = np.stack([np.fft.fft2(_u_small(i)) for i in range(3)])
+    V[:, 0, 0] = 0
+    betas = np.array([0.0, 1e-3, 3e-3])
+    got = step_batch(V.copy(), op, cubic=betas)
+    for i in range(3):
+        assert np.allclose(got[i], step2d(V[i].copy(), op, cubic=float(betas[i])), atol=1e-11)
+
+
+# --- J17 option 2: anisotropic -a u' u'_x (2026-10-10) ---
+from ks_latent.solver.ks2d import aniso_term2d  # noqa: E402
+
+
+def test_aniso_term_matches_direct_evaluation_mean_zero_and_shift_invariant():
+    cfg = _cfg_small()
+    op = get_operator2d(cfg)
+    u = _u_small(3)
+    a = 0.7
+    up = u - u.mean()
+    # direct: spectral x-derivative of u'^2 / 2 (same aliasing as the term itself)
+    direct = -a * np.fft.ifft2(0.5j * op.KX * np.fft.fft2(up ** 2)).real
+    got = np.fft.ifft2(aniso_term2d(np.fft.fft2(u), a, op.KX)).real
+    assert np.max(np.abs(got - direct)) < 1e-12
+    assert abs(got.mean()) < 1e-13
+    shifted = np.fft.ifft2(aniso_term2d(np.fft.fft2(u + 3.0), a, op.KX)).real
+    assert np.max(np.abs(shifted - got)) < 1e-12
+    # equals -a u' u'_x pointwise for a smooth band-limited field (low modes only, no aliasing)
+    x = np.arange(cfg.NX) * cfg.Lx / cfg.NX
+    k = 2 * np.pi / cfg.Lx
+    f = np.repeat(np.sin(k * x)[:, None], cfg.NY, axis=1)
+    g = np.fft.ifft2(aniso_term2d(np.fft.fft2(f), a, op.KX)).real
+    assert np.max(np.abs(g - (-a * f * k * np.repeat(np.cos(k * x)[:, None], cfg.NY, axis=1)))) < 1e-12
+
+
+def test_aniso_tangent_matches_finite_difference():
+    cfg = _cfg_small()
+    op = get_operator2d(cfg)
+    v = np.fft.fft2(_u_small(2)); v[0, 0] = 0
+    dv = np.fft.fft2(np.random.default_rng(6).standard_normal((cfg.NX, cfg.NY))); dv[0, 0] = 0
+    eps = 1e-6
+    kw = dict(cubic=1e-3, aniso=0.5)
+    fd = (step2d(v + eps * dv, op, **kw) - step2d(v - eps * dv, op, **kw)) / (2 * eps)
+    vn, dV = step_with_tangent2d(v, dv[None], op, **kw)
+    assert np.allclose(vn, step2d(v, op, **kw), atol=1e-10)
+    assert np.max(np.abs(dV[0] - fd)) / np.max(np.abs(fd)) < 1e-6
+
+
+def test_exp_i11_step_batch_matches_solver_with_aniso():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    from exp_i11_pde_letkf import step_batch
+    cfg = _cfg_small()
+    op = get_operator2d(cfg)
+    V = np.stack([np.fft.fft2(_u_small(i)) for i in range(3)])
+    V[:, 0, 0] = 0
+    got = step_batch(V.copy(), op, aniso=0.4)
+    for i in range(3):
+        assert np.allclose(got[i], step2d(V[i].copy(), op, aniso=0.4), atol=1e-11)
+
+
+# --- J17H: structurally wrong physics model a K^2 - b K^order, g |grad u|^2 (2026-10-10) ---
+def test_hyper_operator_reduces_to_standard_and_order6_symbol():
+    from ks_latent.solver.ks2d import hyper_operator2d
+    cfg = _cfg_small()
+    std = get_operator2d(cfg)
+    h4 = hyper_operator2d(cfg, 1.0, 1.0, 4.0)
+    assert np.allclose(h4.Lhat, std.Lhat, atol=1e-12) and np.allclose(h4.coeffs.E, std.coeffs.E, atol=1e-12)
+    h6 = hyper_operator2d(cfg, 1.3, 0.7, 6.0)
+    K2 = std.KX ** 2 + std.KY ** 2
+    assert np.allclose(h6.Lhat, 1.3 * K2 - 0.7 * K2 ** 3, atol=1e-9)
+
+
+def test_step_batch_nl_coef_scales_only_the_nonlinearity():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    from exp_i11_pde_letkf import step_batch
+    cfg = _cfg_small()
+    op = get_operator2d(cfg)
+    V = np.stack([np.fft.fft2(_u_small(i)) for i in range(2)])
+    V[:, 0, 0] = 0
+    # KS scaling symmetry: with nonlinearity g, u_g = u_1 / g solves the g-equation
+    g = 2.0
+    got = step_batch(V.copy() / g, op, nl_coef=np.array([g, g]))
+    ref = step_batch(V.copy(), op)
+    assert np.allclose(got, ref / g, atol=1e-10)
+    assert np.allclose(step_batch(V.copy(), op, nl_coef=1.0), ref, atol=0)
