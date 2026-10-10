@@ -328,7 +328,9 @@ def main() -> None:
             rec["free"].append(f(sfft.ifft2(Vfree).real))
             V = sfft.fft2(Xa.reshape(N, M, M))
             if cyc % 10 == 9:
-                print(f"cycle {cyc + 1}: " + " ".join(f"{k} {v[-1]:.3f}" for k, v in rec.items() if v), flush=True)
+                print(f"cycle {cyc + 1}: " + " ".join(f"{k} {v[-1]:.3f}" if not isinstance(v[-1], list)
+                                                 else f"{k} " + "/".join(f"{x:.3f}" for x in v[-1])
+                                                 for k, v in rec.items() if v), flush=True)
     late = slice(a.n_cycles // 2, None)
     steady = {k: float(np.mean(v[late])) for k, v in rec.items() if v and not isinstance(v[0], list)}
     vec = {k: np.mean(np.array(v[late]), axis=0).tolist() for k, v in rec.items() if v and isinstance(v[0], list)}

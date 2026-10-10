@@ -2576,8 +2576,8 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
    0.18; perfect model: 0.076) and loses when the error is large or structural (coefficient 25% off:
    0.42; spurious mean flow: 0.44–0.60; wrong damping order p = 6: 0.35, p = 8: 0.43 [J17H, all
    coefficients estimated online]; hidden memory field: [J17B]). The crossover is set by the physics
-   model's irreducible one-cycle forecast error relative to the observation error, at ≈ 0.1–0.2 (σ_obs
-   ≈ 0.4 in field units): a usable rule for when a learned filter is the better choice. The physics
+   model's irreducible (state-dependent) one-cycle forecast error relative to the observation error, at ≈ 0.1
+   field units ≈ σ_obs/6 (σ_obs = 0.62 field units; corrected 2026-10-10): a usable rule for when a learned filter is the better choice. The physics
    filter also diverges outside a narrow RTPS window; the latent filter uses one default everywhere.
 6. **Honest frame.** The latent filter's floor (≈ 0.25) is the decoder's; a correct or correctable
    physics model gets well below it. The method is for systems without a trustworthy model (CM1,
@@ -2705,7 +2705,13 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
 - **K3h Fig. 8 (1D):** unchanged; moves with K1's choice.
 - **K3i** Each figure: grayscale and 50%-zoom check; captions "what is plotted, what to see".
 
-### K4 `[ ]` §3.8 "Latent ensemble data assimilation" (method) — rewrite
+### K4 `[x]` §3.8 "Latent ensemble data assimilation" (method) — rewrite
+- **Done 2026-10-10** (`sections/03_method.tex`): Part II filter as used (LETKF, GC 1.5 sites, RTPS 0.7, noise
+  0.02); Prop. blockdiag kept; new "Shifted tilings" paragraph with Eq. `eq:blend` (Hann partition of
+  unity, no feedback, exactness, cycle spinning); Eq. nens_local kept; new "physics-based comparator"
+  paragraph (parameter estimation, bias correction, offline residuals). New bib entries
+  (whitakerhamill2012, coifmandonoho1995, anderson2001, ruiz2013, dee2005, brajard2020, bocquet2020)
+  added from memory — **verify against primary sources (K9)**.
 - State the Part II filter as used: per-site local ETKF (deterministic transform, Hunt et al. 2007)
   with R-localization (GC, half-width 1.5 sites), RTPS α = 0.7 (Whitaker & Hamill 2012), model noise
   0.02 per latent coordinate per step, 5 steps per cycle. Move the PFF and the dense Schur-product
@@ -2724,7 +2730,18 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
   error from offline one-cycle residuals (Eq. for r = R(u(t+T)) − M(R(u(t)))).
 - ~0.5 day.
 
-### K5 `[ ]` §7 rewrite, subsection by subsection (replace `07_data_assimilation.tex`)
+### K5 `[~]` §7 rewrite, subsection by subsection (replace `07_data_assimilation.tex`)
+- **K5.1–K5.5 drafted 2026-10-10** (`sections/07_data_assimilation.tex`, compiles with no undefined refs):
+  §7.1 setting (model, twin protocol, filter, metrics/baselines); §7.2 shifted tilings (Fig. 13, Table
+  `tab:da_2d_ensemble` = `tab07_p2_members`); §7.3 accuracy, decoder-not-the-limit, latent vs physical
+  analysis, Gaussianity; §7.4 44²→440² (Fig. 9 = `fig09_p2_da`, Table `tab:da_2d_sizes` =
+  `tab07_p2_sizes`); §7.5 learned vs physics (design, results, the state-dependent-error crossover at
+  ≈ σ_obs/6, robustness, scope) with provisional Table `tab:da_model_error` (inline; K2c to regenerate).
+  Red `\placeholder{}` markers: P1 (unlocalized), P2 (timing), P3 (300 cycles), P6 (J17H with joint
+  estimation; rerun after a print-bug crash, `run_j17h_abg.sh`), P7 (J17B), P8 (crossover wording),
+  P9 (J5). The old 1D and cost subsections follow under a K5.6–K5.8 placeholder banner.
+  TODO(K11): recompute the Gaussianity numbers for `p7c12d10_ks2d`.
+- **App. E** networks table now reads `tabE_p2_networks` (K2g).
 Each subsection lists its inputs; text options are given where a result is pending.
 - **K5.1 §7.1 Setting.** Twin protocol with the Part II numbers (stride 8 = 2.75 units = half the
   patch; σ_obs 0.1 standardized = 0.40 field units; 64 members per tiling; 100 cycles; steady =

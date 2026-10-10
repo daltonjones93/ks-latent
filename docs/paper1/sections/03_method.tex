@@ -519,30 +519,29 @@ short teacher-forced validation loss does not (Sec.~\ref{sec:fail_regimes}).
 
 Observations are taken of the physical field,
 $y_n = \Hobs(u_n) + \nu_n$, $\nu_n\sim\mathcal{N}(0,R)$, where $\Hobs$
-selects grid points on a regular sparse network. The filter state is
-an ensemble $\{z^{(e)}\}_{e=1}^{\Nens}$ of latent fields, forecast with
+selects grid points on a regular network. The filter state is an
+ensemble $\{z^{(e)}\}_{e=1}^{\Nens}$ of latent fields, forecast with
 $\Fp$ plus additive model noise, and the observation operator in latent
-space is $h = \Hobs\circ\Dec$. We use three analysis schemes:
-\begin{itemize}
-\item a particle flow filter (the Gauss--Newton ``NAT'' variant of
-  \citet{huvanleeuwen2021}), used in 1D;
-\item a stochastic ensemble Kalman filter with perturbed observations
-  \citep{burgers1998,houtekamermitchell1998} and Schur-product
-  covariance localization \citep{houtekamermitchell2001}, with gain
-  $K = (\rho\circ B)J^{\top}\big(J(\rho\circ B)J^{\top}+R\big)^{-1}$,
-  where $B$ is the ensemble covariance, $\rho$ the taper, and $J$ the
-  Jacobian of $h$ at the ensemble mean; used in 1D and 2D;
-\item a per-site local ensemble Kalman filter in the local-analysis
-  form of \citet{hunt2007}, with observation-space (R-)localization and
-  the same perturbed-observation update: each site is updated from the
-  observations within the taper's support, with each observation's error
-  variance divided by its taper value; used in 2D.
-\end{itemize}
-The taper is the Gaspari--Cohn function \citep{gaspari1999} of the site
-distance $\dist(j,k)$, with toroidal distance in 2D. As a distance-free
-baseline we use sampling error correction (SEC), which replaces the
-taper by a correction factor fitted offline from the sample correlation
-\citep{anderson2012}.
+space is $h = \Hobs\circ\Dec$. Nothing in the filter uses the equations
+of the system: the model is the learned propagator, and the only
+physical input is the observation network.
+
+\para{The per-site filter.} The 2D experiments of Part~II use a local
+ensemble transform Kalman filter in the local-analysis form of
+\citet{hunt2007}, run once per site of the lattice. Site $s$ is updated
+from the observations whose taper value $\rho_i$ with respect to $s$ is
+positive, each with its error variance divided by $\rho_i$
+(observation-space or R-localization), using the deterministic ensemble
+transform of \citet{hunt2007}. The taper is the Gaspari--Cohn function
+\citep{gaspari1999} of the toroidal site distance $\dist(j,k)$, with
+half-width $1.5$ sites. After each analysis the ensemble spread is
+relaxed towards the forecast spread, coordinate by coordinate, with
+weight $\alpha=0.7$ (relaxation to prior spread, RTPS;
+\citealp{whitakerhamill2012}); the forecast adds Gaussian model noise of
+standard deviation $0.02$ per latent coordinate at every propagator
+step. The 1D experiments also use a particle flow filter
+\citep{huvanleeuwen2021} and a stochastic ensemble Kalman filter with
+Schur-product localization; they are defined in Appendix~\ref{app:da}.
 
 The per-patch decoder makes the observation operator exactly local in
 latent space.
@@ -572,8 +571,38 @@ $\Rdec>0$, row $i$ would have non-zeros at every site within $\Rdec$ of
 its patch, the colouring would need $c(2\Rdec+1)^{\dim}$ colours, and the
 per-site analysis in (b) would have to include those sites as well or
 truncate $h$. Neither the cost of the colouring nor the memory of the
-per-site filter depends on the domain size; the dense covariance-localized
-filter, which forms $\dlat\times\dlat$ matrices, scales as $P^2$ in memory.
+per-site filter depends on the domain size.
+
+\para{Shifted tilings.} A per-patch decoder reconstructs each patch from
+its own site, so its errors are tied to the patch lattice: they are
+largest at patch edges and they do not average out over time, because
+the lattice does not move. We remove this lattice dependence without
+retraining. Let $\Tr_o$ translate the physical field by
+$o\in\{0,p/2\}^2$ grid points, with $p$ the patch size, giving $K=4$
+copies of the patch lattice offset by half a patch in $x$, in $y$ and in
+both. Tiling $k$ encodes $\Tr_{o_k}u$, runs its own ensemble and its own
+per-site filter with the same observations, and decodes its analysis
+mean back to the unshifted frame, $\bar u_k = \Tr_{o_k}^{-1}\Dec(\bar
+z_k)$. The analysis is the blend
+\begin{equation}
+  \bar u = \sum_{k=1}^{K} w_k\,\bar u_k,\qquad
+  w_k(x,y) = \frac{\phi(x-o_{k,x})\,\phi(y-o_{k,y})}
+  {\sum_{l}\phi(x-o_{l,x})\,\phi(y-o_{l,y})},\quad
+  \phi(\xi) = \sin^2\!\Big(\frac{\pi(\xi \bmod p + \tfrac12)}{p}\Big),
+  \label{eq:blend}
+\end{equation}
+a partition of unity whose weight for tiling $k$ vanishes on that
+tiling's own patch edges (Fig.~\ref{fig:tilings}b); for $K=4$ the
+denominator is $1$. The members are blended the same way, so the blended
+ensemble has a spread. The tilings never exchange information: each
+cycles its own ensemble, and the blend is formed only for output, since
+re-encoding the blended field on each tiling degrades the analysis
+(Sec.~\ref{sec:da_tilings}). The construction is cycle spinning
+\citep{coifmandonoho1995} on the patch lattice, applied to the
+analysis. It keeps the exactness of Proposition~\ref{prop:blockdiag}:
+each tiling's filter is exactly local, and Eq.~\eqref{eq:blend} is a
+fixed linear map of their outputs. It costs $K$ filters, which run in
+parallel.
 
 \para{How large an ensemble is needed.}
 An ensemble filter needs enough members to span the directions along
@@ -587,8 +616,25 @@ $A_{\mathrm{loc}}$ \citep{patil2001,ott2004}, which suggests
   \label{eq:nens_local}
 \end{equation}
 independent of the total domain size. For 1D KS with the taper used in
-Sec.~\ref{sec:da_results} (support radius $6$ sites of length $6.25$),
+Sec.~\ref{sec:da_1d} (support radius $6$ sites of length $6.25$),
 Eq.~\eqref{eq:nens_local} gives $\Nens\gtrsim 0.22\times75\approx17$.
 Combined with Corollary~\ref{cor:transfer}, this is the reason to expect a
 transferred local model to keep a fixed-size filter useful as the domain
 grows, while an unlocalized filter of the same size degrades.
+
+\para{A physics-based comparator.} To ask what the learned model costs or
+gains against the equations, Sec.~\ref{sec:da_model_error} runs the same
+kind of filter in the physical space of a partial differential equation:
+an ensemble of PDE states, forecast with a spectral solver, analysed by a
+local ensemble transform Kalman filter on $4\times4$ blocks of grid points
+with R-localization and RTPS, observing the same points with the same
+errors. Its forecast model is deliberately wrong (Appendix~\ref{app:da}).
+It is given the standard remedies for model error, each tuned on one
+seed: the RTPS weight and the localization radius; online estimation of
+global model parameters by state augmentation
+\citep{anderson2001,ruiz2013}, with a global ensemble transform for the
+parameters and a floor on their spread; and correction of the mean
+one-cycle forecast error, with additive noise drawn from the covariance of
+the remaining error \citep{dee2005}, both estimated offline from
+$r = u(t+T)-M\big(u(t)\big)$ on an independent trajectory, where $M$ is the
+wrong model and $T$ one assimilation cycle.

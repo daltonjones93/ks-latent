@@ -3,241 +3,405 @@
 \label{sec:da_results}
 %======================================================================
 
-Part~II asks whether the local structure that lets a model transfer
-also lets a filter work on large domains with a fixed ensemble. The
-models are those of Part~I, deployed at each size without retraining;
-the filters run entirely in their latent space and observe the physical
-field.
+Part~II asks whether the local structure that lets a model transfer also
+lets a filter work, with one model and one setting, on domains of any
+size, and what such a filter is worth against one built on the
+equations. The filter runs entirely in the latent space of a learned
+model and observes the physical field. It never uses the equations of
+the system, and in 2D its model never sees a clean field.
 
 %----------------------------------------------------------------------
-\subsection{Setting: exact locality and what is measured}
+\subsection{Setting}
 \label{sec:da_setting}
 %----------------------------------------------------------------------
 
+\para{The model.} The 2D experiments use one model throughout: the
+architecture and window training of Part~I with $c=12$ channels per site
+instead of 6, trained only on fields that carry one fixed realization of
+independent Gaussian noise of standard deviation $0.1$ in standardized
+units, the level of the observation errors below. It never sees a clean
+field. Its Kaplan--Yorke dimension is within $3.6\%$ of the truth's at
+$44^2$ and $2.1\%$ at $66^2$ (Appendix~\ref{app:tables}), comparable to the
+6-channel model of Part~I. We use the larger model for data assimilation
+because the filter benefits from the extra capacity, and keep the
+6-channel model for Part~I, whose transfer results it established. The
+1D experiments use the 1D model of Part~I.
+
 \para{Twin experiments.} At each domain size the truth is a trajectory of
-the PDE itself, integrated at the deployment resolution from a spun-up
-state. Every $5$ model steps (5 time units in 1D, $0.5$ in 2D KS, about
-$0.5$ and $0.1$ Lyapunov times) we observe the field at the points of a
-regular network with spacing $3.125$ (1D) or $2.75$ (2D KS) length
-units, two observations per site in 1D and four in 2D, with independent
-Gaussian errors of standard deviation $0.1$ in the standardized units of
-the training data. The initial ensemble is the encoded initial truth
-plus independent perturbations of standard deviation $0.1$ per latent
-coordinate; the forecast adds model noise of standard deviation $0.08$
-per coordinate at every step (Sec.~\ref{sec:da_method}). Each run has
-$100$ cycles. The free run starts from the same ensemble, evolves with
-the same model, receives no observations and no model noise; the error
-of its ensemble mean is the reference that skill is measured against.
+the PDE, integrated at the deployment resolution from a spun-up state.
+Every $0.5$ time units (5 model steps, about $0.08$ Lyapunov times) the
+field is observed at the points of a regular network with spacing
+$2.75$, half the patch length, so four observations per site, with
+independent Gaussian errors of standard deviation $0.1$ in standardized
+units ($0.62$ in field units). The networks are listed in
+Table~\ref{tab:da_networks}. Each tiling's initial ensemble is its
+encoding of the initial truth plus independent perturbations of
+standard deviation $0.1$ per latent coordinate. Each run has $100$
+cycles, and all reported values are steady-state averages over cycles
+$51$--$100$.
 
-\para{Filters.} Section~\ref{sec:da_method} defines the three analysis
-schemes. We name them by what they compute, since the literature uses
-``LETKF'' for several. The \emph{dense filter} is a stochastic ensemble
-Kalman filter (EnKF) with perturbed observations and Schur-product
-localization of the full $\dlat\times\dlat$ forecast covariance. The
-\emph{per-site filter} performs one analysis per site, in the
-local-analysis form of \citet{hunt2007}, with each observation's error
-variance divided by its taper value, but with the same
-perturbed-observation update as the dense filter; it is therefore a
-local stochastic ensemble Kalman filter rather than an ensemble
-transform filter. Its deterministic counterpart, the local ensemble
-transform Kalman filter of \citet{hunt2007} with the same localization,
-gives the same skill to within $2\%$ at $\Nens=64$ (Appendix~\ref{app:da}) and is
-reported where it differs. In 1D the analysis is also done with the
-particle flow filter (PFF), and both 1D filters use the same Gaspari--Cohn
-(GC) taper of half-width $3$ sites.
+\para{The filter.} The per-site local ensemble transform filter of
+Sec.~\ref{sec:da_method}, Gaspari--Cohn half-width $1.5$ sites, RTPS
+$\alpha=0.7$, model noise $0.02$ per coordinate and step, $64$ members per
+tiling and four shifted tilings blended by Eq.~\eqref{eq:blend}. These
+values are the same in every experiment of this section; none was tuned
+per domain size, per seed or per experiment.
 
-\para{Why the per-site filter is exact.} The decoder of the 2D models is
-per-patch ($\Rdec=0$), so by Proposition~\ref{prop:blockdiag} the
-Jacobian of the observations with respect to the latent field is
-block-diagonal: an observation depends only on the $c$ channels of the
-site whose patch contains it. Two consequences make the filter scale.
-The whole Jacobian is obtained from $c=6$ forward-mode derivatives at
-any domain size, and each site's analysis uses only the ensemble at the
-few sites that own an observation inside its taper support, without
-truncating any observation's dependence on the latent state. The local
-analysis is not an approximation of a global one that happens to be
-local; it is the analysis of a problem that is local. The dense filter,
-by contrast, stores $\dlat\times\dlat$ matrices, whose memory grows with
-the square of the area.
-
-\para{Metrics.} The \emph{error} at an analysis time is the
-root-mean-square difference, per latent coordinate, between the
-ensemble-mean latent field and the encoded truth,
-$\|\bar z - \E(u)\|/\sqrt{\dlat}$; the free run's error is defined the
-same way. \emph{Skill} is the ratio of free-run error to analysis error:
-above 1 the filter helps, below 1 it makes the estimate worse than not
-assimilating at all. \emph{Spread} is the ensemble standard deviation per
-coordinate, and \emph{calibration} the ratio of spread to error, which is
-1 for an ensemble that represents its own uncertainty correctly and
-below 1 for an over-confident one. All reported values are
-\emph{steady-state} averages over cycles $51$--$100$, after the initial
-transient. Because the latent coordinates are learned, we also measure
-the error in physical space: the root-mean-square difference between
-the decoded ensemble mean and the true field, at every grid point and at
-the observed points separately, against the floor set by the decoder
-alone, $\|\Dec(\E(u))-u\|$.
-
-\para{How large an ensemble the problem demands.} Without localization a
-filter needs at least as many members as there are unstable and neutral
-directions \citep{bocquetcarrassi2017}; for a deterministic filter on
-Lorenz-96 the minimum is $n_+ + 1$, with $n_+$ the number of positive
-Lyapunov exponents \citep{takeda2026}. These counts are measured here.
-For 2D KS the truth has $n_+ = 42$--$44$ at $44^2$ and $93$--$101$ at $66^2$,
-and the transferred model has $n_+ = 168$--$170$ at $88^2$ (Table~\ref{tab:truth}
-and Appendix~\ref{app:tables}); for 1D KS the truth has $n_+ = 26$--$27$ at
-$L=200$ and $50$--$51$ at $L=400$ (Appendix~\ref{app:truth_list}). A fixed ensemble of 64 members is therefore above
-this bound only at the native 2D size and at $L=200$ in 1D. An
-unlocalized filter of that size should fail beyond them; a localized
-filter needs only to span the unstable directions inside its taper
-support, Eq.~\eqref{eq:nens_local}, which do not grow with the domain.
-The following sections test both predictions.
+\para{What is measured.} The \emph{error} is the root-mean-square
+difference between the analysis mean, decoded and blended, and the true
+field, over all grid points, in field units. We compare it with what can
+be had without a dynamical model: cubic-spline interpolation of the same
+observations ($0.81$--$0.83$ at every size) and climatological optimal
+interpolation ($0.80$ at $44^2$); with the decoder's own error on the
+encoded truth, $\|\Dec(\E(u))-u\|$, single and blended (the \emph{decoder
+floor}); and with a filter that knows the equations, the physical-space
+local ensemble transform filter of Sec.~\ref{sec:da_method} run with the
+true PDE ($0.076$ at its best localization). The run without assimilation
+has errors of $4.2$--$5.3$. \emph{Calibration} is the ratio of ensemble
+spread to error, $1$ for an ensemble that represents its own
+uncertainty. Free-run skill, the ratio of the free-run error to the
+analysis error, is reported in Table~\ref{tab:da_2d_sizes} for comparison
+with earlier latent filters.
 
 %----------------------------------------------------------------------
-\subsection{A fixed ensemble across a hundredfold area}
+\subsection{Shifted tilings}
+\label{sec:da_tilings}
+%----------------------------------------------------------------------
+
+With one tiling the analysis error at $44^2$ is $0.457$ (seed 0; $0.431$ and
+$0.418$ for seeds 1 and 2). With four shifted tilings it is $0.324$, $0.310$
+and $0.302$: about $30\%$ lower on every seed, from the same model with no
+retraining (Fig.~\ref{fig:da_2d}f and Table~\ref{tab:da_2d_ensemble}). Two
+tilings, offset diagonally, give $0.369$, and sixteen, offset by a quarter
+patch, $0.287$. The calibration is $0.86$ with one tiling, $0.92$--$0.99$ with
+four and $0.51$ with sixteen: the independent spreads average down faster
+than the errors once the tilings overlap strongly, so four is the
+calibrated choice and sixteen the accurate one. Uniform weights instead
+of Hann weights give $0.313$ at calibration $0.63$.
+
+\para{It is the offsets, not the members.} Four ensembles of 64 members on
+the \emph{same} tiling, blended the same way, give $0.450$, $0.423$ and $0.412$,
+no better than one tiling, and a calibration of $0.44$--$0.48$
+(Table~\ref{tab:da_2d_ensemble}(iii)). Splitting a fixed total of 64
+members into four tilings of 16 gives $0.352$, $0.334$ and $0.318$, against
+$0.457$, $0.431$ and $0.418$ for one ensemble of 64: at equal cost the tilings
+are $23$--$24\%$ more accurate on every seed. Shifted tilings are a better use
+of members than a larger ensemble.
+
+\para{Why it works.} With one tiling the error is tied to the patch
+lattice. It is largest at patch edges, $0.49$--$0.58$ against $0.38$ at patch
+centres (Fig.~\ref{fig:tilings}c), and the mean gradient across a patch
+edge is $1.73$ times that inside a patch, against $1.02$ in the truth
+(Fig.~\ref{fig:tilings}f). The lattice-tied part is not limited to
+the seams. Decomposed by wavenumber, the errors of the four tilings are
+only weakly correlated: the mean correlation between tilings is $0.37$--$0.42$
+at wavenumbers below $1.6$ and $0.11$ above, at both $44^2$ and $220^2$
+(Fig.~\ref{fig:tilings}e). Averaging weakly correlated errors removes most
+of them: the blend reduces the error variance by a factor of $1.4$--$1.9$ at
+wavenumbers below $1.6$ and $3.9$ above (Fig.~\ref{fig:tilings}d). The seam
+ratio of the blend is $1.02$, the truth's. Feeding the blended analysis
+back into each tiling's encoder makes things worse, because the blended
+field is not the decoding of any latent state; the tilings therefore
+cycle independently and are combined only for output.
+
+\para{Exactness and cost.} Each tiling's filter is exactly local
+(Proposition~\ref{prop:blockdiag}), and the blend is a fixed linear map
+of their outputs, so the composite analysis is exactly local too. The
+four filters are independent and run in parallel; run in one process,
+four tilings cost about $2.3$ times one at $220^2$ in our earlier
+measurement, because the truth integration and the observation draws are shared
+\placeholder{P2: clean timing from I14} (Sec.~\ref{sec:da_cost}).
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/fig13_tilings.pdf}
+\caption{Shifted tilings. (a) The patch lattice of tiling 0 (solid) and the
+lattice shifted by half a patch (dashed); four tilings are shifted by
+$(0,0)$, $(p/2,0)$, $(0,p/2)$ and $(p/2,p/2)$, each with its own ensemble and
+filter. (b) Blend weights along one axis, Eq.~\eqref{eq:blend}: each
+tiling's Hann weight vanishes on its own patch edges, and the weights sum
+to one. (c) Analysis error against position within a patch at $44^2$ (seed
+0), one tiling (dashed) and four (solid), for the model trained on noisy
+data and for a model trained on clean data: the single-tiling error peaks
+at patch edges, and the blend removes the peak. (d) Error variance by
+wavenumber band for one tiling, the Hann blend and the uniform average of
+the four tilings, with the uniform average predicted from the
+inter-tiling error covariance $C$ as $\mathbf 1^\top C\mathbf 1/K^2$. (e) Mean
+correlation between the tilings' analysis errors by band, at $44^2$ and
+$220^2$. (f) Seam ratio, the mean gradient across patch edges over that
+inside patches. The tilings' errors are weakly correlated at every scale,
+so averaging them removes most of the lattice-tied error, not only the
+seams.}
+\label{fig:tilings}
+\end{figure*}
+
+\begin{table}[htbp]
+\caption{Members and tilings, 2D KS, steady-state analysis error (field
+units; spread over error in parentheses or in the last column). (i)
+Members per tiling with four tilings, at $44^2$ and $220^2$. (ii) A fixed
+total of 64 members split over $K$ tilings, seeds 0--2. (iii) Four
+ensembles of 64 members on four shifted tilings, and on one tiling,
+blended the same way. (iv) Number of tilings, 64 members each, seed 0,
+with the blended decoder floor. ---: not run.}
+\label{tab:da_2d_ensemble}
+\begin{ruledtabular}
+\begin{tabular}{lcccc}
+\tabinput{tables/tab07_p2_members}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+%----------------------------------------------------------------------
+\subsection{Accuracy and calibration at the native size}
+\label{sec:da_accuracy}
+%----------------------------------------------------------------------
+
+At $44^2$ the analysis error is $0.30$--$0.32$ over three seeds, against $0.81$--$0.83$
+for interpolating the same observations and $0.80$ for climatological
+optimal interpolation: the learned dynamics carry information between
+observation times and between observation points that the observations
+alone do not. At the observed points the error is $0.31$--$0.33$, half the
+observation error, so the analysis is not simply drawing towards the
+data. The prior, one cycle earlier, has an error of $0.34$--$0.39$; the
+latent model's own error over one cycle, measured on an independent
+truth, is small, so the filter's error is a persistent part that the
+analysis does not remove rather than error the model regrows each cycle.
+The ensemble is well calibrated, with spread over error $0.92$--$0.99$.
+RTPS weights of $0.5$, $0.7$ and $0.9$ give $0.322$, $0.324$ and $0.340$ at
+calibrations $0.78$, $0.92$ and $1.16$; we use $0.7$, the calibrated choice
+within $1\%$ of the best error.
+
+\para{The decoder is not the limit.} The decoder floor is $0.24$--$0.25$ for one
+tiling, about half of that tiling's analysis error, and $0.13$--$0.14$ for the
+blend, well below the blended analysis's $0.30$--$0.33$
+(Table~\ref{tab:da_2d_sizes}). Most of the remaining error is therefore
+the filter's, not the reconstruction's.
+
+\para{The analysis belongs in latent space.} One could use the learned
+model only as a forecast device and do the analysis in physical space.
+We tested this with the same model, encoding each member on the four
+tilings, propagating, decoding and blending, and analysing the blended
+members with the physical-space local ensemble transform filter of
+Sec.~\ref{sec:da_method}, tuned over its localization radius and RTPS.
+Its best error is $0.354$, $0.345$ and $0.338$ for seeds 0--2, at a calibration of
+$1.22$--$1.27$, against $0.324$, $0.310$ and $0.302$ at $0.92$--$0.99$ for the latent
+analysis; with one tiling the two are equal ($0.461$ and $0.457$). The latent
+analysis is $5$--$10\%$ more accurate on every seed and better calibrated.
+A physical-space analysis must re-encode fields that the decoder never
+produced, and the latent analysis does not.
+
+% TODO(K11): gaussianity_L44.json was computed with an earlier model; recompute for p7c12d10_ks2d.
+\para{Gaussianity.} The latent coordinates are close to Gaussian in
+climatology (mean absolute skewness $0.10$, excess kurtosis $-0.38$), and
+one-cycle priors show no skewness distinguishable from sampling noise in
+either space. At this cycle length the latent space offers neither an
+advantage nor a disadvantage for a Gaussian filter.
+
+%----------------------------------------------------------------------
+\subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}
 \label{sec:da_2d}
 %----------------------------------------------------------------------
 
-Table~\ref{tab:da_2d_sizes} and Fig.~\ref{fig:da_2d} give the central result of Part~II. The 2D KS
-model, trained on windows of a $264^2$ simulation, is deployed on square
-domains from $44^2$ to $440^2$, a factor of 100 in area and in latent
-dimension ($\dlat=384$ to $38\,400$), and the same per-site filter with 64
-members assimilates the same observation network at every size. Its
-steady-state skill is $4.23$ at $44^2$ and $3.84$--$4.08$ at every larger size,
-$3.90$ at $440^2$: the filter loses less than $10\%$ of its skill over the
-whole range. A second seed at every size from $44^2$ to $330^2$ changes the
-skill by at most $0.15$.
+Table~\ref{tab:da_2d_sizes} and Fig.~\ref{fig:da_2d} give the result
+that the locality was built for. The same model and the same filter
+settings are deployed on square domains from $44^2$ to $440^2$, a factor of
+100 in area and in latent dimension ($\dlat = 768$ to $76\,800$ per tiling).
+The analysis error is $0.324$, $0.304$, $0.312$, $0.326$ and $0.311$ at $44^2$, $88^2$,
+$220^2$, $330^2$ and $440^2$, with second seeds at $220^2$ and $330^2$ within $0.01$, and
+the calibration stays between $0.92$ and $0.98$. With one tiling the error
+is $0.42$--$0.46$ at every size; interpolation stays at $0.81$--$0.83$ and the
+blended decoder floor at $0.13$--$0.14$. Nothing degrades with the domain,
+and there is no sign of a size beyond which the method stops working
+(Fig.~\ref{fig:da_2d}b,d).
 
-An unlocalized filter with the same 64 members does what the bound of
-Sec.~\ref{sec:da_setting} predicts. At $44^2$, where $64$ exceeds the
-$42$--$44$ unstable directions, it helps (skill $2.31$); at $66^2$, with
-$93$--$101$, and at $88^2$, with about 170, it is worse than no
-assimilation ($0.94$ and $0.83$). Doubling the ensemble to 128 restores
-skill where 128 exceeds $n_+$ ($3.47$ at $44^2$, $2.22$ at $66^2$) and not where
-it does not ($1.11$ at $88^2$). The dense filter with Gaspari--Cohn
-localization, which applies the same taper to the full covariance,
-works at every size it can be run at ($3.40$--$3.65$), $11$--$14\%$ below the
-per-site filter, but its memory grows with the square of the area
-(Sec.~\ref{sec:da_cost}), and beyond $220^2$ we did not run it.
+\para{The ensemble does not grow with the domain.} With four tilings, the
+error is $0.450$, $0.352$, $0.330$, $0.324$ and $0.322$ for $8$, $16$, $32$, $64$ and $128$
+members per tiling at $44^2$, and $0.329$, $0.315$, $0.312$ and $0.311$ for $16$ to $128$ at
+$220^2$ (Fig.~\ref{fig:da_2d}c): accuracy saturates by about 32 members per
+tiling at both sizes. Equation~\eqref{eq:nens_local} with the 2D KS
+density of $0.043$ per unit area and the taper's support (radius $16.5$
+length units) gives about $37$, consistent with that saturation.
 
-\para{Ensemble size.} Table~\ref{tab:da_2d_ensemble} shows the per-site
-filter's skill against ensemble size. It is the same at every domain
-size: about $1.1$ with 8 members, $1.8$--$2.1$ with 16, $3.3$--$3.8$ with 32,
-$3.8$--$4.2$ with 64 and slightly lower again with 128. That the required
-ensemble does not depend on the domain size is the point. The level it
-settles at is set by the local problem: Eq.~\eqref{eq:nens_local} with
-the 2D KS density of $0.043$ per unit area and the taper's support (radius
-$33$ length units) gives an estimate of about 150, far above the 32--64
-members that suffice, so the heuristic is conservative here, as one
-expects when the errors inside the support are dominated by a few
-unstable directions. The dense filter with localization already reaches
-$3.5$--$3.8$ with 16 members, where the per-site filter does not. The
-deterministic transform behaves like the perturbed-observation update
-at every ensemble size ($1.87$ at 16 members), so observation sampling
-noise is not the cause. The likely cause is the localization form: the
-dense filter tapers the covariance itself, while the per-site filter
-tapers only the observation errors and uses the untapered sample
-covariance among the sites inside its support, which 16 members estimate
-poorly. We have not tested this.
+\para{Without localization.} \placeholder{P1: unlocalized filter (the same
+filter with the taper set to 1), 64 and 128 members, one and four tilings,
+at $44^2$, $66^2$, $88^2$; truth $n_+ = 42$--$44$ at $44^2$ and $93$--$101$ at $66^2$. Expected
+from the 6-channel record: works where $\Nens > n_+$, fails beyond;
+state whether the tilings rescue it.}
 
-\para{Calibration and model noise.} The ensemble is over-confident:
-its spread is about a third of its error at every size ($0.33$--$0.37$ for
-the per-site filter, $0.40$--$0.43$ for the dense one). Inflating the
-forecast perturbations by up to $20\%$ changes neither skill nor
-calibration by more than $9\%$ (Appendix~\ref{app:da}): with four observations per
-site, the analysis is set by the observations rather than by the prior
-spread. The model noise is the effective control. Halving it from $0.08$ to
-$0.04$ raises the skill by $13$--$14\%$ and lowers the calibration by $0.03$, by
-the same amounts at $44^2$, $88^2$ and $220^2$ (skill $4.79$, $4.55$, $4.33$), so this
-trade-off, too, does not depend on the domain size.
-
-\para{In physical space.} The latent error is measured against the
-encoded truth, so it cannot see what the decoder loses. Decoding the
-analysis mean, its root-mean-square error against the true field in
-steady state is $1.05$, $0.99$, $1.01$ and $1.02$ at $44^2$, $88^2$, $220^2$ and
-$330^2$, and $0.79$--$0.82$ at the observed points (observation error $0.62$
-in these units), against a floor of $0.65$--$0.69$ for the decoder alone,
-$\|\Dec(\E(u))-u\|$. The analysis error does not depend on the domain
-size, and about $40\%$ of its variance is the decoder's. (The field's
-standard deviation grows from $4.0$ at $44^2$ to $9.1$ at $330^2$ as larger
-domains hold more large-scale variability, so the error relative to the
-field shrinks with size.) In physical space the skill is $4.5$--$6.2$,
-against $3.8$--$4.2$ in latent space. The decoder's error sits mostly at
-patch edges: at every size from $44^2$ to $330^2$ the mean gradient across a
-patch edge is $3.6$ times that inside a patch in the reconstruction of
-the true field, $3.8$ times in the analysis and $3.0$ in the free run,
-against $1.0$ in the truth. These are the seams of Sec.~\ref{sec:scaling},
-set by the decoder and barely changed by the assimilation
-(Fig.~\ref{fig:da_snapshot}).
+\para{Long runs.} \placeholder{P3: 300 cycles at $220^2$ --- drift or not.}
 
 \begin{figure*}[htbp]
 \centering
-\includegraphics{figures/fig11_da_snapshot.pdf}
-\caption{One steady-state analysis at $330^2$ ($\dlat=21\,600$, 64 members,
-cycle 78 of 100), fields divided by the training standard deviation.
-Top: the whole domain; the square marks the $55\times55$ window shown
-below. (a, e) Truth, with the observation sites in the window; (b, f)
-free run, the mean of the 64 unassimilated members, which have
-decorrelated from the truth and from each other, so their mean keeps
-only the large-scale pattern; (c, g) analysis, the decoded ensemble
-mean; (d, h) analysis error, with patch edges drawn in the window.
-Root-mean-square errors in field units. The analysis recovers the
-cellular pattern everywhere; much of its residual error is small-scale
-and largest at patch edges.}
-\label{fig:da_snapshot}
-\end{figure*}
-
-\begin{figure*}[htbp]
-\centering
-\includegraphics{figures/fig09_2d_da.pdf}
-\caption{Data assimilation in the 2D KS latent field. (a) Magnitude of
-the observation Jacobian at $44^2$, computed densely by reverse-mode
-differentiation, with observations sorted by the site that owns them
-(12 of the 64 sites): it is exactly zero outside the six columns of each
-site (largest off-block entry $0$, largest entry $1.6$), as
-Proposition~\ref{prop:blockdiag} states. (b) Steady-state skill against
-domain area with 64 members (and 128 for the unlocalized filter): the
-per-site filter keeps its skill over a hundredfold area; the
-unlocalized filter fails where the truth's $n_+$ ($42$--$44$ at $44^2$,
-$93$--$101$ at $66^2$) exceeds the ensemble. (c) Skill against ensemble size
-for the per-site filter at three sizes, and for the dense filter with
-Gaspari--Cohn localization at $44^2$. (d) Per-cycle analysis error,
-spread and free-run error at $330^2$ ($\dlat=21\,600$); shaded: the
-steady-state window. (e) Peak memory of the filter alone against latent
-dimension, with guides proportional to $\dlat$ and $\dlat^2$ through the
-$88^2$ points; from $220^2$ to $330^2$ the per-site filter's memory grows less
-than linearly. (f) Skill against observation spacing in units of the
-site length, for 2D KS at $44^2$ and 1D KS at $L=200$: assimilation fails once the spacing
-reaches the site length in both systems.}
+\includegraphics{figures/fig09_p2_da.pdf}
+\caption{Data assimilation in the 2D KS latent field with shifted
+tilings. (a) Magnitude of the latent observation Jacobian at $44^2$,
+computed densely by reverse-mode differentiation, observations sorted by
+the site that owns them (12 of 64 sites): it is exactly zero outside the
+12 columns of each site, as Proposition~\ref{prop:blockdiag} states. (b)
+Steady-state analysis error against domain area, one tiling and four
+(all seeds as points), with interpolation of the observations, the
+decoder floors and the physical-space filter run with the true equations
+at $44^2$. (c) Error against members per tiling at $44^2$ and $220^2$. (d)
+Per-cycle analysis error and spread at $440^2$ ($\dlat=76\,800$ per tiling),
+four tilings, and the one-tiling error; shaded: the steady-state window.
+(e) Equal resources at $44^2$, mean and range over three seeds: a fixed total
+of 64 members split over one, two and four tilings, and four ensembles of
+64 on one tiling or on four shifted tilings. (f) Error against the number
+of tilings, 64 members each, with spread over error printed at each point
+and for uniform weights. One model and one setting hold over a hundredfold
+area, and the gain comes from the offsets of the tilings, not from the
+number of members.}
 \label{fig:da_2d}
 \end{figure*}
 
 \begin{table*}[htbp]
 \caption{2D KS data assimilation across domain sizes, steady-state
-skill (calibration in parentheses), observation spacing $2.75$, 100
-cycles. $n_+$: positive Lyapunov exponents of the truth; $^a$of the
-transferred model, no truth at this size. Per-site: the per-site filter
-with 64 members, seed 0 and, after the comma, seed 1. Dense GC: dense
-filter with Gaspari--Cohn localization, 64 members. Unlocalized: dense
-filter without localization, 64 and 128 members. ---: not run (the dense
-filter's memory grows with the square of the area).}
+analysis error in field units (cycles 51--100, 100 cycles), 64 members per
+tiling. $\dlat$: latent dimension per tiling. Four tilings: seed 0, then
+further seeds. Calibration: spread over error, four tilings, seed 0.
+Interpolation: cubic spline of the observations. Decoder floor:
+$\|\Dec(\E(u))-u\|$ with one tiling and blended over four. Free run: the
+ensemble mean without assimilation, whose error depends on the truth's
+large-scale variability (seed 0 at $330^2$ has a larger field variance; its
+seed 1 gives $5.3$). ---: not run.}
 \label{tab:da_2d_sizes}
-\widetabular{lcccccc}{
-size & $\dlat$ & $n_+$ & per-site, 64 & dense GC, 64 & unlocalized, 64 & unlocalized, 128 \\
+\widetabular{lcccccccc}{
+size & $\dlat$ & 1 tiling & 4 tilings & calibration & interpolation & floor, 1 & floor, 4 & free run \\
 \hline
-\tabinput{tables/tab07_2d_sizes}}
+\tabinput{tables/tab07_p2_sizes}}
 \end{table*}
 
+%----------------------------------------------------------------------
+\subsection{Learned versus physics-based filters under model error}
+\label{sec:da_model_error}
+%----------------------------------------------------------------------
+
+No forecast model of a real system is correct, and for many systems of
+interest, convection-permitting weather models among them, the model
+error is large, structural and poorly known. Measurement error, by
+contrast, is usually well characterized, which is why the model of this
+section is trained on noisy fields. The question is then not whether a
+learned filter beats a filter that knows the equations; with the true
+equations the physics-based filter reaches $0.076$, four times better than
+the latent filter's $0.31$. It is how wrong a physical model has to be
+before a model learned from noisy data is the better choice, once the
+physics-based filter is given every standard remedy for model error.
+
+\para{Design.} The truth is the 2D KS equation, the system the latent
+model was trained on, and its error, $0.312$ averaged over seeds 0--2
+($0.302$--$0.324$), is fixed: it was not tuned for this section. The
+comparator is the physical-space local ensemble transform filter of
+Sec.~\ref{sec:da_method}, with the same observations, whose forecast
+model is wrong in one of four ways (Appendix~\ref{app:da}):
+\begin{itemize}
+\item \emph{a wrong coefficient}, $a\nabla^2u$ with $a=1.1$ or $1.25$;
+\item \emph{a spurious process}: uniform advection at speed $1$ or $2$, or a
+  fixed terrain-like forcing of amplitude $0.2$ or $0.4$;
+\item \emph{a coarse grid}, $64^2$ or $32^2$ instead of $128^2$;
+\item \emph{a wrong form of the damping}: $-a\nabla^2u - b(-\nabla^2)^{p/2}u -
+  (g/2)|\nabla u|^2$ with damping order $p=5$, $6$ or $8$ instead of $4$, whose three
+  coefficients are all estimated online, so that no coefficient is left
+  wrong but no setting of them reproduces the KS growth-rate curve.
+\end{itemize}
+Each physics-based filter is given, and tuned on seed 0 over, the RTPS
+weight and the localization radius; online estimation of the parameter
+it gets wrong (the coefficient, the advection speed, or $a$, $b$ and $g$
+jointly); and bias correction with additive model error estimated
+offline from one-cycle residuals on an independent trajectory. Its
+reported value is its best configuration on seed 0, confirmed on seeds
+1--2; the decision rule (a filter wins if its three-seed mean is at least
+$10\%$ lower and it is lower on every seed) was written down before the
+runs.
+
+\para{Results.} Table~\ref{tab:da_model_error} orders the cases by the
+physics-based filter's difficulty. It wins clearly when its model error
+is one it can correct: with the $\nabla^2$ coefficient $10\%$ off and estimated
+online it reaches $0.225$; bias correction removes the fixed forcing
+entirely ($0.225$ at both amplitudes); and the coarse grids lose little
+($0.083$ and $0.181$; bias correction does not help there). It loses when the error is larger or of the wrong form:
+with the coefficient $25\%$ off, online estimation brings it from $0.48$ to
+$0.42$, still $1.35$ times the latent filter's error; with spurious
+advection, estimation of the speed leaves $0.44$ and $0.55$, $1.4$ and $1.8$
+times. With the wrong damping order the tuned filter reaches $0.289$,
+$0.343$ and $0.420$ for $p = 5$, $6$ and $8$ \placeholder{P6: with joint online
+estimation of $a$, $b$, $g$ and RTPS 0.6: final 3-seed values and outcomes}; bias
+correction does nothing for these state-dependent errors ($0.297$, $0.361$
+and $0.440$ on seed 0).
+
+\para{The crossover.} What decides the comparison is not the size of the
+physics model's one-cycle forecast error but its \emph{state-dependent}
+part: the residual left after subtracting the mean one-cycle error,
+which bias correction removes. The fixed forcing of amplitude $0.4$ has a
+one-cycle error of $0.20$, but only $0.016$ of it is state-dependent, and the
+physics-based filter wins. Every case whose state-dependent one-cycle
+error is below $0.08$ (the grids, the forcing, the $10\%$ coefficient, damping
+order 5, $0.000$--$0.077$) is a win or a tie for the physics-based filter; every
+case at $0.2$ or above (the $25\%$ coefficient, the advection, damping order
+8) is a win for the latent filter; order 6, at $0.12$, lies between
+\placeholder{P8: final placement of order 6 and of the hidden-process cases;
+state the threshold}. The crossover is therefore near $0.1$ in field units, a
+sixth of the observation error: a physical model whose one-cycle error,
+after bias correction, exceeds about a sixth of the observation error is
+worth replacing by a model learned from data, and one below it is not.
+\placeholder{P7: J17B, an unobserved slow field feeding back on the
+observed one; both filters' errors, the floor with the true two-field
+model, and where the two levels fall on the crossover.}
+
+\para{Robustness.} The physics-based filter works only in a narrow window
+of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
+RTPS $0.5$, $0.6$, $0.7$, $0.9$ and $1.0$ ($c=16$), and multiplicative inflation
+without RTPS diverged or was far worse in every wrong-model case. At its
+best setting it is over-dispersed, with spread over error $1.7$--$2.0$. The
+latent filter used one setting throughout and was not retuned for any
+case. \placeholder{P9: the same comparison at $220^2$, if J5 is run.}
+
+\para{What this does and does not show.} The comparison is between a
+learned model with complete noisy training fields of the true system and
+a physical model with a chosen, not calibrated, error; real training data
+are sparser, and real model errors are not of our choosing. The latent
+filter's error is about four times that of a filter with the correct
+equations, so where a trustworthy model exists it should be used. The
+result is the location of the crossover and the observation that it is
+set by the state-dependent part of the model error, which is the part
+that parameter estimation and bias correction cannot reach.
+
 \begin{table*}[htbp]
-\caption{Steady-state skill against ensemble size, 2D KS. Per-site
-filter (perturbed observations) at four domain sizes; its deterministic
-transform variant at $44^2$; dense filter with Gaspari--Cohn localization
-at three sizes. ---: not run.}
-\label{tab:da_2d_ensemble}
-\widetabular{ccccccccc}{
-$\Nens$ & per-site $44^2$ & $66^2$ & $88^2$ & $220^2$ & transform $44^2$ & dense GC $44^2$ & $66^2$ & $88^2$ \\
+\caption{Learned versus physics-based filters under model error, 2D KS at
+$44^2$, steady-state analysis error in field units, mean over seeds 0--2
+(range). One-cycle error: the physics model's root-mean-square one-cycle
+forecast error from the true state on an independent trajectory, total
+and state-dependent (after subtracting its mean). Tuned: best RTPS and
+localization. Best: best configuration including online parameter
+estimation (est.) or bias correction (bc), selected on seed 0. The latent
+filter is the same in every row: $0.312$ ($0.302$--$0.324$). Provisional rows are
+marked; Block K2c regenerates the table from the result files.}
+\label{tab:da_model_error}
+\widetabular{lccccc}{
+physics model & one-cycle error & tuned & best & remedy & outcome \\
 \hline
-\tabinput{tables/tab07_2d_ensemble}}
+true equations & $0$ / $0$ & $0.076$ & $0.076$ & --- & floor \\
+$64^2$ grid & $0.000$ / $0.000$ & $0.083$ ($0.077$--$0.088$) & $0.083$ & --- & physics \\
+$32^2$ grid & $0.037$ / $0.036$ & $0.181$ ($0.180$--$0.184$) & $0.181$ & none helps & physics $1.7\times$ \\
+forcing $0.2$ & $0.101$ / $0.008$ & $0.248$ ($0.244$--$0.251$) & $0.225$ ($0.218$--$0.230$) & bc & physics $1.4\times$ \\
+forcing $0.4$ & $0.203$ / $0.016$ & $0.296$ ($0.294$--$0.298$) & $0.225$ ($0.219$--$0.229$) & bc & physics $1.4\times$ \\
+$\nabla^2$ coefficient $1.1$ & $0.082$ / $0.077$ & $0.322$ ($0.318$--$0.325$) & $0.225$ ($0.218$--$0.229$) & est. & physics $1.4\times$ \\
+damping order $5$ & $0.072$ / $0.069$ & $0.289$ ($0.280$--$0.296$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
+damping order $6$ & $0.129$ / $0.123$ & $0.343$ ($0.335$--$0.351$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
+$\nabla^2$ coefficient $1.25$ & $0.210$ / $0.199$ & $0.481$ ($0.475$--$0.488$) & $0.420$ ($0.416$--$0.423$) & est. & latent $1.35\times$ \\
+damping order $8$ & $0.210$ / $0.201$ & $0.420$ ($0.412$--$0.432$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
+advection $1$ & $0.78$ / $0.72$ & $0.584$ ($0.581$--$0.587$) & $0.436$ ($0.430$--$0.440$) & est. & latent $1.4\times$ \\
+advection $2$ & $1.53$ / $1.42$ & $0.869$ ($0.863$--$0.876$) & $0.553$ ($0.546$--$0.559$) & est. & latent $1.8\times$ \\
+hidden slow field & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} \\
+}
 \end{table*}
+
+%----------------------------------------------------------------------
+% K5.6-K5.8 (noisy training; forecasts, robustness, observation density and the 1D results; cost)
+% are still to be rewritten. The 1D subsection and the cost subsection below are the previous text.
+%----------------------------------------------------------------------
+\para{\placeholder{To be rewritten (Block K5.6--K5.8): noisy training (J18), forecasts from the
+analyses (I7), robustness (I16), observation density with the Part~II model (K10a), and cost
+(I14). The two subsections below are the previous text.}}
 
 %----------------------------------------------------------------------
 \subsection{Observation density and the one-dimensional results}

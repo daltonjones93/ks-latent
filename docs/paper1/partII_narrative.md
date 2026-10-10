@@ -2,7 +2,7 @@
 
 The skeleton of §7, the Part II sentences of the abstract, Key Point 3, the §1 bullet and the §10
 paragraph. Every number comes from a JSON in `artifacts/experiments/da2d/` (named in brackets).
-Units: physical RMSE in field units (2D KS at 44²: field std ≈ 3.75, σ_obs = 0.1 standardized ≈ 0.40).
+Units: physical RMSE in field units. σ_obs = 0.1 × the training-data std (6.17) = **0.62 field units** (the 44² truth's own field std is ≈ 3.75; corrected 2026-10-10 — earlier drafts said ≈ 0.40).
 Steady state = cycles 51–100. Placeholders `[[Pn]]` are listed at the end with the run that fills them.
 
 **Setting.** Part II uses `p7c12d10_ks2d`: the Part I architecture with 12 channels per site, trained
@@ -118,7 +118,7 @@ set by the physics model's irreducible one-cycle forecast error relative to the 
   correction removes). Every case where it is ≤ 0.077 (64², 32², forcing 0.008–0.016, coefficient 1.1,
   order 5) is a physics win or tie; every case where it is ≥ 0.2 (coefficient 1.25, mean flow, order 8
   pending) is a latent win. Order 6 (total 0.129) sits in between. So the crossover is near 0.1 field
-  units ≈ 0.27 σ_obs (σ_obs ≈ 0.375 at 44²). Caveat: for the estimated cases the offline value is at
+  units ≈ 0.16 σ_obs (σ_obs = 0.62 field units: a sixth of the observation error). Caveat: for the estimated cases the offline value is at
   the wrong starting parameter; estimation lowers the effective error, so the true crossover can only
   be lower than these points suggest for those rows. The forcing cases show why the total error is the
   wrong axis: 0.2 total, but almost all bias.

@@ -51,3 +51,8 @@
   \renewenvironment{tabular}[1]{\rt@tabular{##1}\hline\hline\noalign{\vskip2pt}}%
     {\noalign{\vskip2pt}\hline\hline\rt@endtabular}}{\par}}{}
 \makeatother
+
+% Placeholder for numbers that pending runs will fill (Block K; see docs/paper1/partII_narrative.md,
+% table P1-P12). Renders in red so none survives into a submitted draft unnoticed.
+\providecommand{\textcolor}[2]{#2}
+\newcommand{\placeholder}[1]{\textcolor{red}{\textbf{[#1]}}}
