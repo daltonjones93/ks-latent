@@ -195,3 +195,28 @@ latent filter error by a third without retraining, and one setting holds over a 
 - Correction found while writing K0: the "≈ 0.25 decoder floor" is the single-tiling floor. With four
   tilings the blended decoder floor is 0.13, so the 0.31 analysis is mostly filter error. K0 claim 6
   and K5.3 must say this (the earlier "the floor is the decoder's" framing applies to K = 1 only).
+
+## Filled 2026-10-10 ~16:00 (results that landed)
+- **P6 (partial), J17H joint (a, b, g) estimation, seed 0** (after the print-bug rerun): order 5 0.266, order 6
+  0.323, order 8 0.425 (tuned only: 0.296 / 0.351 / 0.432; RTPS 0.6 c 8.25: 0.289 / 0.356 / 0.420). Estimation
+  helps orders 5–6 by ~10%, order 8 by 2%. Seeds 1–2 running for the best configs. Provisional reading:
+  order 5 physics wins (~0.27 vs 0.31), order 6 tie (0.323 vs 0.324 on seed 0), order 8 latent 1.35×.
+  Consistent with the crossover at state-dependent one-cycle error ≈ 0.1 (orders 5/6/8: 0.069/0.123/0.201).
+- **P10 observation density (K10a, 44², seed 0):** stride 4 (1.4 units): 4 tilings 0.226 (cal. 0.86), 1 tiling
+  0.333, interpolation 0.539. Stride 8: 0.324 / 0.457 / 0.829. Stride 16 (5.5 units, one observation per
+  site): 0.769 (cal. 1.06) / 0.990 / interpolation 3.008 — 4× better than interpolation. 300 cycles at
+  stride 16: 50-cycle block means 0.55, 0.77, 0.72, 0.82, 0.72, 0.86 — bounded, slowly fluctuating,
+  possibly a weak upward trend; no divergence (the 6-channel/clean-model drift warning does not reproduce
+  with the Part II model over 300 cycles).
+- **P11 forecasts (I7, 44², 3 seeds, 10 starts each):** blended-analysis forecast error at leads of 1 / 5 /
+  10 / 20 / 40 / 60 cycles (0.5 time units each): seed 0 0.38 / 0.79 / 1.42 / 2.87 / 4.66 / 4.93, single
+  tiling 0.51 / 0.92 / 1.62 / 3.33 / 5.19 / 5.49, forecast from the encoded truth 0.21 / 0.56 / 1.08 / 2.40
+  / 4.57 / 4.95, persistence 0.75 / 3.00 / 4.58 / 5.44, field std ≈ 3.8–4.2. The blend's advantage persists:
+  26% at 1 cycle, 12–14% at 10–20 cycles (≈ 0.8–1.6 Lyapunov times), gone by ~40 cycles. Same on seeds 1–2.
+  → branch A ("a better initial condition, not only a smoother picture").
+- **P12 robustness (I16a/b):** a climatological initial ensemble (no knowledge of the truth) starts at 1.33
+  and reaches the steady state within ~8 cycles; its steady error is identical (0.324) to the run started
+  from the encoded truth: the filter forgets its initial ensemble. Assumed observation error 0.5× / 2× the
+  true: 0.351 (cal. 0.58) / 0.338 (cal. 1.40) vs 0.324 (0.92): 4–8% worse, calibration moves as expected.
+- Still pending: P1 (~21:00), P2 (overnight), P3 (I16c 300 cycles at 220², running), P4 (~23:00), P7 (J17B:
+  ε = 0.1 model trained 15:54, latent runs next; ε = 0.2 later), P9 (overnight).
