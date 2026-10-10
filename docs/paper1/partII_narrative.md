@@ -25,8 +25,11 @@ no retraining, removes the patch seams, and uses members better than one larger 
 - More tilings: K = 2 0.369, K = 4 0.324, K = 16 **0.287** (spread/error 0.97 → 0.92 → 0.51: accuracy
   vs calibration trade-off; K = 4 is the calibrated default) [`h9_D10_L44_I4_*`].
 - Equal total of 64 members: 1 × 64 0.457 / 0.431 / 0.418; 4 × 16 **0.352 / 0.334 / 0.318** (23–24%
-  better on every seed) [`h9_D10_L44_I2_*`]. Control: four ensembles on the SAME tiling give no gain
-  (6-channel record: 0.943 vs 0.951), so the gain comes from the offsets, not the member count.
+  better on every seed) [`h9_D10_L44_I2_*`].
+- **Control (Part II model, 2026-10-10):** four ensembles of 64 on the SAME tiling, blended the same way:
+  0.450 / 0.423 / 0.412 (spread/error 0.44–0.48), i.e. no better than one tiling (0.457 / 0.431 / 0.418)
+  and badly under-dispersed, against 0.324 / 0.310 / 0.302 (0.92–0.99) for four shifted tilings
+  [`h9_K2b_ctrl_T4_s*`]. The gain comes from the offsets, not from more members or from averaging.
 - Seams (edge/interior gradient ratio, truth 1.02): one tiling 1.73, blend **1.02** [`seams_I9.json`].
 - Mechanism: the single-tiling analysis error is tied to the patch lattice; the tilings' errors are
   only weakly correlated (0.11–0.42 by wavenumber band) so they average down [`h9_D10_L44_diag_T4`].

@@ -625,3 +625,40 @@ model gives 0.338 / 0.322 / 0.320. Decoder floor 0.251 vs 0.287; D_KY at 44² 3.
 Also today: the redesigned I28 (truth = the system the model was trained on; the physics filter's
 model is wrong). The learned filter ties or wins in 5 of 6 wrong-dynamics cases; resolution-only
 error favours the physics filter. 12-channel scaling 44²–440² is flat (0.32–0.34).
+
+## 2026-10-10 — Block K1: scope of the Part II rewrite
+Part II (§7, §3.8, App. E, front matter, §9, §10) is rewritten for the method now reported:
+`p7c12d10_ks2d` (12 channels, trained only on noisy fields), per-site local ETKF in latent space,
+GC 1.5 sites, RTPS 0.7, 4 Hann-blended shifted tilings, 64 members per tiling, stride 8.
+
+**Dropped from §7** (they describe the superseded 6-channel, single-tiling, stochastic-EnKF filter):
+- free-run "skill" as the primary metric (kept as one column; physical RMSE in field units leads,
+  against interpolation, climatological OI, decoder floors and the perfect-model PDE floor);
+- the dense Schur-product filter, its memory comparison and the 11–14% dense-vs-per-site gap;
+- model noise 0.08 and the inflation sweep (`tabE_inflation`, deleted);
+- calibration 0.33–0.37 and the "spread is a third of the error" paragraph (now 0.92–0.99);
+- seam ratios 3.6× (now 1.73 single tiling, 1.02 blended);
+- the old observation-density numbers (7.8 / 4.2 / 1.2 / 1.0) — replaced by K10(a).
+- Old tables `tab07_2d_sizes`, `tab07_2d_ensemble`, `tab_da_cost`, `tabE_inflation` and Fig. 9/11 are
+  superseded by `tab07_p2_sizes`, `tab07_p2_members` (K2a/b), K2e, and K3a/K3f. The old scripts and
+  files stay in the repository as the record.
+
+**Unlocalized-filter failure (user):** rerun with the Part II model (`scripts/run_k1_unloc.sh`: 44²,
+66², 88²; N = 64 and 128; K = 1 and 4; unlocalized = the same filter with taper ≡ 1), not quoted from
+the 6-channel runs.
+
+**1D results (user: keep in §7 only if remarkably good for the thesis):** keep one compact §7
+subsection with the two distinctive results — (i) without localization the required ensemble
+doubles with every doubling of the domain, while localized filters need 16 members at every size;
+(ii) distance localization in the latent field beats distance-free sampling error correction by up to
+3.5×. The L = 100 sweep, observation-spacing numbers and SEC implementation details move to App. E.
+
+**Sparse-observation stability** (I30–I32, stride-16 cycling): one limitation paragraph in §7 and §9;
+the rest to the DA follow-up paper (decision of 2026-10-09 unchanged).
+
+**Part I** is untouched except the two-model statement, App. D's 12-channel D_KY note, and one
+sentence in §6 pointing to the seam removal by the tilings.
+
+**Correction recorded with K1:** the decoder floor that limits the filter is 0.24–0.25 for one tiling
+but 0.13 for the 4-tiling blend; the 0.31 analysis error is therefore mostly filter error. Text must
+not say "the latent filter's floor is the decoder's" for the blended method.

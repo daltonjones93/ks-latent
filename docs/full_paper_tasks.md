@@ -2586,7 +2586,10 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
 - Write K0 as a half-page `docs/paper1/partII_narrative.md`, with the final numbers filled from K2,
   and keep it in sync as J17B/J18a/I7/I16 land. ~1 h.
 
-### K1 `[ ]` Scope decisions: what Part II drops, keeps as reference, or moves (decide before writing)
+### K1 `[x]` Scope decisions: what Part II drops, keeps as reference, or moves (decide before writing)
+- **Done 2026-10-10** → `docs/paper1/decisions.md` "Block K1". Unlocalized failure rerun with the Part II
+  model (`run_k1_unloc.sh`); 1D kept as one compact §7 subsection (two distinctive results), details to
+  App. E; old tables/figures superseded, files kept as the record.
 - **Drop from §7** (they describe the old filter): the "skill" metric as the primary number (keep
   free-run skill as one column only); the dense Schur-product filter and its memory comparison; model
   noise 0.08 / inflation sweep (tabE_inflation); calibration 0.33–0.37 and the "spread is a third of
@@ -2610,7 +2613,15 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
   the §6 seam sentence gaining "removed by the tilings of Part II (Sec. 7.2)".
 - Record the decisions in `docs/paper1/decisions.md`. ~1 h.
 
-### K2 `[ ]` Tables (regenerate every Part II table from JSONs; scripts in `scripts/paper_figures/`)
+### K2 `[~]` Tables (regenerate every Part II table from JSONs; scripts in `scripts/paper_figures/`)
+- **K2a + K2b done 2026-10-10** (`scripts/paper_figures/tab07_p2_tables.py` → `tables/tab07_p2_sizes.tex`,
+  `tables/tab07_p2_members.tex`, each with `.meta.json`). Rerun the script when these land (rows fill
+  in automatically): 66² (`h9_K1l_L66_*`, ~21:00); the same-tiling control row (`h9_K2b_ctrl_T4_s*`,
+  running); 220² N = 8 (not run; optional).
+  - Column layouts for the LaTeX wrappers (K5): sizes = size & d & RMSE 1 tiling & RMSE 4 tilings (seeds)
+    & spread/error & interpolation & decoder floor 1 & decoder floor 4 & free run; members = 5 columns,
+    three titled blocks. The 330² seed-0 free-run error (10.1) reflects that truth's larger field
+    variability (seed 1: 5.3); say so in the caption or drop the free-run column.
 - **K2a `tab07_2d_sizes` → "accuracy across sizes".** Rows 44², 88², 220², 330², 440²; columns: d,
   K = 1 RMSE, K = 4 RMSE (seed 0, seed 1), spread/error, interpolation, climatological OI, decoder
   floor (K = 4 blend), free-run skill. Inputs: `h9_D10_L{44,88,220,330,440}_I1_T{1,4}*.json`,
