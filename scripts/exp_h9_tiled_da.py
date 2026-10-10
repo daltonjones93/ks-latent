@@ -48,6 +48,15 @@ def interp_periodic(obs: np.ndarray, s: int, NX: int) -> np.ndarray:
     return sp(x, x)
 
 
+def parse_memory(spec):
+    """'eps,tau,kappa[,coupling]' -> MemoryParams (J17B), or None."""
+    if not spec:
+        return None
+    from ks_latent.solver.ks2d_memory import MemoryParams
+    f = spec.split(",")
+    return MemoryParams(float(f[0]), float(f[1]), float(f[2]), f[3] if len(f) > 3 else "lap")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="p7b_ks2d")
@@ -76,6 +85,8 @@ def main() -> None:
                          "(ks_latent/solver/twin.py); the models keep a = 1. Default 1: perfect-model twin.")
     ap.add_argument("--truth-advect-x", type=float, default=0.0, help="I28: truth has mean-flow advection c (x); models do not")
     ap.add_argument("--truth-forcing-amp", type=float, default=0.0, help="I28: truth has terrain-like forcing (std); models do not")
+    ap.add_argument("--truth-memory", default=None,
+                    help="J17B: 'eps,tau,kappa[,coupling]' -- truth has the hidden memory field v (ks2d_memory.py)")
     ap.add_argument("--truth-cubic", type=float, default=0.0,
                     help="J17A: truth u_t = KS(u) - beta P[u'^3] (the latent model is trained on that system's data)")
     ap.add_argument("--tiling-reset", action="store_true",
@@ -142,9 +153,15 @@ def main() -> None:
     if not cache.exists():
         np.save(cache, spinup2d(kcfg, np.random.default_rng(a.seed + 500)))
     from ks_latent.solver.twin import twin_truth
-    u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
-                             cubic=a.truth_cubic)
-    truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, **truth_kw)
+    if a.truth_memory:  # J17B: hidden memory field; only u is ever used (observed / scored)
+        from ks_latent.solver.ks2d_memory import integrate_memory, memory_truth
+        mp = parse_memory(a.truth_memory)
+        u0, v0 = memory_truth(kcfg, a.seed, mp)
+        truth = integrate_memory(u0, v0, kcfg, a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, mp)[0]
+    else:
+        u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
+                                 cubic=a.truth_cubic)
+        truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, **truth_kw)
     truth = ((truth.reshape(truth.shape[0], -1) - mean) / std).reshape(-1, NX, NX)
 
     s, N, hp = a.obs_stride, a.n_ensemble, patch // 2

@@ -2300,6 +2300,16 @@ completely.
     - β = 2.2e-3: std 2.92–3.07 (20% lower), max 10.1; separation 1e-8 → 0.06 in 100 units (still
       chaotic, weaker growth).
   - Truth D_KY at 44² (A3): `j17a_truth_lyap.py`, G1 settings (150 directions), running.
+- **Paper wording for the J17A process (user, 2026-10-10).** Describe −βu′³ as "a Swift–Hohenberg-type
+  cubic saturation absent from the forecast model". Points to make:
+  - −u³ is the classic saturating term of the Swift–Hohenberg equation, u_t = ru − (1 + ∇²)²u − u³,
+    which shares KS's ∇²/∇⁴ structure (citation to verify).
+  - It has no linear part, so KS's linear instability (fastest-growing wavenumber 1/√2) is unchanged;
+    it only saturates large amplitudes.
+  - The system stays chaotic: field std −13% (β = 1.1e-3) and −20% (2.2e-3); twin-start growth
+    comparable to standard KS (A1); truth D_KY from A3.
+  - No literature search was done (user decision): do not claim the KS + cubic system is new or that
+    it was used before; present it purely as a controlled missing process.
 - **Pre-registered decision rule.**
   - Physics filter: the best configuration over the A6 grid (RTPS, c; bias correction ± Q;
     ∇²-coefficient estimation), **selected on seed 0**, then run on seeds 0–2.
@@ -2311,6 +2321,61 @@ completely.
     seed. **Physics wins** under the mirror condition. Otherwise **tie** → run A9 (β = 2.2 × 10⁻³).
 - **Launched 2026-10-10 ~10:00:** A4 data (5 trajectories in parallel, `--only`) and the A1
   boundedness checks at both β levels.
+
+#### J17A interim results (2026-10-10, 11:40)
+- **A3 truth D_KY (β = 1.1e-3): 76.1** (standard KS 81.8, −7%), λ₁ = 0.154, 38 positive exponents.
+- **A4 data std** (raw field) 4.05; σ_obs = 0.405.
+- **One-cycle model error of the KS model** (seed 3, rms field units): 0.055 (bias 0.022). Smaller than
+  the J16 forcing-0.2 case (0.10), which the physics filter handled.
+- **A6 tuning, seed 0, no remedies:** best 0.190 (c = 8.25, RTPS 0.7); 0.192 at c = 16. Already below the
+  latent filter's usual ~0.31 and its decoder floor ~0.25 → the 15% level is a physics win (pending
+  formal completion).
+- **Lesson:** tendency share (15%) is the wrong strength measure; what matters is the one-cycle forecast
+  error relative to σ_obs.
+- **β scan of the one-cycle error and chaos** (44², seed 3; separation of starts 1e-6 apart after 100 units):
+
+  | β | one-cycle error (bias) | field std | separation after 100 u | regime |
+  |---|---|---|---|---|
+  | 1.1e-3 | 0.055 (0.022) | 3.27 | grows to O(1) | chaotic |
+  | 2.2e-3 | 0.074 (0.042) | 3.00 | grows | chaotic (weaker) |
+  | 3.3e-3 | — | 2.95 | 5.8e-4 | weakly chaotic (λ ≈ 0.06) |
+  | 4.4e-3 | 0.102 (0.087) | 2.65 | 2.7e-4 | weakly chaotic |
+  | 6.6e-3 | 0.103 (0.101) | 2.49 | 9e-7 (no growth) | **not chaotic** |
+  | 1e-2 | 0.167 (0.167) | 2.41 | 2e-8 | **steady pattern** |
+
+  The cubic process **cannot reach a one-cycle error of 0.2–0.3 while staying chaotic.** At large β the
+  error becomes almost pure bias (a frozen pattern), which bias correction removes exactly. So the
+  user-approved "strong level by forecast error" (option 2) is not achievable with −βu³.
+- **Launched:** the pre-registered A9 level β = 2.2e-3 (`run_j17a30.sh`: data, then training after the 15%
+  model, physics A6/A8, latent A7; truth D_KY via `j17a_truth_lyap.py`).
+- **Open decision (user):** for a large missing-process error that stays chaotic, a different process
+  is needed (state-dependent, not saturating), or Variant B (hidden memory).
+
+#### J17C (stopped) and J17H — structurally wrong physics model, all coefficients estimable (2026-10-10)
+- **J17A stopped (user).** The −βu³ truth cannot reach a large one-cycle error while chaotic (β scan above).
+- **J17C stopped (user).** Truth = standard KS, physics model = KS + spurious u³. Rejected: if its
+  coefficient is estimated it can go to zero, which recovers KS exactly (the J16 parametric case).
+- **J17H design (user-approved).** Truth = standard 2D KS (so the latent filter's existing result, 0.312
+  over seeds 0–2 with `p7c12d10_ks2d`, needs no retraining). The physics model is
+  u_t = −a∇²u − b(−∇²)^{p/2}u − (g/2)|∇u|², with damping order **p ≠ 4** (main level p = 6, ∇⁶
+  hyperdiffusion, a standard modelling choice in weather/climate models).
+  - **All coefficients (a, b, g) are estimated jointly online** (`--estimate-param abg`,
+    `param_est.global_params_update`), starting from the offline best fit.
+  - **No (a, b, g) reproduces KS**: the growth-rate curve aK² − bK^p has the wrong shape for p ≠ 4.
+  - The order p is the model's structure (the modeller's choice), not an estimated parameter.
+- **Code:** `ks2d.hyper_operator2d`; `exp_i11_pde_letkf.py --model-order/--model-hyper-coef/--model-nl-coef`,
+  `--estimate-param abg` (per-member operators and nonlinearity, b kept > 0);
+  `exp_j16_estimate_pde_model_error.py` model options; `exp_j17h_fit.py` (offline best fit on the
+  independent seed-3 truth: minimum one-cycle error = the irreducible structural error); `run_j17h.sh <p>`.
+  Tests: p = 4, a = b = 1 equals the standard operator; order-6 symbol; the nonlinearity coefficient
+  obeys KS's scaling symmetry u → u/g; the joint update equals the column-wise scalar updates and the
+  joint ensemble Kalman regression; per-column floors.
+- **Pre-registered decision rule (before any J17H DA run).** Physics filter: best configuration over
+  tuning (RTPS × c), joint (a, b, g) estimation, bias correction ± Q, and estimation + bias
+  correction, selected on seed 0, then run on seeds 0–2. Latent: 0.312 (existing, untouched). **Latent
+  wins** if the physics 3-seed mean is ≥ 10% higher and higher on every seed; mirror for a physics win;
+  otherwise tie. Strength is reported as the offline irreducible one-cycle error; levels p = 5, 6, 8
+  give a curve if they differ.
 
 #### Variant B — a hidden process with memory (realistic; probably the DA follow-up paper)
 Truth: u_t = KS(u) + ε v, and v_t = −v/τ + κ ∇²u (or κ u). Here v is an unobserved field with its own
