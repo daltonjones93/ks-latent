@@ -313,7 +313,7 @@ reported value is its best configuration on seed 0, confirmed on seeds
 $10\%$ lower and it is lower on every seed) was written down before the
 runs.
 
-\para{Results.} Table~\ref{tab:da_model_error} orders the cases by the
+\para{Results.} Table~\ref{tab:da_model_error} and Fig.~\ref{fig:model_error} order the cases by the
 physics-based filter's difficulty. It wins clearly when its model error
 is one it can correct: with the $\nabla^2$ coefficient $10\%$ off and estimated
 online it reaches $0.225$; bias correction removes the fixed forcing
@@ -322,8 +322,8 @@ entirely ($0.225$ at both amplitudes); and the coarse grids lose little
 with the coefficient $25\%$ off, online estimation brings it from $0.48$ to
 $0.42$, still $1.35$ times the latent filter's error; with spurious
 advection, estimation of the speed leaves $0.44$ and $0.55$, $1.4$ and $1.8$
-times. With the wrong damping order the tuned filter reaches $0.289$,
-$0.343$ and $0.420$ for $p = 5$, $6$ and $8$ \placeholder{P6: with joint online
+times. With the wrong damping order the tuned filter reaches $0.283$,
+$0.343$ and $0.409$ for $p = 5$, $6$ and $8$ \placeholder{P6: with joint online
 estimation of $a$, $b$, $g$ and RTPS 0.6: final 3-seed values and outcomes}; bias
 correction does nothing for these state-dependent errors ($0.297$, $0.361$
 and $0.440$ on seed 0).
@@ -373,27 +373,34 @@ forecast error from the true state on an independent trajectory, total
 and state-dependent (after subtracting its mean). Tuned: best RTPS and
 localization. Best: best configuration including online parameter
 estimation (est.) or bias correction (bc), selected on seed 0. The latent
-filter is the same in every row: $0.312$ ($0.302$--$0.324$). Provisional rows are
-marked; Block K2c regenerates the table from the result files.}
+filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field cases, where the
+latent model was trained on that system and the comparison is in its field units. Outcome: a filter
+wins if its three-seed mean is at least $10\%$ lower and it is lower on every seed; the factor is the
+ratio of the means. $^\dagger$A configuration run on seed 0 only was lower still; its seeds 1--2 are
+pending.}
 \label{tab:da_model_error}
 \widetabular{lccccc}{
 physics model & one-cycle error & tuned & best & remedy & outcome \\
 \hline
-true equations & $0$ / $0$ & $0.076$ & $0.076$ & --- & floor \\
-$64^2$ grid & $0.000$ / $0.000$ & $0.083$ ($0.077$--$0.088$) & $0.083$ & --- & physics \\
-$32^2$ grid & $0.037$ / $0.036$ & $0.181$ ($0.180$--$0.184$) & $0.181$ & none helps & physics $1.7\times$ \\
-forcing $0.2$ & $0.101$ / $0.008$ & $0.248$ ($0.244$--$0.251$) & $0.225$ ($0.218$--$0.230$) & bc & physics $1.4\times$ \\
-forcing $0.4$ & $0.203$ / $0.016$ & $0.296$ ($0.294$--$0.298$) & $0.225$ ($0.219$--$0.229$) & bc & physics $1.4\times$ \\
-$\nabla^2$ coefficient $1.1$ & $0.082$ / $0.077$ & $0.322$ ($0.318$--$0.325$) & $0.225$ ($0.218$--$0.229$) & est. & physics $1.4\times$ \\
-damping order $5$ & $0.072$ / $0.069$ & $0.289$ ($0.280$--$0.296$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
-damping order $6$ & $0.129$ / $0.123$ & $0.343$ ($0.335$--$0.351$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
-$\nabla^2$ coefficient $1.25$ & $0.210$ / $0.199$ & $0.481$ ($0.475$--$0.488$) & $0.420$ ($0.416$--$0.423$) & est. & latent $1.35\times$ \\
-damping order $8$ & $0.210$ / $0.201$ & $0.420$ ($0.412$--$0.432$) & \placeholder{P6} & \placeholder{P6} & \placeholder{P6} \\
-advection $1$ & $0.78$ / $0.72$ & $0.584$ ($0.581$--$0.587$) & $0.436$ ($0.430$--$0.440$) & est. & latent $1.4\times$ \\
-advection $2$ & $1.53$ / $1.42$ & $0.869$ ($0.863$--$0.876$) & $0.553$ ($0.546$--$0.559$) & est. & latent $1.8\times$ \\
-hidden slow field & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} & \placeholder{P7} \\
-}
+\tabinput{tables/tab07_p2_model_error}}
 \end{table*}
+
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/fig14_model_error.pdf}
+\caption{Learned versus physics-based filters under model error, 2D KS at $44^2$. (a) The
+physics-based filter's error over the latent filter's (three-seed means) against the state-dependent
+part of its model's one-cycle forecast error (the part left after bias correction), in units of the
+observation error; open: tuned RTPS and localization only; filled: with the best remedy (online
+parameter estimation or bias correction); the band marks $\pm10\%$ of the latent filter, the dotted line
+a physics-based filter with the true equations. (b) The physics-based filter's error against its RTPS
+weight for three wrong models (log scale; RTPS 0 diverged or was worse than interpolation), and the
+latent filter's single setting. Below a state-dependent one-cycle error of about a sixth of the
+observation error the physics-based filter wins; above it the latent filter does, and the
+physics-based filter works only in a narrow window of its tuning.}
+\label{fig:model_error}
+\end{figure*}
 
 %----------------------------------------------------------------------
 \subsection{Trained only on noisy data}
