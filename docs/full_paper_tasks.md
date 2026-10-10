@@ -2214,6 +2214,61 @@ What Part II now claims (to be confirmed by J1–J5):
 - **Effort:** ~1 day of code (state augmentation in `LocalETKFPhys2D`, Q estimation for the PDE),
   ~3 h of runs.
 
+### J18 `[ ]` Training on noisy data helps DA: make it a highlighted result (user, 2026-10-10)
+**Why.** The model trained only on σ = 0.1 noisy data (`p7c12d10_ks2d`) beats the clean-data model at every
+domain size (4 tilings, seed 0):
+
+| Domain | 44² | 88² | 220² | 330² | 440² |
+|---|---|---|---|---|---|
+| Clean-data model | 0.338 | 0.321 | 0.326 | 0.340 | 0.326 |
+| Noisy-data model | 0.324 | 0.304 | 0.312 | 0.326 | 0.311 |
+
+44², seeds 0–2: 0.338/0.322/0.320 → 0.324/0.310/0.302; spread/error 0.92–0.99; seam ratio 1.94 → 1.73 at matched settings (J18c);
+D_KY within 2–4%. Consistent but modest (~4–5%); the strong message is that realistic noisy training
+costs nothing and helps a little. Paper: a short highlighted subsection plus a figure, not the headline.
+
+- **J18a σ = 0.3 model** (deferred earlier). Train `p7c12d30_ks2d` (same recipe, `--data-noise 0.3`), then
+  DA at 44² (K = 4 seeds 0–2, K = 1) and one larger domain (220²). Shows whether more noise helps more,
+  plateaus, or hurts: turns one point into a trend. ~2.5 h training + ~1 h runs. Run after J17B's
+  second training (one MPS training at a time).
+- **J18b mechanism check.** For each model (clean vs σ = 0.1, and σ = 0.3 when available): take true
+  states, nudge them slightly off the attractor the way filter members are (latent noise like the
+  analysis spread, and physical-space noise of matched size), and measure how far the encoder → decoder
+  round trip moves them, and whether it moves them TOWARD the truth (distance to the clean state
+  before vs after). If the noisy-trained model pulls perturbed fields back closer, that explains the DA
+  gain. ~20 min, no training.
+- **J18c seam figure.** The error ratio at patch seams, 3.7 (clean) → 1.73 (noisy), as a figure: error
+  vs position within a patch for both models (single tiling), plus the K = 4 blend. The most visible
+  effect of noisy training.
+- **J18b DONE (2026-10-10, `exp_j18b_roundtrip.py`, 40 states of the independent seed-3 truth, 44²).** Ratio =
+  rms(round trip − truth) / rms(perturbed − truth); < 1 means the round trip moves the field toward the truth.
+
+  | Perturbation (standardized std) | clean-data model | noisy-data model (σ = 0.1) |
+  |---|---|---|
+  | none: reconstruction error | 0.046 | **0.039** |
+  | white grid-point noise 0.05 / 0.1 / 0.2 / 0.4 | 0.95 / 0.53 / 0.35 / 0.29 | **0.81 / 0.44 / 0.29 / 0.23** |
+  | smooth noise (4-point correlation) 0.05 / 0.1 / 0.2 / 0.4 | 1.35 / 1.09 / 1.02 / 0.99 | 1.26 / 1.07 / 1.01 / 0.99 |
+  | latent noise 0.05 / 0.1 / 0.2 | 1.04 / 1.01 / 1.00 | 1.05 / 1.02 / 1.00 |
+
+  - Both models remove grid-scale noise; the noisy-trained one removes ~15–20% more, and reconstructs
+    clean states 15% better.
+  - Neither pulls SMOOTH or latent-space perturbations back toward the attractor (ratio ≈ 1): those pass
+    through unchanged. So the mechanism is better small-scale denoising and reconstruction, **not** a
+    general projection onto the attractor. The paper should say exactly that.
+- **J18c DONE (2026-10-10, `fig_j18c_seams.py`, `docs/figures/j18c_seams.png`; clean-model field runs
+  `h9_J18c_clean_T1/T4`).** Matched settings (44², seed 0, RTPS 0.7):
+  - **Correction:** the gradient seam ratio (edge/interior, truth = 1.02) is **1.94 (clean) → 1.73 (noisy)**
+    for a single tiling, not 3.7 → 1.73. The 3.7 came from an earlier clean-model measurement under
+    different settings. At matched settings the excess over truth falls from 0.92 to 0.71 (−23%).
+  - With 4 tilings the seams vanish for both models (blend 1.02 = truth).
+  - Error profile across a patch (edge/interior RMSE): 1.44 → 1.38 single tiling; 0.98 / 0.99 with 4 tilings.
+  - Paper: noisy training reduces seams modestly; tilings remove them. The seam figure belongs with the
+    tilings result more than with the noisy-training result.
+- **J18a queued** (`run_j18a.sh`, caffeinated): trains after J17B's two models (~19:00), runs ~23:00.
+- **Expected / implications:** if J18b shows a pull toward the attractor, the paper can state the
+  mechanism (the encoder learns a projection onto the attractor, which the filter benefits from); with
+  J18a the claim becomes "noisy training is a regularizer for latent DA, optimal near σ ≈ X".
+
 ### J17 `[ ]` Missing dynamics: no setting of the physics model's parameters reproduces the truth (user, 2026-10-09)
 **Why.** In J1/J2/J16 every physics-model error is either a wrong parameter (which online parameter
 estimation can recover) or a fixed pattern (which bias correction can remove). The fairest, and the
@@ -2413,6 +2468,37 @@ This mirrors unobserved moisture or microphysics in CM1.
   placed in the DA follow-up paper together with history-aware propagators, unless the result is
   crisp and the paper has room. In Part II it would be one paragraph pointing forward. It directly
   motivates the CM1 study (Paper 3).
+
+#### J17B progress (2026-10-10)
+- **B2 code done** (`ks_latent/solver/ks2d_memory.py`; tests in `tests/unit/test_ks2d_memory.py`: ε = 0 equals
+  the standard solver, free decay of v is exp(−t/τ), a tiny single mode matches the 2×2 matrix exponential
+  for both couplings, batching, multi-field LETKF). Wired into `gen_ks2d_wide_dataset.py --memory`,
+  `exp_h9_tiled_da.py --truth-memory`, `exp_i11_pde_letkf.py --truth-memory/--model-memory` (floor: the
+  model carries v, initialised at 0, updated through its covariance with observed u),
+  `exp_j16_estimate_pde_model_error.py --truth-memory`. Smoke-tested (4 cycles) on all three paths.
+- **B1/B3 scan** (`j17b_scan.py`, 44², seed 3; τ = 2, C = ∇²). "One-cycle" = KS model's error (bias part):
+
+  | ε, κ | u std | chaos (1e-6 → after 100 u) | rms εv / KS tendency | v autocorr. | R² v ~ local u | one-cycle |
+  |---|---|---|---|---|---|---|
+  | 0.05, +1 | 3.33 | 4.7 | 0.15 | 5.5 | 0.83 | 0.063 (0.040) |
+  | 0.1, +1 | 2.93 | 0.13 | 0.33 | 6.0 | 0.84 | 0.114 (0.081) |
+  | 0.3, +1 / 1, +1 | 1.43 / 0.03 | none | — | — | — | chaos killed (delayed diffusion) |
+  | identity, +1 | 20–61 | none | — | — | — | runaway to a steady state |
+  | 0.05, −1 | 4.29 | 5.3 | 0.11 | 4.5 | 0.80 | 0.079 (0.047) |
+  | **0.1, −1** | 4.78 | 6.8 | 0.20 | 4.5 | 0.79 | **0.165 (0.095)** |
+  | **0.2, −1** | 5.78 | 7.1 | 0.32 | 4.0 | 0.77 | **0.377 (0.203)** |
+
+  κ < 0 (a delayed anti-diffusion: driving) stays strongly chaotic and reaches large, mostly
+  state-dependent errors; v's memory is 4–4.5 time units (8–9 DA cycles); ~20% of v's variance is not
+  linearly predictable from the current local u (the part a Markovian learned model cannot see).
+  **Pre-registered levels (user go-ahead, 2026-10-10): (ε, τ, κ) = (0.1, 2, −1) and (0.2, 2, −1), C = ∇².**
+- **Pre-registered decision rule (before any J17B DA run).** Physics filter (KS model, no v): best over
+  tuning (RTPS × c), bias correction ± Q, ∇²-coefficient estimation (surrogate), and estimation + bias
+  correction, selected on seed 0, then seeds 0–2. Latent filter: Part II settings, untuned, model
+  `p7c12d10_memB<ε>` trained only on σ = 0.1 noisy u data. Same obs (σ = 0.1 × the new data std) and
+  truths. **Latent wins** if its 3-seed mean is ≥ 10% lower and lower on every seed; mirror for a physics
+  win; else tie. Floor: physics filter with the true (u, v) model, v unobserved.
+- **Launched 2026-10-10 ~13:45:** `run_j17b_all.sh` (caffeinated).
 
 **Effort:**
 - Variant A: ~0.5 day of code, ~30 min of data, ~5 h of training, ~4 h of runs, plus ~5 h per extra

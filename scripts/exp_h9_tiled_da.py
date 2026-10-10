@@ -85,6 +85,15 @@ def main() -> None:
                          "(ks_latent/solver/twin.py); the models keep a = 1. Default 1: perfect-model twin.")
     ap.add_argument("--truth-advect-x", type=float, default=0.0, help="I28: truth has mean-flow advection c (x); models do not")
     ap.add_argument("--truth-forcing-amp", type=float, default=0.0, help="I28: truth has terrain-like forcing (std); models do not")
+    ap.add_argument("--assumed-obs-noise-std", type=float, default=None,
+                    help="I16b: observation-error std the FILTER assumes (R); the data keep --obs-noise-std")
+    ap.add_argument("--ic-climatology", action="store_true",
+                    help="I16a: initial ensemble = encoded states of an independent climatology (seed-3 run, 2 time "
+                         "units apart), with no knowledge of the truth (instead of the encoded truth + noise)")
+    ap.add_argument("--forecast-every", type=int, default=0,
+                    help="I7: from steady-state analyses (cycles > n_cycles/2), every k cycles run deterministic "
+                         "forecasts of each tiling's analysis mean, blended, out to --forecast-leads cycles")
+    ap.add_argument("--forecast-leads", type=int, default=60)
     ap.add_argument("--truth-memory", default=None,
                     help="J17B: 'eps,tau,kappa[,coupling]' -- truth has the hidden memory field v (ks2d_memory.py)")
     ap.add_argument("--truth-cubic", type=float, default=0.0,
@@ -153,15 +162,16 @@ def main() -> None:
     if not cache.exists():
         np.save(cache, spinup2d(kcfg, np.random.default_rng(a.seed + 500)))
     from ks_latent.solver.twin import twin_truth
+    n_cyc_truth = a.n_cycles + (a.forecast_leads if a.forecast_every else 0)  # I7: truth beyond the last cycle
     if a.truth_memory:  # J17B: hidden memory field; only u is ever used (observed / scored)
         from ks_latent.solver.ks2d_memory import integrate_memory, memory_truth
         mp = parse_memory(a.truth_memory)
         u0, v0 = memory_truth(kcfg, a.seed, mp)
-        truth = integrate_memory(u0, v0, kcfg, a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, mp)[0]
+        truth = integrate_memory(u0, v0, kcfg, a.n_prop_steps * n_cyc_truth * kcfg.snapshot_every, mp)[0]
     else:
         u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
                                  cubic=a.truth_cubic)
-        truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * a.n_cycles * kcfg.snapshot_every, **truth_kw)
+        truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * n_cyc_truth * kcfg.snapshot_every, **truth_kw)
     truth = ((truth.reshape(truth.shape[0], -1) - mean) / std).reshape(-1, NX, NX)
 
     s, N, hp = a.obs_stride, a.n_ensemble, patch // 2
@@ -202,11 +212,23 @@ def main() -> None:
     site_of_obs = FO[(0, 0)][2]
     d = enc(truth[:1], (0, 0)).shape[1]
     c = d // (ns * ns)
-    R_diag = torch.full((site_of_obs.shape[0],), a.obs_noise_std ** 2, dtype=torch.float64)
+    r_assumed = a.obs_noise_std if a.assumed_obs_noise_std is None else a.assumed_obs_noise_std
+    R_diag = torch.full((site_of_obs.shape[0],), r_assumed ** 2, dtype=torch.float64)
 
     gen = torch.Generator().manual_seed(a.seed)
     Zc = []
+    if a.ic_climatology:  # I16a: members drawn from an independent climatology, no knowledge of the truth
+        if a.truth_memory or a.truth_cubic or a.truth_lap_coef != 1.0 or a.truth_advect_x or a.truth_forcing_amp:
+            raise ValueError("--ic-climatology is implemented for the standard truth only")
+        cc = Path(f"artifacts/cache/ks2d_spinup_L{g.L:g}_NX{NX}_dt{dt:g}_T200_seed3.npy")
+        if not cc.exists():
+            np.save(cc, spinup2d(kcfg, np.random.default_rng(3 + 500)))
+        clim = integrate2d(np.load(cc), kcfg, n_steps=N * 2 * 50, snapshot_every=100)[1:]  # N states, 2 units apart
+        clim = ((clim.reshape(N, -1) - mean) / std).reshape(N, NX, NX)
     for o in offs:
+        if a.ic_climatology:
+            Zc.append(enc(clim, o))
+            continue
         z0 = enc(truth[:1], o)[0]
         Zc.append(z0 + a.ic_perturb_std * torch.randn(N, d, generator=gen))
     Zp = [z.clone() for z in Zc]
@@ -225,6 +247,7 @@ def main() -> None:
     diverged_at = None
     save_at = set(np.linspace(late0, a.n_cycles - 1, a.save_fields).round().astype(int).tolist()) if a.save_fields else set()
     saved = {k: [] for k in ("truth", "tiling0", "blend", "floor1", "floorK", "cycle")}
+    fcst = []  # I7 forecast rows
     t = 0
     for cyc in range(a.n_cycles):
         Zf = []
@@ -304,6 +327,33 @@ def main() -> None:
             diag["uniform"].append([float(np.sum(np.abs(Eu[m]) ** 2) / NX ** 4) for m in bmask])
             rb = dec(enc(Ub.mean(0)[None], (0, 0)), (0, 0))[0]
             diag["reencode_err"].append(f(rb)); diag["reencode_dist"].append(f(rb - Ub.mean(0) + u))
+        if a.forecast_every and cyc >= late0 and (cyc - late0) % a.forecast_every == 0:
+            # I7: deterministic forecasts of each tiling's analysis mean (no model noise), blended (Hann);
+            # tiling 0 alone (single-tiling filter); the encoded TRUE state (decoder-limited ceiling); persistence.
+            zt_c = {o: enc(u[None], o) for o in offs}
+            zt_p = {o: enc(truth[t - a.n_prop_steps][None], o) for o in offs}
+            cur = [(Zp[k].mean(0, keepdim=True), Zc[k].mean(0, keepdim=True)) for k in range(len(offs))]
+            tru = [(zt_p[o], zt_c[o]) for o in offs]
+            row = {"blend": [], "tiling0": [], "true_init_blend": [], "persistence": [], "clim": []}
+            ub0 = Ub.mean(0)
+            for lead in range(1, a.forecast_leads + 1):
+                if t + lead * a.n_prop_steps >= truth.shape[0]:
+                    break
+                ut = truth[t + lead * a.n_prop_steps]
+                nxt, nxt_t, fields, fields_t = [], [], [], []
+                for k, o in enumerate(offs):
+                    fc1 = forecast_ensemble(prop, cur[k][0], cur[k][1], a.n_prop_steps, 0.0)
+                    fc2 = forecast_ensemble(prop, tru[k][0], tru[k][1], a.n_prop_steps, 0.0)
+                    nxt.append((fc1.z_prev_final, fc1.z_curr_final)); nxt_t.append((fc2.z_prev_final, fc2.z_curr_final))
+                    fields.append(dec(fc1.z_curr_final, o)[0]); fields_t.append(dec(fc2.z_curr_final, o)[0])
+                cur, tru = nxt, nxt_t
+                g_ = lambda v: float(np.sqrt(np.mean((v - ut) ** 2)) * std)  # noqa: E731
+                row["blend"].append(g_(sum(w * x for w, x in zip(W, fields))))
+                row["tiling0"].append(g_(fields[0]))
+                row["true_init_blend"].append(g_(sum(w * x for w, x in zip(W, fields_t))))
+                row["persistence"].append(g_(ub0))
+                row["clim"].append(float(np.sqrt(np.mean(ut ** 2)) * std))
+            fcst.append(row)
         if cyc in save_at:
             for k, v in (("truth", u), ("tiling0", Ua[0].mean(0)), ("blend", Ub.mean(0)), ("floor1", recs[0]),
                          ("floorK", sum(w * r for w, r in zip(W, recs)))):
@@ -356,6 +406,10 @@ def main() -> None:
     if a.tiling_reset:
         steady["n_resets_total"] = len(resets)
     out = {"args": vars(a), "steady": steady, "resets": resets, "per_cycle": rec, "wall_s": time.time() - t0, "oi_climatological": 0.798}
+    if fcst:  # I7: mean error vs lead (cycles of n_prop_steps snapshots) over the forecast starts
+        nl = min(len(r["blend"]) for r in fcst)
+        out["forecast"] = {k: np.mean([r[k][:nl] for r in fcst], axis=0).tolist() for k in fcst[0]}
+        out["forecast"]["n_starts"] = len(fcst)
     Path("artifacts/experiments/da2d").mkdir(parents=True, exist_ok=True)
     Path(f"artifacts/experiments/da2d/h9_{a.out}.json").write_text(json.dumps(out, indent=2))
     print(a.out, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in steady.items() if not isinstance(v, dict)},
