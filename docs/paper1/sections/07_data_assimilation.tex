@@ -57,7 +57,7 @@ encoded truth, $\|\Dec(\E(u))-u\|$, single and blended (the \emph{decoder
 floor}); and with a filter that knows the equations, the physical-space
 local ensemble transform filter of Sec.~\ref{sec:da_method} run with the
 true PDE ($0.076$ at its best localization). The run without assimilation
-has errors of $4.2$--$5.3$. \emph{Calibration} is the ratio of ensemble
+has errors of $4.2$--$5.3$ ($10.1$ for one truth at $330^2$, Table~\ref{tab:da_2d_sizes}). \emph{Calibration} is the ratio of ensemble
 spread to error, $1$ for an ensemble that represents its own
 uncertainty. Free-run skill, the ratio of the free-run error to the
 analysis error, is reported in Table~\ref{tab:da_2d_sizes} for comparison
@@ -85,7 +85,7 @@ no better than one tiling, and a calibration of $0.44$--$0.48$
 (Table~\ref{tab:da_2d_ensemble}(iii)). Splitting a fixed total of 64
 members into four tilings of 16 gives $0.352$, $0.334$ and $0.318$, against
 $0.457$, $0.431$ and $0.418$ for one ensemble of 64: at equal cost the tilings
-are $23$--$24\%$ more accurate on every seed. Shifted tilings are a better use
+are $22$--$24\%$ more accurate on every seed. Shifted tilings are a better use
 of members than a larger ensemble.
 
 \para{Why it works.} With one tiling the error is tied to the patch
@@ -181,11 +181,12 @@ model only as a forecast device and do the analysis in physical space.
 We tested this with the same model, encoding each member on the four
 tilings, propagating, decoding and blending, and analysing the blended
 members with the physical-space local ensemble transform filter of
-Sec.~\ref{sec:da_method}, tuned over its localization radius and RTPS.
+Sec.~\ref{sec:da_method}, with the localization radius and RTPS tuned on the
+clean-trained model.
 Its best error is $0.354$, $0.345$ and $0.338$ for seeds 0--2, at a calibration of
 $1.22$--$1.27$, against $0.324$, $0.310$ and $0.302$ at $0.92$--$0.99$ for the latent
 analysis; with one tiling the two are equal ($0.461$ and $0.457$). The latent
-analysis is $5$--$10\%$ more accurate on every seed and better calibrated.
+analysis is $8$--$11\%$ more accurate on every seed and better calibrated.
 A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
@@ -233,7 +234,7 @@ with 64 and 128 members, it reaches $0.51$ and $0.37$ with four tilings
 ($0.69$ and $0.50$ with one), against $0.32$ localized. At $66^2$, 64
 members fail ($2.26$ with four tilings, $3.22$ with one, against
 interpolation's $0.82$), while 128 members give $0.49$ and $0.67$. At
-$88^2$ both fail: $3.40$ and $1.77$ with four tilings, $4.07$ and $2.59$ with
+$88^2$ both fail: $3.40$ and $1.76$ with four tilings, $4.07$ and $2.59$ with
 one. The tilings reduce the error in every case but do not rescue a filter
 whose ensemble is too small for the attractor. The localized filter,
 with 64 members per tiling, gives $0.32$, $0.31$ and $0.30$ at the same three
@@ -270,7 +271,7 @@ number of members.}
 \centering
 \includegraphics{figures/fig11_da_snapshot.pdf}
 \caption{One steady-state analysis at $440^2$ ($\dlat=76\,800$ per tiling,
-64 members, observation spacing $2.75$; cycle 99 of 100). Top row, full
+64 members, observation spacing $2.75$; the last of 100 cycles). Top row, full
 domain: truth, the analysis of one tiling, the blend of four shifted
 tilings, and the two analysis errors (RMSE in field units). Bottom row: the
 same fields in a $55\times55$ window (the square in the top row; $10\times10$
@@ -365,7 +366,7 @@ one-cycle error of $0.20$, but only $0.016$ of it is state-dependent, and the
 physics-based filter wins. Every case whose state-dependent one-cycle
 error is below $0.08$ (the grids, the forcing, the $10\%$ coefficient, damping
 order 5, $0.000$--$0.077$) is a win or a tie for the physics-based filter; every
-case at $0.2$ or above (the $25\%$ coefficient, the advection, damping order
+case at about $0.2$ or above (the $25\%$ coefficient, the advection, damping order
 8) is a win for the latent filter; and order 6, at $0.12$, is a tie. The crossover is therefore near $0.1$ in field units, a
 sixth of the observation error: a physical model whose one-cycle error,
 after bias correction, exceeds about a sixth of the observation error is
@@ -380,7 +381,7 @@ latent state to the next, so it is Markov by construction and cannot represent t
 it is trained on noisy fields $u$ of this coupled system but never sees $v$. And because $v$ is
 driven by $\nabla^2u$, much of its effect on $u$ looks like a change in the $\nabla^2$ coefficient,
 which the physics-based filter, given every remedy (Appendix~\ref{app:da_comparator}), can estimate
-online (it settles at $1.12$--$1.20$). The physics model's
+online (it settles at $1.09$--$1.20$). The physics model's
 error is therefore largely parametric, while the latent model's is structural. At $\varepsilon=0.1$
 the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
 the $\nabla^2$ coefficient estimated online, $0.442$ ($0.436$--$0.447$); at $\varepsilon=0.2$ they are
@@ -397,8 +398,10 @@ test of the crossover for a structural error that estimation cannot absorb.}
 \para{Robustness.} The physics-based filter works only in a narrow window
 of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
 RTPS $0.5$, $0.6$, $0.7$, $0.9$ and $1.0$ ($c=16$), and multiplicative inflation
-without RTPS diverged or was far worse in every wrong-model case. At its
-best setting it is over-dispersed, with spread over error $1.7$--$2.0$. The
+without RTPS was far worse in every case with a wrong coefficient, forcing
+or advection, and $4$--$21\%$ worse on the coarse grids. At its best setting
+it is over-dispersed, with spread over error $1.6$--$1.75$ at damping order 6
+and up to $6$ with advection. The
 latent filter used one setting throughout and was not retuned for any
 case. \placeholder{P9: the same comparison at $220^2$, if J5 is run.}
 
@@ -423,8 +426,7 @@ estimation (est.) or bias correction (bc), selected on seed 0. The latent
 filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field cases, where the
 latent model was trained on that system and the comparison is in its field units. Outcome: a filter
 wins if its three-seed mean is at least $10\%$ lower and it is lower on every seed; the factor is the
-ratio of the means. $^\dagger$A configuration run on seed 0 only was lower still; its seeds 1--2 are
-pending.}
+ratio of the means.}
 \label{tab:da_model_error}
 \widetabular{lccccc}{
 physics model & one-cycle error & tuned & best & remedy & outcome \\
@@ -463,14 +465,16 @@ calibration rising from $0.85$--$0.90$ to $0.92$--$0.98$. At $44^2$ the gain hol
 three seeds ($0.338$, $0.322$, $0.320$ against $0.324$, $0.310$, $0.302$). The dynamics are
 preserved: the noisy-trained model's Kaplan--Yorke dimension is within
 $3.6\%$ and $2.1\%$ of the truth's at $44^2$ and $66^2$, against $2.1\%$ and $1.1\%$ for the
-clean-trained one, both within the truth's own spread.
+clean-trained one (against one truth run). The clean-trained model is within the
+spread of the three $44^2$ truth runs ($80.7$--$83.6$); the noisy-trained one, at $84.7$, is
+just above it.
 
 \para{Why.} The decoder floor falls from $0.27$--$0.29$ to $0.24$--$0.25$ with one tiling and
 from $0.15$--$0.16$ to $0.13$--$0.14$ with four, and the seam ratio of a single
 tiling from $1.94$ to $1.73$ (Fig.~\ref{fig:tilings}f). Passing perturbed true
 states through the encoder and decoder shows where this comes from
 (Appendix~\ref{app:da}): the noisy-trained autoencoder reconstructs clean
-states $15\%$ more accurately ($0.039$ against $0.046$ in standardized units) and
+states $14\%$ more accurately ($0.039$ against $0.046$ in standardized units) and
 removes $15$--$20\%$ more grid-scale noise (it leaves $44\%$ of white noise of
 standard deviation $0.1$, against $53\%$), while neither model pulls smooth or
 latent-space perturbations back towards the attractor; those pass through
@@ -602,7 +606,7 @@ With localization, every ensemble of 16 or more members gives a skill of
 $2.3$--$3.0$ at both sizes and with both filters. Without it, the filter is
 worse than no assimilation until the ensemble is large enough, and how
 large depends on the domain: at $L=200$, where the truth has $n_+=26$--$27$, it is
-marginal with 64 members and works with 128; at $L=400$, where $n_+=50$--$51$, it
+marginal with 64 members and works with 128; at $L=400$, where $n_+=51$, it
 fails with 64, is marginal with 128 and works only with 256. The two
 filters differ by at most $0.4$ in skill. This is Eq.~\eqref{eq:nens_local}
 and its unlocalized counterpart, measured.
@@ -663,7 +667,7 @@ the likely one). Four tilings in one process cost $2.5$--$2.9$ times
 one, not four, because the truth and the observations are shared; the
 tilings are independent and could run in parallel, which we did not time. Peak
 memory, $0.7$~GB at $44^2$ and $14.6$ and $17.2$~GB at $440^2$ for one and four
-tilings, grows more slowly than the area (slope $0.75$) and includes the
+tilings, grows more slowly than the area (slope $0.68$) and includes the
 stored truth trajectory, $6.6$~GB at $440^2$. The per-site filter never forms a
 $\dlat\times\dlat$ matrix, which at $440^2$ would take $47$~GB in double precision.
 We have not profiled the per-site loop, which runs in Python and is the

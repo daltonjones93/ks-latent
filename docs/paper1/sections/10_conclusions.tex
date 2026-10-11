@@ -33,7 +33,7 @@ ensemble filter in latent space is exact and needs only a fixed number of
 forward passes for its Jacobian. Running it on four copies of the patch
 lattice shifted by half a patch, and blending them, lowers its error by
 about $30\%$ without retraining. With one model, trained only on noisy fields,
-and one setting, it analyses the field to an error of $0.31$, against $0.82$
+and one setting, it analyses the field to an error of $0.30$--$0.33$, against $0.82$
 for interpolating the observations, on every domain from $44^2$ to $440^2$,
 while an unlocalized filter fails once the attractor has more unstable
 directions than the ensemble has members. Against a physics-based filter

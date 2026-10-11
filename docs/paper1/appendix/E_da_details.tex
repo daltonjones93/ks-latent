@@ -208,7 +208,7 @@ fixed spacing used here.
 
 \para{Sampling error correction.} At the training size $L=100$, in an earlier comparison with 40
 cycles, SEC applied to a global latent vector beat Gaspari--Cohn applied to the local field at every
-ensemble size, with errors $5$--$25\%$ lower. That comparison confounds the localization with the
+ensemble size, with errors $3$--$19\%$ lower. That comparison confounds the localization with the
 architecture (two different autoencoders), and at $L=100$ the taper is non-zero on 11 of the 16 sites
 of the ring, so it hardly localizes. At $L=200$ the comparison is made on one latent. The
 SEC-corrected covariance formed elementwise is indefinite at five of six ensemble sizes, and the
@@ -250,7 +250,7 @@ Seeds change the initial ensemble, the observation noise and the model noise; se
 change the truth's initial state. At $44^2$ the three seeds give $0.302$--$0.324$, and second seeds at $220^2$
 and $330^2$ are within $0.01$ of the first (Table~\ref{tab:da_2d_sizes}); differences below about $0.02$ are
 within run-to-run variation. Started from the encoded truth, the analysis error rises over the first
-cycles as the ensemble spreads, and is within $10\%$ of its steady value from cycle 4 at every size.
+cycles as the ensemble spreads, and is first within $10\%$ of its steady value by cycle 4 at every size.
 Its 10-cycle means over cycles 51--100 vary by up to $\pm6\%$ at $44^2$, $\pm2\%$ at $88^2$ and $\pm1\%$ or less at $220^2$ and
 beyond, the smaller domains averaging over fewer independent regions. Long runs with sparse
 observations are not bitwise reproducible from run to run (multithreaded floating-point reductions,

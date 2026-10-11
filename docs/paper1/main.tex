@@ -61,7 +61,7 @@ of larger domains by up to $38\%$, while models trained on windows of one large 
 boundaries, are within $0.6$--$2\%$ and $1$--$9\%$. With a per-patch decoder
 the latent observation operator is exactly local. An ensemble filter in the latent space, run on four
 copies of the patch lattice shifted by half a patch and blended, analyses 2D Kuramoto--Sivashinsky
-fields with errors of $0.31$, against $0.82$ for interpolating the observations, from $44^2$ to
+fields with errors of $0.30$--$0.33$, against $0.82$ for interpolating the observations, from $44^2$ to
 $440^2$ with one model, trained only on noisy fields, and one setting. Against a
 physics-based filter given online parameter estimation and bias correction, it loses when the
 physical model's error is small or correctable, and wins once the part of that error that bias
@@ -79,9 +79,9 @@ available, the model's own Lyapunov spectrum against that of the true equations,
 systems. The same locality lets data assimilation, the combination of a model with
 observations used in weather forecasting, run in the learned space with a small, fixed
 ensemble, whether the domain is small or a hundred times larger. No forecast
-model of the weather is perfect; we find that a surrogate learned from noisy measurements does as
-well as a filter built on equations that are slightly wrong, and better once the equations are wrong
-in ways that their usual corrections cannot repair.
+model of the weather is perfect; we find that a filter built on equations that are only slightly wrong
+is still better than a surrogate learned from noisy measurements, but the surrogate is better once
+the equations are wrong in ways that their usual corrections cannot repair.
 
 \input{sections/01_introduction}
 \input{sections/02_background}
