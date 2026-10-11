@@ -184,13 +184,13 @@ The 1D results carry no such caveat.
 %----------------------------------------------------------------------
 \begin{table*}[htbp]
 \caption{Systems and data. $\Delta x$ is the grid spacing,
-$\Delta t$ the snapshot interval seen by the model, ``train domain'' the
-domain from which training data (crops, for 2D) are drawn, and ``eval''
+$\Delta t$ the snapshot interval seen by the model, ``Train domain'' the
+domain from which training data (crops, for 2D) are drawn, and ``Eval sizes''
 the domain sizes at which models are compared with ground truth.}
 \label{tab:systems}
 \begin{ruledtabular}
 \begin{tabular}{lcccc}
-system & $\Delta x$ & $\Delta t$ & train domain (trajectories) & eval sizes \\
+System & $\Delta x$ & $\Delta t$ & Train domain (trajectories) & Eval sizes \\
 \hline
 1D KS & $0.39$ & $1.0$ & $L=100$ (50+10) & $L=25,\,50,\,100,\,200,\,400$ \\
 2D KS & $0.344$ & $0.1$ & $264\times264$ (4+1) & $44^2,\,66^2,\,88^2$ \\
@@ -210,7 +210,7 @@ every table). Values in bold are the
 references used in the paper (means where several runs exist).}
 \label{tab:truth}
 \widetabular{llcccl}{
-system & size & $\DKY$ & density & $T$ (runs) & note \\
+System & Size & $\DKY$ & Density & $T$ (runs) & Note \\
 \hline
 \tabinput{tables/truth_dky}}
 \end{table*}

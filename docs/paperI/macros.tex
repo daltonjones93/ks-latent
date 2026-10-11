@@ -35,10 +35,20 @@
 % Run-in paragraph heading (revtex letters \paragraph headings; we do not want that).
 \newcommand{\para}[1]{\par\medskip\noindent\textbf{#1}\enspace}
 
-% Wide table that is scaled to the text width (revtex's ruledtabular forces \hsize and defeats
-% \resizebox). Same double-rule look as ruledtabular. #1: column spec, #2: body (header + rows).
-\newcommand{\widetabular}[2]{\resizebox{\textwidth}{!}{%
-  \begin{tabular}{#1}\hline\hline\noalign{\vskip 2pt}#2\noalign{\vskip 2pt}\hline\hline\end{tabular}}}
+% Wide table: full line width with the columns spread out (like revtex's ruledtabular) when it fits,
+% shrunk to the line width only when its natural width is larger -- never enlarged, so a narrow table
+% keeps the float font size (fixed 2026-10-11: \resizebox alone scaled small tables up).
+% #1: column spec, #2: body (header + rows). The body is typeset twice (measured, then set).
+\makeatletter
+\newsavebox\wt@box
+\newcommand{\widetabular}[2]{%
+  \sbox\wt@box{\begin{tabular}{#1}\hline\hline\noalign{\vskip 2pt}#2\noalign{\vskip 2pt}\hline\hline\end{tabular}}%
+  \ifdim\wd\wt@box>\linewidth
+    \resizebox{\linewidth}{!}{\usebox\wt@box}%
+  \else
+    \begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}#1}\hline\hline\noalign{\vskip 2pt}#2\noalign{\vskip 2pt}\hline\hline\end{tabular*}%
+  \fi}
+\makeatother
 % Table bodies are read with TeX's primitive \input (expandable), so a rule may follow them.
 \makeatletter\newcommand{\tabinput}[1]{\@@input #1.tex }\makeatother
 

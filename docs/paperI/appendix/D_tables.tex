@@ -81,7 +81,7 @@ analysis shows no deficit of large-scale unstable directions in the
 model, so we have no evidence that the remaining errors come from missing
 long-range coupling.
 
-\newcommand{\evalhead}[1]{model & description & #1 \\ \hline}
+\newcommand{\evalhead}[1]{Model & Description & #1 \\ \hline}
 \newcommand{\evalnotes}{\par\footnotesize $^a$Trained on an $8\times8$-site
 periodic box with the same architecture as the window-trained full-reach
 models; the $\alpha=0.1$, $3\times$ value uses an unstandardized initial
@@ -123,15 +123,15 @@ $^\star$Main-text model.}
 
 \begin{table}[htbp]
 \caption{Reconstruction and decoded-rollout statistics of the main-text
-models. ``recon.'': autoencoder error as a percentage of the field
-variance; ``std'': decoded rollout standard deviation over the truth's;
+models. ``Recon.'': autoencoder error as a percentage of the field
+variance; ``Std'': decoded rollout standard deviation over the truth's;
 the last two columns give the energy share (\%) in the lowest band for
 truth / model rollout and in the highest band for truth /
 reconstruction.}
 \label{tab:spectra}
 \begin{ruledtabular}\footnotesize
 \begin{tabular}{llcccc}
-system & size & recon. & std & low band & high band \\
+System & Size & Recon. & Std & Low band & High band \\
 \hline
 \tabinput{tables/eval_spectra}
 \end{tabular}
