@@ -23,16 +23,19 @@ memory: every table body is `\tabinput` of a generated file and every figure com
 - **S0.1 `[ ]` Confirm the split line.** Paper I = dynamics and transfer; Paper II = data assimilation.
   The per-patch decoder (§6.3) stays in Paper I as an architecture result with one forward pointer;
   Proposition 4 (block-diagonal Jacobian) and its proof move to Paper II. ~5 min.
-- **S0.2 `[ ]` Target journals and formats.** Paper I: Chaos (REVTeX `aip,cha`; the AGU class was kept
+- **S0.2 `[x]` Target journals and formats (decided 2026-10-11).** Paper I: Chaos. Paper II: **JAMES**
+  (AGU): the scope is learned models in Earth-system modelling and DA, the AGU class is already in
+  use, there is no word cap, and the CM1 follow-up will address the same readership; QJRMS is the
+  fallback. Both drafts keep the current class; the length budgets below still apply. Original text: Paper I: Chaos (REVTeX `aip,cha`; the AGU class was kept
   only for drafting) or keep AGU style. Paper II: pick one of QJRMS, MWR, JAMES, NPG; this fixes
   length (MWR ≈ 7,500 words main text; QJRMS no hard limit, ~8,000 typical; JAMES none), figure count,
   citation style and whether an appendix or supplement holds the details. ~15 min. Until decided the
   drafts use the current AGU class with a length budget of ≤ 9,000 words of main text and ≤ 8 figures each.
-- **S0.3 `[ ]` The 1D DA results (§7.7, Fig. 8, App. E.5).** They use the 1D model, a single tiling and
+- **S0.3 `[x]` (a) chosen 2026-10-11. The 1D DA results (§7.7, Fig. 8, App. E.5).** They use the 1D model, a single tiling and
   different filters (PFF, stochastic EnKF, SEC). Options: (a) a short subsection + appendix in Paper II
   (recommended: the "n₊ doubles with the domain" and "GC beats SEC" results are the clearest
   evidence that a latent with a geometry is what makes localization work); (b) appendix only; (c) drop.
-- **S0.4 `[ ]` Submission order and cross-citation.** Paper II cites Paper I for the model's transfer
+- **S0.4 `[x]` Agreed 2026-10-11. Submission order and cross-citation.** Paper II cites Paper I for the model's transfer
   validation. Recommended: finish Paper I first and post it to arXiv so Paper II can cite a preprint;
   Paper II is otherwise written to stand alone (its own model description, its own validation table).
 - **S0.5 `[ ]` Kolmogorov flow in Paper II.** None was assimilated; Paper II mentions it only in
