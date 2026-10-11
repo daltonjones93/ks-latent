@@ -120,3 +120,13 @@ now describe the latent filter as a per-site ensemble Kalman filter in the local
 with perturbed observations; the physics-based comparator (`letkf_phys.py`) is a deterministic LETKF, as
 stated. Prop. 1(b) covers both updates, so nothing else changes. paper1 is frozen and keeps the error.
 Found while writing the Kolmogorov filter (which uses the same `LETKFLocal2D`).
+
+## 2026-10-11 — Kolmogorov DA: tilings shifted in x only (SK4 smoke)
+
+With the 6-channel α = 0.05 model at 1× (30 cycles, vorticity units): interpolation 0.197, one tiling 0.222,
+four tilings in x and y 0.415, four in x only 0.174. The y-shifted tilings' analyses fail (0.656, 0.665) while
+their decoder floors are only modestly worse (0.20–0.21 vs 0.165): Kolmogorov flow is invariant to y-shifts
+only by whole forcing periods (32 grid points), a half-patch y-shift is a quarter period, and the strip-trained
+propagator, which never saw that phase, produces wrong dynamics. Every Kolmogorov run uses x-only offsets
+(0, 4, 8, 12 grid points for four tilings). The Kolmogorov section must say why the tilings differ from 2D KS.
+Smoke outputs: `artifacts/experiments/kda/k_smoke_c19_*.json`.

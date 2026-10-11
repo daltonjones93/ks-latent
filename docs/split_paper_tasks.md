@@ -283,20 +283,32 @@ stays a KS result. α = 0.05, the drag whose canonical models are best documente
   (`scripts/run_kda_train.sh`, caffeinated): starts after the third J17G training (~13:30), ~3 h,
   then D_KY at 1×/2×/3× (seed 0) against the α = 0.05 truths. Check: D_KY within the spread of the
   6-channel canonical models (Paper I Table); if far worse, fall back to the clean 6-channel model.
-- **SK2 `[ ]` Kolmogorov truth in `exp_h9_tiled_da.py`.** `--system kolmogorov --alpha 0.05 --scale s`:
+- **SK2 `[x]` Kolmogorov truth in `exp_h9_tiled_da.py`.** `--system kolmogorov --alpha 0.05 --scale s`:
   strip geometry (48s × 8 sites, widened in x only), vorticity truth from `spinup_kolmogorov` /
   `integrate_kolmogorov` with a cache per (scale, seed), snapshot spacing matching the model's
   training `dt_snap`, standardization by the checkpoint's statistics. Unit test: the truth step
   equals the solver's; the deployment grid matches the training spacing in x and y. ~0.5 day.
-- **SK3 `[ ]` Tilings and observations on a strip.** Offsets {0, p/2} in x and y on a non-square
+- **SK3 `[x]` Tilings and observations on a strip.** Offsets {0, p/2} in x and y on a non-square
   periodic lattice; observation stride 8 (four per site); interpolation baseline on the strip;
   decoder floors; the blend's partition of unity on a rectangle (test: weights sum to 1). ~0.5 day.
-- **SK4 `[ ]` Smoke and calibration.** 10-cycle smoke at 1×; check the cycle length (number of
+- **SK4 `[x]` Smoke and calibration.** 10-cycle smoke at 1×; check the cycle length (number of
   propagator steps per cycle) against the Kolmogorov Lyapunov time (6–16 time units) so a cycle is
   a comparable fraction of a Lyapunov time to the KS runs; keep the KS filter settings (GC 1.5 sites,
   RTPS 0.7, 64 members, noise 0.02) unless the smoke diverges. ~2 h.
-- **SK5 `[ ]` Runs.** 1×: one and four tilings, seeds 0–2; 3×: one and four tilings, seed 0; 100
+- **SK5 `[~]` Runs.** 1×: one and four tilings, seeds 0–2; 3×: one and four tilings, seed 0; 100
   cycles. Queue with caffeinate. ~3–4 h unattended.
+**SK2–SK5 status, 2026-10-11.** Code: `scripts/exp_k_tiled_da.py` (Kolmogorov truth from the training
+metadata at the training spacing, rectangular strip, same per-site filter and Hann blend as 2D KS) and
+`ks_latent/da/tilings.py` (offsets, blend weights, per-frame observation sites; `tests/unit/test_tilings.py`,
+13 tests). Cycle = 5 model steps = 1.0 time unit = 0.08 Lyapunov times (λ₁ = 0.084 at α = 0.05, 1×), as in 2D
+KS. **Smoke (6-channel c19_e0d0_c6, 1×, 30 cycles, vorticity units):** interpolation 0.197; one tiling 0.222;
+4 tilings shifted in x and y 0.415, because the y-shifted tilings fail (0.656, 0.665; their decoder floors are
+only 0.20–0.21 vs 0.165): a y-shift by half a patch is a quarter forcing period, outside training, and the
+propagator's dynamics break; 2 tilings in x 0.190; **4 tilings in x only 0.174** (floor 0.125), spread/error
+0.35 (under-dispersed). Decision: Kolmogorov tilings are shifted in x only (default). The decoder floor
+(12% of the field std, 4% in 2D KS) is the main limit for the 6-channel model. SK5 queued
+(`scripts/run_kda_da.sh`, caffeinated): after the KDA training and D_KY check, 1× four tilings seeds 0–2 and one
+tiling, 3× four and one tiling, plus RTPS 0.9 and model noise 0.04 at 1× (log `artifacts/logs/kda_da.log`).
 - **SK6 `[ ]` Results in Paper II.** A subsection "A second system: Kolmogorov flow" (≤ 400 words):
   error vs interpolation and the decoder floors, one tiling vs four, calibration, 1× vs 3×; one row
   block in the sizes table (or its own small table, `tabK_kolm_da.py`); one panel (vorticity truth,
