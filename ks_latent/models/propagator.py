@@ -1072,6 +1072,43 @@ class _LocalMLPDeltaBody2D(nn.Module):
         return delta.reshape(B, Px * Py * c)
 
 
+class _LocalMLPHistoryDeltaBody2D(_LocalMLPDeltaBody2D):
+    """`backbone="local_mlp_2d"`, `mode="history"` (added 2026-10-10, J17B
+    memory test, user-directed: "queue the two step test, except use 3 steps
+    of memory"). Identical to `_LocalMLPDeltaBody2D` except that each site's
+    token is embedded from its `c` channels at all `n_history` states
+    (oldest to newest, concatenated per site: `n_history * c` inputs), so a
+    hidden process with memory can be inferred from the recent past of the
+    site's own latent and, through the mixer, of its neighbours'. Every
+    weight still depends only on `local_channels`, `n_history`,
+    `token_d_model` and `attn_window`, never on the number of sites, so the
+    model resizes exactly like the markovian one; the zero-initialized
+    readout keeps identity-at-init (`z_next = z_hist[:, -1]`)."""
+
+    def __init__(self, n_sites_x: int, n_sites_y: int, local_channels: int, token_d_model: int, n_layers: int,
+                 mlp_ratio: int, window: int, dropout: float, zero_init: bool, n_history: int):
+        super().__init__(n_sites_x, n_sites_y, local_channels, token_d_model, n_layers, mlp_ratio, window,
+                         dropout, zero_init)
+        if n_history < 2:
+            raise ValueError(f"n_history must be >= 2, got {n_history!r}")
+        self.n_history = n_history
+        self.token_embed = nn.Linear(n_history * local_channels, token_d_model)
+
+    def forward(self, z_hist: torch.Tensor) -> torch.Tensor:
+        """`z_hist`: `(B, n_history, n_sites_x*n_sites_y*local_channels)`, oldest to newest, each state
+        site-major -> `(B, n_sites_x*n_sites_y*local_channels)` increment for the newest state."""
+        B, H, _ = z_hist.shape
+        if H != self.n_history:
+            raise ValueError(f"z_hist has {H} states, expected n_history={self.n_history}")
+        Px, Py, c = self.n_sites_x, self.n_sites_y, self.local_channels
+        tokens = z_hist.reshape(B, H, Px * Py, c).permute(0, 2, 1, 3).reshape(B, Px * Py, H * c)
+        h = self.token_embed(tokens)
+        for block in self.blocks:
+            h = block(h, Px, Py)
+        h = self.norm(h)
+        return self.token_unembed(h).reshape(B, Px * Py * c)
+
+
 def _biot_savart_velocity(omega: torch.Tensor, Lx: float, Ly: float) -> torch.Tensor:
     """`omega`: `(B, Px, Py)` vorticity sampled on an `(n_sites_x,
     n_sites_y)` periodic grid of physical size `Lx x Ly`. Returns
@@ -4475,6 +4512,12 @@ class LatentPropagator(nn.Module):
                     d, cfg.n_history, cfg.fno_modes, cfg.hidden, cfg.n_blocks, cfg.dropout, cfg.zero_init,
                     mask_window=cfg.attn_window, fourier_ifft_readout=cfg.fourier_ifft_readout,
                     nonexpansive=cfg.nonexpansive,
+                )
+            elif cfg.backbone == "local_mlp_2d":
+                self.body = _LocalMLPHistoryDeltaBody2D(
+                    cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
+                    cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.n_history,
                 )
             else:
                 raise ValueError(f"Unknown backbone {cfg.backbone!r} for mode='history'")

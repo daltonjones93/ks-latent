@@ -1747,14 +1747,15 @@ def _validate_propagator_mode_backbone(mode: str, backbone: str) -> None:
             f"backbone={backbone!r} is only implemented for mode='markovian' "
             "(brief §5.2 addendum); the two_step map stays an MLP."
         )
-    if mode == "history" and backbone not in ("mlp", "vit", "fno_vit", "fourier_mlp"):
+    if mode == "history" and backbone not in ("mlp", "vit", "fno_vit", "fourier_mlp", "local_mlp_2d"):
         raise ValueError(
             f"mode='history' (added 2026-08-29, user-directed: 'the original model for this "
             f"project used a propagator with information from the current step and a step in "
             f"the past... design a ViT model that takes in several states from the past'; "
             f"backbone='mlp' added 2026-08-30, generalizing 'two_step' to an arbitrary "
             f"history length -- see docs/PHASE2_ARCHITECTURE_EXPERIMENTS.md Section 9) is "
-            f"only implemented with backbone in ('mlp', 'vit', 'fno_vit', 'fourier_mlp'), "
+            f"only implemented with backbone in ('mlp', 'vit', 'fno_vit', 'fourier_mlp', 'local_mlp_2d' "
+            f"[J17B memory test, 2026-10-10]), "
             f"got backbone={backbone!r}."
         )
 

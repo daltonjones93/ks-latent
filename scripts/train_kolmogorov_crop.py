@@ -54,6 +54,9 @@ def main() -> None:
     p.add_argument("--prop-lr", type=float, default=None, help="Stage B peak learning rate (default: config's)")
     p.add_argument("--k-full", action="store_true", help="Stage B: rollout length k_max from the first step")
     p.add_argument("--n-offsets", type=int, default=32)
+    p.add_argument("--n-history", type=int, default=1,
+                   help="J17B (2026-10-10): >1 trains a mode='history' propagator on the current state and "
+                        "n_history-1 past states (local_mlp_2d only). 1 = the markovian recipe, unchanged.")
     p.add_argument("--device", default="mps")
     p.add_argument("--local-channels", type=int, default=3)
     p.add_argument("--backbone", choices=["local_mlp_2d", "local_mlp_2d_consensus", "local_mlp_2d_biotsavart"],
@@ -226,7 +229,9 @@ def main() -> None:
           flush=True)
     c = ae_cfg.local_channels
     prop_cfg = AuxPropagatorConfig(
-        d_latent=Pu * bank_tr.shape[3] * c, mode="markovian", backbone=args.backbone, attn_window=args.window,
+        d_latent=Pu * bank_tr.shape[3] * c, mode="history" if args.n_history > 1 else "markovian",
+        n_history=max(args.n_history, 2) if args.n_history > 1 else 3,
+        backbone=args.backbone, attn_window=args.window,
         local_mlp2d_n_sites_x=Pu, local_mlp2d_n_sites_y=bank_tr.shape[3], local_mlp2d_local_channels=c,
         local_mlp2d_token_d_model=32, local_mlp2d_n_layers=2,
         consensus_n_iter=args.consensus_n_iter, consensus_radius=args.consensus_radius, **extra_cfg,

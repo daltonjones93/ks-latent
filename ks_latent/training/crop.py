@@ -445,6 +445,32 @@ def forced_halo_rollout(prop, z_win: torch.Tensor, k: int, halo: int, noise: flo
     return torch.stack(preds, dim=1)
 
 
+def forced_halo_rollout_history(prop, z_win: torch.Tensor, k: int, halo: int, noise: float = 0.0,
+                                halo_y: int = 0) -> torch.Tensor:
+    """`mode="history"` counterpart of `forced_halo_rollout` (J17B memory test, 2026-10-10).
+    `z_win`: `(B, H-1+k+1, Pu, Pv, c)` true encoded window, `H = prop.cfg.n_history`. The first `H`
+    states (+ independent noise) are the initial history; every step overwrites the forced halo of
+    every history state with the true state at that time, and slides the window (drop the oldest,
+    append the prediction). Returns the predicted free interior `(B, k, Pu-2h, Pv-2h_y, c)`, the
+    targets being `z_win[:, H:]`."""
+    H = prop.cfg.n_history
+    B, T, Pu, Pv, c = z_win.shape
+    if T != H + k:
+        raise ValueError(f"z_win has {T} states, expected n_history + k = {H + k}")
+    states = z_win[:, :H].clone()
+    if noise > 0:
+        states = states + noise * torch.randn_like(states)
+    ix, iy = slice(halo, Pu - halo), slice(halo_y, Pv - halo_y)
+    preds = []
+    for j in range(k):
+        inp = z_win[:, j:j + H].clone()
+        inp[:, :, ix, iy] = states[:, :, ix, iy]
+        nxt = prop.step_history(inp.reshape(B, H, -1)).reshape(B, Pu, Pv, c)
+        preds.append(nxt[:, ix, iy])
+        states = torch.cat([states[:, 1:], nxt.unsqueeze(1)], dim=1)
+    return torch.stack(preds, dim=1)
+
+
 def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg: CropPropConfig, log=print,
                     bs_train: "tuple | None" = None, bs_val: "tuple | None" = None,
                     ae=None, site_len: float = 1.0) -> dict:
@@ -465,10 +491,14 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
     h, hy = cfg.halo_sites, cfg.halo_sites_y
     nC, T = bank_train.shape[:2]
 
-    def windows(bank, B, k, gen, bsx=None):
+    H = prop.cfg.n_history if getattr(prop, "mode", None) == "history" else 1
+    if H > 1 and (bs_train is not None or cfg.w_spectral > 0 or cfg.w_rank > 0):
+        raise ValueError("mode='history' is implemented without Biot-Savart, spectral or rank terms")
+
+    def windows(bank, B, k, gen, bsx=None):  # k + H states: H of history, k targets
         ci = torch.randint(0, bank.shape[0], (B,), generator=gen).to(dev)
-        t0 = torch.randint(0, bank.shape[1] - k, (B,), generator=gen).to(dev)
-        tt = t0[:, None] + torch.arange(k + 1, device=dev)[None, :]
+        t0 = torch.randint(0, bank.shape[1] - k - H + 1, (B,), generator=gen).to(dev)
+        tt = t0[:, None] + torch.arange(k + H, device=dev)[None, :]
         if bsx is None:
             return bank[ci[:, None], tt], None
         ctraj, cx0, ctx = bsx
@@ -504,8 +534,11 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
         noise = cfg.noise_in_start + (cfg.noise_in_end - cfg.noise_in_start) * frac
         prop.train()
         win, wbs = windows(bank_train, cfg.batch, k, g, bs_train)
-        pred = forced_halo_rollout(prop, win, k, h, noise, bs=wbs, halo_y=hy)
-        loss = F.mse_loss(pred, win[:, 1:, h:win.shape[2] - h, hy:win.shape[3] - hy])
+        if H > 1:
+            pred = forced_halo_rollout_history(prop, win, k, h, noise, halo_y=hy)
+        else:
+            pred = forced_halo_rollout(prop, win, k, h, noise, bs=wbs, halo_y=hy)
+        loss = F.mse_loss(pred, win[:, H:, h:win.shape[2] - h, hy:win.shape[3] - hy])
         if cfg.w_rank > 0:
             loss = loss + cfg.w_rank * F.relu(ld_target - per_site_logdet(pred))
         if cfg.w_spectral > 0 and step % cfg.spectral_every == 0:
@@ -530,8 +563,11 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             prop.eval()
             with torch.no_grad():
-                vp = forced_halo_rollout(prop, val_win, cfg.k_max, h, bs=val_bs, halo_y=hy)
-                val = F.mse_loss(vp, val_win[:, 1:, h:val_win.shape[2] - h, hy:val_win.shape[3] - hy]).item()
+                if H > 1:
+                    vp = forced_halo_rollout_history(prop, val_win, cfg.k_max, h, halo_y=hy)
+                else:
+                    vp = forced_halo_rollout(prop, val_win, cfg.k_max, h, bs=val_bs, halo_y=hy)
+                val = F.mse_loss(vp, val_win[:, H:, h:val_win.shape[2] - h, hy:val_win.shape[3] - hy]).item()
             hist.append({"step": step + 1, "k": k, "train_loss": loss.item(), "val_kmax_mse": val,
                          "wall_s": time.time() - t_start})
             log(f"  [cropProp] step {step + 1}/{cfg.steps} k {k} loss {loss.item():.5f} "

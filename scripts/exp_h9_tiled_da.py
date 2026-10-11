@@ -31,7 +31,7 @@ import torch
 from scipy.interpolate import RectBivariateSpline
 
 from ks_latent.config import KSConfig2D
-from ks_latent.da.forecast import forecast_ensemble
+from ks_latent.da.forecast import forecast_ensemble, forecast_ensemble_history
 from ks_latent.da.geometry2d import deployment_grid_2d, training_dx
 from ks_latent.da.jacobian_coloring import obs_site_map_2d
 from ks_latent.da.letkf_local import LETKFLocal2D
@@ -139,6 +139,14 @@ def main() -> None:
     ae = load_autoencoder_checkpoint_resized_2d(AE, new_n_sites_x=ns, new_n_sites_y=ns, new_NX=NX, new_NY=NX)[0].eval()
     prop = load_propagator_checkpoint_resized_2d(PR, new_n_sites_x=ns, new_n_sites_y=ns)[0].eval()
     mean, std = float(ck["normalization_mean"]), float(ck["normalization_std"])
+    # J17B memory test (2026-10-10): a mode="history" propagator steps from the current state and
+    # H-1 past states. Each member then carries its history; the filter analyses the history as
+    # extra channels of each site (an augmented-state, lagged-smoother update with the same local
+    # gain), observing only the newest state.
+    H = prop.cfg.n_history if getattr(prop, "mode", None) == "history" else 1
+    if H > 1 and (a.gate or a.forecast_every or a.tiling_reset or a.feedback or a.project_members
+                  or a.manifold_diag):
+        raise ValueError("a history propagator is implemented for the plain tiled filter only")
     if a.gate:
         from ks_latent.da.gated import GatedPropagator, calibrate_gate
         off = None
@@ -207,7 +215,16 @@ def main() -> None:
 
     def make_h(o):  # observation operator in tiling o's frame
         ix, iy = FO[o][0], FO[o][1]
+        if H > 1:  # augmented state (P, H, c) site-major: observe the newest state only
+            return lambda z: ae.decode(z.to(torch.float32).reshape(ns * ns, H, -1)[:, -1].reshape(1, -1)).squeeze(0) \
+                .reshape(NX, NX)[ix][:, iy].reshape(-1).double()
         return lambda z: ae.decode(z.to(torch.float32).unsqueeze(0)).squeeze(0).reshape(NX, NX)[ix][:, iy].reshape(-1).double()
+
+    def to_aug(Zh):  # (N, H, P*c) -> (N, P*H*c), site-major
+        return Zh.reshape(len(Zh), H, ns * ns, -1).permute(0, 2, 1, 3).reshape(len(Zh), -1)
+
+    def from_aug(Za):  # inverse of to_aug
+        return Za.reshape(len(Za), ns * ns, H, -1).permute(0, 2, 1, 3).reshape(len(Za), H, -1)
 
     site_of_obs = FO[(0, 0)][2]
     d = enc(truth[:1], (0, 0)).shape[1]
@@ -232,6 +249,7 @@ def main() -> None:
         z0 = enc(truth[:1], o)[0]
         Zc.append(z0 + a.ic_perturb_std * torch.randn(N, d, generator=gen))
     Zp = [z.clone() for z in Zc]
+    Zh = [z.unsqueeze(1).repeat(1, H, 1) for z in Zc] if H > 1 else None  # constant initial history
     rng = np.random.default_rng(a.seed + 1)
 
     rec = {k: [] for k in ("tiling0", "blend", "blend_of_means", "floor1", "floorK", "interp", "spread0",
@@ -239,6 +257,7 @@ def main() -> None:
                            "z_err0", "z_offman0", "z_offman_member0", "z_offman_truth", "gate_mean", "n_reset")}
     resets = []  # (cycle, tiling, disagreement, median disagreement)
     Zfree_p, Zfree_c = Zp[0].clone(), Zc[0].clone()
+    Zfree_h = Zh[0].clone() if H > 1 else None
     kk = 2 * np.pi * np.fft.fftfreq(NX, d=g.L / NX); KK = np.sqrt(kk[:, None] ** 2 + kk[None, :] ** 2)
     BANDS = [(0, 0.6), (0.6, 1.14), (1.14, 1.6), (1.6, 99)]
     bmask = [(KK >= lo) & (KK < hi) for lo, hi in BANDS]
@@ -252,15 +271,23 @@ def main() -> None:
     for cyc in range(a.n_cycles):
         Zf = []
         for k in range(len(offs)):
-            fc = forecast_ensemble(prop, Zp[k], Zc[k], a.n_prop_steps, a.model_noise_std)
-            Zp[k], Zf_k = fc.z_prev_final, fc.z_curr_final
+            if H > 1:
+                Zh[k] = forecast_ensemble_history(prop, Zh[k], a.n_prop_steps, a.model_noise_std).z_hist_final
+                Zf_k = Zh[k][:, -1]
+            else:
+                fc = forecast_ensemble(prop, Zp[k], Zc[k], a.n_prop_steps, a.model_noise_std)
+                Zp[k], Zf_k = fc.z_prev_final, fc.z_curr_final
             if a.project_members:
                 with torch.no_grad():
                     Zf_k = torch.cat([ae.encode(ae.decode(Zf_k[i:i + 32])) for i in range(0, len(Zf_k), 32)])
             Zf.append(Zf_k)
         if not a.no_free:
-            fcf = forecast_ensemble(prop, Zfree_p, Zfree_c, a.n_prop_steps, 0.0)
-            Zfree_p, Zfree_c = fcf.z_prev_final, fcf.z_curr_final
+            if H > 1:
+                Zfree_h = forecast_ensemble_history(prop, Zfree_h, a.n_prop_steps, 0.0).z_hist_final
+                Zfree_c = Zfree_h[:, -1]
+            else:
+                fcf = forecast_ensemble(prop, Zfree_p, Zfree_c, a.n_prop_steps, 0.0)
+                Zfree_p, Zfree_c = fcf.z_prev_final, fcf.z_curr_final
         t += a.n_prop_steps
         u = truth[t]
         yg = u[::s, ::s] + a.obs_noise_std * rng.standard_normal((NX // s, NX // s))
@@ -268,9 +295,13 @@ def main() -> None:
         Uf = [dec(Zf[k], o).mean(0) for k, o in enumerate(offs)]  # forecast (prior) means, original frame
         Ua = []
         for k, o in enumerate(offs):
-            filt = LETKFLocal2D(make_h(o), R_diag, FO[o][2], ns, ns, c, a.gc_c, inflation=a.inflation, rtps=a.rtps,
-                                seed=a.seed * 1000 + cyc * 20 + k)
-            Za = filt.analyze(Zf[k].double(), yv).Z_analysis.float()
+            filt = LETKFLocal2D(make_h(o), R_diag, FO[o][2], ns, ns, c * H, a.gc_c, inflation=a.inflation,
+                                rtps=a.rtps, seed=a.seed * 1000 + cyc * 20 + k)
+            if H > 1:
+                Zh[k] = from_aug(filt.analyze(to_aug(Zh[k]).double(), yv).Z_analysis.float())
+                Za = Zh[k][:, -1]
+            else:
+                Za = filt.analyze(Zf[k].double(), yv).Z_analysis.float()
             Zc[k] = Za
             Ua.append(dec(Za, o))  # (N, NX, NX)
         Ub = sum(w[None] * U for w, U in zip(W, Ua))  # member-wise blend
