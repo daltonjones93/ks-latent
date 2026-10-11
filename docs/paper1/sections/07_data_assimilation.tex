@@ -212,7 +212,10 @@ the calibration stays between $0.92$ and $0.98$. With one tiling the error
 is $0.42$--$0.46$ at every size; interpolation stays at $0.81$--$0.83$ and the
 blended decoder floor at $0.13$--$0.14$. Nothing degrades with the domain,
 and there is no sign of a size beyond which the method stops working
-(Fig.~\ref{fig:da_2d}b,d).
+(Fig.~\ref{fig:da_2d}b,d). Figure~\ref{fig:da_snapshot} shows one analysis at $440^2$: the
+blend follows the truth's structure at every scale the observations
+resolve, and the patch-edge seams of a single tiling, visible in its error,
+are absent from the blend's.
 
 \para{The ensemble does not grow with the domain.} With four tilings, the
 error is $0.450$, $0.352$, $0.330$, $0.324$ and $0.322$ for $8$, $16$, $32$, $64$ and $128$
@@ -359,20 +362,29 @@ case at $0.2$ or above (the $25\%$ coefficient, the advection, damping order
 sixth of the observation error: a physical model whose one-cycle error,
 after bias correction, exceeds about a sixth of the observation error is
 worth replacing by a model learned from data, and one below it is not.
-The hardest case for both filters is a truth with a process that neither can represent: an
+A separate question is a truth that is not Markov in the observed field, which
+neither filter's model can represent: an
 unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
 $v_t=-v/\tau+\kappa\nabla^2u$, $\tau=2$, whose memory (4--4.5 time units, eight to nine cycles) makes $v$ a
 function of the past of $u$, not of its present: about $20\%$ of its variance is not predictable from
-the current field. The latent model is trained on noisy fields $u$ of this coupled system, so the
-slow process acts in all its training data, but it never sees $v$; the physics-based filter's model
-is KS without $v$, given every remedy (Appendix~\ref{app:da_comparator}). At $\varepsilon=0.1$, where the
-state-dependent one-cycle error of the KS model is $0.15$, about $0.18$ of this system's observation
-error, the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
-the $\nabla^2$ coefficient estimated online, $0.442$ ($0.436$--$0.447$): a tie by the decision rule, as the
-crossover predicts. Neither is far from what the true equations achieve when $v$ is unobserved
-($0.405$, the same filter carrying its own $v$), and both are well below interpolation ($1.10$--$1.15$).
-\placeholder{P7: $\varepsilon=0.2$ (state-dependent one-cycle error $0.35$, about $0.4$ of the observation
-error), where the crossover predicts a clear win for the latent filter.}
+the current field. This case does not test the crossover. The latent propagator maps the current
+latent state to the next, so it is Markov by construction and cannot represent the memory either;
+it is trained on noisy fields $u$ of this coupled system but never sees $v$. And because $v$ is
+driven by $\nabla^2u$, much of its effect on $u$ looks like a change in the $\nabla^2$ coefficient,
+which the physics-based filter, given every remedy (Appendix~\ref{app:da_comparator}), can estimate
+online (it settles at $1.12$--$1.20$). The physics model's
+error is therefore largely parametric, while the latent model's is structural. At $\varepsilon=0.1$
+the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
+the $\nabla^2$ coefficient estimated online, $0.442$ ($0.436$--$0.447$); at $\varepsilon=0.2$ they are
+$0.628$ ($0.620$--$0.641$) and $0.599$ ($0.596$--$0.604$). Both are ties by the decision rule, and
+both filters lose ground against what the true equations achieve with $v$ unobserved ($0.405$ and
+$0.493$, the same filter carrying its own $v$); both stay well below interpolation. Memory of this
+kind limits a Markov latent model as much as a misspecified physical one, and the remedy on the
+learned side, a propagator given past states, is outside this study.
+\placeholder{P7: J17G, a Markov missing process (an anisotropic gradient nonlinearity,
+$-\tfrac{\delta}{2}(u_x^2-u_y^2)$, with $\delta=0.1$, $0.2$, $0.3$; state-dependent one-cycle error after the
+best offline fit of $(a, b, g)$ about $0.16$, $0.32$ and $0.43$ of the observation error). This is the
+test of the crossover for a structural error that estimation cannot absorb.}
 
 \para{Robustness.} The physics-based filter works only in a narrow window
 of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
