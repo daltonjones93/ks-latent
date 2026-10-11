@@ -14,7 +14,7 @@ import h5py
 import numpy as np
 from matplotlib.patches import Rectangle
 
-from _style import ART, COL2, INK, panel_label, plt, save
+from _style import ART, COL1, COL2, INK, panel_label, plt, save
 
 CMAP, VMAX = "RdBu_r", 2.5
 D1 = ART / "datasets/stage1_trajectories_dtsnap1.h5"
@@ -104,3 +104,20 @@ cb.outline.set_linewidth(0.4)
 cax.set_box_aspect(None)
 
 save(fig, "fig02_systems", [str(p.relative_to(ART.parent)) for p in (D1, D2, D3)])
+
+# Paper II (S4.6): the 2D KS panel alone, one column wide.
+fig = plt.figure(figsize=(COL1, 2.9))
+gs = fig.add_gridspec(1, 2, width_ratios=[1.0, 0.05], wspace=0.08)
+b, cax = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+b.grid(False)
+for sp in ("top", "right"):
+    b.spines[sp].set_visible(True)
+im = b.pcolormesh(e2, e2, u2.T, cmap=CMAP, vmin=-VMAX, vmax=VMAX, shading="flat", rasterized=True)
+b.set_aspect("equal")
+window(b, 3 * h2, 4 * h2, 40 * h2, 40 * h2, 6 * h2, 6 * h2)
+b.set_xlabel("$x$"); b.set_ylabel("$y$", labelpad=1)
+b.set_xticks([0, 132, 264]); b.set_yticks([0, 132, 264])
+cb = fig.colorbar(im, cax=cax)
+cb.set_label("field / dataset std")
+cb.outline.set_linewidth(0.4)
+save(fig, "fig02_systems_ks2d", [str(D2.relative_to(ART.parent))])

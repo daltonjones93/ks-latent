@@ -1,5 +1,61 @@
 %======================================================================
-\section{Proof of Proposition 1}
+\section{Proof of Proposition~\ref{prop:blockdiag}}
+\label{app:proof}
 %======================================================================
-% TODO(S4.16): paper1 App. B.4.
-\placeholder{S4.16: Proof of Proposition 1}
+
+Write $s(i)$ for the patch, and its site, that contains the grid point
+$\bm x_i$ read by observation $i$, and $\dim$ for the spatial dimension. A
+map between lattice fields is per-site if its output at site $j$ depends
+only on its input at $j$: a $1\times1$ convolution, a pointwise
+nonlinearity, layer normalization over channels.
+
+With $\Rdec=0$ the decoder has no lattice convolutions: a $1\times1$
+convolution and a pointwise nonlinearity act on each site, and the
+transposed convolution with kernel and stride equal to the patch writes
+site $j$'s output only onto patch $j$. Hence $\Dec(z)$ restricted to patch
+$j$ is $g(z_j)$ for one fixed function $g:\R^c\to\R^{p^{\dim}}$. Let
+observation $i$ read grid point $\bm{x}_i$ in patch $s(i)$. Then
+$h_i(z)=g(z_{s(i)})(\bm{x}_i)$ does not depend on $z_j$ for $j\ne s(i)$,
+which is the block-diagonal structure.
+
+\emph{(a)} Let $v^{(k)}=\sum_{j\in\Lat}e_{j,k}$. Then
+\[
+  (Jv^{(k)})_i = \sum_{j\in\Lat}\sum_{l=1}^{c} J_{i,(j,l)}\,v^{(k)}_{(j,l)}
+  = \sum_{j\in\Lat} J_{i,(j,k)} = J_{i,(s(i),k)},
+\]
+since all terms with $j\ne s(i)$ vanish. So the $c$ products
+$Jv^{(1)},\dots,Jv^{(c)}$ contain every possibly non-zero entry of $J$,
+and every other entry is zero. Each product is one forward-mode pass
+through $h$, whatever $P$ and $m$ are.
+
+\emph{(b)} For site $s$, let $O_s$ be the observations with non-zero
+taper weight and $U_s=s(O_s)$ the sites that own them. The
+perturbed-observation analysis of site $s$ uses the rows $O_s$ of three
+quantities: the innovations, computed from the nonlinear $h$ evaluated
+once for the whole ensemble; the cross-covariance
+$\Cov(z_s, z)\,J_{O_s,:}^{\top}$; and the observation-space covariance
+$J_{O_s,:}\,B\,J_{O_s,:}^{\top}$. By the block structure, the rows
+$J_{O_s,:}$ vanish outside the columns of $U_s$, so
+\[
+\begin{aligned}
+  \Cov(z_s,z)\,J_{O_s,:}^{\top} &= \Cov(z_s,z_{U_s})\,J_{O_s,U_s}^{\top},\\
+  J_{O_s,:}\,B\,J_{O_s,:}^{\top} &= J_{O_s,U_s}\,B_{U_sU_s}\,J_{O_s,U_s}^{\top},
+\end{aligned}
+\]
+exactly. The analysis at $s$ therefore needs only the ensemble at
+$U_s\cup\{s\}$ and the compact Jacobian from (a); no row of $J$ is
+truncated. The ensemble-transform update uses the same rows through the
+observation-space perturbations $Y = X\,J_{O_s,:}^{\top} = X_{U_s}\,J_{O_s,U_s}^{\top}$
+and the innovation of the ensemble mean on $O_s$, so the same conclusion
+holds for it. With $\Rdec>0$ the rows $J_{O_s,:}$ are non-zero on every site
+within $\Rdec$ of $U_s$, and the same identities hold only after replacing
+$U_s$ by that larger set. \qed
+
+\para{Shifted tilings preserve exactness.} Let tiling $k$ act on $\Tr_{o_k}u$. Its observation operator
+is $h_k = \Hobs\circ\Tr_{o_k}^{-1}\circ\Dec$, and $\Tr_{o_k}^{-1}$ only relabels grid points, so each $h_k$ is
+again a grid-point selection composed with a per-patch decoder, and the proposition applies to
+each tiling separately: every tiling's analysis is exactly local in its own lattice. The blend of
+Eq.~\eqref{eq:blend} is a fixed linear map of the $K$ decoded analyses, with weights that depend only
+on position, so the value of the blended analysis at a grid point depends only on the $K$ sites, one per
+tiling, whose patches contain it, and through them only on the observations within the taper
+supports of those sites. No approximation enters at any step.

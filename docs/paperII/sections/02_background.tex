@@ -1,5 +1,141 @@
 %======================================================================
 \section{Background}
+\label{sec:background}
 %======================================================================
-% TODO(S4.3): paper1 §2.3, expanded; new prior-work table.
-\placeholder{S4.3: Background}
+
+%----------------------------------------------------------------------
+\subsection{Ensemble filters, localization and extensive chaos}
+\label{sec:bg_da}
+%----------------------------------------------------------------------
+
+Ensemble Kalman filters
+\citep{burgers1998,houtekamermitchell1998,whitakerhamill2002} estimate
+forecast covariances from a small ensemble, and localization makes them
+work when the ensemble is much smaller than the state: by tapering the
+covariance \citep{houtekamermitchell2001,gaspari1999}, by analysing each
+grid point from nearby observations
+\citep{ott2004,hunt2007}, or by correcting sampling error without a
+distance \citep{anderson2012}. The local ensemble transform Kalman filter
+(LETKF) of \citet{hunt2007}, the form used here, computes one analysis per
+grid point or region from the observations within a cut-off radius,
+inflating the error variance of each observation with its distance
+(observation-space or R-localization), and applies a deterministic
+transform to the ensemble perturbations. The two common localizations are
+related but not equivalent \citep{sakovbertino2011,greybush2011}. The case
+for localization rests on local low dimensionality \citep{patil2001}: the
+forecast errors within a region span few directions. Without
+localization, a filter needs at least as many members as there are
+unstable and neutral directions
+\citep{trevisan2004,gurumoorthy2017,bocquetcarrassi2017}; for a
+deterministic filter on Lorenz-96 the minimum is $n_+ + 1$, with $n_+$ the
+number of positive Lyapunov exponents \citep{takeda2026}. Particle flow
+filters offer a nonlinear alternative \citep{huvanleeuwen2021}.
+
+In spatially extended chaos this requirement grows with the domain. The
+Kaplan--Yorke dimension $\DKY$ \citep{kaplanyorke1979} and the number of
+positive exponents of an extensively chaotic system grow in proportion to
+its volume \citep{ruelle1982,manneville1985,egolfgreenside1994}, with a
+density $\rho$ that does not depend on the domain; for the
+Kuramoto--Sivashinsky (KS) equation in one dimension $\rho\approx0.22$ per
+unit length \citep{edson2019}. An unlocalized filter must therefore grow
+its ensemble with the domain, while a localized one needs only enough
+members for the unstable directions inside its local region
+(Sec.~\ref{sec:nens}).
+
+%----------------------------------------------------------------------
+\subsection{Data assimilation in learned latent spaces}
+\label{sec:bg_latent}
+%----------------------------------------------------------------------
+
+Learned surrogates of spatiotemporal chaos usually encode the whole field
+into one latent vector and learn its evolution
+\citep{linotgraham2020,linotgraham2022,racca2023}, and several reproduce
+the Lyapunov spectrum of the system at the size they were trained on
+\citep{pathak2017,vlachas2020,ozalpmagri2025}. Filters in such latent
+spaces have been built with global latents and no localization
+\citep{peyron2021,chen2023roadenkf,pasmans2025,tong2026laeenkf}. The
+reduced-order autodifferentiable ensemble Kalman filter of
+\citet{chen2023roadenkf}, which includes KS among its tests, explicitly
+does not pursue covariance localization, and the latent autoencoder
+filter of \citet{tong2026laeenkf} lists it as future work. The reason is
+structural: a global latent vector has no notion of distance, so there is
+nothing to taper. Latent score-based filters note that a generic encoding
+destroys the local structure that LETKF-type methods exploit
+\citep{si2025latentensf}, and learned corrections to ensemble filters can
+outperform a tuned LETKF on KS \citep{bach2025}.
+
+\citet{jones2026transfer}, hereafter Paper~I, take the opposite route: a
+latent \emph{field} on a lattice of sites, built from weight-shared
+operators of finite reach, so that one trained model runs on domains of any
+size and reproduces the true Lyapunov spectra, $\DKY$ and their growth with
+the domain in 1D and 2D KS and in Kolmogorov flow. Such a latent has a
+geometry, and the question this paper asks is what that geometry is worth
+to a filter.
+
+%----------------------------------------------------------------------
+\subsection{Imperfect models and their remedies}
+\label{sec:bg_model_error}
+%----------------------------------------------------------------------
+
+A learned model is worth using where a physical one is wrong. A line of
+work learns the forecast model itself from sparse, noisy observations, by
+alternating ensemble data assimilation and network training
+\citep{brajard2020,bocquet2020}. There, as here, the comparison that
+matters is with data assimilation run with a physical model:
+\citet{brajard2020} report that on the 40-variable Lorenz-96 system their
+learned convolutional surrogate, trained and used at that one size,
+recovers the positive Lyapunov exponents, and that an ensemble filter
+with it has an analysis error $2.4$ times that of the same filter with the
+true model, and well below interpolation. With an imperfect physical model
+the standard remedies are inflation and relaxation to prior spread
+\citep{whitakerhamill2012}, online estimation of model parameters by state
+augmentation \citep{anderson2001,ruiz2013}, and bias correction with
+additive model error \citep{dee2005}. A fair comparison gives the
+physics-based filter all of them (Sec.~\ref{sec:da_model_error}).
+
+Finally, the shifted tilings of Sec.~\ref{sec:tilings_method} are cycle
+spinning \citep{coifmandonoho1995} on the patch lattice: averaging
+estimates computed on shifted copies of a grid removes the artefacts tied
+to the grid.
+
+%----------------------------------------------------------------------
+\subsection{What is new here}
+\label{sec:bg_novelty}
+%----------------------------------------------------------------------
+
+That localization makes ensemble filters work with small ensembles is
+established, and so is data assimilation in a learned latent space.
+Table~\ref{tab:prior_work} summarizes the closest work. What we add is
+their combination, made exact: a latent observation operator that is
+exactly local, so that a per-site ensemble filter in latent space needs no
+truncation and keeps working at any domain size with one model and one
+setting; shifted tilings that remove the errors tied to the patch lattice;
+and a comparison with physics-based filters whose models are wrong in ways
+that their standard remedies can and cannot correct.
+
+% G-pass (docs/paperII/decisions.md, S4.3): every entry of the prior rows is to be checked against
+% the paper itself before submission; the "latent DA"/"localized" entries for bach2025 and the
+% "wrong model" entries are the least certain.
+\begin{table}[htbp]
+\caption{Closest prior work. ``Latent DA'': the analysis is computed in a
+learned latent space; ``localized'': the filter is localized; ``other
+sizes'': one trained model assimilates data on domains of another size;
+``wrong model'': compared with a filter that uses a physical model with
+model error and its standard remedies. $\circ$: compared only with a
+filter that uses the true model.}
+\label{tab:prior_work}
+\begin{ruledtabular}
+\begin{tabular}{lcccc}
+work & latent DA & localized & other sizes & wrong model \\
+\hline
+\citet{peyron2021} & \checkmark & --- & --- & --- \\
+\citet{chen2023roadenkf} & \checkmark & --- & --- & --- \\
+\citet{pasmans2025} & \checkmark & --- & --- & --- \\
+\citet{tong2026laeenkf} & \checkmark & --- & --- & --- \\
+\citet{si2025latentensf} & \checkmark & --- & --- & --- \\
+\citet{bach2025} & --- & --- & --- & $\circ$ \\
+\citet{brajard2020,bocquet2020} & --- & --- & --- & $\circ$ \\
+This work & \checkmark & \checkmark & \checkmark & \checkmark \\
+\end{tabular}
+\end{ruledtabular}
+\end{table}

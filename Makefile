@@ -35,8 +35,9 @@ PAPERI_TABLES := tab02_tab03 tab04_transfer2d tab08_alpha01_ablation tabA_archit
 	tabC_truth tabD_evaluations tabD_spectra
 PAPERI_FIGS := fig01_concept fig02_systems fig03_1d_transfer fig04_1d_spectra fig05_box_vs_window \
 	fig06_scaling fig07_rollouts_spectra fig10_failure figC1_truth_convergence figC2_appendix_panels
-PAPERII_TABLES := tab07_1d_da tab07_p2_model_error tab07_p2_tables tabE_p2 tabE_p2_robustness tab_da_cost
-PAPERII_FIGS := fig01_concept fig08_1d_da fig09_p2_da fig11_da_snapshot fig12_jacobian_timing \
+PAPERII_TABLES := tab07_1d_da tab07_p2_model_error tab07_p2_tables tabE_p2 tabE_p2_robustness tab_da_cost \
+	tabA_architecture tabC_truth tabV_model_validation
+PAPERII_FIGS := fig_concept_da fig02_systems fig08_1d_da fig09_p2_da fig11_da_snapshot fig12_jacobian_timing \
 	fig13_tilings fig14_model_error fig16_forecasts
 
 define build_paper

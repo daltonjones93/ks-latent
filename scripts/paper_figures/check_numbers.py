@@ -50,7 +50,10 @@ EXPLAINED_BY_PAPER = {"paper1": {
     ("sections/04_systems.tex", "0.048"): "literature value (Cvitanovic et al. 2010 leading exponent at L=22)",
     ("sections/05_results_1d.tex", "0.2125"): "axis range of Fig. 3(b), quoted in the caption",
     ("sections/05_results_1d.tex", "0.2325"): "axis range of Fig. 3(b), quoted in the caption",
-}, "paperII": {}}
+}, "paperII": {
+    ("sections/04_system.tex", "0.0424"): "mean 2D KS truth D_KY per unit area at 44^2 (82.01/44^2; truth runs of _truths.py, Paper I Table 2)",
+    ("sections/04_system.tex", "0.0434"): "mean 2D KS truth D_KY per unit area at 66^2 (189.05/66^2; truth runs of _truths.py, Paper I Table 2)",
+}}
 EXPLAINED = EXPLAINED_BY_PAPER[PAPER]
 
 # ---------- source values ----------

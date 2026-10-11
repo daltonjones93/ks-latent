@@ -1,0 +1,19 @@
+{
+  "table": "model_validation",
+  "git_sha": "7131d28ae373995a54f584a6c8c2a26ec72cda13",
+  "timestamp_utc": "2026-10-11T18:55:22Z",
+  "inputs": [
+    "artifacts/experiments/crop/p7c12_ks2d_x1.0_seed0.json",
+    "artifacts/experiments/crop/p7c12_ks2d_x1.5_seed0.json",
+    "artifacts/experiments/crop/p7c12d10_ks2d_x1.0_seed0.json",
+    "artifacts/experiments/crop/p7c12d10_ks2d_x1.5_seed0.json",
+    "artifacts/experiments/g1_2dks_transfer_full.json",
+    "artifacts/experiments/g1_2dks_transfer_native44_n150.json",
+    "artifacts/experiments/rollout_stats/p7b_ks2d_ks2d_n1000.json",
+    "artifacts/experiments/rollout_stats/p7c12_ks2d_ks2d_n1000.json",
+    "artifacts/experiments/rollout_stats/p7c12d10_ks2d_ks2d_n1000.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed1.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed2.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json"
+  ]
+}

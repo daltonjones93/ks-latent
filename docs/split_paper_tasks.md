@@ -201,36 +201,36 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   observation operator, shifted tilings, size invariance, the comparison with physics-based filters,
   noisy training; (v) scope: twin experiments in 2D KS; the CM1 target as motivation (one sentence).
   Contributions as a bulleted list (old §1's two DA bullets, updated by P7). Target ≤ 1,100 words. ~2 h.
-- **S4.3 `[ ]` §2 Background.** Old §2.3 moved and slightly expanded (what LETKF does; RTPS,
+- **S4.3 `[x]` §2 Background.** Old §2.3 moved and slightly expanded (what LETKF does; RTPS,
   parameter estimation, bias correction as the remedies; cycle spinning); new prior-work table with
   columns: learned model / latent DA / localized / other sizes / compared with a physics-based filter;
   rows: chen2023roadenkf, tong2026laeenkf, peyron2021, pasmans2025, bach2025, si2025latentensf,
   brajard2020, bocquet2020, this work. ~1.5 h.
-- **S4.4 `[ ]` §3.1 The local latent field (restated).** One page: lattice, channels, encoder/decoder
+- **S4.4 `[x]` §3.1 The local latent field (restated).** One page: lattice, channels, encoder/decoder
   per patch, propagator with reach, equivariance (statement only, "Paper I, Prop. 1"), window
   training (one paragraph), the noisy-training objective (one paragraph), the 12-channel model's
   recipe (table row in App. A'). No proofs. Include Fig. 1 (S4.17). ~2 h.
-- **S4.5 `[ ]` §3.2–3.5 The filter (old §3.8 moved).** Per-site LETKF; Proposition 1 (block-diagonal
+- **S4.5 `[x]` §3.2–3.5 The filter (old §3.8 moved).** Per-site LETKF; Proposition 1 (block-diagonal
   Jacobian; old Prop. 3) with proof in App. B'; shifted tilings and Eq. (blend); the N_ens argument;
   the physics-based comparator. Renumber: Prop. 3 → Prop. 1. ~1 h.
-- **S4.6 `[ ]` §4 System and ground truth.** 2D KS only: equation, parameters at 44²–440², ETDRK4 in
+- **S4.6 `[x]` §4 System and ground truth.** 2D KS only: equation, parameters at 44²–440², ETDRK4 in
   one sentence, the truth's D_KY and n₊ at 44² and 66² with their spread (from old §4.3, §4.4, App. C.4),
   and a validation table of the Paper II model (D_KY error 3.6% / 2.1%, reconstruction error,
   free-rollout statistics; from App. D's 12-channel rows). Figure: the 2D KS panel of old Fig. 2 as a
   one-column figure. If S0.3 = (a), a short paragraph on 1D KS and its model. ~1.5 h.
-- **S4.7 `[ ]` §5.1 Setting (old §7.1).** Move; replace "Part I" by "Paper I"; the model paragraph
+- **S4.7 `[x]` §5.1 Setting (old §7.1).** Move; replace "Part I" by "Paper I"; the model paragraph
   shortens because §3.1 now describes it. ~30 min.
-- **S4.8 `[ ]` §5.2–5.3 Tilings and accuracy (old §7.2–7.3).** Move with Fig. (tilings) and the
+- **S4.8 `[x]` §5.2–5.3 Tilings and accuracy (old §7.2–7.3).** Move with Fig. (tilings) and the
   members table. ~30 min.
-- **S4.9 `[ ]` §5.4 One model from 44² to 440² (old §7.4).** Move with Fig. (da_2d), Fig. (snapshot)
+- **S4.9 `[x]` §5.4 One model from 44² to 440² (old §7.4).** Move with Fig. (da_2d), Fig. (snapshot)
   and the sizes table; the "without localization" paragraph stays here. ~30 min.
-- **S4.10 `[ ]` §6 Learned versus physics-based filters (old §7.5).** Move; fill P7 (J17G) and P9 (J5)
+- **S4.10 `[~]` §6 Learned versus physics-based filters (old §7.5).** Move; fill P7 (J17G) and P9 (J5)
   when they land; regenerate the model-error table and Fig. (model_error) with the J17G rows; the
   J17B paragraph stays as the non-Markov case (the 2026-10-11 framing). ~2 h after the runs.
-- **S4.11 `[ ]` §7 Trained only on noisy data (old §7.6).** Move; the round-trip appendix with it. ~30 min.
-- **S4.12 `[ ]` §8 Forecasts, robustness, observation density, cost (old §7.7, §7.9).** Move; Fig.
+- **S4.11 `[x]` §7 Trained only on noisy data (old §7.6).** Move; the round-trip appendix with it. ~30 min.
+- **S4.12 `[x]` §8 Forecasts, robustness, observation density, cost (old §7.7, §7.9).** Move; Fig.
   (forecasts), the robustness and cost tables. ~45 min.
-- **S4.13 `[ ]` The 1D results (old §7.8, Fig. 8, App. E.5).** Per S0.3: (a) §9 "The one-dimensional
+- **S4.13 `[x]` The 1D results (old §7.8, Fig. 8, App. E.5).** Per S0.3: (a) §9 "The one-dimensional
   case" + App.; (b) App. only with two sentences in §5.4; (c) drop and delete the SEC background. ~1 h.
 - **S4.14 `[ ]` §10 Discussion.** Old §9 paras "What locality buys" and "When to prefer a learned
   model"; limitations item 6 expanded into a list (twin experiments; one system; dense regular
@@ -239,17 +239,17 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   domains (I27), model-error statistics (I22). ~1.5 h.
 - **S4.15 `[ ]` §11 Conclusions.** Old §10 para 3 expanded to three short paragraphs: exactness and
   tilings; size invariance and the ensemble; the crossover. ~45 min.
-- **S4.16 `[ ]` Appendices.** A' settings (12-channel model, noisy training, filter and comparator
+- **S4.16 `[x]` Appendices.** A' settings (12-channel model, noisy training, filter and comparator
   settings; from old Table A's last column and App. E.2–E.3); B' proof of Prop. 1 (old App. B.4);
   C' the 2D KS truths used (short; cite Paper I); D' old App. E.1, E.4, E.6, E.7 and (per S0.3) E.5;
   E' reproducibility ("Part II code" + numerics/seeds in short + compute). ~2 h.
-- **S4.17 `[ ]` Fig. 1 (new).** Panels: (a) the latent field and the per-patch decoder; (b) the
+- **S4.17 `[x]` Fig. 1 (new).** Panels: (a) the latent field and the per-patch decoder; (b) the
   block-diagonal observation Jacobian (old Fig. 9a, measured); (c) the four shifted tilings and the
   Hann weights (old Fig. 13a–b). Reuse `fig01_concept.py` panel (d) and `fig13_tilings.py`; one new
   script `fig_concept_da.py`. ~2 h.
 - **S4.18 `[ ]` Length pass.** Target ≤ 8,500 words main text. Candidates: §5.3 Gaussianity → App.;
   §8 observation density → App. with one sentence; the cost section → one paragraph + table. ~1.5 h.
-- **S4.19 `[ ]` Figures regenerated** into `docs/paperII/figures` under content names: tilings, da_2d,
+- **S4.19 `[~]` Figures regenerated** into `docs/paperII/figures` under content names: tilings, da_2d,
   snapshot, model_error, forecasts, (1d_da), jacobian_timing, systems_ks2d. Captions without
   "Part I/II". ~1 h.
 - **S4.20 `[ ]` Bibliography.** `refs.bib` pruned to the entries cited; add Paper I (arXiv id after
@@ -261,6 +261,14 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   before use; no `\ref` to a Paper I label; the model's transfer is quoted, not assumed. ~1 h.
 - **S4.23 `[ ]` Journal formatting (after S0.2).** Class, citation style, figure widths, supplement
   vs appendix, data-availability statement. ~2 h.
+
+
+**S4 first pass done 2026-10-11** (S4.3–S4.9, S4.11–S4.13, S4.16, S4.17; S4.10 and S4.19 partly; details
+in `docs/paperII/decisions.md`). `make paperII` builds (48 pages, no undefined references; number check
+0 UNMATCHED, 0 SUSPECT). Left: S4.1, S4.2, S4.14, S4.15 (front matter, introduction, discussion,
+conclusions: after J17G), S4.10's P7/P9 and the J17G rows of the model-error table and figure, SK6,
+S4.18 (sections now ~9,800 words with LaTeX, before introduction and discussion), S4.19's duplicate
+panels (Fig. da_2d(a) and Fig. tilings(a,b) repeat Fig. 1(b)–(d)), S4.20–S4.23.
 
 ---
 

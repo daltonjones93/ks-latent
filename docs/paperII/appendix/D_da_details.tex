@@ -1,5 +1,119 @@
 %======================================================================
 \section{Data assimilation details}
+\label{app:da}
 %======================================================================
-% TODO(S4.16): paper1 App. E.1, E.4--E.7.
-\placeholder{S4.16: Data assimilation details}
+
+\subsection{Observation networks}
+\label{app:da_networks}
+
+Table~\ref{tab:da_networks} lists every configuration. The grid spacing
+is that of the training data at every size, so a fixed stride is a fixed
+physical spacing: two observations per site in 1D and four in 2D.
+Observation errors are independent with standard deviation $0.1$ in
+standardized units, $R=0.01\,I$; for 2D KS this is $0.62$ in field units. In 2D every
+observation is assimilated by each of the $K=4$ tilings, whose offsets are listed in grid points.
+
+\begin{table}[htbp]
+\caption{Data assimilation configurations: grid, sites, latent dimension
+$\dlat$, observation stride (grid points), spacing (length units) and
+number of observations $m$.}
+\label{tab:da_networks}
+\begin{ruledtabular}
+\begin{tabular}{llccccccccc}
+system & size & grid & sites & $c$ & $\dlat$ & $K$ & offsets & stride & spacing & $m$ \\
+\hline
+\tabinput{tables/networks}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+\subsection{Cost of the observation Jacobian}
+\label{app:da_jacobian}
+
+Figure~\ref{fig:jacobian_timing} times the latent observation Jacobian at
+every deployment size, with the observation network of the runs. The
+coloured construction, $c=12$ forward-mode passes through the decoder,
+gives the same matrix as dense reverse-mode differentiation to single
+precision (largest difference $2\times10^{-7}$ up to $132^2$), and its time grows
+slightly more slowly than the latent dimension: $2.4$~ms at $44^2$ and
+$119$~ms at $440^2$. Reverse mode needs one pass per observation and grows
+almost with the square of the dimension, $32$ times slower at $132^2$; we did
+not run it beyond that size.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/jacobian_timing.pdf}
+\caption{Wall time per observation Jacobian against latent dimension,
+2D KS, observation spacing $2.75$, four CPU threads, median of three: dense
+reverse mode (one pass per observation) and the coloured construction
+used by the per-site filter (twelve forward passes). The two agree exactly
+where both were computed. Slopes are least-squares power-law fits.}
+\label{fig:jacobian_timing}
+\end{figure}
+
+
+\subsection{One-dimensional experiments}
+\label{app:da_1d}
+
+Table~\ref{tab:da_1d} gives the 1D results summarized in Sec.~\ref{sec:da_1d}. They use the 1D
+model of Paper~I, a single tiling, and either the particle flow filter or the stochastic ensemble
+Kalman filter with Gaspari--Cohn localization of half-width 3 sites, without RTPS.
+
+\para{Observation density.} With the particle flow filter at $L=200$ the skill is $5.2$, $2.9$, $1.2$ and
+$1.0$ at observation spacings $1.6$, $3.1$, $6.25$ and $12.5$: with a single tiling, assimilation fails once
+the spacing reaches the site length ($6.25$), well below the pattern wavelength $2\sqrt2\,\pi\approx8.9$.
+An earlier version of the 1D experiment scaled the observation stride with the domain, which doubled
+the spacing with every doubling of $L$; at $L=200$ its localized skill was about $1.3$, against $2.9$ at the
+fixed spacing used here.
+
+\para{Sampling error correction.} At the training size $L=100$, in an earlier comparison with 40
+cycles, SEC applied to a global latent vector beat Gaspari--Cohn applied to the local field at every
+ensemble size, with errors $3$--$19\%$ lower. That comparison confounds the localization with the
+architecture (two different autoencoders), and at $L=100$ the taper is non-zero on 11 of the 16 sites
+of the ring, so it hardly localizes. At $L=200$ the comparison is made on one latent. The
+SEC-corrected covariance formed elementwise is indefinite at five of six ensemble sizes, and the
+particle flow filter, which factorizes it, fails; this is a property of the matrix form, not of SEC,
+and the projected and serial forms of Appendix~\ref{app:da_filters} run at every size.
+
+\begin{table*}[htbp]
+\caption{1D KS data assimilation after transfer: steady-state skill
+(free-run error over analysis error, cycles 51--100) at a fixed
+observation spacing of $3.125$, model trained at $L=100$. Pairs: no
+localization / Gaspari--Cohn (half-width 3 sites). Last two columns
+($L=200$ only): sampling error correction with the particle flow filter
+after projection onto the PSD cone, and in a serial ensemble Kalman
+filter. Skill below 1 means the filter is worse than no assimilation.}
+\label{tab:da_1d}
+\widetabular{ccccccc}{
+$\Nens$ & PFF, $L=200$ & PFF, $L=400$ & EnKF, $L=200$ & EnKF, $L=400$ & SEC-PSD & serial SEC \\
+\hline
+\tabinput{tables/1d_da}}
+\end{table*}
+
+
+\subsection{Noisy training: the round-trip test}
+\label{app:da_roundtrip}
+
+Forty true states of an independent 2D KS trajectory at $44^2$, standardized with each model's training
+statistics, are perturbed and passed through the encoder and decoder; the ratio of the error after the
+round trip to the error before it is below one when the round trip moves the field towards the truth.
+For white grid-point noise of standard deviation $0.05$, $0.1$, $0.2$ and $0.4$ the ratio is $0.95$, $0.53$, $0.35$
+and $0.29$ for the clean-trained model and $0.81$, $0.44$, $0.29$ and $0.23$ for the noisy-trained one; for
+smooth noise (correlation length 4 grid points) it is $1.35$, $1.09$, $1.02$ and $0.99$ against $1.26$, $1.07$,
+$1.01$ and $0.99$; for latent-space noise of standard deviation $0.05$--$0.2$ it is $1.00$--$1.05$ for both. The
+reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_j18b\_roundtrip.py}).
+
+\subsection{Run-to-run spread and transients}
+\label{app:da_tuning}
+
+Seeds change the initial ensemble, the observation noise and the model noise; seeds 1 and 2 also
+change the truth's initial state. At $44^2$ the three seeds give $0.302$--$0.324$, and second seeds at $220^2$
+and $330^2$ are within $0.01$ of the first (Table~\ref{tab:da_2d_sizes}); differences below about $0.02$ are
+within run-to-run variation. Started from the encoded truth, the analysis error rises over the first
+cycles as the ensemble spreads, and is first within $10\%$ of its steady value by cycle 4 at every size.
+Its 10-cycle means over cycles 51--100 vary by up to $\pm6\%$ at $44^2$, $\pm2\%$ at $88^2$ and $\pm1\%$ or less at $220^2$ and
+beyond, the smaller domains averaging over fewer independent regions. Long runs with sparse
+observations are not bitwise reproducible from run to run (multithreaded floating-point reductions,
+amplified by chaos), so differences between methods smaller than the seed spread are not
+significant there. The per-cycle values of every run are stored with its summary.
+

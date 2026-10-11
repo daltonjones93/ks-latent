@@ -1,5 +1,45 @@
 %======================================================================
 \section{Trained only on noisy data}
+\label{sec:da_noisy}
 %======================================================================
-% TODO(S4.11): paper1 §7.6.
-\placeholder{S4.11: Trained only on noisy data}
+
+The model of this paper was trained on fields that carry observation-level
+noise, and it is the better for it. A model with the same architecture and
+recipe trained on clean fields gives $0.338$, $0.321$, $0.326$, $0.340$ and $0.326$ at
+$44^2$ to $440^2$ (four tilings, seed 0), against $0.324$, $0.304$, $0.312$, $0.326$ and $0.311$
+for the noisy-trained model: $4$--$5\%$ lower error at every size, with the
+calibration rising from $0.85$--$0.90$ to $0.92$--$0.98$. At $44^2$ the gain holds on all
+three seeds ($0.338$, $0.322$, $0.320$ against $0.324$, $0.310$, $0.302$). The dynamics are
+preserved: the noisy-trained model's Kaplan--Yorke dimension is within
+$3.6\%$ and $2.1\%$ of the truth's at $44^2$ and $66^2$, against $2.1\%$ and $1.1\%$ for the
+clean-trained one (against one truth run). The clean-trained model is within the
+spread of the three $44^2$ truth runs ($80.7$--$83.6$); the noisy-trained one, at $84.7$, is
+just above it.
+
+\para{Why.} The decoder floor falls from $0.27$--$0.29$ to $0.24$--$0.25$ with one tiling and
+from $0.15$--$0.16$ to $0.13$--$0.14$ with four, and the seam ratio of a single
+tiling from $1.94$ to $1.73$ (Fig.~\ref{fig:tilings}f). Passing perturbed true
+states through the encoder and decoder shows where this comes from
+(Appendix~\ref{app:da_roundtrip}): the noisy-trained autoencoder reconstructs clean
+states $14\%$ more accurately ($0.039$ against $0.046$ in standardized units) and
+removes $15$--$20\%$ more grid-scale noise (it leaves $44\%$ of white noise of
+standard deviation $0.1$, against $53\%$), while neither model pulls smooth or
+latent-space perturbations back towards the attractor; those pass through
+unchanged. The benefit is better reconstruction and small-scale
+denoising, not a projection of the analysis onto the attractor.
+More noise does not help further. A model trained with noise of standard
+deviation $0.3$, three times the observation error, gives $0.343$, $0.332$ and
+$0.328$ at $44^2$ (seeds 0--2, four tilings) and $0.334$ at $220^2$, worse than the
+model trained at the observation noise ($0.324$, $0.310$, $0.302$; $0.312$) and no
+better than the clean-trained one ($0.338$, $0.322$, $0.320$; $0.326$). Its dynamics
+are as accurate (Kaplan--Yorke dimension within $1.4\%$ of the truth's at $44^2$)
+and its decoder floor is lower still ($0.22$--$0.23$ with one tiling,
+$0.12$--$0.13$ with four), but the filter is over-dispersed, with a calibration
+of $1.06$--$1.10$. The best training noise is therefore near the observation
+error, at least among the three levels we tried.
+
+That a model of the dynamics can be learned from noisy fields without
+loss matters for the comparison of Sec.~\ref{sec:da_model_error}:
+measurement error is the part of the error budget that is usually well
+characterized, and it can be accounted for in training.
+

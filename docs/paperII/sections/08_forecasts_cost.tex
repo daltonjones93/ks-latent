@@ -1,5 +1,139 @@
 %======================================================================
 \section{Forecasts, robustness, observation density and cost}
+\label{sec:da_robust}
 %======================================================================
-% TODO(S4.12): paper1 §7.7, §7.9.
-\placeholder{S4.12: Forecasts, robustness, observation density and cost}
+
+\para{Forecasts from the analyses.} A better analysis should give a better
+forecast, not only a smoother picture. From steady-state analyses at
+$44^2$ we forecast each tiling's analysis mean with the learned model,
+without noise, and blend the forecasts (Fig.~\ref{fig:forecasts},
+Table~\ref{tab:da_forecast}). The blended forecast's error is $26\%$ below
+that of the single-tiling forecast after one cycle and $15$--$17\%$ below it
+at $0.4$--$1.7$ Lyapunov times. It reaches half the field's standard
+deviation after $1.26$ Lyapunov times (seeds 0--2: $1.16$--$1.40$), against $1.10$ for
+the single-tiling analysis, $1.62$ for a forecast started from the encoded
+true state and $0.33$ for persistence, and the field's standard deviation
+after $2.39$, against $2.06$, $2.70$ and $0.74$. The tilings recover a third to a half
+of the forecast skill that separates the single-tiling analysis from a
+perfect initial condition for this model. Beyond about three Lyapunov
+times all forecasts are decorrelated from the truth; the blend's error
+then stays lower only because it averages four partly independent
+forecasts.
+
+\para{Robustness.} Started from an ensemble drawn from an independent
+climatology, with no knowledge of the truth, the filter's error falls
+from $1.33$ to within $10\%$ of its steady value in 8 cycles, and the analysis
+then converges onto the one started from the encoded truth: the
+difference between the two decays by a factor of about ten every ten
+cycles, to $10^{-8}$ by cycle 100 (Table~\ref{tab:da_robust}). With the
+observation error misspecified by a factor of two in either direction
+the error rises by $4$--$8\%$ ($0.351$ and $0.338$ against $0.324$), and the calibration
+moves the way it should ($0.58$ and $1.40$). A 300-cycle run at $220^2$ holds $0.31$ throughout.
+
+\para{Observation density.} Table~\ref{tab:da_robust} and Fig.~\ref{fig:da_2d}
+use observations every $2.75$ length units, four per site. With twice as
+many in each direction (spacing $1.4$) the error is $0.226$ with four tilings and
+$0.333$ with one, against $0.539$ for interpolation; with half as many (spacing
+$5.5$, one observation per site) it is $0.769$ and $0.990$, against $3.01$ for
+interpolation, a factor of four. At this sparse spacing the filter stays
+bounded over 300 cycles (means $0.77$, $0.77$ and $0.79$ over cycles 51--100,
+101--200 and 201--300), but its error relative to interpolation is no
+longer the whole story: the learned model must carry the state between
+sparse observations, and on longer runs with sparser networks the
+stability of the learned propagator becomes the limit. Failsafes for that
+regime, a propagator trained with latent noise, a gate that falls back to
+it off the attractor, and the reset of a tiling that departs from the
+others, are the subject of a follow-up study.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics{figures/forecasts.pdf}
+\caption{Forecasts from the analyses, 2D KS at $44^2$. (a) Forecast error
+against lead time, mean over seeds 0--2 (10 forecasts each from
+steady-state analyses), for the blended four-tiling analysis (shaded:
+range over seeds), the single-tiling analysis, the encoded true state,
+persistence of the analysis, and the field's standard deviation. Top axis
+in Lyapunov times of the seed-0 truth ($\lambda_1=0.165$; the three $44^2$ truths give $0.165$--$0.194$). (b) Ratio of the blended to the
+single-tiling forecast error. The blended analysis is a better initial
+condition: its forecasts stay ahead for about two Lyapunov times.}
+\label{fig:forecasts}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Forecast error from the analyses (field units), 2D KS at $44^2$,
+mean over seeds 0--2. Lead in cycles of $0.5$ time units and in Lyapunov
+times of the seed-0 truth ($\lambda_1=0.165$); forecasts from the four-tiling analysis, the single-tiling
+analysis and the encoded true state; persistence; the field's standard
+deviation; ratio of the four-tiling to the single-tiling error.}
+\label{tab:da_forecast}
+\begin{ruledtabular}
+\begin{tabular}{cccccccc}
+cycles & $\lambda_1 t$ & 4 tilings & 1 tiling & true state & persistence & field std & ratio \\
+\hline
+\tabinput{tables/forecast}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+\begin{table}[htbp]
+\caption{Robustness of the filter, 2D KS, four tilings, $44^2$ unless
+stated: steady-state analysis error (field units) and spread over error.
+The last column gives, for the initial ensembles, the cycles until the
+error first falls within $10\%$ of its steady value and, for the long runs,
+means over cycles 51--100, 101--200 and 201--300. ---: not run.}
+\label{tab:da_robust}
+\begin{ruledtabular}
+\begin{tabular}{lccc}
+case & error & calibration & \\
+\hline
+\tabinput{tables/robustness}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+%----------------------------------------------------------------------
+\subsection{Cost and memory}
+\label{sec:da_cost}
+%----------------------------------------------------------------------
+
+Table~\ref{tab:da_cost} gives what the filter costs, measured one run at
+a time on an otherwise idle workstation (three threads, 64 members per
+tiling, 100 cycles). The times are for the whole run, including the
+integration of the PDE truth and the observation draws. One tiling takes
+$9$~s at $44^2$ and $1266$~s at $440^2$, four tilings $26$~s and $3542$~s, or $35$~s per
+cycle at $\dlat=76\,800$ per tiling. Over the full range, a factor of 100 in
+area, the time grows almost in proportion to the area (least-squares
+slope $1.05$ on log axes for both one and four tilings); above $220^2$ it
+grows somewhat faster (slope $1.3$), although the work per site does not
+depend on the domain; we have not identified the cause (memory traffic is
+the likely one). Four tilings in one process cost $2.5$--$2.9$ times
+one, not four, because the truth and the observations are shared; the
+tilings are independent and could run in parallel, which we did not time. Peak
+memory, $0.7$~GB at $44^2$ and $14.6$ and $17.2$~GB at $440^2$ for one and four
+tilings, grows more slowly than the area (slope $0.68$) and includes the
+stored truth trajectory, $6.6$~GB at $440^2$. The per-site filter never forms a
+$\dlat\times\dlat$ matrix, which at $440^2$ would take $47$~GB in double precision.
+We have not profiled the per-site loop, which runs in Python and is the
+obvious target for a vectorized implementation. The observation Jacobian
+itself is cheap: its twelve forward passes take $2.4$~ms at $44^2$ and $119$~ms at
+$440^2$, where dense reverse mode would need one pass per observation
+(Appendix~\ref{app:da_jacobian}).
+
+\begin{table}[htbp]
+\caption{Cost of the latent filter, 2D KS, 64 members per tiling,
+observation spacing $2.75$, 100 cycles, one run at a time (three threads).
+$\dlat$: latent dimension per tiling; wall: whole-run wall time including
+the PDE truth (s); 4/1: ratio of four tilings to one in one process;
+per cycle: wall time per cycle with four tilings (s); peak memory: peak
+resident memory of the whole run (GB), which includes the stored truth
+trajectory (last column, GB).}
+\label{tab:da_cost}
+\begin{ruledtabular}
+\begin{tabular}{lcccccccc}
+size & $\dlat$ & \multicolumn{2}{c}{wall (s)} & 4/1 & per cycle & \multicolumn{2}{c}{peak memory} & truth \\
+ & & $K=1$ & $K=4$ & & $K=4$ & $K=1$ & $K=4$ & \\
+\hline
+\tabinput{tables/da_cost}
+\end{tabular}
+\end{ruledtabular}
+\end{table}

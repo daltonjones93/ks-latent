@@ -1,5 +1,52 @@
 %======================================================================
 \section{Ground truth}
+\label{app:groundtruth}
 %======================================================================
-% TODO(S4.16): paper1 App. C.4 (short; cite Paper I).
-\placeholder{S4.16: Ground truth}
+
+The protocol is that of Paper~I, which also validates the solvers; we
+summarize what the 2D KS truths of Sec.~\ref{sec:ks2d} rest on.
+
+\para{Lyapunov computation.} The base trajectory and $K$ tangent vectors
+are advanced together by the same ETDRK4 step, the tangent vectors by the
+exact Fr\'echet derivative of the right-hand side, which for
+$\tfrac12|\nabla u|^2$ follows from the product rule without
+approximation; the $\bm k=0$ mode is projected out of the base trajectory
+and of every tangent vector. The tangent vectors are re-orthonormalized
+by a QR factorization every time unit, and the exponents are the time
+averages of $\log|R_{ii}|$ over a 40-unit window after a 20-unit warm-up,
+which follows a spin-up of 200 time units. $K=150$ at $44^2$ and $300$ at $66^2$,
+in both cases beyond the index at which the cumulative sum of exponents
+turns negative, so $\DKY$ is computed, not extrapolated. The truths use
+the grid of the model.
+
+\para{Spread and convergence.} Three runs at $44^2$ give $81.8$, $80.7$ and
+$83.6$, and two at $66^2$ give $192.5$ and $185.6$, a spread of $\pm1.8\%$ at both
+sizes. Table~\ref{tab:running_ks2d} gives the running estimates of the runs
+that recorded them: over the last 20 time units they still move by
+$3$--$5\%$, in both directions. We therefore treat the truths as uncertain at
+the level of a few percent, comparable to the model's errors in
+Table~\ref{tab:model_validation}.
+
+\begin{table}[htbp]
+\caption{Running $\DKY$ of the 2D KS truth runs that recorded it, at the
+averaging times shown (time units after the warm-up), and the change over
+the last 20 time units.}
+\label{tab:running_ks2d}
+\begin{ruledtabular}
+\begin{tabular}{lccccc}
+run & 10 & 20 & 30 & 40 & last 20 \\
+\hline
+\tabinput{tables/running_ks2d}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+\para{Model spectra.} The model's spectrum is that of the latent map,
+computed with the same algorithm: tangent vectors are propagated through
+$\Fp$ by forward-mode automatic differentiation in single precision and
+re-orthonormalized every 10 steps by a double-precision QR, with a warm-up
+of 200 steps and $2000$ steps ($200$ time units), from the encoding of a true
+state. We use $384$ tangent directions at $44^2$ and $512$ at $66^2$, again beyond
+the index at which the cumulative sum turns negative. Paper~I shows that
+double-precision propagation changes the 2D KS model's $\DKY$ by less than the
+spread over initial conditions.

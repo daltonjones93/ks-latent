@@ -1,5 +1,59 @@
 %======================================================================
 \section{The one-dimensional case}
+\label{sec:da_1d}
 %======================================================================
-% TODO(S4.13): paper1 §7.8, Fig. 8.
-\placeholder{S4.13: The one-dimensional case}
+
+Two results from 1D KS complete the picture (Fig.~\ref{fig:da_1d};
+details, the table and the observation-density sweep in
+Appendix~\ref{app:da_1d}). They use the 1D model of Paper~I (Sec.~\ref{sec:ks1d}), deployed at
+$L=200$ and $400$ without retraining, a single tiling, and the particle flow
+filter or the stochastic ensemble Kalman filter at a fixed observation
+spacing of $3.125$; skill is the ratio of free-run to analysis error.
+
+\para{The ensemble an unlocalized filter needs doubles with the domain.}
+With localization, every ensemble of 16 or more members gives a skill of
+$2.3$--$3.0$ at both sizes and with both filters. Without it, the filter is
+worse than no assimilation until the ensemble is large enough, and how
+large depends on the domain: at $L=200$, where the truth has $n_+=26$--$27$, it is
+marginal with 64 members and works with 128; at $L=400$, where $n_+=51$, it
+fails with 64, is marginal with 128 and works only with 256. The two
+filters differ by at most $0.4$ in skill. This is Eq.~\eqref{eq:nens_local}
+and its unlocalized counterpart, measured.
+
+\para{A distance beats a distance-free correction.} Sampling error
+correction \citep{anderson2012} localizes without a distance and is the
+natural alternative for a latent space that has none. On one latent at
+$L=200$, in the forms in which it runs (the corrected matrix projected onto
+the positive semidefinite cone, or the serial correction of each
+regression coefficient that \citet{anderson2012} uses), Gaspari--Cohn
+localization in the latent field beats it at every ensemble size below
+256, by a factor of up to $1.7$ against the projected form and up to $3.5$
+against the serial one, which does not help at all below 128 members.
+SEC removes sampling noise from correlations; a distance taper also
+removes the many weak true correlations between distant sites, which a
+small ensemble cannot afford to estimate. Giving the latent a geometry is
+what makes this possible.
+
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/1d_da.pdf}
+\caption{1D KS data assimilation: skill (free-run error over analysis
+error; above the dotted line assimilation helps) against ensemble size,
+observation spacing $3.125$ in every panel. (a) Training size $L=100$
+(earlier sweeps, 40 cycles, whole-run skill): a global latent vector
+without localization and with sampling error correction (SEC), and the
+local field without localization and with Gaspari--Cohn (GC), particle
+flow filter, drawn with the symbols of the particle-flow curves in (b,c). (b) $L=200$ and (c) $L=400$, the local model transferred
+without retraining (100 cycles, steady state): no localization and GC,
+for the particle flow filter (solid) and the ensemble Kalman filter
+(dashed); in (b) also SEC after projection onto the PSD cone and in a
+serial filter, with crosses at the ensemble sizes where SEC in matrix
+form failed. The shaded line marks $n_++1$ for the truth. With
+localization a 16-member ensemble suffices at both sizes; without it,
+the ensemble must exceed the number of unstable directions by a margin,
+and that number doubles with the domain.}
+\label{fig:da_1d}
+\end{figure*}
+
+

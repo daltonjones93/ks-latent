@@ -1,5 +1,245 @@
 %======================================================================
 \section{Method}
+\label{sec:method}
 %======================================================================
-% TODO(S4.4--S4.5): §3.1 restated latent field; §3.2--3.5 paper1 §3.8 (Prop. 4 -> Prop. 1).
-\placeholder{S4.4--S4.5: Method}
+
+This section restates the model of Paper~I in the form the filter needs,
+proves that its observation operator is exactly local, and defines the
+filter, the shifted tilings and the physics-based comparator.
+Figure~\ref{fig:concept} summarizes the construction; the settings of the
+model and the filter are in Appendix~\ref{app:settings}.
+
+%----------------------------------------------------------------------
+\subsection{The local latent field}
+\label{sec:local_field}
+%----------------------------------------------------------------------
+
+\para{Lattice and latent.} A scalar field $u$ on a periodic domain
+$\Omega$ is sampled on a uniform grid of spacing $\Delta x$ and observed
+at snapshot interval $\Delta t$; it is standardized with one mean and one
+standard deviation computed on the training data. The domain is tiled by
+non-overlapping square \emph{patches} of $p$ grid points per side, of
+physical size $h=p\,\Delta x$, whose centres form a periodic \emph{site
+lattice} $\Lat$ with $P=|\Lat|$ sites. We write $\dist(j,k)$ for the
+periodic distance between sites in units of the site spacing and $\Tr_s$
+for the translation of the physical field by $s$ grid points. The latent
+state is a field on the lattice,
+\begin{equation}
+  z = (z_j)_{j\in\Lat}, \qquad z_j \in \R^{c},
+  \qquad \dlat = cP,
+  \label{eq:latent_field}
+\end{equation}
+with $c$ channels per site, flattened site-major only to call a library
+routine.
+
+\para{Encoder and decoder.} The encoder $\E$ maps each patch to a
+hidden vector by a strided convolution whose kernel equals the patch, and
+then to $c-1$ learned channels by per-site layers; channel $0$ is not
+learned but is the patch average of $u$, which fixes one coordinate to a
+physical quantity with the same meaning at every size. The decoder $\Dec$
+mirrors it: per-site layers from $c$ channels to a hidden width, and a
+transposed convolution with kernel and stride equal to the patch, which
+writes each site's hidden vector back onto its own patch. In general
+$\E$ and $\Dec$ may also mix neighbouring sites, over $\Renc$ and $\Rdec$
+sites; the model used here has $\Renc=\Rdec=0$. It is \emph{per-patch}:
+$z_j$ is a function of patch $j$ alone, and patch $j$ is reconstructed
+from $z_j$ alone. This is the property the filter rests on.
+
+\para{Propagator.} The latent dynamics are a residual map
+$z^{n+1}=\Fp(z^n)=z^n+f_\theta(z^n)$, where $f_\theta$ embeds each site's
+$c$ channels to a width $d_m$, applies $n_\ell$ blocks that each mix the
+sites within radius $w$ by an unconstrained circular convolution and then
+apply a per-site MLP, both with layer normalization and residual
+connections, and projects back to $c$ channels. One step at site $j$
+therefore depends on the sites within the reach $\Rprop=w\,n_\ell$, here
+$6$ sites. All operators are weight-shared and of finite reach on a
+periodic lattice, so the three maps commute exactly with shifts by whole
+patches and their parameters do not depend on $P$ (Paper~I,
+Prop.~1). The same trained weights define the model on every periodic
+domain whose sides are multiples of $h$, with $\dlat$ growing in
+proportion to the area; this is how one model is deployed below on
+domains from $44^2$ to $440^2$.
+
+\para{Training on windows.} The model is trained on random windows of one
+large periodic simulation, not on a small periodic box, so that no
+training sample contains a whole periodic direction. The autoencoder is
+trained first, on reconstruction with two regularizers on the channel
+covariance (a variance anchor and a log-determinant barrier against
+correlated collapse). With the encoder frozen, the propagator is then
+trained on rollouts in which a halo of $\eta\ge\Rprop$ sites at the window
+edges is overwritten after every step by the true encoding, and only the
+free interior is scored; this trains exactly the limited-area problem with
+true lateral boundary values (Paper~I, Prop.~2). The rollout length is
+ramped to $32$ steps, and Gaussian noise added to the initial latent state
+is annealed from $0.10$ to $0.02$.
+
+\para{Trained only on noisy data.} The model used in this paper never sees
+a clean field. Every training field carries one fixed realization of
+independent Gaussian noise of standard deviation $0.1$ in standardized
+units, the level of the observation errors of Sec.~\ref{sec:da_results}.
+The reconstruction loss is measured against these noisy fields, and the
+propagator learns from encodings of them, so the training data are what an
+observing system could provide on a dense network. Section~\ref{sec:da_noisy}
+compares this model with the same recipe trained on clean fields.
+
+%----------------------------------------------------------------------
+\subsection{Latent ensemble data assimilation}
+\label{sec:da_method}
+%----------------------------------------------------------------------
+
+Observations are taken of the physical field,
+$y_n = \Hobs(u_n) + \nu_n$, $\nu_n\sim\mathcal{N}(0,R)$, where $\Hobs$
+selects grid points on a regular network. The filter state is an
+ensemble $\{z^{(e)}\}_{e=1}^{\Nens}$ of latent fields, forecast with
+$\Fp$ plus additive model noise, and the observation operator in latent
+space is $h = \Hobs\circ\Dec$. Nothing in the filter uses the equations
+of the system: the model is the learned propagator, and the only
+physical input is the observation network.
+
+\para{The per-site filter.} The 2D experiments use a local ensemble
+transform Kalman filter in the local-analysis form of \citet{hunt2007},
+run once per site of the lattice. Site $s$ is updated from the
+observations whose taper value $\rho_i$ with respect to $s$ is positive,
+each with its error variance divided by $\rho_i$ (R-localization), using
+the deterministic ensemble transform of \citet{hunt2007}. The taper is the
+Gaspari--Cohn function \citep{gaspari1999} of the toroidal site distance
+$\dist(j,k)$, with half-width $1.5$ sites. After each analysis the
+ensemble spread is relaxed towards the forecast spread, coordinate by
+coordinate, with weight $\alpha=0.7$ (relaxation to prior spread, RTPS;
+\citealp{whitakerhamill2012}); the forecast adds Gaussian model noise of
+standard deviation $0.02$ per latent coordinate at every propagator step.
+The 1D experiments of Sec.~\ref{sec:da_1d} also use a particle flow filter
+\citep{huvanleeuwen2021} and a stochastic ensemble Kalman filter with
+Schur-product localization; all analysis schemes are written out in
+Appendix~\ref{app:da_filters}.
+
+The per-patch decoder makes the observation operator exactly local in
+latent space.
+
+\begin{proposition}[Block-diagonal observation Jacobian]
+\label{prop:blockdiag}
+Let $\Rdec=0$ and let $\Hobs$ select grid points. Then
+$\partial h_i/\partial z_{j,k} = 0$ for every channel $k$ unless
+observation $i$ lies in patch $j$. Consequently:
+\begin{enumerate}
+\item[(a)] the full Jacobian $J\in\R^{m\times\dlat}$ is recovered exactly
+  from $c$ forward-mode Jacobian--vector products with the tangents
+  $v^{(k)} = \sum_{j\in\Lat} e_{j,k}$, $k=1,\dots,c$, for any $P$ and any
+  number of observations $m$;
+\item[(b)] in the per-site filter with R-localization, with either the
+  perturbed-observation or the ensemble-transform update, the analysis at
+  site $s$ depends only on the ensemble at the sites that own an
+  observation within the taper support of $s$, and no row of $J$ is
+  truncated in computing it.
+\end{enumerate}
+\end{proposition}
+
+The proof is in Appendix~\ref{app:proof}. Part (a) is a column colouring
+of $J$ in the sense of \citet{curtis1974}: all columns belonging to the
+same channel can share one colour, because no row has two non-zeros in
+such a group. With $\Rdec>0$, row $i$ would have non-zeros at every site
+within $\Rdec$ of its patch, the colouring would need
+$c(2\Rdec+1)^{\dim}$ colours, and the per-site analysis in (b) would have
+to include those sites as well or truncate $h$. Neither the cost of the
+colouring nor the memory of the per-site filter depends on the domain
+size. Figure~\ref{fig:concept}b shows the measured Jacobian.
+
+%----------------------------------------------------------------------
+\subsection{Shifted tilings}
+\label{sec:tilings_method}
+%----------------------------------------------------------------------
+
+A per-patch decoder reconstructs each patch from its own site, so its
+errors are tied to the patch lattice: they are largest at patch edges and
+they do not average out over time, because the lattice does not move. We
+remove this lattice dependence without retraining. Let $\Tr_o$ translate
+the physical field by $o\in\{0,p/2\}^2$ grid points, giving $K=4$ copies
+of the patch lattice offset by half a patch in $x$, in $y$ and in both.
+Tiling $k$ encodes $\Tr_{o_k}u$, runs its own ensemble and its own
+per-site filter with the same observations, and decodes its analysis mean
+back to the unshifted frame, $\bar u_k = \Tr_{o_k}^{-1}\Dec(\bar z_k)$. The
+analysis is the blend
+\begin{equation}
+\begin{gathered}
+  \bar u = \sum_{k=1}^{K} w_k\,\bar u_k,\qquad
+  w_k(x,y) = \frac{\phi(x-o_{k,x})\,\phi(y-o_{k,y})}
+  {\sum_{l}\phi(x-o_{l,x})\,\phi(y-o_{l,y})},\\
+  \phi(\xi) = \sin^2\!\Big(\frac{\pi(\xi \bmod p + \tfrac12)}{p}\Big),
+\end{gathered}
+  \label{eq:blend}
+\end{equation}
+a partition of unity whose weight for tiling $k$ vanishes on that
+tiling's own patch edges (Fig.~\ref{fig:concept}c,d); for $K=4$ the
+denominator is $1$. The members are blended the same way, so the blended
+ensemble has a spread. The tilings never exchange information: each
+cycles its own ensemble, and the blend is formed only for output, since
+re-encoding the blended field on each tiling degrades the analysis
+(Sec.~\ref{sec:da_tilings}). The construction is cycle spinning
+\citep{coifmandonoho1995} on the patch lattice, applied to the analysis.
+It keeps the exactness of Proposition~\ref{prop:blockdiag}: each tiling's
+filter is exactly local, and Eq.~\eqref{eq:blend} is a fixed linear map of
+their outputs (Appendix~\ref{app:proof}). It costs $K$ filters, which can
+run in parallel.
+
+%----------------------------------------------------------------------
+\subsection{How large an ensemble is needed}
+\label{sec:nens}
+%----------------------------------------------------------------------
+
+An ensemble filter needs enough members to span the directions along
+which forecast errors grow. Without localization these are the unstable
+directions of the whole attractor, so $\Nens$ must grow with $\DKY$ and
+therefore with $|\Omega|$. With localization, each local analysis only
+needs to span the unstable directions active inside the taper support
+$A_{\mathrm{loc}}$ \citep{patil2001,ott2004}, which suggests
+\begin{equation}
+  \Nens \gtrsim \rho\,|A_{\mathrm{loc}}|,
+  \label{eq:nens_local}
+\end{equation}
+independent of the total domain size. For 1D KS with the taper used in
+Sec.~\ref{sec:da_1d} (support radius $6$ sites of length $6.25$),
+Eq.~\eqref{eq:nens_local} gives $\Nens\gtrsim 0.22\times75\approx17$; the 2D
+value is given in Sec.~\ref{sec:da_2d}. Combined with a model whose
+parameters do not depend on the domain, this is the reason to expect a
+fixed-size localized filter to keep working as the domain grows, while an
+unlocalized filter of the same size degrades.
+
+%----------------------------------------------------------------------
+\subsection{A physics-based comparator}
+\label{sec:comparator}
+%----------------------------------------------------------------------
+
+To ask what the learned model costs or gains against the equations,
+Sec.~\ref{sec:da_model_error} runs the same kind of filter in the physical
+space of a partial differential equation: an ensemble of PDE states,
+forecast with a spectral solver, analysed by a local ensemble transform
+Kalman filter on $4\times4$ blocks of grid points with R-localization and
+RTPS, observing the same points with the same errors. Its forecast model
+is deliberately wrong (Appendix~\ref{app:da_comparator}). It is given the
+standard remedies for model error, each tuned on one seed: the RTPS weight
+and the localization radius; online estimation of global model parameters
+by state augmentation \citep{anderson2001,ruiz2013}, with a global ensemble
+transform for the parameters and a floor on their spread; and correction
+of the mean one-cycle forecast error, with additive noise drawn from the
+covariance of the remaining error \citep{dee2005}, both estimated offline
+from $r = u(t+T)-M\big(u(t)\big)$ on an independent trajectory, where $M$
+is the wrong model and $T$ one assimilation cycle.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/concept_da.pdf}
+\caption{Exactly local data assimilation in a latent field. (a) The latent
+field: each patch of the physical field is encoded into $c$ channels at
+its own site by $\E$, and $\Dec$ writes each site back onto its own patch;
+the propagator $\Fp$ mixes sites within a finite reach. (b) The latent
+observation Jacobian of the model of this paper, measured at $44^2$ by
+dense reverse-mode differentiation, observations sorted by the site that
+owns them (12 of 64 sites): it is exactly zero outside the $c=12$ columns of
+each site (Proposition~\ref{prop:blockdiag}). (c) Shifted tilings: the
+patch lattice of tiling 0 (solid) and the lattice shifted by half a patch
+(dashed); four tilings are shifted by $(0,0)$, $(p/2,0)$, $(0,p/2)$ and
+$(p/2,p/2)$. (d) Blend weights along one axis, Eq.~\eqref{eq:blend}: each
+tiling's weight vanishes on its own patch edges, and the weights sum to
+one.}
+\label{fig:concept}
+\end{figure*}
