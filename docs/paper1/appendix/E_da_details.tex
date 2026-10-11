@@ -96,7 +96,8 @@ and site $s$'s analysis ensemble is $\bar z_s + (\bar w\mathbf 1^\top+W)^\top X_
 the Kalman update computed with the ensemble covariance exactly (unit
 test). It is the analysis of every 2D experiment. Its stochastic counterpart, the per-site filter
 above, gave the same skill to within $0.15$ at every ensemble size with an earlier single-tiling
-filter at $44^2$, at about $40\%$ higher CPU time.
+filter at $44^2$ (decisions log, D4), while the deterministic transform took about $40\%$ less
+CPU time, having no observation draws.
 
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
