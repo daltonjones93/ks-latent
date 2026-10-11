@@ -1,7 +1,7 @@
 {
   "figure": "fig09_p2_da",
-  "git_sha": "dac1cebee70b7793d14b2086f6cbd0c0e7fff907",
-  "timestamp_utc": "2026-10-10T21:26:28Z",
+  "git_sha": "8cca7aedbb5944b3fbd33486b182456d92398143",
+  "timestamp_utc": "2026-10-11T00:21:20Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_D10_L220_I1_T1.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T4.json",
@@ -45,6 +45,10 @@
     "artifacts/experiments/da2d/h9_I33_d10_T4_s1.json",
     "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
     "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T1_N64.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T4_N64.json",
+    "artifacts/experiments/da2d/h9_K1u_L44_T4_N64.json",
+    "artifacts/experiments/da2d/h9_K1u_L66_T4_N64.json",
     "artifacts/experiments/da2d/h9_K2b_ctrl_T4_s0.json",
     "artifacts/experiments/da2d/h9_K2b_ctrl_T4_s1.json",
     "artifacts/experiments/da2d/h9_K2b_ctrl_T4_s2.json",

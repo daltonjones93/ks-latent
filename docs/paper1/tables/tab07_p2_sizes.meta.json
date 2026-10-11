@@ -4,6 +4,8 @@
     "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
     "artifacts/experiments/da2d/h9_I33_d10_T4_s1.json",
     "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T1_N64.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T4_N64.json",
     "artifacts/experiments/da2d/h9_D10_L88_I1_T1.json",
     "artifacts/experiments/da2d/h9_D10_L88_I1_T4.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T1.json",
@@ -23,6 +25,13 @@
         0.3239509037531639,
         0.3102447975525827,
         0.30242543923005577
+      ]
+    },
+    "66": {
+      "d": 1728,
+      "K1": 0.4229822730987705,
+      "K4": [
+        0.3069814913984914
       ]
     },
     "88": {
