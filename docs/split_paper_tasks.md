@@ -303,6 +303,36 @@ stays a KS result. α = 0.05, the drag whose canonical models are best documente
   analysis, error at 3×) added to the snapshot figure or as a separate figure. Remove "Kolmogorov
   flow was not assimilated" from the limitations. ~0.5 day.
 
+## S1D Per-patch 1D model for Paper II (decided 2026-10-11)
+
+Purpose: make the 1D experiments of Paper II use the same kind of model as the 2D ones (per-patch
+encoder and decoder, so Prop. 1 holds in 1D; noisy training at 0.1), instead of Paper I's 1D model
+(reach 6, clean data), which §4.3 currently has to describe as an exception.
+
+- **S1D.1 `[~]` Option A (queued, `scripts/run_1d_perpatch.sh`, caffeinated, log `artifacts/logs/pp1d.log`).**
+  Paper I's 1D recipe with encoder/decoder reach 0, c = 6, no spatial penalty, noisy data
+  (`artifacts/datasets/stage1_trajectories_dtsnap1_noise0.1.h5`, `scripts/make_noisy_dataset.py`).
+  Starts when the last J17G training is done; then D_KY at L = 100/200/400 from three ICs
+  (`eval_1d_transfer.py --tag pp1d_c6d10`) and the full 1D DA set (`run_blockD_1d.sh`, TAGP=pp1d_c6d10_,
+  results in `artifacts/experiments/d1_pp1d_c6d10_`). Check: D_KY within the truth spread at every L
+  (Paper I's 1D model is within 1.2%); reconstruction; free rollouts.
+- **S1D.2 `[x]` Option B code (written 2026-10-11, not run).** Window training on one wide 1D domain:
+  `scripts/gen_ks1d_wide.py` (L = 1600, 4+1 trajectories of 250, standardized with the L = 100 statistics),
+  `ks_latent/training/crop1d.py` (Stage A on 1D windows; Stage B reuses the 2D forced-halo trainer with one
+  site in y), `scripts/train_ks1d_crop.py` (saves checkpoints in the L = 100 format; `eval_1d_transfer.py
+  --tag pp1d_crop_c6d10`). Tests `tests/unit/test_crop1d.py` (1D forced-halo exactness, halo one site
+  short breaks it; bank layout; seam wrap; size independence). Run only if A transfers poorly or the
+  user wants 2D-identical training.
+- **S1D.3 `[ ]` Update Paper II with the per-patch 1D results** (after S1D.1, or S1D.2 if run): §4.3 (the
+  1D model is per-patch and noisy-trained; drop the "Prop. 1 does not apply" sentence; its D_KY
+  validation, a row block in Table `model_validation`); §9 and App. D (regenerate `fig08_1d_da.py`,
+  `tab07_1d_da.py` from the new runs; re-check "ensemble doubles with the domain" and "GC beats SEC");
+  App. A (`tabA_architecture_da`: the new 1D column); App. B/§3 if the 1D filter changes. Optional: run
+  the 2D per-site LETKF with two shifted tilings in 1D, so 1D and 2D use the same filter (needs a 1D
+  path in `exp_h9_tiled_da.py`). Decision log entry in `docs/paperII/decisions.md`.
+
+---
+
 ## S5 Consistency between the two papers
 
 - **S5.1 `[ ]` Shared facts agree.** One script, `scripts/paper_figures/shared_facts.py`, prints the

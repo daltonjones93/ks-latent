@@ -44,6 +44,17 @@ MODELS = {
         "artifacts/stage1_ae_patched_full_exp_e4_seed2_localfield_d48_localmlp.pt",
         "artifacts/stage2_prop_patched_full_exp_e4_seed2_localfield_d48_localmlp_warmstart_k12_300ep.pt",
     ),
+    # Paper II 1D per-patch models (2026-10-11): (A) the Paper I recipe with encoder/decoder reach 0,
+    # c = 6, no spatial penalty, noisy data (scripts/run_1d_perpatch.sh); (B) window-trained
+    # (scripts/train_ks1d_crop.py).
+    "pp1d_c6d10": (
+        "artifacts/stage1_ae_patched_full_pp1d_c6d10.pt",
+        "artifacts/stage2_prop_patched_full_pp1d_c6d10_warmstart_k12_300ep.pt",
+    ),
+    "pp1d_crop_c6d10": (
+        "artifacts/stage1_ae_patched_full_pp1d_crop_c6d10.pt",
+        "artifacts/stage2_prop_patched_full_pp1d_crop_c6d10.pt",
+    ),
 }
 DATASET = "artifacts/datasets/stage1_trajectories_dtsnap1.h5"
 OLD_L = 100.0
