@@ -47,10 +47,10 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | appendix/D_tables.tex | 27 | 1.7 | 92 |
 | appendix/D_tables.tex | 35 | 0.35 | 108 |
 | appendix/D_tables.tex | 74 | 9.1 | 40 |
-| appendix/D_tables.tex | 75 | 10.0 | 891 |
+| appendix/D_tables.tex | 75 | 10.0 | 895 |
 | sections/02_background.tex | 20 | 0.16 | 77 |
-| sections/03_method.tex | 233 | 1.26 | 18 |
-| sections/03_method.tex | 350 | 0.10 | 929 |
+| sections/03_method.tex | 233 | 1.26 | 19 |
+| sections/03_method.tex | 350 | 0.10 | 933 |
 | sections/03_method.tex | 378 | 0.65 | 33 |
 | sections/04_systems.tex | 52 | 0.39 | 104 |
 | sections/04_systems.tex | 60 | 22.5 | 21 |

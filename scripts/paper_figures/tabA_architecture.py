@@ -52,18 +52,18 @@ cols["1D KS"] = {
     "encoder reach $r_e n_e$": f"{a['site_mix_radius']}$\\times${a['n_site_mix_layers']}",
     "decoder reach $r_d n_d$": f"{a['site_mix_radius']}$\\times${a['n_site_mix_layers']}",
     "propagator $w$, $n_\\ell$, $d_m$": f"{p['attn_window']}, {p['token_n_layers']}, {p['token_d_model']}",
-    "training data": "whole periodic box, $L=100$",
+    "training data": "periodic, $L=100$ (whole box)",
     "trajectories (train+val) $\\times$ length": "50+10 $\\times$ 250",
-    "crop / halo (sites)": "--- / ---",
-    "Stage A": f"200 ep., lr {s1.lr:g}, batch {s1.batch_size}",
-    "Stage A regularizers": "$w_{\\rm var}$ 0.02, $w_{\\rm ld}$ 0.0035, $w_{\\rm sp}$ 0.01$^a$",
+    "window (sites)": "---", "halo (sites)": "---",
+    "Stage A length": "200 epochs", "Stage A learning rate": f"{s1.lr:g}", "Stage A batch": f"{s1.batch_size}",
+    "Stage A $w_{\\rm var}$ / $w_{\\rm ld}$": "0.02 / 0.0035$^a$",
     "log-det offset $\\epsilon$": f"{s1.logdet_eps:g}",
-    "Stage A aux. loss": f"$w_{{\\rm pred}}$ {s1.w_pred:g}, $k=2$",
-    "Stage B": f"300 ep., lr {s2.lr:g}, batch {s2.batch_size}",
+    "Stage A auxiliary loss": f"$w_{{\\rm pred}}$ {s1.w_pred:g}, $k=2$",
+    "Stage B length": "300 epochs", "Stage B learning rate": f"{s2.lr:g}", "Stage B batch": f"{s2.batch_size}",
     "$k$ curriculum": "2$\\to$8$\\to$12",
     "input noise": f"{s2.noise_in_start:g}$\\to${s2.noise_in_end:g}",
     "$w_{\\rm rank}$": "---",
-    "val. recon / val. $k_{\\max}$ MSE": f"{ae1['val_recon_final']:.1e} / {pr1['best_val_kmax_mse']:.3f}",
+    "validation recon. MSE": f"{ae1['val_recon_final']:.1e}", "validation $k_{\\max}$ MSE": f"{pr1['best_val_kmax_mse']:.3f}",
 }
 record["section224"] = {"source": "checkpoints + scripts/section224_ks_localfield_d48_localmlp.sh + "
                                   "Stage{1,2}TrainingConfig defaults", "ae_config": a, "prop_config": p,
@@ -79,10 +79,11 @@ def nparams(sd):
 
 
 def pcount(ae, pr):
-    """Trainable parameters (autoencoder + propagator), read from the checkpoints. They do not depend on the
-    domain: the same tensors are used on every deployment grid."""
+    """Trainable parameters (autoencoder, propagator, total), read from the checkpoints. They do not depend on
+    the domain: the same tensors are used on every deployment grid."""
     a, p = nparams(ae["ae_state_dict"]), nparams(pr["prop_state_dict"])
-    return f"{a:,} + {p:,} = {a + p:,}".replace(",", "{,}")
+    f = lambda n: f"{n:,}".replace(",", "{,}")  # noqa: E731
+    return {"parameters, autoencoder": f(a), "parameters, propagator": f(p), "parameters, total": f(a + p)}
 
 
 def data_noise(tag, ae):
@@ -108,7 +109,8 @@ for name, tag in MODELS_2D:
     px = a["NX"] // a["n_sites_x"]
     h = (264.0 / 48) if ks2d else (2 * 3.141592653589793 / 8)
     crop = f"{ca['crop_sites']}$\\times${ca['crop_sites_y']}" if ca["crop_sites_y"] else f"{ca['crop_sites']}$\\times$full $y$"
-    halo = f"{cp['halo_sites']}" + (f"/{cp['halo_sites_y']}" if cp.get("halo_sites_y") else " ($x$ only)")
+    hy = cp.get("halo_sites_y")
+    halo = f"{cp['halo_sites']}" + ((" ($x$, $y$)" if hy == cp["halo_sites"] else f"/{hy}") if hy else " ($x$ only)")
     kmid_pct = round(100 * cp["k_mid_frac"])
     cols[name] = {
         "patch (grid points)": f"{px}$\\times${a['NY'] // a['n_sites_y']}", "site length $h$": round(h, 2),
@@ -116,20 +118,20 @@ for name, tag in MODELS_2D:
         "encoder reach $r_e n_e$": f"{a['site_mix_radius']}$\\times${a['n_site_mix_layers']}",
         "decoder reach $r_d n_d$": f"{a['dec_site_mix_radius']}$\\times${a['dec_n_site_mix_layers']}",
         "propagator $w$, $n_\\ell$, $d_m$": f"{p['attn_window']}, {p['local_mlp2d_n_layers']}, {p['local_mlp2d_token_d_model']}",
-        "training data": "$264^2$ periodic" if ks2d else "$32\\pi\\times2\\pi$ periodic",
+        "training data": "periodic, $264^2$" if ks2d else "periodic, $32\\pi\\times2\\pi$",
         "trajectories (train+val) $\\times$ length": f"{sh['n_train']}+{sh['n_val']} $\\times$ {round((sh['n_snapshots']-1)*dt_snap)}",
-        "crop / halo (sites)": f"{crop} / {halo}",
-        "Stage A": f"{ca['steps']} steps, lr {ca['lr']:g}, batch {ca['batch']}",
-        "Stage A regularizers": f"$w_{{\\rm var}}$ {ca['w_var']:g}, $w_{{\\rm ld}}$ {ca['w_logdet']:g}",
+        "window (sites)": crop, "halo (sites)": halo,
+        "Stage A length": f"{ca['steps']} steps", "Stage A learning rate": f"{ca['lr']:g}", "Stage A batch": f"{ca['batch']}",
+        "Stage A $w_{\\rm var}$ / $w_{\\rm ld}$": f"{ca['w_var']:g} / {ca['w_logdet']:g}",
         "log-det offset $\\epsilon$": f"{ca.get('logdet_eps', 1e-3):g}",
-        "Stage A aux. loss": "none",
-        "Stage B": f"{cp['steps']} steps, lr {cp['lr']:g}, batch {cp['batch']}",
+        "Stage A auxiliary loss": "none",
+        "Stage B length": f"{cp['steps']} steps", "Stage B learning rate": f"{cp['lr']:g}", "Stage B batch": f"{cp['batch']}",
         "$k$ curriculum": f"2$\\to${cp['k_mid']}$\\to${cp['k_max']}",
         "input noise": f"{cp['noise_in_start']:g}$\\to${cp['noise_in_end']:g}",
         "$w_{\\rm rank}$": f"{cp.get('w_rank', 0.0):g}" + ("$^b$" if cp.get("w_rank", 0.0) else ""),
-        "val. recon / val. $k_{\\max}$ MSE": f"{ae['val_recon_interior']:.1e} / {pr['best_val_kmax_mse']:.3f}",
+        "validation recon. MSE": f"{ae['val_recon_interior']:.1e}", "validation $k_{\\max}$ MSE": f"{pr['best_val_kmax_mse']:.3f}",
         "training-data noise": f"{data_noise(tag, ae):g}",
-        "parameters (AE + propagator)": pcount(ae, pr),
+        **pcount(ae, pr),
     }
     record[tag] = {"source": "checkpoints + crop_train log", "ae_config": a, "crop_ae_config": ca,
                    "prop_config_relevant": {k: p[k] for k in ("backbone", "attn_window", "local_mlp2d_n_layers",
@@ -139,16 +141,38 @@ for name, tag in MODELS_2D:
                    "train_dataset": ae["train_dataset"], "train_shape": sh,
                    "k_mid_reached_at_pct_of_steps": kmid_pct}
 
-cols["1D KS"]["parameters (AE + propagator)"] = pcount(ae1, pr1)
+cols["1D KS"].update(pcount(ae1, pr1))
 for c in cols.values():
     c.setdefault("training-data noise", "0")
 
 
+# Printed row labels (2026-10-11, user: capitalize every label, consistently across rows and columns).
+LABELS = {
+    "patch (grid points)": "Patch (grid points)", "site length $h$": "Site length $h$",
+    "channels $c$ (learned + anchor)": "Channels $c$ (learned + anchor)", "AE hidden width": "Autoencoder hidden width",
+    "encoder reach $r_e n_e$": "Encoder reach $r_e n_e$", "decoder reach $r_d n_d$": "Decoder reach $r_d n_d$",
+    "propagator $w$, $n_\\ell$, $d_m$": "Propagator $w$, $n_\\ell$, $d_m$", "training data": "Training domain",
+    "trajectories (train+val) $\\times$ length": "Trajectories (train + val) $\\times$ length",
+    "window (sites)": "Window (sites)", "halo (sites)": "Halo (sites)",
+    "log-det offset $\\epsilon$": "Stage A log-det offset $\\epsilon$",
+    "$k$ curriculum": "Stage B rollout length $k$", "input noise": "Stage B input noise $\\sigma$",
+    "$w_{\\rm rank}$": "Stage B rank penalty $w_{\\rm rank}$",
+    "validation recon. MSE": "Validation reconstruction MSE", "validation $k_{\\max}$ MSE": "Validation $k_{\\max}$-step MSE",
+    "training-data noise": "Training-data noise", "parameters, autoencoder": "Parameters, autoencoder",
+    "parameters, propagator": "Parameters, propagator", "parameters, total": "Parameters, total",
+}
+
+
+def cap(v):
+    v = str(v)
+    return v[0].upper() + v[1:] if v[:1].islower() else v
+
+
 def render(names, rows, labels=None):
     lines = ["% Generated by scripts/paper_figures/tabA_architecture.py -- do not edit by hand.",
-             " & " + " & ".join(labels or names) + " \\\\", "\\hline"]
+             "Setting & " + " & ".join(labels or names) + " \\\\", "\\hline"]
     for r in rows:
-        lines.append(r + " & " + " & ".join(str(cols[n][r]) for n in names) + " \\\\")
+        lines.append(LABELS.get(r, cap(r)) + " & " + " & ".join(cap(cols[n][r]) for n in names) + " \\\\")
     return lines
 
 
