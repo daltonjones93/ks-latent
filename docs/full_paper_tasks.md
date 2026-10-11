@@ -2786,7 +2786,8 @@ abstract sentence, Key Point 3, §1's bullet and §10's paragraph:
   Red `\placeholder{}` markers: P1 (unlocalized), P2 (timing), P3 (300 cycles), P6 (J17H with joint
   estimation; rerun after a print-bug crash, `run_j17h_abg.sh`), P7 (J17B), P8 (crossover wording),
   P9 (J5). The old 1D and cost subsections follow under a K5.6–K5.8 placeholder banner.
-  TODO(K11): recompute the Gaussianity numbers for `p7c12d10_ks2d`.
+  ~~TODO(K11): recompute the Gaussianity numbers for `p7c12d10_ks2d`.~~ Checked 2026-10-11: the text already
+  quotes `gaussianity_L44_p7c12d10_ks2d.json` (0.20 / -0.07 / 0.38 / 0.40).
 - **App. E** networks table now reads `tabE_p2_networks` (K2g).
 Each subsection lists its inputs; text options are given where a result is pending.
 - **K5.1 §7.1 Setting.** Twin protocol with the Part II numbers (stride 8 = 2.75 units = half the
@@ -2969,10 +2970,17 @@ Each subsection lists its inputs; text options are given where a result is pendi
 - (e) Save fields at 440² (K3f) if the I14 run did not.
 - (f) Unlocalized reruns only if K1 chooses option (b).
 
-### K11 `[ ]` Number provenance and consistency (absorbs J14)
+### K11 `[~]` Number provenance and consistency (absorbs J14)
 - Extend `check_numbers.py` to every Part II number in §1, §7, §9, §10, the abstract and the key
   points; tables regenerated from JSONs only; a G2/G3-style pass on §7; the three decimal
   conventions fixed (RMSE to 3 decimals in tables, 2 in text; ratios to 2). ~0.5 day.
+
+- **2026-10-11 progress:** P1 (K1u unlocalized), P2 + §7.8 (I14; `tab_da_cost.py` rewritten for the Part II
+  filter, dense-filter columns dropped per K1) and P4 (J18a σ = 0.3: worse than σ = 0.1, no better than clean;
+  calibration 1.06–1.10) written into §7. Fig. 11 (440², K10e) and Fig. 12 (c = 12 timing) regenerated; Fig. 11
+  cited in §7.4. `check_numbers.py` gained a strict Part II class (SUSPECT); it reports 0, but at 2–3 decimals
+  with ~1200 files the automatic match is weak, so a by-hand trace of every §7 number is under way
+  (`docs/paper1/k11_part2_verification.md`). Remaining placeholders: P7 (J17G), P9 (J5).
 
 ### K12 `[ ]` Decisions log, commit cadence, coauthor pass
 - `decisions.md` entries for K1 and for each outcome branch chosen (J17H, J17B, J18a, I7, I16).
