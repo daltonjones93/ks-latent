@@ -124,110 +124,6 @@
 %---------------- Ensemble data assimilation ----------------
 
 % status: [verified 2026-10-08, literature pass]
-@article{burgers1998,
-  author  = {Burgers, Gerrit and van Leeuwen, Peter Jan and Evensen, Geir},
-  title   = {Analysis scheme in the ensemble {K}alman filter},
-  journal = {Monthly Weather Review},
-  volume  = {126},
-  pages   = {1719--1724},
-  year    = {1998}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{houtekamermitchell1998,
-  author  = {Houtekamer, Pieter L. and Mitchell, Herschel L.},
-  title   = {Data assimilation using an ensemble {K}alman filter technique},
-  journal = {Monthly Weather Review},
-  volume  = {126},
-  pages   = {796--811},
-  year    = {1998}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{houtekamermitchell2001,
-  author  = {Houtekamer, Pieter L. and Mitchell, Herschel L.},
-  title   = {A sequential ensemble {K}alman filter for atmospheric data assimilation},
-  journal = {Monthly Weather Review},
-  volume  = {129},
-  pages   = {123--137},
-  year    = {2001}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{hunt2007,
-  author  = {Hunt, Brian R. and Kostelich, Eric J. and Szunyogh, Istvan},
-  title   = {Efficient data assimilation for spatiotemporal chaos: A local ensemble transform {K}alman filter},
-  journal = {Physica D},
-  volume  = {230},
-  pages   = {112--126},
-  year    = {2007}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{gaspari1999,
-  author  = {Gaspari, Gregory and Cohn, Stephen E.},
-  title   = {Construction of correlation functions in two and three dimensions},
-  journal = {Quarterly Journal of the Royal Meteorological Society},
-  volume  = {125},
-  pages   = {723--757},
-  year    = {1999}
-}
-
-% status: [checked]
-@article{anderson2012,
-  author  = {Anderson, Jeffrey L.},
-  title   = {Localization and sampling error correction in ensemble {K}alman filter data assimilation},
-  journal = {Monthly Weather Review},
-  volume  = {140},
-  pages   = {2359--2371},
-  year    = {2012}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{huvanleeuwen2021,
-  author  = {Hu, Chih-Chi and van Leeuwen, Peter Jan},
-  title   = {A particle flow filter for high-dimensional system applications},
-  journal = {Quarterly Journal of the Royal Meteorological Society},
-  volume  = {147},
-  pages   = {2352--2374},
-  year    = {2021}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{patil2001,
-  author  = {Patil, D. J. and Hunt, Brian R. and Kalnay, Eugenia and Yorke, James A. and Ott, Edward},
-  title   = {Local low dimensionality of atmospheric dynamics},
-  journal = {Physical Review Letters},
-  volume  = {86},
-  pages   = {5878--5881},
-  year    = {2001}
-}
-
-% status: [verified 2026-10-08, literature pass]
-@article{ott2004,
-  author  = {Ott, Edward and Hunt, Brian R. and Szunyogh, Istvan and Zimin, Aleksey V. and Kostelich, Eric J. and Corazza, Matteo and Kalnay, Eugenia and Patil, D. J. and Yorke, James A.},
-  title   = {A local ensemble {K}alman filter for atmospheric data assimilation},
-  journal = {Tellus A},
-  volume  = {56},
-  pages   = {415--428},
-  year    = {2004}
-}
-
-%---------------- Numerical methods ----------------
-
-% status: [verified 2026-10-08, literature pass]
-@article{curtis1974,
-  author  = {Curtis, A. R. and Powell, M. J. D. and Reid, J. K.},
-  title   = {On the estimation of sparse {J}acobian matrices},
-  journal = {Journal of the Institute of Mathematics and its Applications},
-  volume  = {13},
-  pages   = {117--119},
-  year    = {1974}
-}
-
-%---------------- Systems ----------------
-
-% status: [verified 2026-10-08]
 @article{kuramoto1976,
   author  = {Kuramoto, Yoshiki and Tsuzuki, Toshio},
   title   = {Persistent propagation of concentration waves in dissipative media far from thermal equilibrium},
@@ -621,145 +517,6 @@
 %---------------- Data assimilation ----------------
 
 % status: [verified] includes KS; declines covariance localization
-@article{chen2023roadenkf,
-  author  = {Chen, Yuming and Sanz-Alonso, Daniel and Willett, Rebecca},
-  title   = {Reduced-order autodifferentiable ensemble {K}alman filters},
-  journal = {Inverse Problems},
-  volume  = {39},
-  number  = {12},
-  pages   = {124001},
-  year    = {2023}
-}
-
-% status: [verified] no KS; localization listed as future work; authors verified 2026-10-08
-@misc{tong2026laeenkf,
-  author = {Tong, Xin T. and Wang, Yanyan and Yan, Liang},
-  title  = {Latent auto-encoder ensemble {K}alman filter for nonlinear data assimilation},
-  year   = {2026},
-  note   = {arXiv:2603.06752}
-}
-
-% status: [verified] accepted J. Comput. Phys.
-@misc{bach2025,
-  author = {Bach, Eviatar and Baptista, Ricardo and Calvello, Edoardo and Chen, Bohan and Stuart, Andrew},
-  title  = {Learning enhanced ensemble filters},
-  year   = {2025},
-  note   = {arXiv:2504.17836}
-}
-
-% status: [partially verified] ICLR 2025, arXiv:2409.00127
-@inproceedings{si2025latentensf,
-  author    = {Si, Phillip and Chen, Peng},
-  title     = {Latent-{EnSF}: A latent ensemble score filter for high-dimensional data assimilation with sparse observation data},
-  booktitle = {International Conference on Learning Representations},
-  year      = {2025}
-}
-
-% status: [verified 2026-10-08] QJRMS 2025, doi:10.1002/qj.70070; arXiv:2502.12987
-@article{pasmans2025,
-  author  = {Pasmans, Ivo and Chen, Yumeng and Finn, Tobias Sebastian and Bocquet, Marc and Carrassi, Alberto},
-  title   = {Ensemble {K}alman filter in latent space using a variational autoencoder pair},
-  journal = {Quarterly Journal of the Royal Meteorological Society},
-  year    = {2025},
-  note    = {doi:10.1002/qj.70070}
-}
-
-% status: [verified]
-@article{peyron2021,
-  author  = {Peyron, Mathis and Fillion, Anthony and G\"urol, Selime and Marchais, Victor and Gratton, Serge and Boudier, Pierre and Goret, Gael},
-  title   = {Latent space data assimilation by using deep learning},
-  journal = {Quarterly Journal of the Royal Meteorological Society},
-  volume  = {147},
-  pages   = {3759--3777},
-  year    = {2021}
-}
-
-% status: [verified 2026-10-08] doi:10.1080/16000870.2017.1304504
-@article{bocquetcarrassi2017,
-  author  = {Bocquet, Marc and Carrassi, Alberto},
-  title   = {Four-dimensional ensemble variational data assimilation and the unstable subspace},
-  journal = {Tellus A},
-  volume  = {69},
-  pages   = {1304504},
-  year    = {2017}
-}
-
-% status: [verified 2026-10-08] doi:10.5194/npg-33-335-2026; m* = N+ + 1 without localization
-@article{takeda2026,
-  author  = {Takeda, Kota and Miyoshi, Takemasa},
-  title   = {Noise-scaled accuracy of the ensemble {K}alman filter with an instability-based minimum ensemble size},
-  journal = {Nonlinear Processes in Geophysics},
-  volume  = {33},
-  pages   = {335--346},
-  year    = {2026}
-}
-
-% status: [verified]
-@article{trevisan2004,
-  author  = {Trevisan, Anna and Uboldi, Francesco},
-  title   = {Assimilation of standard and targeted observations within the unstable subspace of the observation--analysis--forecast cycle system},
-  journal = {Journal of the Atmospheric Sciences},
-  volume  = {61},
-  pages   = {103--113},
-  year    = {2004}
-}
-
-% status: [verified]
-@article{gurumoorthy2017,
-  author  = {Gurumoorthy, Karthik S. and Grudzien, Colin and Apte, Amit and Carrassi, Alberto and Jones, Christopher K. R. T.},
-  title   = {Rank deficiency of {K}alman error covariance matrices in linear time-varying system with deterministic evolution},
-  journal = {SIAM Journal on Control and Optimization},
-  volume  = {55},
-  number  = {2},
-  pages   = {741--759},
-  year    = {2017}
-}
-
-% status: [verified 2026-10-08] doi:10.1175/1520-0493(2002)130<1913:EDAWPO>2.0.CO;2
-@article{whitakerhamill2002,
-  author  = {Whitaker, Jeffrey S. and Hamill, Thomas M.},
-  title   = {Ensemble data assimilation without perturbed observations},
-  journal = {Monthly Weather Review},
-  volume  = {130},
-  pages   = {1913--1924},
-  year    = {2002}
-}
-
-% status: [verified 2026-10-08] doi:10.1007/s10596-010-9202-6
-@article{sakovbertino2011,
-  author  = {Sakov, Pavel and Bertino, Laurent},
-  title   = {Relation between two common localisation methods for the {EnKF}},
-  journal = {Computational Geosciences},
-  volume  = {15},
-  number  = {2},
-  pages   = {225--237},
-  year    = {2011}
-}
-
-% status: [verified 2026-10-08] doi:10.1175/2010MWR3328.1
-@article{greybush2011,
-  author  = {Greybush, Steven J. and Kalnay, Eugenia and Miyoshi, Takemasa and Ide, Kayo and Hunt, Brian R.},
-  title   = {Balance and ensemble {K}alman filter localization techniques},
-  journal = {Monthly Weather Review},
-  volume  = {139},
-  pages   = {511--522},
-  year    = {2011}
-}
-
-% status: [verified 2026-10-08] SIAM J. Numer. Anal. 20(1), 187-209
-@article{coleman1983,
-  author  = {Coleman, Thomas F. and Mor\'e, Jorge J.},
-  title   = {Estimation of sparse {J}acobian matrices and graph coloring problems},
-  journal = {SIAM Journal on Numerical Analysis},
-  volume  = {20},
-  number  = {1},
-  pages   = {187--209},
-  year    = {1983}
-}
-
-%---------------- Limited-area modelling ----------------
-
-% status: [verified 2026-10-08] doi:10.1002/qj.49710243210
 @article{davies1976,
   author  = {Davies, H. C.},
   title   = {A lateral boundary formulation for multi-level prediction models},
@@ -800,58 +557,6 @@
 % --- Added 2026-10-10 (Block K4). Verified 2026-10-10 (Block K9): DOIs resolved through Crossref
 % (api.crossref.org) or the publisher / author record for each entry; Coifman & Donoho's series volume is
 % not listed by Crossref or Springer, so it is omitted.
-@article{whitakerhamill2012,
-  author  = {Whitaker, Jeffrey S. and Hamill, Thomas M.},
-  title   = {Evaluating methods to account for system errors in ensemble data assimilation},
-  journal = {Monthly Weather Review},
-  year    = {2012},
-  volume  = {140},
-  number  = {9},
-  pages   = {3078--3089},
-  doi     = {10.1175/MWR-D-11-00276.1}
-}
-@incollection{coifmandonoho1995,
-  author    = {Coifman, Ronald R. and Donoho, David L.},
-  title     = {Translation-invariant de-noising},
-  booktitle = {Wavelets and Statistics},
-  editor    = {Antoniadis, Anestis and Oppenheim, Georges},
-  series    = {Lecture Notes in Statistics},
-  publisher = {Springer},
-  address   = {New York},
-  year      = {1995},
-  pages     = {125--150},
-  doi       = {10.1007/978-1-4612-2544-7_9}
-}
-@article{anderson2001,
-  author  = {Anderson, Jeffrey L.},
-  title   = {An ensemble adjustment {Kalman} filter for data assimilation},
-  journal = {Monthly Weather Review},
-  year    = {2001},
-  volume  = {129},
-  number  = {12},
-  pages   = {2884--2903},
-  doi     = {10.1175/1520-0493(2001)129<2884:AEAKFF>2.0.CO;2}
-}
-@article{ruiz2013,
-  author  = {Ruiz, Juan J. and Pulido, Manuel and Miyoshi, Takemasa},
-  title   = {Estimating model parameters with ensemble-based data assimilation: A review},
-  journal = {Journal of the Meteorological Society of Japan},
-  year    = {2013},
-  volume  = {91},
-  number  = {2},
-  pages   = {79--99},
-  doi     = {10.2151/jmsj.2013-201}
-}
-@article{dee2005,
-  author  = {Dee, Dick P.},
-  title   = {Bias and data assimilation},
-  journal = {Quarterly Journal of the Royal Meteorological Society},
-  year    = {2005},
-  volume  = {131},
-  number  = {613},
-  pages   = {3323--3343},
-  doi     = {10.1256/qj.05.137}
-}
 @article{brajard2020,
   author  = {Brajard, Julien and Carrassi, Alberto and Bocquet, Marc and Bertino, Laurent},
   title   = {Combining data assimilation and machine learning to emulate a dynamical model from sparse and noisy observations: A case study with the {Lorenz} 96 model},
@@ -870,4 +575,11 @@
   number  = {1},
   pages   = {55--80},
   doi     = {10.3934/fods.2020004}
+}
+
+@unpublished{jones2026da,
+  author = {Jones, Dalton and van Leeuwen, Peter Jan},
+  title  = {Exactly local ensemble data assimilation in a learned latent field},
+  note   = {In preparation},
+  year   = {2026}
 }

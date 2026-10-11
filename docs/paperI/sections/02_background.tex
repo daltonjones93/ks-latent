@@ -1,5 +1,148 @@
 %======================================================================
-\section{Background}
+\section{Background and related work}
+\label{sec:background}
 %======================================================================
-% TODO(S3.3): paper1 §2.1, §2.2, §2.4 + Table 1 without the local-DA column.
-\placeholder{S3.3: Background}
+
+%----------------------------------------------------------------------
+\subsection{Extensive chaos and its Lyapunov analysis}
+\label{sec:bg_extensive}
+%----------------------------------------------------------------------
+
+A spatially extended system is extensively chaotic when the dimension of
+its attractor grows in proportion to its volume. Ruelle conjectured that
+the Lyapunov spectrum of turbulence has a large-volume limit, a density of
+exponents per unit volume \citep{ruelle1982}; numerical studies of
+coupled map lattices established such a limit for lattice maps
+\citep{livi1986,isola1990}, and \citet{bunimovichsinai1988} proved
+related results for weakly coupled maps. For the Kuramoto--Sivashinsky
+equation extensivity of the Kaplan--Yorke dimension $\DKY$
+\citep{kaplanyorke1979} was found by \citet{manneville1985}, and
+\citet{edson2019} give $\DKY\approx0.226L-0.16$ for $L\gtrsim80$.
+\citet{egolfgreenside1994} showed that extensivity holds in a
+representative pattern-forming system but that the dimension density is
+not set by the two-point correlation length, so the length that controls
+it must be found by other means. Not every degree of freedom counted by
+$\DKY$ is local: \citet{yang2009} separate a finite set of ``physical''
+Lyapunov modes from the rest in KS, and \citet{takeuchi2009} show that
+large chaotic systems can carry collective modes. Spectra are computed
+with the method of \citet{benettin1980}.
+
+Two results are especially close to our question. The first is that a
+lattice spectrum computed on a small subsystem, suitably rescaled,
+predicts the spectrum, $\DKY$ and entropy of the large system
+\citep{carretero1999}. A trained local model is a learned lattice map, so
+this is the dynamical-systems basis for expecting that a model trained
+on a small domain can reproduce the dimension of a large one. The second
+is that perturbations in spatiotemporal chaos spread at a finite speed,
+measured by comoving (velocity-dependent) Lyapunov exponents
+\citep{kaneko1986,deisslerkaneko1987}. We measure this speed for 1D KS
+but find that it does not set the reach a model needs
+(Sec.~\ref{sec:receptive}).
+
+In two-dimensional flows without large-scale dissipation the inverse
+cascade makes the statistics, and the dimension, depend on the domain
+size; linear drag arrests it (Sec.~\ref{sec:kolmogorov}). The most closely
+related dimension study of Kolmogorov flow, \citet{kolmogorovregimes2026},
+computes $\DKY$ across Reynolds numbers and forcing wavenumbers in a fixed
+box without drag.
+
+%----------------------------------------------------------------------
+\subsection{Learned surrogates of spatiotemporal chaos}
+\label{sec:bg_surrogates}
+%----------------------------------------------------------------------
+
+\para{Global latent models and their Lyapunov validation.} The common
+design encodes the whole field into one latent vector and learns its
+evolution, for example with autoencoders and neural ordinary differential
+equations on an inertial manifold \citep{linotgraham2020,linotgraham2022}
+or with convolutional autoencoders and echo state networks
+\citep{racca2023}. Learned models of KS reproduce its Lyapunov spectrum: a
+reservoir computer at $L=60$ \citep{pathak2017}, reservoir and recurrent
+networks \citep{vlachas2020}, and latent models with their covariant
+Lyapunov vectors \citep{ozalp2023,ozalpmagri2025}; a convolutional
+surrogate of the 40-variable Lorenz-96 system learned from sparse, noisy
+observations recovers its positive exponents \citep{brajard2020,bocquet2020}.
+Each validation is at the single domain size the model was trained on.
+
+\para{Local models and larger domains.} Parallel reservoir computers
+forecast KS on large domains with one reservoir per subdomain
+\citep{pathak2018}; the reservoirs can share weights, but a new set is
+trained for each domain size, and the exponents reported are the PDE's,
+not the model's. Patch-decomposed autoencoders with neural ODEs model KS
+and Kolmogorov flow with low-dimensional latents per patch
+\citep{constanteamores2024}, again one model per size, validated by
+short-time tracking and flow statistics; in a minimal flow unit, which is
+non-extensive by construction, a single global latent suffices
+\citep{constanteamores2025}. Translation-equivariant models can be run on
+larger domains than they were trained on: learned discretizations
+\citep{barsinai2019}, learned corrections to a coarse Navier--Stokes
+solver on a Kolmogorov domain twice as large \citep{kochkov2021}, learned
+coarse simulators of KS \citep{stachenfeld2022}, local neural operators on
+unseen geometries \citep{li2024lno}, and transformer operators with a
+locality bias on domains up to ten times larger per axis
+\citep{devilleroche2026}; fully convolutional networks trained on image
+crops are the computer-vision form of the idea \citep{long2015}, and
+generalization to finer resolution is a different question
+\citep{sakarvadia2026}. These studies validate by short-time error or by
+statistics, not by the dimension of the attractor. Local neural-field
+latents have been reported to fail on KS, with the decoder as the
+bottleneck \citep{aroma2024}.
+
+\para{Limited-area models and rollout training.} Our window training is a
+learned limited-area model: the interior evolves freely while the
+boundary zone is overwritten by the parent solution, a zero-width version
+of the relaxation zone of \citet{davies1976}, with the known risks of
+lateral-boundary errors \citep{warner1997}; graph-based neural weather
+models have been built for limited areas with boundary forcing
+\citep{oskarsson2023}. Training on multi-step rollouts stabilizes learned
+solvers \citep{brandstetter2022,lippe2023}, but squared-error rollouts
+blur the forecast toward the conditional mean
+\citep{lam2023graphcast,bonavita2024}, objectives that match invariant
+measures or dynamical invariants have been proposed to counter it
+\citep{jiang2023,schiff2024,platt2023}, and training with input noise is
+equivalent to a Jacobian penalty \citep{bishop1995}.
+Section~\ref{sec:objective} connects both effects to an underestimate of
+$\DKY$.
+
+%----------------------------------------------------------------------
+\subsection{What is and is not new here}
+\label{sec:bg_novelty}
+%----------------------------------------------------------------------
+
+That KS admits localized reduced models is not new:
+\citet{wittenberg1999} showed with wavelets that its dynamics are
+localized in both space and scale, and \citet{wittenberg2001} built
+localized low-dimensional models from short periodized subsystems,
+arguing that they are minimal models for arbitrarily large domains. That
+learned models can reproduce Lyapunov spectra, and that local models can be
+run on larger domains, are each established. Table~\ref{tab:prior_work}
+summarizes the closest work. What we add is the combination: a learned,
+weight-shared local latent field whose zero-shot extensions are checked
+against the true Lyapunov spectra at several domain sizes in three
+systems; a training procedure on windows of one simulation, with a proof
+that it trains the limited-area problem exactly; and an account of the
+training choices that make a learned local rule fail, with a
+model-selection rule that needs no ground truth.
+
+\begin{table*}[htbp]
+\caption{Closest prior work. ``Local'': weight-shared operators of finite
+reach; ``other sizes'': one trained model evaluated on domains of another
+size; ``Lyapunov'': the model's own Lyapunov spectrum or $\DKY$ compared
+with the truth; ``windows'': trained on windows of a larger domain with
+boundary forcing. $\circ$: partly (see text).}
+\label{tab:prior_work}
+\widetabular{lccccc}{
+work & learned & local & other sizes & Lyapunov & windows \\
+\hline
+\citet{carretero1999} & --- & \checkmark & \checkmark & \checkmark & --- \\
+\citet{wittenberg2001} & --- & \checkmark & $\circ$ & --- & $\circ$ \\
+\citet{pathak2017,vlachas2020} & \checkmark & --- & --- & \checkmark & --- \\
+\citet{ozalpmagri2025} & \checkmark & --- & --- & \checkmark & --- \\
+\citet{pathak2018} & \checkmark & $\circ$ & --- & --- & $\circ$ \\
+\citet{constanteamores2024} & \checkmark & $\circ$ & --- & --- & --- \\
+\citet{barsinai2019,kochkov2021} & \checkmark & \checkmark & \checkmark & --- & --- \\
+\citet{devilleroche2026} & \checkmark & \checkmark & \checkmark & --- & --- \\
+\citet{oskarsson2023} & \checkmark & $\circ$ & --- & --- & \checkmark \\
+\citet{brajard2020,bocquet2020} & \checkmark & $\circ$ & --- & $\circ$ & --- \\
+This work & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\}
+\end{table*}

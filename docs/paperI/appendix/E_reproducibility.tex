@@ -1,5 +1,68 @@
 %======================================================================
 \section{Reproducibility}
+\label{app:reproducibility}
 %======================================================================
-% TODO(S3.10): paper1 App. F without the Part II code.
-\placeholder{S3.10: Reproducibility}
+
+\subsection{Code, results and provenance}
+
+All results come from one Python package and its scripts. The package
+(\texttt{ks\_latent}) contains the PDE solvers, the autoencoders and
+propagators, the training loops including window training, and the
+Lyapunov analysis; scripts run each experiment and write
+a JSON file per run with its configuration, seeds and wall time. Every
+table body and figure in this paper is produced by a script in
+\texttt{scripts/paper\_figures/} that reads only these result files; each
+figure is written with a sidecar file listing its inputs, the commit and a
+time stamp. A decision log records every choice of truth, model and
+convention and every correction made while writing. A number-provenance
+check compares every decimal number in the text with the generated
+tables and the result files and lists those it cannot match, each of
+which has been checked by hand.
+% TODO(G8): replace by the tagged release commit and archive DOI once the code is released; the
+% results were produced from a working tree on top of commit 2cd9da0 with uncommitted changes.
+
+\subsection{Numerics, devices and seeds}
+
+The PDEs are integrated in double precision on the CPU with ETDRK4. The
+networks are trained in single precision on the GPU of an Apple M5 Pro
+(48~GB unified memory); training there is not bitwise reproducible, so
+repeated trainings with one seed agree only statistically, and we report
+separate training seeds where we have them. Lyapunov spectra propagate
+tangent vectors in single precision and re-orthonormalize them in double
+precision on the CPU (Appendix~\ref{app:model_spectra}). Initial conditions are
+indexed by seed (0, 1, 2) and spun up for 100--500 time units. PDE
+trajectories from one seed are reproducible only for a fixed number of
+FFT threads; runs that differ in thread count follow different
+trajectories after a few Lyapunov times, and we use them as independent
+realizations (Appendix~\ref{app:groundtruth}). The software environment
+is Python 3.11.15, PyTorch 2.13.0, NumPy 1.26.4 and SciPy 1.17.1, fixed by
+an exported environment file.
+
+\subsection{Tests}
+
+The properties the paper relies on are checked by unit tests that pass in
+a few seconds:
+\begin{itemize}
+\item \emph{Solver:} the linear growth spectrum, the exponential
+  time-differencing coefficients against high-precision evaluation, mean
+  conservation, translation equivariance and fourth-order convergence.
+\item \emph{Architecture:} exact translation equivariance of the 2D
+  autoencoder along each axis (Proposition~\ref{prop:equivariance}); the
+  gauge-anchored channel equals the patch average; the reach of the
+  propagator and of the 1D autoencoder, measured by masking their
+  Jacobians, and the zero reach of the per-patch decoder
+  (Sec.~\ref{sec:receptive}).
+\item \emph{Window training:} a forced-halo rollout reproduces the
+  interior of the same propagator run on the large periodic domain, in 1D
+  and 2D, and a halo one site too narrow breaks the equality
+  (Proposition~\ref{prop:halo}).
+\item \emph{Lyapunov analysis:} the double-precision tangent path
+  recovers the spectrum of a linear map to machine precision.
+\end{itemize}
+
+\subsection{Compute}
+
+All runs used one workstation. Typical costs: a 1D Lyapunov spectrum of
+the PDE at $L=400$, 35~min; a 120-unit Kolmogorov truth at $3\times$, several
+hours; a model spectrum at $3\times$ or $88^2$, about 7~min; training a 2D
+propagator, 17~min to 2~h.

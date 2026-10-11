@@ -22,7 +22,7 @@ memory: every table body is `\tabinput` of a generated file and every figure com
 
 - **S0.1 `[x]` Confirmed 2026-10-11 (user). The split line.** Paper I = dynamics and transfer; Paper II = data assimilation.
   The per-patch decoder (§6.3) stays in Paper I as an architecture result with one forward pointer;
-  Proposition 4 (block-diagonal Jacobian) and its proof move to Paper II. ~5 min.
+  Proposition 3 (block-diagonal Jacobian) and its proof move to Paper II. ~5 min.
 - **S0.2 `[x]` Target journals and formats (decided 2026-10-11).** Paper I: Chaos. Paper II: **JAMES**
   (AGU): the scope is learned models in Earth-system modelling and DA, the AGU class is already in
   use, there is no word cap, and the CM1 follow-up will address the same readership; QJRMS is the
@@ -108,7 +108,7 @@ Source → destination. "Rewrite" = new prose with the same facts; "move" = copy
 | §3.5 Objective, Lemma, remarks | | move | one paragraph: the noisy-training objective (S4.4) |
 | §3.6 Canonical recipe | | move | the Paper II recipe as a table row (App. A') |
 | §3.7 Evaluation | | move | the D_KY check of the Paper II model only |
-| §3.8 Latent ensemble DA, Prop 4 | 1,300 | drop (one forward pointer in §6.3) | move → Paper II §3 "Method" (S4.5) |
+| §3.8 Latent ensemble DA, Prop 3 | 1,300 | drop (one forward pointer in §6.3) | move → Paper II §3 "Method" (S4.5) |
 | §4 Systems (three), Table 2, Fig. 2 | 1,730 | move | 2D KS only (eq., parameters, truth D_KY and n₊); 1D KS if S0.3 = (a) (S4.6) |
 | §5 1D transfer, Figs 3–4, Table 3 | 930 | move | — |
 | §6 2D transfer, Figs 5–7, Table 4 | 2,280 | move; §6.3 per-patch paragraph keeps one forward pointer (S3.5) | — |
@@ -128,7 +128,7 @@ Source → destination. "Rewrite" = new prose with the same facts; "move" = copy
 | §9 Outlook | | rewrite: dynamics only | rewrite: DA / CM1 (S4.14) |
 | §10 Conclusions | 500 | paras 1, 2, 4 (S3.7) | para 3 expanded (S4.15) |
 | App. A Architecture, Table A | | move; drop the 12-channel column | App. A': 12-channel column + noisy training + filter settings (S4.16) |
-| App. B Proofs 1–3 + Lemma | | move | App. B': proof of Prop. 4 only (S4.16) |
+| App. B Proofs 1–2 + Lemma | | move | App. B': proof of Prop. 3 only (S4.16) |
 | App. C Ground truth | | move | one subsection: the 2D KS truths used (44², 66²; n₊), cite Paper I for the protocol (S4.16) |
 | App. D Tables, Fig. C2 | | move (drop the 12-channel rows? keep: they document the DA model's dynamics) | the 12-channel model's rows as a validation table (S4.16) |
 | App. E DA details, Fig. 12 | 2,180 | — | move (S4.16) |
@@ -142,42 +142,42 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 
 ## S3 Paper I (`docs/paperI/`)
 
-- **S3.1 `[ ]` Front matter.** Title (drop "and exactly local ensemble data assimilation"); three key
+- **S3.1 `[x]` Front matter.** Title (drop "and exactly local ensemble data assimilation"); three key
   points (replace KP3 by a failure-modes or selection-rule point); abstract ≤ 250 words without the
   DA sentences; PLS without the DA sentences. Check: no `\ref` to a DA label. ~1 h.
-- **S3.2 `[ ]` §1 Introduction.** Keep paras 1, 3, 4 (why a field; three things that matter → two);
+- **S3.2 `[x]` §1 Introduction.** Keep paras 1, 3, 4 (why a field; three things that matter → two);
   reduce the DA paragraph to one sentence ("a companion paper [Paper II] builds a localized ensemble
   filter on this latent"); contributions list without the two DA bullets; drop the "two parts"
   paragraph. Target ≤ 1,000 words. ~1.5 h.
-- **S3.3 `[ ]` §2 Background.** §2.1–2.2 moved; §2.3 dropped; §2.4 rewritten with Table 1 minus the
+- **S3.3 `[x]` §2 Background.** §2.1–2.2 moved; §2.3 dropped; §2.4 rewritten with Table 1 minus the
   "local DA" column and minus the DA-only rows (chen2023roadenkf, tong2026laeenkf, brajard2020,
   bocquet2020 unless kept for the Lyapunov column). Regenerate the table by hand (it is static). ~1 h.
-- **S3.4 `[ ]` §3 Method without §3.8.** Move §3.1–3.7; renumber; the first paragraph lists
+- **S3.4 `[x]` §3 Method without §3.8.** Move §3.1–3.7; renumber; the first paragraph lists
   Secs. 5–7 as the results; delete every "Part I"/"Part II" phrase (26 occurrences across the paper,
-  `grep -n "Part~I"`). Check: builds; Props 1–3, Cor. 1, Lemma 1 numbered 1–3, 1, 1. ~1 h.
-- **S3.5 `[ ]` §4–§6 and §8 moved.** §4 whole; §5 whole; §6 whole with the per-patch paragraph's last
+  `grep -n "Part~I"`). Check: builds; Props 1–2, Cor. 1, Lemma 1 numbered 1–2, 1, 1. ~1 h.
+- **S3.5 `[x]` §4–§6 and §8 moved.** §4 whole; §5 whole; §6 whole with the per-patch paragraph's last
   sentence changed to "and, as the companion paper shows, makes the latent observation operator
   exactly local"; §8 whole. Fix cross-references (`sec:da_results` → a `\citet{paperII}` entry in
   `refs.bib` with "submitted"). ~1 h.
-- **S3.6 `[ ]` §8 Discussion (old §9).** Paras 1–4; limitations items 1–5; outlook rewritten for the
+- **S3.6 `[x]` §8 Discussion (old §9).** Paras 1–4; limitations items 1–5; outlook rewritten for the
   dynamics (other extensive systems; forecasting; what a learned model's transfer error says about
   extensivity). Drop "What locality buys in DA" and "When to prefer a learned model". ~1 h.
-- **S3.7 `[ ]` §9 Conclusions (old §10).** Paras 1, 2 and the closing rule; the DA paragraph replaced by
+- **S3.7 `[x]` §9 Conclusions (old §10).** Paras 1, 2 and the closing rule; the DA paragraph replaced by
   one sentence pointing to Paper II. ~30 min.
-- **S3.8 `[ ]` Figures.** Fig. 1 → panels (a)–(c) only (`fig01_concept.py` gains `--panels abc`);
+- **S3.8 `[x]` Figures.** Fig. 1 → panels (a)–(c) only (`fig01_concept.py` gains `--panels abc`);
   Figs. 2–7, 10, C1, C2 regenerated into `docs/paperI/figures` under content names; renumber
   references. Check each at natural size; captions no longer mention Part II. ~1.5 h.
-- **S3.9 `[ ]` Length pass.** Target ≤ 9,000 words main text. Candidates: §2.2 (surrogates) −300;
+- **S3.9 `[~]` (9,609 words; see paperI/decisions.md) Length pass.** Target ≤ 9,000 words main text. Candidates: §2.2 (surrogates) −300;
   §3.5 remarks −200; §4.4 (truth precision) → App. C −400; §6.3 −300; §8 −200. Record the cuts in
   `paperI/decisions.md`. ~2 h.
-- **S3.10 `[ ]` Appendices.** A (Table A without the 12-channel column; note that the DA model is in
-  Paper II), B (Props 1–3, Lemma), C, D (keep the 12-channel rows with a footnote "the model of
+- **S3.10 `[x]` Appendices.** A (Table A without the 12-channel column; note that the DA model is in
+  Paper II), B (Props 1–2, Lemma), C, D (keep the 12-channel rows with a footnote "the model of
   Paper II"), F (minus "Part II code"; compute paragraph without the DA timings). ~1 h.
-- **S3.11 `[ ]` Bibliography.** `refs.bib` pruned to the entries cited; add the Paper II entry. Check:
+- **S3.11 `[x]` Bibliography.** `refs.bib` pruned to the entries cited; add the Paper II entry. Check:
   `bibtex` warnings zero; no DA-only references remain unless cited. ~30 min.
-- **S3.12 `[ ]` Number check.** `check_numbers.py --paper paperI`: zero UNMATCHED; every table body
+- **S3.12 `[x]` Number check.** `check_numbers.py --paper paperI`: zero UNMATCHED; every table body
   generated. ~30 min.
-- **S3.13 `[ ]` Read-through for self-containment.** A reader who has not seen Paper II must not meet
+- **S3.13 `[x]` Read-through for self-containment.** A reader who has not seen Paper II must not meet
   an undefined object: grep for "filter", "assimilation", "tiling", "observation" and confirm each
   occurrence is motivated locally or points to Paper II. ~1 h.
 - **S3.14 `[ ]` Journal formatting (after S0.2).** If Chaos: switch to REVTeX `aip,cha,reprint`
@@ -211,8 +211,8 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   training (one paragraph), the noisy-training objective (one paragraph), the 12-channel model's
   recipe (table row in App. A'). No proofs. Include Fig. 1 (S4.17). ~2 h.
 - **S4.5 `[ ]` §3.2–3.5 The filter (old §3.8 moved).** Per-site LETKF; Proposition 1 (block-diagonal
-  Jacobian; old Prop. 4) with proof in App. B'; shifted tilings and Eq. (blend); the N_ens argument;
-  the physics-based comparator. Renumber: Prop. 4 → Prop. 1. ~1 h.
+  Jacobian; old Prop. 3) with proof in App. B'; shifted tilings and Eq. (blend); the N_ens argument;
+  the physics-based comparator. Renumber: Prop. 3 → Prop. 1. ~1 h.
 - **S4.6 `[ ]` §4 System and ground truth.** 2D KS only: equation, parameters at 44²–440², ETDRK4 in
   one sentence, the truth's D_KY and n₊ at 44² and 66² with their spread (from old §4.3, §4.4, App. C.4),
   and a validation table of the Paper II model (D_KY error 3.6% / 2.1%, reconstruction error,

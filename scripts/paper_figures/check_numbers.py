@@ -46,7 +46,11 @@ EXPLAINED_BY_PAPER = {"paper1": {
     ("sections/05_results_1d.tex", "0.2325"): "axis range of Fig. 3(b), quoted in the caption",
     ("sections/07_data_assimilation.tex", "4.55"): "D9 steady-state skill at 88^2 (4.549), da2d_D9_L88_local_N64_noise0.04_s0.json",
     ("sections/07_data_assimilation.tex", "5.96"): "ratio of filter-only RSS 220^2/88^2 (3.35/0.5625), cost_summary.json",
-}, "paperI": {}, "paperII": {}}
+}, "paperI": {
+    ("sections/04_systems.tex", "0.048"): "literature value (Cvitanovic et al. 2010 leading exponent at L=22)",
+    ("sections/05_results_1d.tex", "0.2125"): "axis range of Fig. 3(b), quoted in the caption",
+    ("sections/05_results_1d.tex", "0.2325"): "axis range of Fig. 3(b), quoted in the caption",
+}, "paperII": {}}
 EXPLAINED = EXPLAINED_BY_PAPER[PAPER]
 
 # ---------- source values ----------

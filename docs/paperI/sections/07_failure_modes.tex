@@ -1,5 +1,147 @@
 %======================================================================
-\section{Failure modes}
+\section{What does not work, and why}
+\label{sec:failure}
 %======================================================================
-% TODO(S3.5): paper1 §8.
-\placeholder{S3.5: Failure modes}
+
+The recipe of Sec.~\ref{sec:canonical_recipe} is the end point of many
+attempts. We report the four failures that bear on the claims above.
+Errors are means of per-IC relative errors over three initial conditions
+against the truths of Table~\ref{tab:truth} unless stated; every number
+is in Appendix~\ref{app:tables}.
+
+%----------------------------------------------------------------------
+\subsection{Softmax attention}
+\label{sec:fail_attention}
+%----------------------------------------------------------------------
+
+In 1D, every propagator that mixed sites by self-attention, windowed or
+global, collapsed to a fixed point under free rollout ($\DKY=0$) while its
+short-horizon validation loss was competitive. Replacing the attention
+by the linear mixer of Eq.~\eqref{eq:mixer_block}, at the same radius,
+removed the collapse. In 2D we replaced only the encoder's site mixing by
+windowed attention with a relative position bias, which keeps exact
+equivariance, on a box-trained Kolmogorov model at $\alpha=0.1$. Its
+Stage~B validation loss was three times lower than the convolutional
+encoder's, yet from one initial condition its $\DKY$ was $30\%$ low at both
+$1\times$ and $2\times$, against $20\%$ and $3\%$ for the convolutional
+model.\footnote{Both from unstandardized initial conditions, the only
+evaluation available for these two models.} A more flexible mixer fits
+the training domain more closely and transfers worse, and short-horizon
+losses predicted neither failure.
+
+%----------------------------------------------------------------------
+\subsection{Coupling and context do not replace the right data}
+\label{sec:fail_coupling}
+%----------------------------------------------------------------------
+
+Non-local inputs make a box-trained model transfer worse
+(Sec.~\ref{sec:box_vs_window}); with window training they are merely
+unhelpful. At $\alpha=0.05$ the window-trained model's errors are $7.3\%$,
+$7.4\%$ and $6.3\%$ at $1\times$, $2\times$ and $3\times$; a learned consensus
+mechanism that exchanges messages between sites gives $7.0\%$, $6.7\%$ and
+$9.2\%$, and the exact Biot--Savart velocity as an extra input $9.4\%$,
+$8.2\%$ and $11.4\%$. Twice as many training trajectories change the
+canonical-recipe errors from $6.2\%$, $5.2\%$, $7.2\%$ to $5.5\%$, $4.4\%$,
+$9.6\%$, so the amount of data does not limit accuracy at $3\times$ either.
+
+%----------------------------------------------------------------------
+\subsection{Short rollouts allow spurious regimes}
+\label{sec:fail_regimes}
+%----------------------------------------------------------------------
+
+A Kolmogorov model trained on $40\times40$-site crops with rollouts of at
+most 12 steps has low validation losses, but its free rollouts leave the
+attractor. On the native box its vorticity standard deviation is $0.98$
+against the truth's $1.40$, and half of its kinetic energy sits at
+$|\bm k|<2$ against $10\%$ in the truth; at $3\times$ it settles into a
+different, more energetic state, and its $\DKY$ there ranges from $65$ to
+$107$ across three initial conditions (Fig.~\ref{fig:failure}(c)). The
+true flow shows no such regimes over 400 time units. Retraining the
+propagator with rollouts up to $\kmax=32$ removes them: variance and
+forcing-band energy share return to within $5\%$ of the truth's at every
+size, and the spread of $\DKY$ at $3\times$ falls from $51\%$ to $5\%$. The
+cost is the bias of the next subsection: the retrained model, which
+also raised the terminal input noise from $0.02$ to $0.05$, is $4\%$, $13\%$
+and $14\%$ low at the three widths (Remark~\ref{rem:noise_penalty}).
+Free-rollout statistics need no truth and catch this failure before
+any Lyapunov computation, which is why they screen every model
+(Sec.~\ref{sec:evaluation}).
+
+%----------------------------------------------------------------------
+\subsection{Squared-error rollouts damp the dimension}
+\label{sec:fail_mse}
+%----------------------------------------------------------------------
+
+Lemma~\ref{lem:mse} predicts that longer squared-error rollouts bias
+$\DKY$ down, and where models differ in $\kmax$ and little else this is
+what happens (Fig.~\ref{fig:failure}(b)). Raising $\kmax$ from 12 to 32
+lowers $\DKY$ at every size, by $0.4$--$6$ points of relative error for the
+per-patch model at $\alpha=0.05$ and by $17$--$25$ points for the 2D-crop
+model above; raising it from 16 to 32 at $\alpha=0.1$ lowers it by $3$--$10$
+points. The bias is not a loss of amplitude: started from the validation
+trajectory, every model we checked ($\kmax$ from 12 to 32, both drags)
+keeps its vorticity variance within $2.3\%$ of the truth's at every lead
+up to 64 steps. The contraction acts on the growth of perturbations,
+which is what $\lambda_1$ and $\DKY$ measure.
+
+Table~\ref{tab:alpha01_ablation} and Fig.~\ref{fig:failure}(a) list the
+six variants trained at $\alpha=0.1$. Shortening the rollout from
+$\kmax=32$ to $16$ cuts the underestimate at $3\times$ from $10.9\%$ to
+$2.6\%$ (v1 to v2, with a slightly stronger barrier), and both $\kmax=20$
+variants are $7$--$10\%$ low there. The offset $\epsilon$ of the log-det
+barrier, which sets how hard the barrier pushes on the weakest latent
+directions, is a second lever: at $\kmax=16$, setting $\epsilon=0$ moves the
+$3\times$ error from $2.9\%$ to $4.9\%$ and the $1\times$ error from $8.8\%$ to
+$2.8\%$ (v5 to v6). No variant is best at every size, and the size at
+which a variant is most accurate is not predictable from its training
+loss; that is why the main-text model was chosen by the truth-free rule
+of Sec.~\ref{sec:canonical_results}. The rule also proved robust where
+a truth-based choice would not have been: against the earlier single
+40-unit truth at $3\times$, v5 was the most accurate variant and v2 the
+second; against the three-run mean, v2 is the most accurate
+(Appendix~\ref{app:groundtruth}). A spectral regularizer that matches the
+rollout's energy shares to the training data's tightens the native-size
+scatter at $\alpha=0.05$ ($5\%$ instead of $22\%$) but worsens the $3\times$
+error ($9.9\%$ instead of $7.2\%$): it constrains the energy distribution,
+not the growth rates that set $\DKY$.
+
+\begin{table}[htbp]
+\caption{Training variants at $\alpha=0.1$. $\epsilon$: offset of the
+log-det barrier; $w_{\mathrm{var}}/w_{\mathrm{ld}}$: Stage~A regularizer
+weights; val.: normalized forecast error at lead 8 on the validation
+trajectory; dev.: largest deviation of the free-rollout statistics from
+the training data (\%), both from the truth-free selection rule; last
+three columns: error in $\DKY$ (\%) at $1\times$, $2\times$, $3\times$.
+$^\star$Selected main-text model. $^\dagger$Trained with an additional
+one-sided log-det floor on the rollout that never activated (a control
+without it is identical to machine precision).}
+\label{tab:alpha01_ablation}
+\begin{ruledtabular}
+\begin{tabular}{lcccccccc}
+variant & $\kmax$ & $\epsilon$ & $w_{\mathrm{var}}/w_{\mathrm{ld}}$ & val. & dev. & $1\times$ & $2\times$ & $3\times$ \\
+\hline
+\tabinput{tables/alpha01_ablation}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/failure.pdf}
+\caption{Failure modes in Kolmogorov flow. (a) The six training variants
+at $\alpha=0.1$ (Table~\ref{tab:alpha01_ablation}): error in $\DKY$ (\%,
+mean over three initial conditions) at each channel width, with
+$\kmax$ in parentheses and the truth-free validation forecast error at
+lead 8 in the right column; $^\star$ the selected model. No row is
+lightest in every column. (b) Signed error in $\DKY$ for three pairs of models that differ in
+the length of their training rollouts, short (open) to long (filled):
+per-patch models at $\alpha=0.05$ ($\kmax$ 12 to 32, otherwise identical
+except for training length), 2D-crop models at $\alpha=0.05$ (12 to 32,
+with terminal input noise 0.05), and v2 to v1 at $\alpha=0.1$ (16 to 32).
+Longer rollouts lower $\DKY$ at every size (Lemma~\ref{lem:mse}). (c)
+Share of kinetic energy at $|\bm k|<2$ during free rollouts at $2\times$
+from one initial condition: the PDE, the 2D-crop model trained with
+$\kmax=12$, which settles into a spurious large-scale regime, and its
+$\kmax=32$ retrain (rollout of 200 time units).}
+\label{fig:failure}
+\end{figure*}

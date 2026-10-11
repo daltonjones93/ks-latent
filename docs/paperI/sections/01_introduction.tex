@@ -1,5 +1,114 @@
 %======================================================================
 \section{Introduction}
+\label{sec:introduction}
 %======================================================================
-% TODO(S3.2): paper1 §1 (sec:introduction), without the DA paragraph and bullets.
-\placeholder{S3.2: Introduction}
+
+Learned surrogates of chaotic partial differential equations usually
+compress the whole state into one latent vector and learn how that
+vector evolves \citep{linotgraham2022,racca2023,ozalpmagri2025}. For
+many systems this is the right design. For spatiotemporally chaotic
+systems on large domains it is not, for a reason that is structural
+rather than technical. Such systems are extensively chaotic: the number
+of active degrees of freedom, measured by the Kaplan--Yorke dimension
+$\DKY$, grows in proportion to the domain
+\citep{ruelle1982,manneville1985,egolfgreenside1994}. A latent vector
+fixed at training time has no size to grow into. A model trained on one
+domain cannot even be evaluated on another, and every new domain size
+requires new data and new training.
+
+We study the alternative: a latent \emph{field}, with a few channels at
+each site of a lattice that tiles the physical domain, built only from
+operators that are shared by all sites and read a bounded neighbourhood
+(Fig.~\ref{fig:concept}).
+The parameters of such a model do not depend on the number of sites, so
+a model trained at one size is applied to a larger domain by adding
+sites, with no retraining. Its latent also has a physical geometry, which
+a companion paper uses to build a localized ensemble filter in latent space
+\citep{jones2026da}. A local, weight-shared model is
+also extensive by construction, like the coupled lattice maps whose
+Lyapunov spectra have a thermodynamic limit \citep{livi1986,isola1990}
+and can be predicted from small subsystems \citep{carretero1999}. The
+question is whether a \emph{learned} local rule reproduces the right
+density of chaos, and whether it keeps doing so on domains it was never
+trained on.
+
+Two things turn out to matter, and they organize the paper. First, the
+local rule must be learned from data that contain the statistics of a
+large domain: the same architecture trained on a small periodic box
+fails under transfer, while trained on windows of one large simulation,
+with the window's boundary driven by the simulation, it transfers.
+Second, the propagator must stay chaotic when it runs freely: rollouts
+that are too short admit spurious regimes, and squared-error rollouts
+that are too long damp the dimension.
+
+We hold the models to a demanding standard: their own Lyapunov spectra,
+computed from the learned maps, compared with spectra of the true PDE at
+every domain size, with the uncertainty of the reference measured rather
+than assumed. We do this for the one-dimensional Kuramoto--Sivashinsky
+(KS) equation, its two-dimensional isotropic form, and two-dimensional
+Kolmogorov flow with linear drag at three drag coefficients.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/concept_transfer.pdf}
+\caption{The idea in three panels. (a) A global latent compresses the
+whole field into one vector of fixed dimension $d$; a local latent field
+assigns $c$ channels to the site of each patch. (b) Because every
+operator is shared across sites and reads a bounded neighbourhood, the
+trained parameters $\theta$ do not depend on the number of sites, and the
+model is deployed on a larger domain by adding sites. (c) Training on
+windows of one large simulation: at every step of a training rollout the
+halo of the window is overwritten by the true encoding, the interior
+runs free, and only the interior is scored, so the loss is exactly that
+of a limited-area model (Proposition~\ref{prop:halo}).}
+\label{fig:concept}
+\end{figure*}
+
+\para{Contributions.}
+\begin{itemize}
+\item \emph{A local latent field for extensive chaos}
+  (Sec.~\ref{sec:method}): weight-shared encoder, decoder and propagator
+  of finite reach, exactly translation-equivariant, with a parameter
+  count independent of the domain size: about $135{,}000$ parameters describe
+  the local law once, and the same parameters run domains of any size.
+\item \emph{Zero-shot transfer validated by Lyapunov spectra}
+  (Sec.~\ref{sec:results1d}). Trained at $L=100$, a 1D KS model reproduces
+  the true $\DKY$ to within $0.2$--$1.2\%$ from $L=50$ to $L=400$, three
+  training seeds agree to within $1.2\%$, and the whole positive part of
+  its Lyapunov spectrum collapses onto the truth's.
+\item \emph{The training distribution decides transfer}
+  (Sec.~\ref{sec:results2d}). Trained on a small periodic box, the same
+  architecture misses $\DKY$ by $15$--$38\%$ on larger domains in three of
+  four cases in two 2D systems, and adding non-local inputs makes this
+  worse. Trained on
+  windows of one large domain, with the window's boundary driven by the
+  simulation, the final models are within $0.6$--$2\%$ of the truth in 2D
+  KS and $1$--$9\%$ in Kolmogorov flow at the two stronger drags, and
+  within the truth's own uncertainty in their scaling with domain size;
+  the weakest drag is harder. The window training is a learned
+  limited-area model, and we prove it trains that problem exactly.
+\item \emph{What fails, and why} (Sec.~\ref{sec:failure}): softmax
+  attention, short rollouts and squared-error damping, with a lemma that
+  connects the last to an underestimate of $\DKY$, and a model-selection
+  rule that uses no ground truth.
+\end{itemize}
+
+What is not new should be said as clearly. Localized reduced models of KS
+were built from wavelets a quarter century ago \citep{wittenberg2001},
+learned models of KS have reproduced Lyapunov spectra at a single size
+\citep{pathak2017,vlachas2020,ozalpmagri2025}, and convolutional
+surrogates have been run on larger domains than they were trained on
+\citep{barsinai2019,kochkov2021}. Section~\ref{sec:background} places our
+results among these. The contrast with minimal flow units, which are
+non-extensive by construction and where a global latent vector works
+well \citep{constanteamores2025}, is the one-sentence summary of when a
+field-valued latent is needed.
+
+Section~\ref{sec:method} defines the model, proves its structural
+properties and fixes the training and evaluation protocols;
+Section~\ref{sec:systems} describes the three systems and how precisely
+their Lyapunov spectra are known. Sections~\ref{sec:results1d}
+and~\ref{sec:results2d} report transfer in one and two dimensions,
+Section~\ref{sec:failure} the failure modes, and
+Section~\ref{sec:discussion} what transfer requires and the limitations of
+this study.

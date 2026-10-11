@@ -1,5 +1,492 @@
 %======================================================================
 \section{Method}
+\label{sec:method}
 %======================================================================
-% TODO(S3.4): paper1 §3.1--3.7 (no §3.8).
-\placeholder{S3.4: Method}
+
+This section defines the model, states the structural properties that
+make domain transfer possible, and fixes the training and evaluation
+protocols used for every result in
+Secs.~\ref{sec:results1d}--\ref{sec:failure}. Proofs of the
+propositions are in Appendix~\ref{app:proofs}; numerical settings for
+each system are in Appendix~\ref{app:architecture}.
+
+%----------------------------------------------------------------------
+\subsection{Setting and notation}
+\label{sec:notation}
+%----------------------------------------------------------------------
+
+We consider a dissipative PDE $\partial_t u = N(u)$ for a scalar field
+$u(\bm{x},t)$ on a periodic domain $\Omega$, either an interval of length
+$L$ or a rectangle $L_x\times L_y$. The field is sampled on a uniform grid
+of spacing $\Delta x$ and observed at snapshot interval $\Delta t$, giving
+a discrete-time state $u_n = u(\cdot, n\Delta t)$. All fields are
+standardized with a single mean and standard deviation computed on the
+training data.
+
+The domain is tiled by non-overlapping square \emph{patches} of
+$p$ grid points per side, so that each patch has physical size
+$h = p\,\Delta x$. The patch centres form a periodic \emph{site lattice}
+$\Lat$ with $P = |\Lat|$ sites ($P = L/h$ in one dimension,
+$P = (L_x/h)(L_y/h)$ in two). We write $\dist(j,k)$ for the periodic
+(toroidal) distance between sites in units of the site spacing, and
+$\Shift_s$ for the shift of a lattice field by $s\in\Z^{\dim}$ sites. A
+shift of the physical field by $s$ whole patches is written
+$\Tr_{s} u(\bm{x}) = u(\bm{x} - s h)$.
+
+Two quantities set the scale of everything that follows. The first is
+the number of active degrees of freedom, measured by the Kaplan--Yorke
+dimension
+\begin{equation}
+  \DKY = k + \frac{\sum_{i=1}^{k}\lambda_i}{|\lambda_{k+1}|},
+  \qquad
+  k = \max\Big\{\, j : \textstyle\sum_{i=1}^{j}\lambda_i \ge 0 \Big\},
+  \label{eq:dky}
+\end{equation}
+where $\lambda_1\ge\lambda_2\ge\cdots$ are the Lyapunov exponents
+\citep{kaplanyorke1979}. The second is how $\DKY$ grows with domain
+size. In \emph{extensive} chaos it grows in proportion to the volume,
+\begin{equation}
+  \DKY(\Omega) = \rho\,|\Omega| + o(|\Omega|),
+  \label{eq:extensive}
+\end{equation}
+with a density $\rho$ that does not depend on $|\Omega|$
+\citep{ruelle1982,manneville1985,egolfgreenside1994}. For the 1D
+Kuramoto--Sivashinsky (KS) equation, $\rho\approx0.22$ per unit length
+\citep{edson2019}. Equation~\eqref{eq:extensive} is the property a
+surrogate must reproduce to be usable on domains larger than the one it
+was trained on, and the property a fixed-size latent vector cannot
+represent: its dimension is fixed at training time.
+
+%----------------------------------------------------------------------
+\subsection{Local latent fields}
+\label{sec:local_field}
+%----------------------------------------------------------------------
+
+The latent state is a field on the site lattice,
+\begin{equation}
+  z = (z_j)_{j\in\Lat}, \qquad z_j \in \R^{c},
+  \qquad \dlat = cP,
+  \label{eq:latent_field}
+\end{equation}
+with $c$ channels per site. It is never flattened into an unstructured
+vector except to call a library routine, and the flattening is always
+site-major so that site identity is recoverable. The model has three
+parts, each built only from operators that are applied identically at
+every site and read a bounded neighbourhood.
+
+\para{Encoder.}
+The encoder $\E$ first maps each patch to a hidden vector by a strided
+convolution whose kernel equals the patch (an exact, non-overlapping
+patch embedding), then applies $n_e$ circular convolutions of radius
+$r_e$ on the site lattice with GELU activations, and finally a
+$1\times1$ convolution to $c-1$ channels. Channel $0$ is not learned: it
+is the patch average of $u$,
+\begin{equation}
+  z_{j,0} = \frac{1}{|\text{patch } j|}\sum_{\bm{x}\in\text{patch } j} u(\bm{x}),
+  \label{eq:anchor}
+\end{equation}
+which fixes one coordinate of the representation to a physical quantity
+with the same meaning at every domain size. The output projection has
+no bias: a per-channel offset shifts every site of the latent field by
+the same constant, which the decoder can absorb and none of the training
+losses constrains, so it drifts during training.
+
+\para{Decoder.}
+The decoder $\Dec$ mirrors the encoder: a $1\times1$ convolution from
+$c$ channels to a hidden width, $n_d$ circular convolutions of radius
+$r_d$, and a transposed convolution with kernel and stride equal to the
+patch, which writes each site's hidden vector back onto its own patch.
+The \emph{reach} of the encoder and decoder is $\Renc = r_e n_e$ and
+$\Rdec = r_d n_d$ sites. When $\Renc=\Rdec=0$ the autoencoder is
+\emph{per-patch}: site $j$'s latent is a function of patch $j$ alone,
+and patch $j$ is reconstructed from $z_j$ alone. This is the canonical
+autoencoder for the 2D systems (Sec.~\ref{sec:canonical_recipe}); the 1D
+model uses $\Renc=\Rdec=6$ sites (Appendix~\ref{app:architecture}).
+
+\para{Propagator.}
+The latent dynamics are a residual map
+\begin{equation}
+  z^{n+1} = \Fp(z^{n}) = z^{n} + f_\theta(z^{n}),
+  \label{eq:propagator}
+\end{equation}
+where $f_\theta$ (``local MLP'') embeds each site's $c$ channels to a
+width $d_m$, applies $n_\ell$ blocks of the form
+\begin{equation}
+  \begin{aligned}
+  a &\leftarrow a + \mathrm{Conv}_{w}\big(\mathrm{LN}(a)\big),\\
+  a &\leftarrow a + \mathrm{MLP}\big(\mathrm{LN}(a)\big),
+  \end{aligned}
+  \label{eq:mixer_block}
+\end{equation}
+and projects back to $c$ channels per site. Here $\mathrm{Conv}_{w}$ is
+a circular convolution of radius $w$ over the site lattice (kernel
+$2w+1$ per axis), $\mathrm{LN}$ is layer normalization over channels at
+each site, and $\mathrm{MLP}$ acts on each site independently. The token
+mixer is an \emph{unconstrained linear} map of the neighbourhood: there
+is no softmax normalization. Every self-attention propagator we tried
+collapsed to a fixed point under free rollout (Sec.~\ref{sec:fail_attention});
+replacing softmax attention by a linear mixer of the same radius removed
+the collapse. The final projection is initialized to zero, so
+$\Fp=\mathrm{id}$ at initialization and early rollouts are stationary
+rather than divergent.
+
+\para{Structural properties.}
+All learned operators above are weight-shared and of finite radius on a
+periodic lattice. Two consequences follow directly.
+
+\begin{proposition}[Equivariance and size independence]
+\label{prop:equivariance}
+Let $\E$, $\Dec$ and $\Fp$ be built as above on a periodic lattice with at
+least $2r+1$ sites along every axis on which a kernel of radius $r$ acts.
+Then for every shift $s$ by a whole number of patches,
+\begin{equation}
+  \E\circ\Tr_{s} = \Shift_s\circ\E, \qquad
+  \Dec\circ\Shift_s = \Tr_{s}\circ\Dec, \qquad
+  \Fp\circ\Shift_s = \Shift_s\circ\Fp,
+  \label{eq:equivariance}
+\end{equation}
+exactly, and the parameter vector $\theta$ of all three maps is the same
+for every $P$.
+\end{proposition}
+
+\begin{corollary}[Transfer by adding sites]
+\label{cor:transfer}
+Hold $\Delta x$ and $p$ (hence $h$) fixed. Then a parameter vector
+$\theta$ trained on any domain defines, without modification, a model on
+every periodic domain whose side lengths are multiples of $h$, with
+$P$ and $\dlat=cP$ growing in proportion to $|\Omega|$.
+\end{corollary}
+
+Corollary~\ref{cor:transfer} is the zero-shot transfer evaluated
+throughout this paper: a checkpoint trained at one size is loaded at a
+new $(N_x,P)$, with every weight copied unchanged. A global latent vector
+admits no such map, because its bottleneck and propagator are tied to
+one value of $\dlat$.
+The parameter count is therefore that of the local rule alone. The 1D
+model has $63{,}812$ parameters and every 2D model about $135{,}000$
+(Appendix~\ref{app:architecture}), and the same tensors run every domain
+size: in a companion study of data assimilation \citep{jones2026da}, a
+12-channel version of the 2D KS model, trained on windows of the $264^2$
+simulation of Sec.~\ref{sec:ks2d}, runs a $440^2$ domain,
+whose field has $1.6$ million grid values and whose latent has $76{,}800$
+coordinates. In a global latent model the layers into and out
+of the bottleneck scale with the size of the field, so its parameter count
+grows with the domain even before its latent dimension does.
+
+A local model is also extensive by construction, which explains both
+what transfer can achieve and how it fails.
+
+\begin{remark}[Local models are extensive]
+\label{rem:extensive_model}
+For translation-invariant lattice maps of finite range the Lyapunov
+spectrum is expected, and found numerically, to have a thermodynamic
+limit: the exponents, indexed per site, converge to a density as
+$P\to\infty$
+\citep{ruelle1982,livi1986,isola1990}; rigorous results exist for weakly
+coupled maps \citep{bunimovichsinai1988}. For a local model this gives
+$\DKY^{\text{model}}(\Omega) = \rho_\theta|\Omega| + o(|\Omega|)$ with a
+density $\rho_\theta$ fixed by the trained weights, and the spectrum of a
+small lattice already predicts that of a large one, as
+\citet{carretero1999} showed for coupled map lattices. A local model can
+therefore match the true density $\rho$. Its finite-size corrections,
+however, are set by its own reach $\Rprop h$, not by the physics, so it
+need not reproduce the true system's departures from
+Eq.~\eqref{eq:extensive} on domains comparable to that reach. We use this
+as an interpretive principle rather than a theorem about our networks: in
+the results below the model's density is nearly constant across sizes,
+and its largest errors occur where the domain is only a few reaches
+wide.
+\end{remark}
+
+%----------------------------------------------------------------------
+\subsection{Receptive fields and locality}
+\label{sec:receptive}
+%----------------------------------------------------------------------
+
+The output of the encoder at site $j$ depends on patches within
+$\Renc$ sites of $j$; one propagator step at site $j$ depends on latent
+sites within $\Rprop = w\,n_\ell$ sites; the decoder output on patch $j$
+depends on latent sites within $\Rdec$. After $k$ propagator steps,
+the decoded field on patch $j$ depends on the initial field within
+\begin{equation}
+  R_k = \Renc + k\,\Rprop + \Rdec
+  \label{eq:light_cone}
+\end{equation}
+sites. Unit tests confirm each reach on the implemented maps by masking
+their Jacobians.
+
+How large must $\Rprop$ be? For a dissipative PDE such as KS the exact
+one-step map has an unbounded domain of dependence, but its influence
+decays rapidly with distance, so the relevant quantity is an
+\emph{interaction range}: the distance beyond which neighbouring values
+no longer improve a one-step prediction. We measure it directly on the
+1D latent. A single quadratic stencil, shared by all sites, that predicts
+each site's one-step increment from the sites within a half-width $w$
+explains $58\%$ of the variance at $w=1$, $82\%$ at $w=2$, $88\%$ at
+$w=3$ and saturates at $90\%$ from $w=4$ on, the value it also reaches
+with access to the whole ring (a linear stencil explains at most
+$2.5\%$ at any width; Fig.~\ref{fig:appendix_panels}(c)). The interaction range of the 1D dynamics at
+$\Delta t=1$ is therefore three to four sites, $19$--$25$ length units, or
+two to three pattern wavelengths. The trained propagator's reach of six
+sites ($37.5$ units) covers it with a margin; the 2D models' six-site
+reach spans about four pattern wavelengths in 2D KS ($33$ units) and
+three forcing wavelengths in Kolmogorov flow ($4.7$ units).
+
+A second length is set by the speed at which perturbations spread, the
+largest velocity $v_*$ with a positive comoving Lyapunov exponent
+\citep{kaneko1986,deisslerkaneko1987}. For 1D KS we measure
+$v_*=1.26\pm0.04$ length units per time unit (150 trajectories), so a
+perturbation spreads about $1.3$ units, a fifth of a site, per snapshot
+interval. This lower bound on the reach is far from binding: the
+interaction range is set by how far the one-step map couples values, not
+by how far perturbations travel.
+
+%----------------------------------------------------------------------
+\subsection{Training on windows of a large domain}
+\label{sec:crop_training}
+%----------------------------------------------------------------------
+
+A model trained on a small periodic box sees only that box's statistics,
+and a propagator whose reach covers most of the box can exploit the
+periodic wrap-around, a self-interaction that does not exist on a larger
+domain. In our 2D experiments this happened: a propagator with
+$\Rprop=6$ trained on an $8$-site periodic ring covers $75\%$ of it, and
+such models fail to transfer (Sec.~\ref{sec:box_vs_window}). We instead
+simulate one large periodic domain and train only on random rectangular
+windows (\emph{crops}) of it. A crop has no boundary condition: its
+edges are open, and the training losses are restricted to the sites a
+light-cone argument certifies.
+
+\para{Stage A: autoencoder.}
+A crop of $W$ sites per cropped direction is encoded and decoded. Sites
+within $\Renc+\Rdec$ of a crop edge are excluded from the
+reconstruction loss, because padding at the edge reaches them. For a
+per-patch autoencoder this margin is zero.
+
+\para{Stage B: propagator with a forced halo.}
+The trained encoder is frozen and applied to many crops of every training
+trajectory at every time, giving a bank of latent crop trajectories.
+The outer $\Renc$ sites per cropped side are dropped, since their
+encoding saw padding. The remaining strip is split into a \emph{halo}
+of $\eta$ sites per side and a \emph{free interior} $I$. A training
+rollout starts from the true encoding, applies the propagator, and after
+every step overwrites the halo with the true encoding at that time; only
+the interior is scored. This is the construction of a limited-area
+forecast model driven by lateral boundary data from a parent run.
+
+\begin{proposition}[Forced-halo exactness]
+\label{prop:halo}
+Let $\eta\ge\Rprop$. Then for every rollout length $k$, the forced-halo
+prediction on the free interior equals the prediction of the same
+weights on any larger periodic domain containing the crop, in which every
+site outside $I$ is set to its true value at every step. If
+$\eta<\Rprop$, the equality fails in general.
+\end{proposition}
+
+Proposition~\ref{prop:halo} says the crop loss is the loss of a
+well-defined object, the model restricted to $I$ with exact lateral
+boundary data, and that no padding artifact enters the gradient. It is
+checked numerically (agreement to $10^{-6}$ for strips cropped in one
+direction and $10^{-5}$ for windows cropped in both, and companion tests
+that halos of $\Rprop-1$ and $\Rprop-2$ break it). The one
+mismatch between training and deployment is that interior sites adjacent
+to the halo see true neighbours in training and predicted neighbours on
+the periodic deployment domain; it is confined to a strip of width
+$\Rprop$.
+
+For 2D Kuramoto--Sivashinsky, which is isotropic, crops are cut in both
+directions, so no training sample contains a whole periodic direction.
+For Kolmogorov flow, whose forcing depends on $y$, crops are strips in
+$x$ that keep the full periodic height, and transfer grows the domain in
+$x$ only.
+
+%----------------------------------------------------------------------
+\subsection{Training objective}
+\label{sec:objective}
+%----------------------------------------------------------------------
+
+\para{Stage A.}
+For a batch of crops with interior latents $\{z_j\}$ pooled over sites
+and batch members, let $C = \Cov(z)\in\R^{c\times c}$ be their channel
+covariance. The loss is
+\begin{equation}
+\begin{split}
+  \mathcal{L}_A ={}&
+  \big\|\,\Dec(\E(u)) - u\,\big\|^2_{I}
+  + \wvar\,\frac1c\sum_{k=1}^{c}\big(C_{kk}-1\big)^2\\
+  &- \wld\,\frac1c\log\det\!\big(C + \epsilon I_c\big),
+\end{split}
+  \label{eq:stageA}
+\end{equation}
+where $\|\cdot\|_I$ is the mean squared error over the unmasked interior.
+The two regularizers do different jobs. The log-determinant barrier
+penalizes any small eigenvalue of $C$, whether it comes from a channel
+with small variance or from a channel that is nearly a linear combination
+of others, so it prevents correlated (rank) collapse that a per-channel
+penalty cannot see. It does not, however, constrain the overall scale:
+it decreases when all eigenvalues grow together, and the encoder and
+decoder can rescale against each other with no change in reconstruction.
+The variance term anchors that scale. With $\wvar=0$ we observed the
+variance diagnostic grow from $8\times10^{2}$ to $2.5\times10^{8}$ over
+training while the reconstruction error stayed flat.
+
+\begin{remark}[The barrier offset $\epsilon$ is not a numerical detail]
+\label{rem:epsilon}
+The barrier's force on an eigenvalue $\mu$ of $C$ is $-1/(\mu+\epsilon)$.
+At initialization the smallest eigenvalue is $0.8$--$4.4\times10^{-3}$ (ten
+random seeds), so setting $\epsilon=10^{-3}$ or $0$ changes the force on
+the weakest directions by a factor of order one, and the trained model's
+dimension at large sizes as much as the rollout length does
+(Sec.~\ref{sec:fail_mse}).
+\end{remark}
+
+\para{Stage B.}
+The propagator is trained on forced-halo rollouts of length $k$,
+\begin{equation}
+  \mathcal{L}_B = \frac1k\sum_{m=1}^{k}
+  \big\|\hat z^{m} - z^{m}\big\|_{I}^{2},
+  \quad \hat z^{0} = z^{0} + \xi,\ \xi\sim\mathcal N(0,\sigma^2 I),
+  \label{eq:stageB}
+\end{equation}
+where $\hat z^{m}$ is the forced-halo prediction. The rollout length $k$
+is ramped from $2$ to an intermediate value $\kmid$ over the first $58\%$
+of training, then to its final value $\kmax$, and held there for the last
+$30\%$; the input noise $\sigma$ is
+annealed linearly from $0.10$ to $0.02$. Long free rollouts are needed:
+short ones leave the free-running model under-constrained and produce
+spurious, initial-condition-dependent regimes (Sec.~\ref{sec:fail_regimes}).
+But long rollouts scored by mean squared error carry a known bias.
+
+\begin{lemma}[Squared-error rollouts favour contraction]
+\label{lem:mse}
+Let $(z^0, z^k)$ be jointly distributed with finite second moments, and
+let $\tilde z^0$ be the (possibly noisy) model input. Among all
+measurable maps $\Phi$, the expected loss
+$\Exp\|\Phi(\tilde z^0)-z^k\|^2$ is minimized by
+$\Phi^\star(\tilde z^0)=\Exp[z^k\mid\tilde z^0]$, and
+\begin{equation}
+  \tr\Cov\big(\Phi^\star(\tilde z^0)\big)
+  = \tr\Cov(z^k) - \Exp\,\tr\Cov\big(z^k\mid\tilde z^0\big).
+  \label{eq:total_variance}
+\end{equation}
+\end{lemma}
+
+The second term in Eq.~\eqref{eq:total_variance} is the forecast
+uncertainty at lead $k$, which in a chaotic system is non-zero at every
+$k>0$ and grows as $e^{2\lambda_1 k\Delta t}$ until it saturates. A
+propagator trained toward $\Phi^\star$ is therefore rewarded for rollouts
+with less spread than real trajectories, that is, for contracting along
+the most unstable directions, and the reward grows with $k$. Our training
+horizons are short in Lyapunov units ($\kmax\Delta t\,\lambda_1\approx1.1$
+for 1D KS, $0.5$--$0.65$ for 2D KS, $0.2$--$1.0$ for Kolmogorov flow), so
+the effect is a bias that grows with $\kmax$, not a collapse to the
+climatological mean. It is the mechanism behind the ``blurring'' of
+machine-learned weather models \citep{lam2023graphcast,bonavita2024}, and
+for a learned surrogate it predicts an underestimate of $\DKY$ that grows
+with $\kmax$, which is what we observe (Sec.~\ref{sec:fail_mse}).
+
+\begin{remark}[Input noise penalizes growth directly]
+\label{rem:noise_penalty}
+Training with input noise of variance $\sigma^2$ is, to leading order, the
+penalty $\sigma^2\|\partial_z\Phi\|_F^2$ on the Jacobian of the trained map
+\citep{bishop1995} (Appendix~\ref{app:proofs}). For the $k$-step map the
+Frobenius norm is at least the largest finite-time growth factor,
+$\|\partial_z\Phi\|_F^2\ge e^{2\lambda^{(k)}_1 k\Delta t}$, so input noise
+penalizes exactly the expansion that produces positive exponents. Rollout
+length and input noise are two handles on one bias: the one run that
+raised both ($\kmax=32$ with terminal noise $0.05$ instead of $0.02$,
+Sec.~\ref{sec:fail_regimes}) underestimates $\DKY$ by $4\%$, $13\%$ and
+$14\%$ at $1\times$, $2\times$ and $3\times$.
+\end{remark}
+
+Rollouts that are too short fail in the opposite way
+(Sec.~\ref{sec:fail_regimes}). We treat $\kmax$ and the noise schedule as
+a trade-off between these two failure modes, not as quantities to
+maximize.
+
+%----------------------------------------------------------------------
+\subsection{The canonical recipe}
+\label{sec:canonical_recipe}
+%----------------------------------------------------------------------
+
+All 2D results in the main text share one architecture and training
+procedure: a per-patch autoencoder ($\Renc=\Rdec=0$) with $c=6$ channels
+(five learned and the anchor) and hidden width $32$; a local-MLP
+propagator with $n_\ell=2$ blocks of radius $w=3$ ($\Rprop=6$ sites),
+token width $d_m=32$ and MLP ratio $4$; training on crops of one large
+domain with a forced halo $\eta=6$; and Stage~A for $8000$ steps and
+Stage~B for $6000$--$9000$ steps with AdamW, linear warm-up and cosine
+decay. The models differ in the rollout length $\kmax$ and in the
+regularizer weights. $\kmax=32$ (2D KS and Kolmogorov flow at
+$\alpha=0.025$) is the long-rollout setting introduced to suppress
+spurious free-running regimes (Sec.~\ref{sec:fail_regimes}); the
+$\alpha=0.05$ model is the earlier, independently verified $\kmax=12$
+model, which a $\kmax=32$ retraining does not improve
+(Sec.~\ref{sec:canonical_results}); and at $\alpha=0.1$, where $\kmax$ and
+the barrier offset $\epsilon$ interact (Sec.~\ref{sec:fail_mse}), the
+model ($\kmax=16$) was chosen among six variants by a rule that uses no
+ground truth (Sec.~\ref{sec:canonical_results}).
+
+The 1D model predates this recipe. It was trained on whole periodic
+domains of $16$ sites with a full-reach encoder and decoder
+($\Renc=\Rdec=6$, $c=3$), jointly with a short-horizon auxiliary
+propagator, and with an additional penalty that favours spatial
+coherence of the latent across neighbouring sites; the propagator was
+then refined with rollouts up to $\kmax=12$. It transfers without crop
+training (Sec.~\ref{sec:results1d}), so we did not retrain it with the 2D
+recipe. Every setting of every model is listed in
+Appendix~\ref{app:architecture}.
+
+%----------------------------------------------------------------------
+\subsection{Evaluation}
+\label{sec:evaluation}
+%----------------------------------------------------------------------
+
+\para{Lyapunov spectra.}
+We compute Lyapunov spectra by the Benettin algorithm with QR
+reorthonormalization \citep{benettin1980}. For the true PDE, tangent
+vectors are propagated with the exact Fr\'echet derivative of the
+time-stepper in double precision. For a model, tangent vectors are
+propagated through $\Fp$ by forward-mode automatic differentiation in
+single precision and re-orthonormalized every 10 steps by a
+double-precision QR on the CPU. The exponents are reported per unit
+physical time, $\lambda_i = (n\Delta t)^{-1}\sum_{q}\log|R^{(q)}_{ii}|$,
+where $R^{(q)}$ is the triangular factor of the $q$-th reorthonormalization
+and $n$ the number of model steps. From each spectrum we report
+$\lambda_1$, the number of positive exponents $n_+$, and $\DKY$. Each
+model spectrum uses all $\dlat$
+tangent directions, a warm-up of 200 steps and $n=2000$ steps (2000 time
+units in 1D, 200 in 2D KS, 400 in Kolmogorov flow); the computation
+raises an error if the cumulative sum in Eq.~\eqref{eq:dky} never turns
+negative, so $\DKY$ is always bracketed rather than extrapolated. The
+spectrum is that of the latent map; comparing it with the PDE's assumes
+that the decoder is a smooth, injective map of the attractor, which the
+agreement of the spectra themselves supports (Sec.~\ref{sec:results1d}).
+
+A model trajectory starts from the encoding of a true on-attractor
+state, standardized with the training statistics, and each model is
+evaluated from three independent initial conditions per domain size
+unless stated otherwise. A finite-time estimate from one initial
+condition is a random quantity, for the model as for the truth: two runs
+that differ only at round-off level (single versus double precision)
+follow different chaotic trajectories. Averaged over three initial
+conditions, double-precision propagation changes $\DKY$ by at most
+$0.3\%$ in 1D and 2D KS and by $2.2\%$ in Kolmogorov flow at the native
+size, where single runs scatter by $25\%$ across initial conditions; we
+therefore report means over initial conditions and treat single-run
+differences below that scatter as noise.
+
+\para{Ground truth.}
+True spectra are computed after a spin-up of $100$--$200$ time units and
+a warm-up of the tangent basis; the window used for every truth value is
+listed in Appendix~\ref{app:groundtruth}. The truth's finite-time $\DKY$ is
+random in the same way as the model's; Section~\ref{sec:truth_uncertainty}
+quantifies its spread and how we use it.
+
+\para{Free-rollout statistics.}
+Before any Lyapunov computation, each model is run freely for several
+hundred time units and its field variance and energy spectrum, split
+into large-scale and forcing-scale bands, are compared with the training
+data or with the truth.
+This check is cheap and detects drifting or multistable models that a
+short teacher-forced validation loss does not (Sec.~\ref{sec:fail_regimes}).

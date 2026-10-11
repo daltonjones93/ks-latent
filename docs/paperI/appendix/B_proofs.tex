@@ -1,5 +1,205 @@
 %======================================================================
 \section{Proofs}
+\label{app:proofs}
 %======================================================================
-% TODO(S3.10): paper1 App. B, Props 1--3 and the Lemma.
-\placeholder{S3.10: Proofs}
+
+Throughout, $\Lat$ is a periodic lattice of sites, $B_R(j)=\{k\in\Lat:
+\dist(k,j)\le R\}$ is the ball of radius $R$ sites around $j$, and for a
+lattice field $a$ we write $a|_S$ for its restriction to a set of sites
+$S$. All maps act on a batch of fields, but the batch index plays no role
+and is suppressed.
+
+\para{Locality.}
+A map $G$ between lattice fields has \emph{reach} $R$ if, for every site
+$j$, $[G(a)]_j$ depends on $a$ only through $a|_{B_R(j)}$; that is,
+$a|_{B_R(j)}=b|_{B_R(j)}$ implies $[G(a)]_j=[G(b)]_j$. A per-site map
+(a $1\times1$ convolution, a pointwise nonlinearity, layer normalization
+over channels, a per-site MLP) has reach $0$. A circular convolution of
+radius $r$ has reach $r$. Reaches add under composition: if $G_1$ has
+reach $R_1$ and $G_2$ has reach $R_2$, then $[G_2(G_1(a))]_j$ depends on
+$G_1(a)|_{B_{R_2}(j)}$, each entry of which depends on $a$ within $R_1$
+of its own site, so $G_2\circ G_1$ has reach at most $R_1+R_2$. A residual
+map $a\mapsto a+G(a)$ has the reach of $G$. Hence one block of
+Eq.~\eqref{eq:mixer_block} has reach $w$, and the propagator $\Fp$ of
+Eq.~\eqref{eq:propagator}, with pointwise embedding and projection around
+$n_\ell$ blocks, has reach $\Rprop = w\,n_\ell$. The same count gives
+$\Renc$ and $\Rdec$ for the encoder and decoder, measured in sites of
+the patch lattice.
+
+%----------------------------------------------------------------------
+\subsection{Proof of Proposition~\ref{prop:equivariance}}
+%----------------------------------------------------------------------
+
+Each map is a composition of the following operations, so it suffices to
+check that each one intertwines the shifts.
+
+\emph{Patch embedding.} With a kernel $K$ supported on one patch and
+stride $p$, the embedding is $(\mathcal{P}u)_j =
+\sum_{\bm{\xi}\in\text{patch}}K(\bm{\xi})\,u(\bm{x}_j+\bm{\xi})$, where
+$\bm{x}_j$ is the corner of patch $j$. Then
+\[
+\begin{aligned}
+  (\mathcal{P}\,\Tr_{s}u)_j
+  &= \sum_{\bm{\xi}}K(\bm{\xi})\,u(\bm{x}_j+\bm{\xi}-s h)\\
+  &= \sum_{\bm{\xi}}K(\bm{\xi})\,u(\bm{x}_{j-s}+\bm{\xi})\\
+  &= (\mathcal{P}u)_{j-s}
+  = (\Shift_s\mathcal{P}u)_j,
+\end{aligned}
+\]
+using $\bm{x}_j - sh = \bm{x}_{j-s}$, which holds because the shift is by
+a whole number of patches. The gauge anchor of Eq.~\eqref{eq:anchor} is
+the special case $K\equiv1/|\text{patch}|$.
+
+\emph{Circular convolution on the lattice.} $(\kappa * a)_j =
+\sum_{|\delta|\le r}\kappa_\delta\,a_{j+\delta}$ with indices taken
+modulo the lattice size. Then $(\kappa*\Shift_s a)_j = \sum_\delta
+\kappa_\delta a_{j+\delta-s} = (\kappa*a)_{j-s} = (\Shift_s(\kappa*a))_j$.
+
+\emph{Per-site operations} ($1\times1$ convolutions, GELU, layer
+normalization over channels, per-site MLPs, the residual sum) act
+identically at every site and therefore commute with any permutation of
+sites, in particular with $\Shift_s$.
+
+\emph{Transposed patch convolution.} The decoder output is
+$\Dec(a)(\bm{x}) = \sum_{j}K'(\bm{x}-\bm{x}_j)\,a_j$ with $K'$ supported
+on one patch. Then
+\[
+\begin{aligned}
+  \Dec(\Shift_s a)(\bm{x}) &= \sum_j K'(\bm{x}-\bm{x}_j)\,a_{j-s}\\
+  &= \sum_k K'(\bm{x}-sh-\bm{x}_k)\,a_k\\
+  &= \Dec(a)(\bm{x}-sh) = (\Tr_{s}\Dec(a))(\bm{x}).
+\end{aligned}
+\]
+
+Composing these identities gives Eq.~\eqref{eq:equivariance}. For the
+second claim, every kernel and weight matrix above has a shape fixed by
+$(p, c, H, r_e, n_e, r_d, n_d, d_m, w, n_\ell)$ and the MLP ratio; none
+depends on $P$. The same $\theta$ therefore defines the maps for every
+$P$; the proviso in the statement, at least $2r+1$ sites along every
+axis on which a kernel of radius $r$ acts, ensures that each circular
+convolution reads $2r+1$ distinct sites. \qed
+
+\begin{remark}
+The proviso is not cosmetic. When a lattice axis has fewer than $2w+1$
+sites, a circular kernel of radius $w$ overlaps itself, so a site
+interacts with copies of itself and its neighbours more than once. The
+1D model transferred to $L=25$ has $4$ sites against a propagator kernel
+of $7$; it is the one size at which the model does not reproduce the
+truth, and its behaviour there depends on the initial condition
+(Sec.~\ref{sec:results1d}).
+\end{remark}
+
+%----------------------------------------------------------------------
+\subsection{Proof of Proposition~\ref{prop:halo}}
+%----------------------------------------------------------------------
+
+\emph{Setting.} Let $\Lat$ be any periodic lattice and $C\subset\Lat$ a
+crop: a set of contiguous sites along the cropped axes, with the outer
+$\Renc$ sites already removed, so that the encoding of the crop agrees
+with the restriction of the encoding of the full field on $C$ (this is
+the locality statement above applied to $\E$). Let $(z^m)_{m\ge0}$ be the
+true latent trajectory on $\Lat$. Define the free interior
+\[
+  I = \{\, j\in C : \dist(j,k) > \eta \ \text{for every } k\in\Lat\setminus C \,\}
+\]
+and the halo $H=C\setminus I$. Let $\Fp_C$ denote the propagator applied
+to a field on $C$ with \emph{any} fixed rule for the values it reads
+outside $C$ (zeros, circular wrap of the crop, or anything else), and
+$\Fp_\Lat$ the propagator on $\Lat$.
+
+The forced-halo rollout is
+\[
+  \hat z^0 = z^0|_C, \quad
+  \hat z^{m+1}|_I = [\Fp_C(\hat z^m)]_I, \quad
+  \hat z^{m+1}|_H = z^{m+1}|_H .
+\]
+The reference sequence is the propagator on $\Lat$ with every site
+outside $I$ held at its true value:
+\[
+\begin{gathered}
+  \tilde z^0 = z^0, \qquad
+  \tilde z^{m+1}|_I = [\Fp_\Lat(\tilde z^m)]_I,\\
+  \tilde z^{m+1}|_{\Lat\setminus I} = z^{m+1}|_{\Lat\setminus I}.
+\end{gathered}
+\]
+
+\emph{Claim.} If $\eta\ge\Rprop$, then $\hat z^m|_I = \tilde z^m|_I$ for
+every $m\ge0$.
+
+\emph{Proof.} For $j\in I$ every $k$ with $\dist(k,j)\le\Rprop\le\eta$
+lies in $C$, by the definition of $I$. Hence $B_{\Rprop}(j)\subset C$,
+the rule $\Fp_C$ uses for sites outside $C$ is never read when computing
+$[\Fp_C(a)]_j$, and by locality
+\begin{equation}
+  a|_C = b|_C \ \Longrightarrow\ [\Fp_C(a)]_j = [\Fp_\Lat(b)]_j
+  \qquad (j\in I),
+  \label{eq:halo_locality}
+\end{equation}
+where $b$ is any field on $\Lat$ extending $a$. We show by induction that
+$\hat z^m = \tilde z^m|_C$. At $m=0$ both equal $z^0|_C$. If
+$\hat z^m=\tilde z^m|_C$, then Eq.~\eqref{eq:halo_locality} with
+$a=\hat z^m$, $b=\tilde z^m$ gives $\hat z^{m+1}|_I=\tilde z^{m+1}|_I$,
+and on $H\subset\Lat\setminus I$ both sequences equal $z^{m+1}$. Hence
+$\hat z^{m+1}=\tilde z^{m+1}|_C$. \qed
+
+\emph{Failure for $\eta<\Rprop$.} Then some $j\in I$ has a site
+$k\notin C$ with $\dist(k,j)\le\Rprop$. Unless the weights happen to make
+$[\Fp(a)]_j$ independent of $a_k$ (a non-generic case), changing the
+true value $z^0_k$ changes $\tilde z^1_j$ but not $\hat z^1_j$, which
+never reads $z^0_k$. So the two sequences differ for some truth. The
+numerical test reported in Sec.~\ref{sec:crop_training} realizes this
+with $\eta=\Rprop-1$.
+
+\begin{remark}
+The reference sequence $\tilde z$ is a limited-area model: the
+propagator runs freely on $I$ and receives exact lateral boundary data.
+On the periodic deployment domain there is no forcing, and sites in $I$
+within $\Rprop$ of $H$ see predicted rather than true neighbours after
+the first step. The training objective is therefore exact for the
+limited-area problem and approximate, in a strip of width $\Rprop$, for
+the deployed one.
+\end{remark}
+
+%----------------------------------------------------------------------
+\subsection{Proof of Lemma~\ref{lem:mse}}
+%----------------------------------------------------------------------
+
+Write $m(\tilde z^0)=\Exp[z^k\mid\tilde z^0]$. For any measurable $\Phi$
+with $\Exp\|\Phi(\tilde z^0)\|^2<\infty$,
+\[
+  \Exp\|\Phi(\tilde z^0)-z^k\|^2
+  = \Exp\|\Phi(\tilde z^0)-m(\tilde z^0)\|^2
+  + \Exp\|m(\tilde z^0)-z^k\|^2,
+\]
+because the cross term
+$2\,\Exp\big[(\Phi-m)^{\top}\Exp[m-z^k\mid\tilde z^0]\big]$ vanishes. The
+first term is non-negative and zero for $\Phi=m$, so $\Phi^\star=m$. The
+law of total covariance,
+$\Cov(z^k)=\Cov\big(\Exp[z^k\mid\tilde z^0]\big)+\Exp\,\Cov(z^k\mid\tilde z^0)$,
+gives Eq.~\eqref{eq:total_variance} after taking the trace. \qed
+
+\begin{remark}
+If the system is mixing, $\Exp[z^k\mid\tilde z^0]$ tends to the
+climatological mean $\Exp[z]$ as $k\to\infty$, so the squared-error-optimal
+$k$-step predictor tends to a constant and the first term of
+Eq.~\eqref{eq:total_variance} tends to zero. An autonomous propagator
+cannot be the conditional mean at every lead time simultaneously, since
+its $k$-step map is the $k$-fold iterate of one map. The lemma therefore
+describes the direction in which the rollout loss pulls the propagator
+(toward iterates with less spread than the data), not the map it
+converges to.
+\end{remark}
+
+\para{Input noise as a Jacobian penalty (Remark~\ref{rem:noise_penalty}).} Expanding
+$\Phi(z+\xi)$ for small $\xi\sim\mathcal N(0,\sigma^2 I)$,
+\begin{equation}
+\begin{split}
+  \Exp_\xi\big\|\Phi(z+\xi)-y\big\|^2
+  ={}& \big\|\Phi(z)-y\big\|^2 + \sigma^2\big\|\partial_z\Phi(z)\big\|_F^2\\
+  &+ \sigma^2\,\big(\Phi(z)-y\big)^{\!\top}\Delta_z\Phi(z) + O(\sigma^4),
+\end{split}
+  \label{eq:noise_penalty}
+\end{equation}
+where $\Delta_z\Phi$ is the vector of Laplacians of the components of
+$\Phi$; the last term averages to zero at the regression optimum.
+

@@ -40,17 +40,45 @@ validated by Lyapunov spectra}
 
 % Key points: AGU limit of three, at most 140 characters each, no special characters.
 \begin{keypoints}
-\item \placeholder{S3.1: key point 1}
-\item \placeholder{key point 2}
-\item \placeholder{key point 3}
+\item A learned local latent field trained at one domain size reproduces the true Lyapunov dimension on domains up to four times larger.
+\item Training on windows of one large simulation, with boundaries driven by the simulation, is what lets the learned local rule transfer.
+\item Training rollouts that are too short or too long distort the learned chaos; a rule that uses no ground truth picks a good model.
 \end{keypoints}
 
+% Every number below is in a table: Table~\ref{tab:transfer1d} (1D), Table~\ref{tab:transfer2d} (2D),
+% Table~\ref{tab:architecture} (parameters); the box-trained range in Fig.~\ref{fig:box_vs_window}
+% and App. D; the selection rule in Sec.~\ref{sec:canonical_results}.
 \begin{abstract}
-\placeholder{S3.1: abstract, at most 250 words}
+Learned surrogates of spatiotemporally chaotic systems usually compress the state into one latent
+vector whose size is fixed at training time, although in extensive chaos the number of active
+degrees of freedom grows with the domain. We make the latent a field: a few channels at each site of
+a lattice that tiles the domain, built only from weight-shared operators of finite reach, so that one
+model, of about $135{,}000$ parameters in 2D, runs on any larger domain by adding sites. Judged by its
+own Lyapunov spectrum, a one-dimensional Kuramoto--Sivashinsky model trained at $L=100$ reproduces
+the Kaplan--Yorke dimension to within $0.2$--$1.2\%$ up to $L=400$. In two-dimensional
+Kuramoto--Sivashinsky and Kolmogorov flows, models trained on a small periodic box miss the
+dimension of larger domains by up to $38\%$, while models trained on windows of one large
+simulation, with driven boundaries, are within $0.6$--$2\%$ in Kuramoto--Sivashinsky and $1$--$9\%$
+in Kolmogorov flow at the two stronger drags. We prove that this window training is exactly the
+training of a limited-area model. Two further choices in training can make a learned local rule fail: rollouts
+that are too short admit spurious free-running regimes, and squared-error rollouts that are too
+long damp the growth rates, a bias that follows from the structure of the loss. Free-rollout
+statistics compared with the training data detect the first problem without any ground truth, and
+a selection rule built on them chose, among six variants, the one with the lowest mean error.
 \end{abstract}
 
 \section*{Plain Language Summary}
-\placeholder{S3.1: plain language summary}
+Many chaotic systems, from flame fronts to atmospheric flows, are spatially extended: the
+larger the domain, the more independent chaotic degrees of freedom it holds. Machine-learned
+surrogates usually describe the whole state by one fixed-length list of numbers, which cannot
+grow with the domain. We instead learn a field of a few numbers at each point of a lattice,
+updated by the same local rule everywhere, so that a model trained on a small domain runs on a
+larger one simply by adding lattice points. We check this transfer with the strictest test
+available, the model's own Lyapunov spectrum against that of the true equations, in three
+systems. What makes the learned rule transfer is the data it is trained on: pieces of one large
+simulation rather than a small closed box. We also show which training choices make the learned
+chaos too weak or send it into the wrong state, and how to detect the second without knowing the
+answer.
 
 \input{sections/01_introduction}
 \input{sections/02_background}
@@ -71,7 +99,9 @@ validated by Lyapunov spectra}
 
 \section*{Open Research Section}
 % TODO(G5): repository and DOI for code, trained models and the result files.
-\placeholder{data availability}
+The code, trained models and result files that support the findings of this study, and the
+scripts that produce every table and figure from them, are available from the corresponding
+author upon reasonable request (Appendix~\ref{app:reproducibility}).
 
 \section*{Conflict of Interest}
 The authors have no conflicts to disclose.

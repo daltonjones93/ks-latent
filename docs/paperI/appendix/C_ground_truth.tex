@@ -1,5 +1,264 @@
 %======================================================================
-\section{Ground truth}
+\section{Ground-truth protocol and solver validation}
+\label{app:groundtruth}
 %======================================================================
-% TODO(S3.10): paper1 App. C.
-\placeholder{S3.10: Ground truth}
+
+%----------------------------------------------------------------------
+\subsection{Lyapunov computation}
+\label{app:benettin}
+%----------------------------------------------------------------------
+
+True Lyapunov spectra are computed with the Benettin algorithm
+\citep{benettin1980}. The base trajectory and $K$ tangent vectors are
+advanced together by the same ETDRK4 step, the tangent vectors by the
+exact Fr\'echet derivative of the right-hand side. Every nonlinearity
+here is a product of two linear functionals of the state ($uu_x$,
+$|\nabla u|^2$, $\bm u\cdot\nabla\omega$ with $\bm u$ linear in $\omega$),
+so the derivative follows from the product rule without approximation;
+for Kolmogorov flow, for instance,
+$D[\bm u\cdot\nabla\omega](\delta\omega) = \delta\bm u\cdot\nabla\omega +
+\bm u\cdot\nabla\delta\omega$, with $\delta\bm u$ obtained from
+$\delta\omega$ by the same Poisson solve. The tangent vectors are
+re-orthonormalized by a QR factorization at a fixed interval, and the
+exponents are the time averages of $\log|R_{ii}|$ after a warm-up during
+which the tangent basis aligns with the dominant directions. The
+number of directions $K$ is chosen to exceed the index at which the cumulative
+sum of exponents turns negative, so $\DKY$ in Eq.~\eqref{eq:dky} is
+computed, not extrapolated. Table~\ref{tab:benettin} lists the settings.
+
+\begin{table*}[htbp]
+\caption{Benettin settings for the ground-truth runs. $K$: tangent
+directions; QR: re-orthonormalization interval; warm-up and window in
+time units, the window excluding the warm-up.}
+\label{tab:benettin}
+\begin{ruledtabular}
+\begin{tabular}{lccccc}
+runs & $\Delta x$ & $K$ & QR & warm-up & window \\
+\hline
+1D KS, $L=22$ & $22/128$ & 15 & 1.0 & 400 & 4000 \\
+1D KS, $L=100$ & $100/1024$ & 35 & 1.0 & 300 & 2000 \\
+1D KS, $L=25$--$400$ & $100/1024$ & 10--192 & 1.0 & 300 & 1200 \\
+2D KS, $44^2$, $66^2$ & $0.344$ & 150, 300 & 1.0 & 20 & 40 \\
+models (all systems) & training grid & $\dlat$ & 10 steps & 200 steps & 2000 steps \\
+Kolmogorov, 40-unit & $2\pi/128$ & 40--176 & 0.5 & 20 & 40 \\
+Kolmogorov, 120-unit & $2\pi/128$ & 40, 96 & 0.5 & 20 & 120 \\
+\end{tabular}
+\end{ruledtabular}
+\end{table*}
+
+The warm-up is not optional. In an early exploration of Kolmogorov flow
+the warm-up was set to zero and the windows were short (6--8 time units).
+At $n=4$, $Re=50$ the leading exponent of the linearization about the
+laminar state then came out between $-0.4$ and $-0.2$; with a 10-unit
+warm-up and a 30-unit window it is $+0.84$, the same at $128^2$ and $32^2$
+grid points. Without warm-up the estimate had the wrong sign, and the
+flow appeared stable across a wide parameter range in which it is in fact
+chaotic.
+
+Spin-up before the Lyapunov computation is 500 time units for 1D KS
+(200 at $L=22$), 200 for 2D KS and 100 for Kolmogorov flow. The 1D truths
+at $L\ge25$ are computed on a grid four times finer than the training
+grid; the 2D truths use the same grid as the model.
+
+\para{Independent realizations.} A chaotic trajectory amplifies any
+difference, including round-off: two otherwise identical 1D runs that
+differ only in the number of threads used by the FFT follow different
+trajectories after a few hundred time units, and give $\DKY=10.90$ and
+$11.31$ at $L=50$. We use such runs as independent finite-time samples.
+Runs that differ only in the number of tangent directions follow the
+same trajectory and agree to within $0.01$; they count as one. Every
+1D size has two or three independent realizations
+(Table~\ref{tab:truth_runs}).
+
+%----------------------------------------------------------------------
+\subsection{Solver validation}
+\label{app:solver_tests}
+%----------------------------------------------------------------------
+
+Each solver passes a suite of tests against analytic answers before any
+data are generated from it.
+
+\para{1D KS.} The most unstable linear mode is at $k=1/\sqrt2$ to
+$10^{-10}$; the ETDRK4 coefficients near $\hat L=0$ agree with a
+high-precision (\texttt{mpmath}) evaluation to $10^{-12}$; the spatial mean
+is conserved to $10^{-8}$ over $10^4$ steps; the solver commutes with
+grid translations to $10^{-10}$; the observed order of convergence in the
+time step is at least $3.5$; for $L<2\pi$ every solution decays to zero;
+and the Kaplan--Yorke dimension falls in the published ranges at $L=22$
+($[5.2,5.6]$; measured $5.26$) and $L=100$ ($[21,24]$; measured $22.5$).
+
+\para{2D KS.} The unstable set is the ring $|\bm k|<1$ with maximum at
+$|\bm k|=1/\sqrt2$; the ETDRK4 coefficients are checked two ways; the
+mean is conserved exactly once the $\bm k=0$ mode is projected out (the
+unprojected equation drifts without bound, $\max|u|>100$ within the
+spin-up, while the projected one stays within $10<\max|u|<16$ over 2000
+steps); the solver commutes with translations in $x$, in $y$ and jointly;
+convergence order is at least $3.5$; and small domains decay.
+
+\para{Kolmogorov flow.} The laminar state $\omega=-n\cos ny$ is an exact
+fixed point of the full nonlinear equation for every $\alpha$, because
+the advection term vanishes on it identically and the forcing balances
+viscosity and drag; the solver preserves it to double-precision round-off
+over hundreds of steps. The solver commutes with every translation in $x$
+and with translations in $y$ by multiples of $2\pi/n$, and, as a test of
+the failure case, does not commute with a generic $y$-translation. Mean
+vorticity is conserved, the convergence order is four, and the leading
+exponent of the linearization about the laminar state is negative at
+$Re=1$ and positive at $Re=50$.
+
+%----------------------------------------------------------------------
+\subsection{Convergence of the Kolmogorov truths}
+\label{app:truth_convergence}
+%----------------------------------------------------------------------
+
+Figure~\ref{fig:truth_convergence} and Table~\ref{tab:running_dky} give
+the running $\DKY$ of the seven 120-unit Kolmogorov runs that recorded
+it. The value at
+$t=40$ is what a 40-unit truth run from the same initial condition
+returns. For the three $\alpha=0.05$ runs, which continue earlier 40-unit
+runs, it reproduces those runs' earlier values ($56.84$, $38.68$,
+$53.89$) to within $0.2\%$. Over the last 20 units of the 120-unit runs the
+running estimates still moved by up to $5\%$. Independent initial
+conditions at a fixed size and window differ by $3.7\%$ at $\alpha=0.1$,
+$2\times$, by $11.3\%$ at $\alpha=0.1$, $3\times$, by $12.4\%$ at
+$\alpha=0.05$, $2\times$, and by $9\%$ at $\alpha=0.05$, $1\times$.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/truth_convergence.pdf}
+\caption{Running Kaplan--Yorke dimension of every truth run that
+recorded it, one panel per system and size; colours distinguish initial
+conditions within a panel. Kolmogorov runs (120 time units): the dotted
+line marks the value a 40-unit run returns, which differs from the
+120-unit value by $-17\%$ to $+23\%$ and in five of seven runs lies
+above it (mean $+9\%$). 2D KS runs (40 time units): the running value still moves by
+$3$--$5\%$, in both directions, over the last 20 time units
+(Appendix~\ref{app:truth_ks2d}).}
+\label{fig:truth_convergence}
+\end{figure*}
+
+\begin{table*}[htbp]
+\caption{Running $\DKY$ of the 120-unit Kolmogorov truths at the
+recorded averaging times, and the relative deviation of the 40-unit value
+from the 120-unit value.}
+\label{tab:running_dky}
+\begin{ruledtabular}
+\begin{tabular}{lccccccc}
+run & 20 & 40 & 60 & 80 & 100 & 120 & dev.\ at 40 \\
+\hline
+\tabinput{tables/running_kolm}
+\end{tabular}
+\end{ruledtabular}
+\end{table*}
+
+Two observations bear on how the main results are read. First, five of
+the seven 40-unit estimates are high, by $9\%$ on average, so the
+remaining single-run 40-unit truths ($\alpha=0.1$, $1\times$;
+$\alpha=0.05$, $3\times$; all sizes at $\alpha=0.025$) may be biased
+upward; a model that matched the converged dimension exactly would then
+appear to under-estimate it. This happened at $\alpha=0.1$, $3\times$:
+the earlier 40-unit run gave $56.35$, the mean over it and the two
+120-unit runs is $53.47$, and the selected model's error there fell from
+$7.6\%$ to $2.6\%$. Second, the spread between initial
+conditions does not shrink to zero with a longer window at the sizes we
+use: at $\alpha=0.05$, $2\times$, the three converged values are $46.6$,
+$46.6$ and $52.6$.
+
+%----------------------------------------------------------------------
+\subsection{Convergence and spread of the 2D KS truths}
+\label{app:truth_ks2d}
+%----------------------------------------------------------------------
+
+The 2D KS truths average over 40 time units, about 7 Lyapunov times.
+Three runs at $44^2$ give $81.8$, $80.7$ and $83.6$, and two at $66^2$ give
+$192.5$ and $185.6$, a spread of $\pm1.8\%$ at both sizes.
+Table~\ref{tab:running_ks2d} gives the running estimates of the runs that
+recorded them: over the last 20 time units they still move by $3$--$5\%$,
+in both directions. We therefore treat the 2D KS truths as uncertain at
+the level of a few percent, comparable to the model errors of
+Sec.~\ref{sec:canonical_results} and larger than the $2.5\%$ difference
+between the mean densities at the two sizes.
+
+\begin{table}[htbp]
+\caption{Running $\DKY$ of the 2D KS truth runs that recorded it, at the
+averaging times shown (time units after the warm-up), and the change over
+the last 20 time units.}
+\label{tab:running_ks2d}
+\begin{ruledtabular}
+\begin{tabular}{lccccc}
+run & 10 & 20 & 30 & 40 & last 20 \\
+\hline
+\tabinput{tables/running_ks2d}
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+%----------------------------------------------------------------------
+\subsection{Model spectra and their precision}
+\label{app:model_spectra}
+%----------------------------------------------------------------------
+
+Model spectra use all $\dlat$ tangent directions, a warm-up of 200
+steps, 2000 steps and a QR factorization every 10 steps
+(Sec.~\ref{sec:evaluation}). The tangent vectors are propagated in
+single precision by forward-mode differentiation, and the QR is done in
+double precision. To check that single precision does not bias the
+result we repeated one model spectrum per system in double precision,
+from three initial conditions each:
+
+\begin{center}
+\begin{tabular}{lccc}
+\hline\hline
+system & single & double & IC spread \\
+\hline
+1D KS, $L=100$ & $22.24$ & $22.24$ & $1.0\%$ \\
+1D KS, $L=200$ & $44.64$ & $44.62$ & $0.7\%$ \\
+2D KS, $44^2$ & $83.51$ & $83.76$ & $1.0\%$ \\
+Kolm., $\alpha=0.05$, $1\times$ & $23.26$ & $22.75$ & $25\%$ \\
+\hline\hline
+\end{tabular}
+\end{center}
+The means over initial conditions agree to within $0.3\%$ in 1D and 2D
+KS and to within $2.2\%$ in Kolmogorov flow, far inside the spread over
+initial conditions. Single runs are a different matter: switching
+precision changes the trajectory, and in Kolmogorov flow at the native
+size it moves one run's $\DKY$ from $26.0$ to $22.0$. A model's own
+finite-time estimate at that size is therefore uncertain by much more
+than its precision, which is why we average over initial conditions and
+do not interpret differences between single runs.
+
+%----------------------------------------------------------------------
+\subsection{Matched initial conditions at native size}
+\label{app:matched_ics}
+%----------------------------------------------------------------------
+
+For Kolmogorov flow at $\alpha=0.05$, $1\times$, the truth script and the
+model-evaluation script build the same solver configuration ($\nu$, $n$,
+time step and spin-up, read from the training data's metadata by the
+evaluation script and hard-coded in the truth script, and checked to
+agree) and generate the initial condition by the same call with the same
+seed. For a given seed the two initial conditions are therefore
+identical, not merely drawn from the same distribution, and a model run
+can be scored against the truth from its own initial condition. Matched
+truths exist for seeds 0--2 ($22.46$, $20.52$, $21.63$).
+
+%----------------------------------------------------------------------
+\subsection{List of ground-truth runs}
+\label{app:truth_list}
+%----------------------------------------------------------------------
+
+\begin{table}[htbp]
+\caption{All ground-truth runs used in the paper. $n_+$: number of
+positive exponents. 1D runs have no seed column: all use IC seed 0 and are
+independent realizations in the sense of
+Sec.~\ref{app:benettin}.}
+\label{tab:truth_runs}
+\scriptsize\renewcommand{\arraystretch}{0.85}
+\begin{ruledtabular}
+\begin{tabular}{llcccccc}
+system & size & seed & $K$ & window & $\lambda_1$ & $n_+$ & $\DKY$ \\
+\hline
+\tabinput{tables/truth_runs}
+\end{tabular}
+\end{ruledtabular}
+\end{table}

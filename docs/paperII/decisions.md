@@ -13,7 +13,7 @@ same format: what was decided, why, and the artifact that holds every number quo
 
 - S0.1 split line: Paper I = dynamics and transfer; Paper II = data assimilation. The per-patch
   decoder stays in Paper I with one forward pointer; the block-diagonal Jacobian proposition
-  (paper1 Prop. 4) and its proof move to Paper II, as its Prop. 1.
+  (paper1 Prop. 3) and its proof move to Paper II, as its Prop. 1.
 - S0.2 journals: Paper I → Chaos; Paper II → JAMES (QJRMS fallback).
 - S0.3 the 1D DA results stay in Paper II (subsection + appendix).
 - S0.4 Paper I is finished first and posted to arXiv; Paper II cites the preprint.
