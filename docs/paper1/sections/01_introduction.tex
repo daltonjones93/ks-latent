@@ -55,6 +55,13 @@ locality must survive the decoder: with a decoder that reconstructs each
 patch from its own site, the latent observation operator is exactly
 local.
 
+No model of a real system is correct, and for many systems of interest
+the equations are incomplete or unknown, while observations, with errors
+that are usually well characterized, are plentiful. A learned surrogate
+that is local can be trained on noisy data of the system itself and used
+inside an ensemble filter on any domain; Part~II asks when that is better
+than a filter built on imperfect equations.
+
 We hold the models to a demanding standard: their own Lyapunov spectra,
 computed from the learned maps, compared with spectra of the true PDE at
 every domain size, with the uncertainty of the reference measured rather
@@ -112,14 +119,22 @@ observations alone (Part~II).}
 \item \emph{Exactly local latent data assimilation}
   (Sec.~\ref{sec:da_results}). With a per-patch decoder the latent
   observation Jacobian is block-diagonal and is obtained from as many
-  forward passes as there are channels, at any domain size; a per-site
-  ensemble filter in latent space is then exact. With 64 members it keeps
-  $90\%$ of its skill from a $44^2$ to a $440^2$ domain of 2D KS, a hundredfold
-  area and latent dimension, with memory that grows no faster than the
-  area. An unlocalized filter of the same size fails beyond the native
-  domain, where the attractor has more unstable directions than the
-  ensemble has members, and in 1D the ensemble it needs doubles with every doubling of the
-  domain, while the localized filter needs 16 members at every size.
+  forward passes as there are channels, at any domain size, so a per-site
+  ensemble filter in latent space is exact. Running it on four copies of the
+  patch lattice shifted by half a patch and blending them removes the error
+  tied to the lattice and lowers the analysis error by about $30\%$ without
+  retraining; the gain comes from the offsets, not from the extra members.
+  With one model trained only on noisy fields, and one setting, the analysis
+  error is $0.30$--$0.33$ on every domain from $44^2$ to $440^2$, against $0.82$ for
+  interpolating the observations, while an unlocalized filter fails once
+  the attractor has more unstable directions than the ensemble has members.
+\item \emph{Learned versus physics-based filters} (Sec.~\ref{sec:da_model_error}).
+  Against a physics-based ensemble filter whose model is wrong, given
+  online parameter estimation and bias correction, the latent filter loses
+  when the model error is small or correctable and wins when it is large or
+  structural. The outcome is predicted by one number, the part of the
+  physical model's one-cycle forecast error that bias correction cannot
+  remove: the crossover is near a sixth of the observation error.
 \end{itemize}
 
 What is not new should be said as clearly. Localized reduced models of KS

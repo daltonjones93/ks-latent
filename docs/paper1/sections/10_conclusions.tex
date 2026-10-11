@@ -29,13 +29,17 @@ without any truth, and the dimension comparison exposes the second.
 
 The same locality carries over to data assimilation. With a per-patch
 decoder the latent observation operator is exactly local, so a per-site
-ensemble filter in latent space is exact, needs only a fixed number of
-forward passes for its Jacobian, and uses memory that grows no faster
-than the area. With 64 members it keeps $90\%$ of its skill from $44^2$ to
-$440^2$, while an unlocalized filter fails whenever the attractor has more
-unstable directions than the ensemble has members; in one dimension a
-localized filter needs 16 members at every size, and an unlocalized one
-needs twice as many with every doubling of the domain.
+ensemble filter in latent space is exact and needs only a fixed number of
+forward passes for its Jacobian. Running it on four copies of the patch
+lattice shifted by half a patch, and blending them, lowers its error by
+about $30\%$ without retraining. With one model, trained only on noisy fields,
+and one setting, it analyses the field to an error of $0.31$, against $0.82$
+for interpolating the observations, on every domain from $44^2$ to $440^2$,
+while an unlocalized filter fails once the attractor has more unstable
+directions than the ensemble has members. Against a physics-based filter
+whose model is wrong, it loses when that model's error is small or
+correctable and wins once the part of the error that bias correction
+cannot remove exceeds about a sixth of the observation error.
 
 The rule we take from this work is short: measure the interaction range
 of the dynamics, give the model a reach that covers it, train on windows

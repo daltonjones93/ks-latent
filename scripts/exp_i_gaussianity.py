@@ -19,7 +19,9 @@ from ks_latent.da.geometry2d import deployment_grid_2d, training_dx
 from ks_latent.models import load_autoencoder_checkpoint_resized_2d, load_propagator_checkpoint_resized_2d
 from ks_latent.solver.ks2d import integrate2d
 
-AE = "artifacts/stage1_ae_kolmogorov_crop_p7b_ks2d.pt"; PR = "artifacts/stage2_prop_kolmogorov_crop_p7b_ks2d.pt"
+import os  # model via KS_TAG (2026-10-10); default p7b_ks2d keeps the original output
+TAG_ = os.environ.get("KS_TAG", "p7b_ks2d"); SUFFIX_ = "" if TAG_ == "p7b_ks2d" else f"_{TAG_}"
+AE = f"artifacts/stage1_ae_kolmogorov_crop_{TAG_}.pt"; PR = f"artifacts/stage2_prop_kolmogorov_crop_{TAG_}.pt"
 ck = torch.load(AE, map_location="cpu", weights_only=False)
 patch = ck["ae_config"].NX // ck["ae_config"].n_sites_x
 g = deployment_grid_2d(44.0, training_dx(ck["train_dataset"]), patch)
@@ -57,6 +59,6 @@ for kind in ("prior_z", "prior_u"):
     out[kind] = {m: float(np.mean([d[m] for d in ks])) for m in ks[0]}
     for k in [k for k in list(out) if k.startswith(kind + "_")]:
         del out[k]
-Path("artifacts/experiments/da2d/gaussianity_L44.json").write_text(json.dumps(out, indent=2))
+Path(f"artifacts/experiments/da2d/gaussianity_L44{SUFFIX_}.json").write_text(json.dumps(out, indent=2))
 for k, v in out.items():
     print(k, {m: round(x, 3) for m, x in v.items()})

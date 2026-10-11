@@ -43,31 +43,29 @@ validated by Lyapunov spectra, and exactly local ensemble data assimilation}
 \begin{keypoints}
 \item A learned local latent field trained at one domain size reproduces the true Lyapunov dimension on domains up to four times larger.
 \item Training on windows of one large simulation, with boundaries driven by the simulation, is what lets the learned local rule transfer.
-\item Because the latent field is exactly local, a 64 member ensemble filter keeps its skill on domains with a hundred times the area.
+\item A latent ensemble filter learned from noisy data works on domains of any size and beats physics filters whose model error is large.
 \end{keypoints}
 
-% Every number below is in a table: Tables III, IV (Part I), Table tab:da_2d_sizes and
-% tab:da_1d (Part II); the box-trained range in Fig. 5 / Table IV of App. D.
+% Every number below is in a table: Tables III, IV (Part I), tab:da_2d_sizes, tab:da_model_error (Part II),
+% tabA (parameters); the box-trained range in Fig. 5 / Table IV of App. D. The last sentence is the
+% crossover of Sec. 7.5; recheck it against J17B eps = 0.2 (placeholder P7) before submission.
 \begin{abstract}
-Learned surrogates of spatiotemporally chaotic systems usually compress the state into one
-latent vector, whose size is fixed at training time. In extensive chaos the number of active
-degrees of freedom grows with the domain, so such a surrogate cannot even be evaluated on a
-domain of another size. We make the latent a field instead: a few channels at each site of a
-lattice that tiles the domain, built only from weight-shared operators of finite reach, so that
-one trained model runs on any larger domain by adding sites. We test whether such models
-reproduce extensive chaos by comparing the Lyapunov spectra of the learned maps with those of
-the true equations. Trained at $L=100$, a one-dimensional Kuramoto--Sivashinsky model
-reproduces the Kaplan--Yorke dimension to within $0.2$--$1.2\%$ from $L=50$ to $L=400$, and the
-positive part of its spectrum collapses onto the truth's. In two-dimensional
-Kuramoto--Sivashinsky and Kolmogorov flows, the same architecture trained on a small periodic box
-misses the dimension of larger domains by up to $38\%$, while trained on windows of one large
-simulation, with the window boundary driven by the simulation, it is within $0.6$--$2\%$ and
-$1$--$9\%$; the weakest drag remains harder. With a per-patch decoder the latent observation
-operator is exactly local, and a per-site ensemble filter with 64 members keeps $90\%$ of its
-skill from a $44^2$ to a $440^2$ domain, with memory that grows no faster than the area, while an unlocalized
-filter of the same size fails whenever the attractor has more unstable directions than the
-ensemble has members. We also report what does not work: box training, short rollouts that
-admit spurious regimes, and squared-error rollouts that damp the dimension.
+Learned surrogates of spatiotemporally chaotic systems usually compress the state into one latent
+vector whose size is fixed at training time, although in extensive chaos the number of active
+degrees of freedom grows with the domain. We make the latent a field: a few channels at each site of
+a lattice that tiles the domain, built only from weight-shared operators of finite reach, so that one
+model, of about $135{,}000$ parameters in 2D, runs on any larger domain by adding sites. Judged by its own Lyapunov spectrum, a one-dimensional
+Kuramoto--Sivashinsky model trained at $L=100$ reproduces the Kaplan--Yorke dimension to within $0.2$--$1.2\%$ up to $L=400$. In two-dimensional
+Kuramoto--Sivashinsky and Kolmogorov flows, models trained on a small periodic box miss the dimension
+of larger domains by up to $38\%$, while models trained on windows of one large simulation, with driven
+boundaries, are within $0.6$--$2\%$ and $1$--$9\%$. With a per-patch decoder
+the latent observation operator is exactly local. An ensemble filter in the latent space, run on four
+copies of the patch lattice shifted by half a patch and blended, analyses 2D Kuramoto--Sivashinsky
+fields with errors of $0.31$, against $0.82$ for interpolating the observations, from $44^2$ to
+$440^2$ with one model, trained only on noisy fields, and one setting. Against a
+physics-based filter given online parameter estimation and bias correction, it loses when the
+physical model's error is small or correctable, and wins once the part of that error that bias
+correction cannot remove exceeds about a sixth of the observation error.
 \end{abstract}
 
 \section*{Plain Language Summary}
@@ -80,7 +78,10 @@ larger one simply by adding lattice points. We check this transfer with the stri
 available, the model's own Lyapunov spectrum against that of the true equations, in three
 systems. The same locality lets data assimilation, the combination of a model with
 observations used in weather forecasting, run in the learned space with a small, fixed
-ensemble, whether the domain is small or a hundred times larger.
+ensemble, whether the domain is small or a hundred times larger. No forecast
+model of the weather is perfect; we find that a surrogate learned from noisy measurements does as
+well as a filter built on equations that are slightly wrong, and better once the equations are wrong
+in ways that their usual corrections cannot repair.
 
 \input{sections/01_introduction}
 \input{sections/02_background}

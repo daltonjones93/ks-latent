@@ -78,21 +78,40 @@ there. Using
 transfer error to locate the scales at which a system stops being
 extensive is a question in its own right, which we leave to future work.
 
-\para{What locality buys in data assimilation.} The latent fields make
-localization possible in a learned space, and with a per-patch decoder
-they make it exact (Proposition~\ref{prop:blockdiag}). The consequence is
-the one that matters for large domains: the ensemble a localized filter
-needs is set by the local problem and does not grow with the domain,
-while an unlocalized filter needs more members than the attractor has
-unstable directions, a number that grows with the domain
-(Secs.~\ref{sec:da_2d} and \ref{sec:da_1d}). Two weaknesses remain. With
-16 members the per-site filter is much weaker than the dense filter with
-the same taper, which localizes the covariance itself, and the
-deterministic transform does not remove the gap; tapering the
-neighbourhood covariance inside each local analysis is the obvious next
-step. And about $40\%$ of the analysis error variance in physical space is
-the decoder's own error, concentrated at patch edges, so a better decoder
-would improve the analysis directly.
+\para{What locality buys in data assimilation.} The latent field makes
+localization possible in a learned space, and with a per-patch decoder it
+makes it exact (Proposition~\ref{prop:blockdiag}). The ensemble a localized
+filter needs is then set by the local problem, about 32 members per tiling
+at every size, while an unlocalized filter needs more members than the
+attractor has unstable directions, a number that grows with the domain
+(Secs.~\ref{sec:da_2d} and \ref{sec:da_1d}). The price of exact locality is
+an error tied to the patch lattice, which the decoder does not remove; the
+shifted tilings remove most of it, because the tilings' errors are only
+weakly correlated, and they do so without retraining. The remaining
+analysis error is mostly the filter's, not the decoder's: the blended
+decoder floor is less than half of it (Sec.~\ref{sec:da_accuracy}). Better
+use of the ensemble inside each tiling, and models of the propagator's
+error in place of isotropic noise, are the natural next steps.
+
+\para{When to prefer a learned model.} A filter built on the correct
+equations is four times more accurate than the latent filter, and one built
+on equations with a small or correctable error is still better. The
+comparison of Sec.~\ref{sec:da_model_error} locates the boundary: what
+matters is the part of the physical model's one-cycle forecast error that
+bias correction cannot remove, and the latent filter wins once it exceeds
+about a sixth of the observation error. Two features of the comparison
+carry over to real systems. The errors that parameter estimation and bias
+correction cannot reach are the structural ones, a wrong form of an
+operator or a process that is missing or unobserved, and those are the
+errors of the models of convection and cloud processes that motivate this
+work. And the learned model needs no tuning for the error of the model it
+replaces: one setting served every case, while the physics-based filter
+worked only in a narrow window of its inflation. The model learned from
+noisy fields was slightly better than one learned from clean fields, so
+measurement error, the part of the error budget that is usually known, can
+be handled in training. A process with memory that the current field does
+not reveal limits both filters (Sec.~\ref{sec:da_model_error}); propagators
+with access to past states are the obvious remedy on the learned side.
 
 \para{Limitations.} We state them plainly.
 \begin{itemize}
@@ -117,16 +136,24 @@ would improve the analysis directly.
   reconstruct the field to $0.01\%$ (1D), $2.6$--$2.9\%$ (2D KS) and $1.2\%$
   (Kolmogorov) of its variance, and the per-patch decoders leave seams
   that appear as excess energy above the patch wavenumber.
-\item \emph{Data assimilation.} The experiments are twin experiments with
-  synthetic, regular and dense observations (half the site length),
-  additive Gaussian model noise and no inflation tuning beyond a short
-  sweep. The ensemble is under-dispersive. We did not compare against a
-  filter in the physical space of the PDE, and Kolmogorov flow was not
+\item \emph{Data assimilation.} The experiments are twin experiments in
+  one 2D system, with regular, dense observations (four per site) and
+  additive Gaussian model noise. With one observation per site the filter
+  is still four times better than interpolation and stays bounded over 300
+  cycles, but longer runs with sparser networks expose the stability of the
+  learned propagator, which we leave to a follow-up study. The model errors
+  of the physics-based comparator were chosen, not calibrated to a real
+  model, and the learned model was trained on complete, noisy fields of the
+  true system, which real data rarely provide. Kolmogorov flow was not
   assimilated.
 \end{itemize}
 
 \para{Outlook.} The ingredients carry over to any system whose chaos is
-extensive and whose dynamics are local at the scale of a few patches:
+extensive and whose dynamics are local at the scale of a few patches. The
+target we have in mind is the assimilation of convection-permitting
+simulations of organized convection, such as squall lines, where the
+equations of the cloud processes are uncertain and much of the state is
+unobserved; other candidates are
 convection in large aspect-ratio cells, limited-area atmospheric models
 nested in a global one, where the forced halo is already the operating
 mode, and high-resolution models whose domain is chosen by the

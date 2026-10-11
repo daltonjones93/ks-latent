@@ -2850,7 +2850,14 @@ Each subsection lists its inputs; text options are given where a result is pendi
 - **K6d App. B:** add the one-paragraph remark that the blend preserves exact locality (a fixed
   linear map of exactly local analyses). ~0.5 h.
 
-### K7 `[ ]` Front matter: title, Key Points, abstract, Plain Language Summary, §1
+### K7 `[~]` Front matter: title, Key Points, abstract, Plain Language Summary, §1
+- **Drafted 2026-10-10 evening:** abstract rewritten (249 words; Part II = exact locality, shifted tilings,
+  0.31 vs 0.82 from 44² to 440², one noisy-trained model and setting, the crossover at ≈ σ_obs/6; also
+  cut to meet the 250-word AGU limit, which the old abstract (277) exceeded); KP3 = "A latent ensemble
+  filter learned from noisy data works on domains of any size and beats physics filters whose model
+  error is large." (131 chars); PLS sentence on imperfect models; §1 motivation paragraph and two Part II
+  contribution bullets (tilings/scaling/unlocalized; learned vs physics with the crossover). Title kept.
+  **Recheck the abstract's last sentence and KP3 against J17B ε = 0.2 (P7).**
 - **Title options** (decide with the coauthor): (a) keep; (b) "…and exactly local ensemble data
   assimilation learned from noisy data"; (c) "…and localized latent data assimilation that rivals
   physics-based filters with imperfect models" — (c) only if J17H/J17B give scenario A.
@@ -2874,7 +2881,14 @@ Each subsection lists its inputs; text options are given where a result is pendi
   (Brajard et al. 2020; Bocquet et al. 2020) and cycle spinning (Coifman & Donoho 1995).
 - ~0.5 day.
 
-### K8 `[ ]` §9 Discussion and §10 Conclusions
+### K8 `[~]` §9 Discussion and §10 Conclusions
+- **Drafted 2026-10-10 evening:** §9 "What locality buys" rewritten (exact locality, ~32 members per tiling,
+  tilings remove lattice error, filter not decoder is the remaining error) and new "When to prefer a
+  learned model" (4× from true equations, crossover, structural errors, one setting vs narrow window,
+  noisy training, memory limit); limitations DA bullet rewritten (sparse obs bounded 300 cycles; chosen
+  errors; complete noisy training fields); outlook names organized convection / squall lines; §10 DA
+  paragraph rewritten; §6 seam sentence points to the tilings. Gaussianity (§7.3) recomputed for the Part
+  II model.
 - **§9 "What locality buys in DA" → rewrite:** exact locality + tilings; the latent analysis beats
   the physical one; the floor is the decoder's and what would lower it (decoder capacity, more
   tilings, I10's band anatomy); the physics comparison's meaning for CM1 (Paper 3) and the

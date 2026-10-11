@@ -190,11 +190,11 @@ analysis is $5$--$10\%$ more accurate on every seed and better calibrated.
 A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
-% TODO(K11): gaussianity_L44.json was computed with an earlier model; recompute for p7c12d10_ks2d.
 \para{Gaussianity.} The latent coordinates are close to Gaussian in
-climatology (mean absolute skewness $0.10$, excess kurtosis $-0.38$), and
-one-cycle priors show no skewness distinguishable from sampling noise in
-either space. At this cycle length the latent space offers neither an
+climatology (mean absolute skewness per coordinate $0.20$, excess kurtosis
+$-0.07$), and 16-member one-cycle priors show mean absolute skewness of $0.38$ in
+latent space and $0.40$ in physical space, within the sampling noise of about $0.6$
+for 16 members. At this cycle length the latent space offers neither an
 advantage nor a disadvantage for a Gaussian filter.
 
 %----------------------------------------------------------------------
