@@ -22,9 +22,10 @@ in Table~\ref{tab:transfer1d}.
 \para{The 12-channel model of the companion paper.} The data assimilation study
 \citep{jones2026da} uses a 12-channel sibling of the 2D KS model, trained on fields carrying
 Gaussian noise of standard deviation $0.1$ (standardized units). Its $\DKY$ is $84.7$ at
-$44^2$ and $188.5$ at $66^2$, against truths of $81.8$ and $192.5$ ($3.6\%$ and $2.1\%$); a 12-channel model
-trained on clean fields gives $83.5$ and $190.4$ ($2.1\%$ and $1.1\%$), and the 6-channel model of this paper
-$1.7\%$ and $2.4\%$. Doubling the channels and training on noisy data leave the transfer of the dimension
+$44^2$ and $188.5$ at $66^2$, against the truth runs from the same initial condition, $81.8$ and $192.5$
+($3.6\%$ and $2.1\%$); a 12-channel model trained on clean fields gives $83.5$ and $190.4$ ($2.1\%$ and
+$1.1\%$), and the 6-channel model of this paper, scored the same way, $1.7\%$ and $2.4\%$ (its $2.0\%$ and
+$0.6\%$ in Table~\ref{tab:transfer2d} are means over initial conditions against the mean truths). Doubling the channels and training on noisy data leave the transfer of the dimension
 within the spread of the truth runs (\texttt{artifacts/experiments/crop/p7c12*\_ks2d\_x*.json}; one
 initial condition each).
 
@@ -57,6 +58,28 @@ half-width $w$; the quadratic stencil saturates at $w=3$--$4$ sites
 nothing (Sec.~\ref{sec:receptive}).}
 \label{fig:appendix_panels}
 \end{figure*}
+
+%----------------------------------------------------------------------
+\subsection{Scale content of the unstable subspace}
+\label{app:chaos_scale}
+%----------------------------------------------------------------------
+
+A local model can represent the dynamics only if the unstable directions
+are themselves local. For Kolmogorov flow at $\alpha=0.05$, $3\times$, we
+decomposed the unstable subspace (the span of the Lyapunov vectors with
+positive exponents) by scale, for the truth and for the window-trained
+full-reach $c=3$ model of Sec.~\ref{sec:window_fix} (the analysis was not
+repeated for the canonical models or the other systems). The true flow
+has 36 unstable directions and the model 34, with nearly identical scale content:
+$9.1\%$ of the unstable-subspace variance lies at scales larger than the
+$2\pi$ box in the truth and $10.0\%$ in the model. In the truth, $31.5$ of
+the 36 unstable directions sit in the wavenumber band $|\bm k|\in[2,8)$
+around the forcing wavenumber $k=4$, and essentially none below $|\bm k|=1$.
+The chaos lives at the forcing scale, which spans a few sites, and that is
+the scale a model with a reach of a few sites resolves best. The same
+analysis shows no deficit of large-scale unstable directions in the
+model, so we have no evidence that the remaining errors come from missing
+long-range coupling.
 
 \newcommand{\evalhead}[1]{model & description & #1 \\ \hline}
 \newcommand{\evalnotes}{\par\footnotesize $^a$Trained on an $8\times8$-site

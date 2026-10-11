@@ -86,6 +86,7 @@ panel_label(a, "a")
 # ---------------- (b) reach / channel ablation ----------------
 ABL = [("p2_a005", "reach 6/6, $c=3$", MUTED), ("c19_e6d0", "reach 6/0, $c=3$", AQUA),
        ("c19_e6d6_c6", "reach 6/6, $c=6$", BLUE), ("c19_e0d0_c6", "reach 0/0, $c=6$", ORANGE)]
+HATCH = ["", "///", "\\\\\\", "xxx"]  # S6.1: second cue for grayscale (AQUA and ORANGE have equal luminance)
 w = 0.19
 for i, (tag, lab, col) in enumerate(ABL):
     for s in (1, 2, 3):
@@ -93,7 +94,7 @@ for i, (tag, lab, col) in enumerate(ABL):
         if len(e) == 0:
             continue
         x = s + (i - 1.5) * w
-        b.bar(x, e.mean(), w * 0.9, color=col, zorder=2, label=lab if s == 1 else None)
+        b.bar(x, e.mean(), w * 0.9, color=col, hatch=HATCH[i], edgecolor="white", lw=0, zorder=2, label=lab if s == 1 else None)
         b.plot(np.full(len(e), x), e, "o", ms=2.3, mfc="white", mec=INK2, mew=0.5, zorder=3)
 b.set_xticks([1, 2, 3]); b.set_xticklabels([r"$1\times$", r"$2\times$", r"$3\times$"])
 b.set_ylabel(r"$|$error$|$ in $D_{\mathrm{KY}}$ (%)")

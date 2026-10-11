@@ -68,3 +68,47 @@ evaluations in `artifacts/experiments/appendix_D_evaluations.csv` use fewer: the
 Benettin with K vectors gives the leading K exponents, and the computation raises an error unless
 the cumulative sum turns negative within them (largest D_KY among the nine: 334.6 < 512). Both
 sentences now say "all d_lat, or 384–512 where d_lat is larger". Found while writing Paper II App. C.
+
+## 2026-10-11 — S3.9 length pass, second round (user: "please do that")
+
+Running text 9,609 → 9,167 words (texcount, sections only; captions and inline math excluded). Cuts:
+- §6.5 "Why a model of finite reach suffices" → App. D, "Scale content of the unstable subspace"
+  (`app:chaos_scale`); the Discussion's interaction-range paragraph points to it.
+- §3.2 parameter paragraph reduced to the counts and the contrast with a global latent; the
+  440² example (12-channel model, 1.6 M grid values, 76,800 latents) now appears only in the
+  Discussion's "parameters describe the law" paragraph, which was itself condensed.
+- §6.4 Kolmogorov densities: only the two numbers that carry an argument kept (α = 0.1, 3×:
+  17.4 vs 17.8; α = 0.025, 3×: 23.7 vs 27.6); the rest are in Fig. 6 and Table 4.
+- §6.4 "Beyond the dimension": the large-scale-energy caveat (modes longer than the native box at
+  2–3 times the truth's but < 0.5% of the energy) and the reconstruction percentages dropped (both
+  in App. D tables); the patch-seam defect kept.
+- §6.3 rollout-length paragraph: the k_xs005_noreg numbers left to App. D.
+- §7.2 coupling: numbers summarized as ranges (6.7–11.4% with coupling vs 6.3–7.4% without; data
+  doubling moves errors by < 3 points); all values in App. D.
+- §4.4 and Limitations: the 2D KS truth values and the Kolmogorov 40-vs-120-unit numbers are no
+  longer repeated (they are in §4.2 and §4.4).
+- §3.5: the closing "trade-off" paragraph merged into the Stage B paragraph.
+Stopped ~170 words above 9,000: further cuts would remove results or the Lemma's discussion,
+and Chaos has no hard limit. Every cut is reversible from git (commit after afa4310).
+
+## 2026-10-11 — S3.14 Chaos format; S5/S6 checks
+
+- `main.tex` → REVTeX 4.2 (`aip,cha,reprint,amsmath,amssymb,nofootinbib,floatfix`), numbered
+  references (aipnum4-2). Lead paragraph adapted from the plain language summary (~140 words).
+  Key points and the PLS live on in `main_agu.tex` (AGU class, same sections), not built by `make`.
+  Data availability and Author declarations (conflict of interest; CRediT roles: placeholder for
+  the coauthor). All 26 floats placed (checked against the aux labels).
+- Figures keep their generated widths (single column 3.37 in, double 5.5 in) inside
+  `figure`/`figure*`; regenerating every figure at 7.0 in would change paper1's shared scripts.
+- **Corrections found by the shared-facts check:** the mean of the two 66² truths is 189.05, printed
+  "189.1" in §4.2 (rounded from the table's two decimals); now 189.0 in both papers (paper1 frozen,
+  not changed). The 6-channel model's "1.7% and 2.4%" in App. D are single-IC errors against the
+  matched truth run, while Table 4's 2.0% and 0.6% are means over ICs against the mean truths; App. D
+  now says so, and Paper II §4.2 too.
+- §5's pointer to the companion paper now says the 1D DA uses "a model transferred in the same way",
+  which holds whether Paper II keeps the full-reach 1D model or switches to the per-patch one (S1D).
+- Grayscale (S6.1): hatching added to `box_vs_window` and `appendix_panels`(b), whose orange and
+  aqua bars have equal luminance; marker and line style per seed in `truth_convergence`; the
+  k_max = 32 curve of `failure`(c) dashed. Regenerated into docs/paperI only.
+- The outlook's TODO(G-pass) removed: its examples (convection cells, nested limited-area models)
+  make no factual claim that needs a citation.

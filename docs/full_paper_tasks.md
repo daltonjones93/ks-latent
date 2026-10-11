@@ -3040,3 +3040,12 @@ Week 4: G7 external read, G8.
 
 Minimal path to a complete draft: A1, A3, A8, A10, B1–B10, B12–B14, C3, C5, C6, D0–D4, D6,
 E1–E8, F1, F2, G1–G6. Everything else strengthens but does not block.
+
+---
+
+## Closed (2026-10-11): continued in `docs/split_paper_tasks.md`
+
+`docs/paper1` was split into Paper I (`docs/paperI`, Chaos) and Paper II (`docs/paperII`, JAMES).
+`docs/paper1` is frozen as the reference draft. Open items of this file continue there: K11 (number
+trace) as S3.12 / S4.21, K12 (hand-off) as S6.3, G5/G8 (data availability, release) as S6.4, and
+the figure contract above as S6.1 for both papers.

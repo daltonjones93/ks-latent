@@ -1,7 +1,7 @@
 {
   "figure": "appendix_panels",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:53Z",
+  "git_sha": "afa4310636f3cab122a07cc36cad34aca73106fd",
+  "timestamp_utc": "2026-10-11T19:27:41Z",
   "inputs": [
     "artifacts/experiments/crop/c19_e0d0_c6_s1_x1_seed0.json",
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed0.json",

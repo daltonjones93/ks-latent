@@ -33,7 +33,8 @@ for ax, ((title, mark), runs), letter in zip(axes.ravel(), groups.items(), "abcd
     for d in sorted(runs, key=lambda d: d["seed"]):
         r = sorted((float(t), v) for t, v in d["running_D_KY_by_time"].items())
         t, v = zip(*r)
-        ax.plot(t, v, "-o", ms=2.6, lw=1.1, color=SEED_COL.get(d["seed"], INK2), label=f"IC seed {d['seed']}")
+        ax.plot(t, v, "-" + {0: "o", 1: "s", 2: "^"}.get(d["seed"], "o"), ms=2.8, lw=1.1, ls=("-", "--", ":")[d["seed"] % 3],
+                color=SEED_COL.get(d["seed"], INK2), label=f"IC seed {d['seed']}")  # S6.1: marker and line style per seed
     if mark:
         ax.axvline(mark, color=INK2, lw=0.6, ls=":")
     ax.set_title(title, fontsize=7.5, pad=8)

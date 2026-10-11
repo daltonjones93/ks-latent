@@ -162,16 +162,11 @@ throughout this paper: a checkpoint trained at one size is loaded at a
 new $(N_x,P)$, with every weight copied unchanged. A global latent vector
 admits no such map, because its bottleneck and propagator are tied to
 one value of $\dlat$.
-The parameter count is therefore that of the local rule alone. The 1D
+The parameter count is therefore that of the local rule alone: the 1D
 model has $63{,}812$ parameters and every 2D model about $135{,}000$
-(Appendix~\ref{app:architecture}), and the same tensors run every domain
-size: in a companion study of data assimilation \citep{jones2026da}, a
-12-channel version of the 2D KS model, trained on windows of the $264^2$
-simulation of Sec.~\ref{sec:ks2d}, runs a $440^2$ domain,
-whose field has $1.6$ million grid values and whose latent has $76{,}800$
-coordinates. In a global latent model the layers into and out
-of the bottleneck scale with the size of the field, so its parameter count
-grows with the domain even before its latent dimension does.
+(Appendix~\ref{app:architecture}), whatever the domain, whereas in a global
+latent model the layers into and out of the bottleneck grow with the size
+of the field.
 
 A local model is also extensive by construction, which explains both
 what transfer can achieve and how it fails.
@@ -355,7 +350,9 @@ $30\%$; the input noise $\sigma$ is
 annealed linearly from $0.10$ to $0.02$. Long free rollouts are needed:
 short ones leave the free-running model under-constrained and produce
 spurious, initial-condition-dependent regimes (Sec.~\ref{sec:fail_regimes}).
-But long rollouts scored by mean squared error carry a known bias.
+But long rollouts scored by mean squared error carry a known bias, so we
+treat $\kmax$ and the noise schedule as a trade-off between two failure
+modes, not as quantities to maximize.
 
 \begin{lemma}[Squared-error rollouts favour contraction]
 \label{lem:mse}
@@ -399,10 +396,6 @@ Sec.~\ref{sec:fail_regimes}) underestimates $\DKY$ by $4\%$, $13\%$ and
 $14\%$ at $1\times$, $2\times$ and $3\times$.
 \end{remark}
 
-Rollouts that are too short fail in the opposite way
-(Sec.~\ref{sec:fail_regimes}). We treat $\kmax$ and the noise schedule as
-a trade-off between these two failure modes, not as quantities to
-maximize.
 
 %----------------------------------------------------------------------
 \subsection{The canonical recipe}

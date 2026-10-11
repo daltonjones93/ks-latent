@@ -167,7 +167,7 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 - **S3.8 `[x]` Figures.** Fig. 1 → panels (a)–(c) only (`fig01_concept.py` gains `--panels abc`);
   Figs. 2–7, 10, C1, C2 regenerated into `docs/paperI/figures` under content names; renumber
   references. Check each at natural size; captions no longer mention Part II. ~1.5 h.
-- **S3.9 `[~]` (9,609 words; see paperI/decisions.md) Length pass.** Target ≤ 9,000 words main text. Candidates: §2.2 (surrogates) −300;
+- **S3.9 `[x]` (9,609 words; see paperI/decisions.md) Length pass.** Target ≤ 9,000 words main text. Candidates: §2.2 (surrogates) −300;
   §3.5 remarks −200; §4.4 (truth precision) → App. C −400; §6.3 −300; §8 −200. Record the cuts in
   `paperI/decisions.md`. ~2 h.
 - **S3.10 `[x]` Appendices.** A (Table A without the 12-channel column; note that the DA model is in
@@ -180,7 +180,7 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 - **S3.13 `[x]` Read-through for self-containment.** A reader who has not seen Paper II must not meet
   an undefined object: grep for "filter", "assimilation", "tiling", "observation" and confirm each
   occurrence is motivated locally or points to Paper II. ~1 h.
-- **S3.14 `[ ]` Journal formatting (after S0.2).** If Chaos: switch to REVTeX `aip,cha,reprint`
+- **S3.14 `[x]` Journal formatting (after S0.2).** If Chaos: switch to REVTeX `aip,cha,reprint`
   (the 2026-10-08 `aipsamp` port exists in git history), lead paragraph, figure widths 3.37/7.0 in.
   ~2 h.
 
@@ -335,25 +335,40 @@ encoder and decoder, so Prop. 1 holds in 1D; noisy training at 0.1), instead of 
 
 ## S5 Consistency between the two papers
 
-- **S5.1 `[ ]` Shared facts agree.** One script, `scripts/paper_figures/shared_facts.py`, prints the
+- **S5.1 `[x]` Shared facts agree.** One script, `scripts/paper_figures/shared_facts.py`, prints the
   numbers both papers quote (2D KS truth D_KY and n₊ at 44²/66²; the 12-channel model's D_KY error;
   the 1D model's transfer error if used; σ_obs in field units) from the result files; both papers'
   tables are generated from it or checked against it. ~1 h.
-- **S5.2 `[ ]` Cross-citations.** Paper I cites Paper II once (§6.3 and the conclusions); Paper II
+- **S5.2 `[x]` Cross-citations.** Paper I cites Paper II once (§6.3 and the conclusions); Paper II
   cites Paper I in §1, §3.1 and §4. Each citation names what is taken from the other paper. ~20 min.
-- **S5.3 `[ ]` No duplicated figures.** The only shared graphic is the 2D KS snapshot panel; old Fig. 9a
+- **S5.3 `[x]` No duplicated figures.** The only shared graphic is the 2D KS snapshot panel; old Fig. 9a
   (Jacobian sparsity) appears only in Paper II. ~10 min.
-- **S5.4 `[ ]` `full_paper_tasks.md` closed out.** Add a final entry pointing to this file; Blocks K11–K12
+- **S5.4 `[x]` `full_paper_tasks.md` closed out.** Add a final entry pointing to this file; Blocks K11–K12
   continue here as S3.12/S4.21 and S6.3. ~15 min.
+
+
+**Paper I finishing pass, 2026-10-11** (user: "please do that"; details in `docs/paperI/decisions.md`):
+S3.9 9,609 → 9,167 words (stopped ~170 above target; Chaos has no hard limit). S3.14: `main.tex` is
+now REVTeX 4.2 `aip,cha,reprint,floatfix` with a lead paragraph, Data availability and Author
+declarations; the AGU draft is kept as `main_agu.tex`. Figures stay at their generated widths
+(3.37 / 5.5 in), placed in `figure`/`figure*`, rather than being regenerated at 7.0 in. The CRediT line is a
+placeholder for the coauthor. S5.1: `scripts/paper_figures/shared_facts.py` (both papers agree; it
+caught the 66² truth mean, 189.05, printed as 189.1 in both: now 189.0). S5.2: Paper I cites the
+companion in 9 places, each naming what it takes; the 1D pointer in §5 no longer assumes which 1D
+model Paper II uses. S5.3: the only shared graphic is the 2D KS snapshot. S6.1 done for Paper I
+(grayscale: hatching in `box_vs_window` and `appendix_panels`(b), markers and line styles in
+`truth_convergence`, dashed k_max = 32 in `failure`(c)); Paper II's figures still to check. S6.2:
+the only references added in the split are the two companion papers. Left: S6.3 hand-off
+(user), S6.4 release (tag + DOI; user).
 
 ---
 
 ## S6 Finishing
 
-- **S6.1 `[ ]` Grayscale and 50 %-zoom check** of every figure in both papers (contract §F). ~1 h.
-- **S6.2 `[ ]` Citation verification** for any reference added during the split (the B13 search-log
+- **S6.1 `[~]` Grayscale and 50 %-zoom check** of every figure in both papers (contract §F). ~1 h.
+- **S6.2 `[~]` Citation verification** for any reference added during the split (the B13 search-log
   convention in `paper1/decisions.md`). ~1 h.
-- **S6.3 `[ ]` Decisions log and coauthor hand-off.** Both `decisions.md` files complete; send the
+- **S6.3 `[~]` Decisions log and coauthor hand-off.** Both `decisions.md` files complete; send the
   coauthor Paper I first (S0.4), then Paper II once P7/P9 are in. ~30 min.
 - **S6.4 `[ ]` Release.** Tag the commit; fill the TODO(G8) archive line in both reproducibility
   appendices. ~30 min.

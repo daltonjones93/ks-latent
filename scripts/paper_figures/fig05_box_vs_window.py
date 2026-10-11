@@ -48,6 +48,9 @@ T_KS = {1.0: tmean("ks2d", 1.0), 1.5: tmean("ks2d", 1.5)}
 
 CATS = [("canonical recipe", BLUE), ("window-trained", ORANGE),
         ("box-trained", AQUA), ("box-trained + coupling", YELLOW)]
+# S6.1 (2026-10-11): ORANGE and AQUA have nearly equal luminance, so in grayscale the categories are
+# also told apart by hatching.
+HATCH = {"canonical recipe": "", "window-trained": "///", "box-trained": "\\\\\\", "box-trained + coupling": "xxx"}
 
 panels = []
 
@@ -112,7 +115,7 @@ for col, ((title, groups), letter) in enumerate(zip(panels, "abc")):
             vals, truth = entries[cat]
             e = errors(vals, truth)
             for axx in (top, ax):
-                axx.bar(gi + off, e.mean(), width * 0.92, color=color, zorder=2)
+                axx.bar(gi + off, e.mean(), width * 0.92, color=color, hatch=HATCH[cat], edgecolor="white", lw=0, zorder=2)
                 axx.plot(np.full(len(e), gi + off), e, "o", ms=2.6, mfc="white", mec=INK2, mew=0.6, zorder=3,
                          clip_on=True)
     ax.set_xticks(range(len(groups)))
@@ -134,7 +137,7 @@ axes[1, 0].set_ylabel(r"relative error in $D_{\mathrm{KY}}$ (%)")
 axes[1, 0].yaxis.set_label_coords(-0.3, 0.62)
 axes[0, 0].set_yticks([90, 100])
 axes[1, 0].set_yticks([0, 10, 20, 30, 40])
-handles = [plt.Rectangle((0, 0), 1, 1, color=c) for _, c in CATS]
+handles = [plt.Rectangle((0, 0), 1, 1, facecolor=c, hatch=HATCH[n], edgecolor="white", lw=0) for n, c in CATS]
 fig.legend(handles, [n for n, _ in CATS], loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.06))
 
 save(fig, "fig05_box_vs_window", inputs)

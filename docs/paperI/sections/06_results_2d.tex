@@ -98,9 +98,8 @@ free-running model under-constrained (Sec.~\ref{sec:fail_regimes}), and
 long ones bias $\DKY$ downward (Sec.~\ref{sec:fail_mse}). The models
 reported here use $\kmax=32$ for 2D KS and for Kolmogorov flow at
 $\alpha=0.025$, $\kmax=16$ at $\alpha=0.1$, and the original $\kmax=12$ at
-$\alpha=0.05$; at that drag a $\kmax=32$ model trained otherwise identically
-(\texttt{k\_xs005\_noreg} in Appendix~\ref{app:tables}) gives
-comparable errors ($6.2\%$, $5.2\%$, $7.2\%$).
+$\alpha=0.05$, where a $\kmax=32$ retraining gives comparable errors
+(Appendix~\ref{app:tables}).
 
 \para{Selecting a model without the truth.} At $\alpha=0.1$ we trained six
 variants that differ in $\kmax$ ($16$--$32$) and in the autoencoder's
@@ -166,58 +165,25 @@ spread of the individual runs ($80.7$--$83.6$ at $44^2$; $82.5$ and $85.6$
 per box at $66^2$), so the truth is consistent with extensive scaling,
 and so is the model, as Remark~\ref{rem:extensive_model} requires.
 
-For Kolmogorov flow the model and truth densities agree at every drag to
-within the spread of the truths themselves. At $\alpha=0.05$ the model's
-density is $23.3$, $23.1$ and $24.5$ per box against $21.5$, $24.3$ and
-$25.1$. At $\alpha=0.1$ the model's density is $16.0$, $16.3$ and $17.4$ per box
-against $15.9$, $15.4$ and $17.8$ (three runs at $2\times$ and at
-$3\times$), including the truth's rise at $3\times$. At $2\times$ the model also reproduces the ordering across drags,
-more dimension per box at weaker drag; at $3\times$ the $\alpha=0.025$ model
-($23.7$ per box) falls below the $\alpha=0.05$ model ($24.5$), while the
-truth keeps rising ($27.6$ against $25.1$).
+For Kolmogorov flow the model and truth densities agree at $\alpha=0.1$
+and $0.05$ to within the spread of the truths themselves, including the
+truth's rise at $3\times$ at $\alpha=0.1$ ($17.4$ per box against $17.8$). At
+$\alpha=0.025$ the model reproduces the ordering across drags at $2\times$ but
+falls below the rising truth at $3\times$ ($23.7$ per box against $27.6$).
 
 \para{Beyond the dimension.} The decoded free rollouts reproduce the
-energetic scales. For the main-text $\alpha=0.1$ model the per-patch
-autoencoder reconstructs the vorticity to $1.2\%$ of its variance, and
-over 180 time units of free rollout the kinetic energy in the bands
-around the forcing wavenumber ($2\le|\bm k|<8$) is within $10\%$ of the
-truth's at every width and the vorticity's standard deviation within
-$3\%$; the energy in modes longer than the native box is two to three
-times the truth's at $2\times$ and $3\times$, but under $0.5\%$ of the
-total. In 2D KS,
-two initial conditions per size show the model's field amplitude and
-large-scale energy share within the scatter between initial conditions
-at every size, with no drift between the first and second halves of a
-rollout. The one systematic defect is local: the per-patch decoder puts
-$1.7$--$2.4\%$ of the energy at $|\bm k|\ge1.4$, against $0.5$--$0.8\%$ in
-the truth, near the patch wavenumber $2\pi/h\approx1.14$
-(Fig.~\ref{fig:rollouts}(d--f)). These are seams at patch edges, already present in the reconstruction of the true
-field ($2.6$--$2.9\%$ error), so they come from the decoder rather than
-the dynamics; they do not affect $\DKY$, and in data assimilation, averaging
-over shifted copies of the patch lattice removes them \citep{jones2026da}.
-Full tables are in Appendix~\ref{app:tables}.
-
-%----------------------------------------------------------------------
-\subsection{Why a model of finite reach suffices}
-\label{sec:chaos_scale}
-%----------------------------------------------------------------------
-
-A local model can represent the dynamics only if the unstable directions
-are themselves local. For Kolmogorov flow at $\alpha=0.05$, $3\times$, we
-decomposed the unstable subspace (the span of the Lyapunov vectors with
-positive exponents) by scale, for the truth and for the window-trained
-full-reach $c=3$ model of Sec.~\ref{sec:window_fix} (the analysis was not
-repeated for the canonical models or the other systems). The true flow
-has 36 unstable directions and the model 34, with nearly identical scale content:
-$9.1\%$ of the unstable-subspace variance lies at scales larger than the
-$2\pi$ box in the truth and $10.0\%$ in the model. In the truth, $31.5$ of
-the 36 unstable directions sit in the wavenumber band $|\bm k|\in[2,8)$
-around the forcing wavenumber $k=4$, and essentially none below $|\bm k|=1$.
-The chaos lives at the forcing scale, which spans a few sites, and that is
-the scale a model with a reach of a few sites resolves best. The same
-analysis shows no deficit of large-scale unstable directions in the
-model, so we have no evidence that the remaining errors come from missing
-long-range coupling.
+energetic scales. For the $\alpha=0.1$ model the kinetic energy around the
+forcing wavenumber ($2\le|\bm k|<8$) is within $10\%$ of the truth's at every
+width and the vorticity's standard deviation within $3\%$; in 2D KS the field
+amplitude and large-scale energy share are within the scatter between
+initial conditions, with no drift. The one systematic defect is local: the
+per-patch decoder puts $1.7$--$2.4\%$ of the 2D KS energy at $|\bm k|\ge1.4$,
+against $0.5$--$0.8\%$ in the truth (Fig.~\ref{fig:rollouts}(d--f)). These are
+seams at patch edges, already present in the reconstruction of the true
+field, so they come from the decoder rather than the dynamics; they do not
+affect $\DKY$, and in data assimilation averaging over shifted copies of the
+patch lattice removes them \citep{jones2026da}. Full tables are in
+Appendix~\ref{app:tables}.
 
 \begin{figure*}[htbp]
 \centering

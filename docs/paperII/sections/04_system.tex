@@ -40,7 +40,7 @@ times) after a spin-up of 200 time units (protocol in
 Appendix~\ref{app:groundtruth} and Paper~I). At $44^2$ three independent
 runs give $\DKY=80.7$, $81.8$ and $83.6$ (mean $82.0$), with $42$--$44$ positive
 exponents and $\lambda_1=0.165$--$0.194$; at $66^2$ two runs give $185.6$ and
-$192.5$ (mean $189.1$), with $93$--$101$ positive exponents. The densities,
+$192.5$ (mean $189.0$), with $93$--$101$ positive exponents. The densities,
 $0.0424$ and $0.0434$ per unit area, differ by $2.5\%$, inside the spread of
 the individual runs, and the running estimates still move by $3$--$5\%$ over
 the last 20 time units, so we treat the truths as uncertain at the level
@@ -88,9 +88,10 @@ somewhat faster in the model than in the PDE. In free rollouts of 1000 steps
 its field standard deviation is $5$--$7\%$ above the truth's from the same
 initial conditions, and it carries slightly too much energy at the
 smallest scales. A clean-trained model with the same recipe is as close to
-the truth; Sec.~\ref{sec:da_noisy} compares the two as filters. For
-comparison, the 6-channel model of Paper~I is within $1.7\%$ and $2.4\%$ at
-the same two sizes.
+the truth; Sec.~\ref{sec:da_noisy} compares the two as filters. Scored the
+same way, the 6-channel model of Paper~I is within $1.7\%$ and $2.4\%$ at the
+same two sizes (Paper~I reports $2.0\%$ and $0.6\%$ as means over initial
+conditions against the mean truths).
 
 \begin{table*}[htbp]
 \caption{Validation of the 12-channel 2D KS models against the PDE. The

@@ -33,7 +33,8 @@ improving a one-step prediction, three to four sites for the 1D latent
 dynamics against a trained reach of six (Sec.~\ref{sec:receptive}). In
 Kolmogorov flow most of the unstable directions lie in the band around
 the forcing wavenumber, $31.5$ of $36$ at $|\bm k|\in[2,8)$ for $\alpha=0.05$ at
-$3\times$, whose wavelengths span one to four sites. Models whose encoder
+$3\times$, whose wavelengths span one to four sites, and a model of finite
+reach reproduces this scale content (Appendix~\ref{app:chaos_scale}). Models whose encoder
 reaches two sites and whose propagator reaches one fail even when trained
 on windows of the very domain they are evaluated on, with errors of
 $66$--$100\%$ in $\DKY$ (Appendix~\ref{app:tables}). The rule we take from
@@ -45,24 +46,18 @@ smallest domain the model can be used on, which is what fails at $L=25$.
 \para{The parameters describe the law, not the state.} Because every
 operator is shared by all sites, the trained parameters encode one local
 rule, and their number is fixed by that rule rather than by the domain.
-The 2D models have about $135{,}000$ parameters. At $66^2$ such a model
-reproduces a Kaplan--Yorke dimension of $188$ to within $0.6\%$ of the truth
-(Table~\ref{tab:transfer2d}), and extrapolating the measured density of
-$0.043$ per unit area, the attractor at $440^2$, on which a 12-channel
-version of the model is used for data assimilation in a companion paper
-\citep{jones2026da}, has a dimension of roughly $8{,}000$. A
-model whose size is set by the state would have to grow with that number;
-this one does not. The same weight sharing makes training cheap in data:
-every window, and every site within it, is a training example of the same
-rule, and the 2D KS models are trained on five trajectories of $25$ time
-units. Neither a small absolute parameter count nor size independence is
-new by itself: convolutional surrogates and neural operators share weights
-too \citep{barsinai2019,kochkov2021}. What the dimension comparison adds is
-evidence that the shared rule is the right one, in the sense that its
-extension to a larger domain carries the right density of chaos. This is
-the inductive bias that extensive chaos calls for: a system made of many
-copies of one local process is described most economically by learning
-that process once.
+A 2D model of about $135{,}000$ parameters reproduces a Kaplan--Yorke
+dimension of $188$ at $66^2$ to within $0.6\%$ (Table~\ref{tab:transfer2d}), and
+a 12-channel version runs a $440^2$ domain, whose attractor dimension we
+estimate at roughly $8{,}000$ from the measured density of $0.043$ per unit area
+\citep{jones2026da}. The same weight sharing makes training cheap in
+data: every window, and every site within it, is a training example of
+the same rule. Weight sharing and size independence are not new by
+themselves \citep{barsinai2019,kochkov2021}; what the dimension comparison
+adds is evidence that the shared rule is the right one, in the sense that
+its extension to a larger domain carries the right density of chaos. A
+system made of many copies of one local process is described most
+economically by learning that process once.
 
 \para{Transfer error as a probe of the physics.} Because a local model
 is extensive by construction, the difference between its dimension
@@ -77,12 +72,9 @@ extensive is a question in its own right, which we leave to future work.
 
 \para{Limitations.} We state them plainly.
 \begin{itemize}
-\item \emph{Ground truth.} The Kolmogorov truths at $\alpha=0.1$, $1\times$, at
-  $\alpha=0.05$, $3\times$, and at all three widths for $\alpha=0.025$ rest on one
-  40-unit run each; such runs deviated from their 120-unit continuations
-  by $-17\%$ to $+23\%$, and were high in five of seven cases. The 2D KS truths
-  average over 40 time units and their running estimates still move by
-  $3$--$5\%$; there is no truth at $88^2$.
+\item \emph{Ground truth.} Five Kolmogorov configurations rest on one 40-unit
+  run, uncertain by 10--15\%, the 2D KS truths by a few percent
+  (Sec.~\ref{sec:truth_uncertainty}), and there is no truth at $88^2$.
 \item \emph{Kolmogorov geometry.} The channel is widened in $x$ only,
   because the forcing fixes the height; transfer in $y$ is untested.
 \item \emph{Models.} Most 2D models have one training seed (the 1D model
@@ -94,10 +86,9 @@ extensive is a question in its own right, which we leave to future work.
   decoder is a smooth, injective map on the attractor, which the agreement
   of the spectra supports but does not prove.
 \item \emph{Reconstruction.} Local neural-field latents have been
-  reported to fail on KS at the decoder \citep{aroma2024}. Our autoencoders
-  reconstruct the field to $0.01\%$ (1D), $2.6$--$2.9\%$ (2D KS) and $1.2\%$
-  (Kolmogorov) of its variance, and the per-patch decoders leave seams
-  that appear as excess energy above the patch wavenumber.
+  reported to fail on KS at the decoder \citep{aroma2024}. Ours reconstruct
+  the field to $0.01\%$ (1D), $2.6$--$2.9\%$ (2D KS) and $1.2\%$ (Kolmogorov) of
+  its variance, with seams at patch edges in 2D.
 \end{itemize}
 
 \para{Outlook.} The ingredients carry over to any system whose chaos is
@@ -113,4 +104,3 @@ Kolmogorov channel? And can the rule be learned from incomplete, noisy
 data rather than from complete fields? A companion paper uses the local
 latent field for ensemble data assimilation, with a model trained only on
 noisy fields \citep{jones2026da}.
-% TODO(G-pass): add verified citations for the outlook systems if they are kept.

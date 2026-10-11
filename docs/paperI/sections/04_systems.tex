@@ -94,7 +94,7 @@ The training data are four trajectories (plus one for validation) of
 on this domain (Sec.~\ref{sec:crop_training}) and evaluated on square
 periodic boxes of side $44$, $66$ and $88$. Ground truth exists at $44^2$
 (three runs, $\DKY=80.7$--$83.6$, mean $82.0$, 42--44 positive exponents)
-and $66^2$ (two runs, $185.6$ and $192.5$, mean $189.1$, 93--101 positive
+and $66^2$ (two runs, $185.6$ and $192.5$, mean $189.0$, 93--101 positive
 exponents). The mean densities, $0.0424$ and $0.0434$ per unit area,
 differ by $2.5\%$, inside the spread of the individual runs; we did not
 compute a truth at $88^2$, where the expected dimension (about 330) would
@@ -160,10 +160,9 @@ claimed (details in Appendix~\ref{app:groundtruth}). In 1D KS, windows of
 finite-time realizations agree to within $0.1$--$2\%$ for $L\ge50$, and we
 treat the 1D truths as accurate to about one percent. The 2D KS truths
 use 40-unit windows (about 7 Lyapunov times); independent initial
-conditions give $80.7$, $81.8$ and $83.6$ at $44^2$ and $185.6$ and $192.5$
-at $66^2$ ($\pm1.8\%$), and the running estimates still move by $3$--$5\%$
-over the last 20 time units, so these truths are uncertain at the level
-of a few percent. In Kolmogorov flow, Lyapunov times are 6--16 time
+conditions agree to $\pm1.8\%$, and the running estimates still move by
+$3$--$5\%$ over the last 20 time units, so these truths are uncertain at
+the level of a few percent. In Kolmogorov flow, Lyapunov times are 6--16 time
 units, and a 40-unit window covers only 2--6 of them: for seven runs
 continued to 120 units, the 40-unit value was off by $-17\%$ to $+23\%$,
 high in five of the seven, and independent initial conditions at a fixed
@@ -173,10 +172,8 @@ size and window differ by $4$--$12\%$
 Where several truth runs exist for one configuration we use their mean
 (Table~\ref{tab:truth}). At $\alpha=0.05$, $1\times$, the three 120-unit
 truths start from the same initial conditions as the model evaluations,
-and we score each model run against its matched truth; since a model's
-own single-run estimate at this size scatters strongly
-(Sec.~\ref{sec:evaluation}; Fig.~\ref{fig:appendix_panels}(a)), this
-removes truth-side noise only. Five Kolmogorov configurations
+and we score each model run against its matched truth, which removes
+truth-side noise only (Fig.~\ref{fig:appendix_panels}(a)). Five Kolmogorov configurations
 ($\alpha=0.1$, $1\times$; $\alpha=0.05$, $3\times$; all three sizes at
 $\alpha=0.025$) rest on a single run. We therefore report the Kolmogorov
 results as scaling of $\DKY$ with domain size, with the spread above as

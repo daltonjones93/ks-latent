@@ -1,7 +1,7 @@
 {
   "figure": "box_vs_window",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:44Z",
+  "git_sha": "afa4310636f3cab122a07cc36cad34aca73106fd",
+  "timestamp_utc": "2026-10-11T19:27:40Z",
   "inputs": [
     "artifacts/experiments/c4/s231_a005_x1_m0.json",
     "artifacts/experiments/c4/s233_a01_x1_m0.json",

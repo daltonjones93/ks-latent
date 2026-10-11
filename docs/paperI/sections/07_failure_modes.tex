@@ -36,13 +36,12 @@ losses predicted neither failure.
 
 Non-local inputs make a box-trained model transfer worse
 (Sec.~\ref{sec:box_vs_window}); with window training they are merely
-unhelpful. At $\alpha=0.05$ the window-trained model's errors are $7.3\%$,
-$7.4\%$ and $6.3\%$ at $1\times$, $2\times$ and $3\times$; a learned consensus
-mechanism that exchanges messages between sites gives $7.0\%$, $6.7\%$ and
-$9.2\%$, and the exact Biot--Savart velocity as an extra input $9.4\%$,
-$8.2\%$ and $11.4\%$. Twice as many training trajectories change the
-canonical-recipe errors from $6.2\%$, $5.2\%$, $7.2\%$ to $5.5\%$, $4.4\%$,
-$9.6\%$, so the amount of data does not limit accuracy at $3\times$ either.
+unhelpful. At $\alpha=0.05$ a learned consensus mechanism that exchanges
+messages between sites, or the exact Biot--Savart velocity as an extra
+input, leaves the errors at $6.7$--$11.4\%$, against $6.3$--$7.4\%$ without
+them, and twice as many training trajectories move the canonical-recipe
+errors by less than three percentage points (Appendix~\ref{app:tables}),
+so the amount of data does not limit accuracy either.
 
 %----------------------------------------------------------------------
 \subsection{Short rollouts allow spurious regimes}

@@ -1,12 +1,12 @@
 %% Paper I of the split of docs/paper1 (docs/split_paper_tasks.md): dynamics and transfer.
-%% Target: Chaos (S0.2); drafted in the AGU class like paper1, REVTeX at S3.14.
-\PassOptionsToPackage{natbibapa}{apacite}% keep \citet / \citep with apacite
-\documentclass[draft]{PJ2019}
+%% Target: Chaos (S0.2). REVTeX 4.2, aip/cha, reprint (S3.14, 2026-10-11). The AGU-class draft with
+%% key points and plain language summary is kept as main_agu.tex (same sections and appendices).
+\documentclass[aip,cha,reprint,amsmath,amssymb,nofootinbib,floatfix]{revtex4-2}
 
-\usepackage{amsmath,amssymb}
 \usepackage{amsthm}
 \usepackage{mathtools}
 \usepackage{bm}
+\usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{xspace}
@@ -15,39 +15,18 @@
 
 \input{macros}
 
-% Float placement for a single-column draft: let figures and tables sit near their first
-% mention (the REVTeX top-only placement pushed most of them to the end of the paper).
-\renewcommand{\topfraction}{0.9}
-\renewcommand{\bottomfraction}{0.8}
-\renewcommand{\textfraction}{0.07}
-\renewcommand{\floatpagefraction}{0.75}
-\setcounter{topnumber}{3}
-\setcounter{bottomnumber}{2}
-\setcounter{totalnumber}{5}
-
-\journalname{Draft}
-
 \begin{document}
 
 \title{Local latent fields for extensive spatiotemporal chaos: zero-shot domain transfer
 validated by Lyapunov spectra}
 
-\authors{Dalton Jones\affil{1}, Peter Jan van Leeuwen\affil{1}}
+\author{Dalton Jones}
+\email{daltjone@colostate.edu}
+\author{Peter Jan van Leeuwen}
+\affiliation{Department of Atmospheric Science, Colorado State University, Fort Collins, Colorado 80523, USA}
 
-\affiliation{1}{Department of Atmospheric Science, Colorado State University, Fort Collins, USA}
+\date{\today}
 
-\correspondingauthor{Dalton Jones}{daltjone@colostate.edu}
-
-% Key points: AGU limit of three, at most 140 characters each, no special characters.
-\begin{keypoints}
-\item A learned local latent field trained at one domain size reproduces the true Lyapunov dimension on domains up to four times larger.
-\item Training on windows of one large simulation, with boundaries driven by the simulation, is what lets the learned local rule transfer.
-\item Training rollouts that are too short or too long distort the learned chaos; a rule that uses no ground truth picks a good model.
-\end{keypoints}
-
-% Every number below is in a table: Table~\ref{tab:transfer1d} (1D), Table~\ref{tab:transfer2d} (2D),
-% Table~\ref{tab:architecture} (parameters); the box-trained range in Fig.~\ref{fig:box_vs_window}
-% and App. D; the selection rule in Sec.~\ref{sec:canonical_results}.
 \begin{abstract}
 Learned surrogates of spatiotemporally chaotic systems usually compress the state into one latent
 vector whose size is fixed at training time, although in extensive chaos the number of active
@@ -67,18 +46,20 @@ statistics compared with the training data detect the first problem without any 
 a selection rule built on them chose, among six variants, the one with the lowest mean error.
 \end{abstract}
 
-\section*{Plain Language Summary}
-Many chaotic systems, from flame fronts to atmospheric flows, are spatially extended: the
-larger the domain, the more independent chaotic degrees of freedom it holds. Machine-learned
-surrogates usually describe the whole state by one fixed-length list of numbers, which cannot
-grow with the domain. We instead learn a field of a few numbers at each point of a lattice,
-updated by the same local rule everywhere, so that a model trained on a small domain runs on a
-larger one simply by adding lattice points. We check this transfer with the strictest test
-available, the model's own Lyapunov spectrum against that of the true equations, in three
-systems. What makes the learned rule transfer is the data it is trained on: pieces of one large
-simulation rather than a small closed box. We also show which training choices make the learned
-chaos too weak or send it into the wrong state, and how to detect the second without knowing the
-answer.
+\maketitle
+
+\begin{quotation}
+Many chaotic systems, from flame fronts to atmospheric flows, are spatially extended: the larger
+the domain, the more independent chaotic degrees of freedom it holds. Machine-learned surrogates
+usually describe the whole state by one list of numbers of fixed length, which cannot grow with
+the domain. We instead learn a field of a few numbers at each point of a lattice, updated by the
+same local rule everywhere, so that a model trained on a small domain runs on a larger one simply
+by adding lattice points. We test this transfer with the strictest check available, the model's
+own Lyapunov spectrum against that of the true equations, in three systems. What makes the
+learned rule transfer is its training data, pieces of one large simulation rather than a small
+closed box, and we show which training choices make the learned chaos too weak or send it into
+the wrong state.
+\end{quotation}
 
 \input{sections/01_introduction}
 \input{sections/02_background}
@@ -97,14 +78,17 @@ answer.
 \input{appendix/D_tables}
 \input{appendix/E_reproducibility}
 
-\section*{Open Research Section}
+\section*{Data availability}
 % TODO(G5): repository and DOI for code, trained models and the result files.
 The code, trained models and result files that support the findings of this study, and the
 scripts that produce every table and figure from them, are available from the corresponding
 author upon reasonable request (Appendix~\ref{app:reproducibility}).
 
-\section*{Conflict of Interest}
-The authors have no conflicts to disclose.
+\section*{Author declarations}
+\para{Conflict of interest.} The authors have no conflicts to disclose.
+
+\para{Author contributions.} % TODO(S6.3): CRediT roles, to be confirmed with the coauthor.
+\placeholder{CRediT author contributions}
 
 \bibliography{refs}
 

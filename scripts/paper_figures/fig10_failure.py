@@ -116,7 +116,7 @@ for seed, ls in ((0, "-"),):
 d = jl(EXP / "rollout_stats/p9b_a005_seed0_n1000_y1.json")
 sc = d["scales"]["2x1"]
 tm = np.linspace(0, d["n_steps"] * dt, len(sc["model"]["ts_share_k_lt_2"]))
-c.plot(tm, sc["model"]["ts_share_k_lt_2"], "-", color=shade(DRAG_COLOR[0.05], 0.55), lw=1.2,
+c.plot(tm, sc["model"]["ts_share_k_lt_2"], "--", color=shade(DRAG_COLOR[0.05], 0.55), lw=1.2,  # S6.1: dashed
        label=r"$k_{\max}=32$")
 c.set_xlabel("time", labelpad=1)
 c.set_ylabel(r"energy share at $|\mathbf{k}|<2$")
