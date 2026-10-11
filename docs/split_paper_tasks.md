@@ -38,8 +38,8 @@ memory: every table body is `\tabinput` of a generated file and every figure com
 - **S0.4 `[x]` Agreed 2026-10-11. Submission order and cross-citation.** Paper II cites Paper I for the model's transfer
   validation. Recommended: finish Paper I first and post it to arXiv so Paper II can cite a preprint;
   Paper II is otherwise written to stand alone (its own model description, its own validation table).
-- **S0.5 `[ ]` Kolmogorov flow in Paper II.** None was assimilated; Paper II mentions it only in
-  limitations. Confirm no Kolmogorov DA run is wanted before the split (it would be new work).
+- **S0.5 `[x]` Kolmogorov flow in Paper II (decided 2026-10-11): latent filter only**, with a
+  noisy-trained 12-channel model, no physics-based comparator. Block SK below.
 - **S0.6 `[ ]` Pending results that Paper II waits for:** J17G (P7, running), J5 (P9, running), the
   plain-language-summary sentence (removed 2026-10-11). Paper II's §5 is written against P7's outcome.
 
@@ -243,6 +243,37 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 
 ---
 
+## SK Kolmogorov-flow data assimilation for Paper II (decided 2026-10-11)
+
+Purpose: show that the filter is not specific to KS, on a second system whose chaos is organized
+by a forcing (anisotropic, a fixed channel height). Latent filter only; the physics-based comparison
+stays a KS result. α = 0.05, the drag whose canonical models are best documented in Paper I.
+
+- **SK1 `[~]` Model.** `k_xs005_c12d10`: the canonical α = 0.05 x-strip recipe (`k_xs005_noreg`
+  flags) with c = 12 and training noise 0.1, i.e. the Paper II KS recipe. Queued
+  (`scripts/run_kda_train.sh`, caffeinated): starts after the third J17G training (~13:30), ~3 h,
+  then D_KY at 1×/2×/3× (seed 0) against the α = 0.05 truths. Check: D_KY within the spread of the
+  6-channel canonical models (Paper I Table); if far worse, fall back to the clean 6-channel model.
+- **SK2 `[ ]` Kolmogorov truth in `exp_h9_tiled_da.py`.** `--system kolmogorov --alpha 0.05 --scale s`:
+  strip geometry (48s × 8 sites, widened in x only), vorticity truth from `spinup_kolmogorov` /
+  `integrate_kolmogorov` with a cache per (scale, seed), snapshot spacing matching the model's
+  training `dt_snap`, standardization by the checkpoint's statistics. Unit test: the truth step
+  equals the solver's; the deployment grid matches the training spacing in x and y. ~0.5 day.
+- **SK3 `[ ]` Tilings and observations on a strip.** Offsets {0, p/2} in x and y on a non-square
+  periodic lattice; observation stride 8 (four per site); interpolation baseline on the strip;
+  decoder floors; the blend's partition of unity on a rectangle (test: weights sum to 1). ~0.5 day.
+- **SK4 `[ ]` Smoke and calibration.** 10-cycle smoke at 1×; check the cycle length (number of
+  propagator steps per cycle) against the Kolmogorov Lyapunov time (6–16 time units) so a cycle is
+  a comparable fraction of a Lyapunov time to the KS runs; keep the KS filter settings (GC 1.5 sites,
+  RTPS 0.7, 64 members, noise 0.02) unless the smoke diverges. ~2 h.
+- **SK5 `[ ]` Runs.** 1×: one and four tilings, seeds 0–2; 3×: one and four tilings, seed 0; 100
+  cycles. Queue with caffeinate. ~3–4 h unattended.
+- **SK6 `[ ]` Results in Paper II.** A subsection "A second system: Kolmogorov flow" (≤ 400 words):
+  error vs interpolation and the decoder floors, one tiling vs four, calibration, 1× vs 3×; one row
+  block in the sizes table (or its own small table, `tabK_kolm_da.py`); one panel (vorticity truth,
+  analysis, error at 3×) added to the snapshot figure or as a separate figure. Remove "Kolmogorov
+  flow was not assimilated" from the limitations. ~0.5 day.
+
 ## S5 Consistency between the two papers
 
 - **S5.1 `[ ]` Shared facts agree.** One script, `scripts/paper_figures/shared_facts.py`, prints the
@@ -279,6 +310,7 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 | 2 | S3.1–S3.13 (Paper I) | ~13 h | phase 1 |
 | 3 | S4.1–S4.9, S4.11–S4.19, S4.22 (Paper II, all but §6) | ~20 h | phase 1, S0.3 |
 | 4 | S4.10, S4.20–S4.21 | ~4 h | J17G, J5 |
+| K | SK1–SK6 (Kolmogorov DA) | ~2 days + ~7 h runs | SK1 training (~16:30) |
 | 5 | S5, S3.14, S4.23, S6 | ~8 h | S0.2, phases 2–4 |
 
 Phases 2 and 3 are independent and can be interleaved; Paper I can be finished and posted (S0.4)
