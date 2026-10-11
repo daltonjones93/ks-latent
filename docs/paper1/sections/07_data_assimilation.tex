@@ -348,7 +348,8 @@ The hardest case for both filters is a truth with a process that neither can rep
 unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
 $v_t=-v/\tau+\kappa\nabla^2u$, $\tau=2$, whose memory (4--4.5 time units, eight to nine cycles) makes $v$ a
 function of the past of $u$, not of its present: about $20\%$ of its variance is not predictable from
-the current field. The latent model is trained on noisy $u$ alone; the physics-based filter's model
+the current field. The latent model is trained on noisy fields $u$ of this coupled system, so the
+slow process acts in all its training data, but it never sees $v$; the physics-based filter's model
 is KS without $v$, given every remedy (Appendix~\ref{app:da_comparator}). At $\varepsilon=0.1$, where the
 state-dependent one-cycle error of the KS model is $0.15$, about $0.18$ of this system's observation
 error, the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
