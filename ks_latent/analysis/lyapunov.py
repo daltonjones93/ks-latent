@@ -290,7 +290,8 @@ def lyapunov_spectrum_ks(
     )
 
 
-def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int, cubic: float = 0.0) -> StepWithTangentFn:
+def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int, cubic: float = 0.0, aniso: float = 0.0,
+                                           ganiso: float = 0.0) -> StepWithTangentFn:
     """2D analogue of `_ks_step_with_tangent_physical_space`. `benettin`
     is written for a flat `(state_dim,)` vector space (QR needs a plain
     2D matrix, `(n_directions, state_dim)`) -- this wrapper flattens the
@@ -306,7 +307,7 @@ def _ks2d_step_with_tangent_physical_space(cfg: KSConfig2D, M: int, cubic: float
         n_directions = tangent_flat.shape[0]
         tangent_phys = tangent_flat.reshape(n_directions, NX, NY)
         dV = np.fft.fft2(tangent_phys, axes=(-2, -1))
-        v_next, dV_next = step_with_tangent2d(v, dV, op, cubic=cubic)
+        v_next, dV_next = step_with_tangent2d(v, dV, op, cubic=cubic, aniso=aniso, ganiso=ganiso)
         u_next = np.fft.ifft2(v_next).real
         tangent_next = np.fft.ifft2(dV_next, axes=(-2, -1)).real
         return u_next.reshape(NX * NY), tangent_next.reshape(n_directions, NX * NY)
@@ -326,8 +327,11 @@ def lyapunov_spectrum_ks2d(
     max_abs_state: float = 50.0,
     M: int = 32,
     cubic: float = 0.0,
+    aniso: float = 0.0,
+    ganiso: float = 0.0,
 ) -> LyapunovResult:
-    """`cubic`: J17A missing-process strength beta (`ks2d.cubic_term2d`); 0 = standard 2D KS.
+    """`cubic`: J17A missing-process strength beta (`ks2d.cubic_term2d`); 0 = standard 2D KS. `aniso`,
+    `ganiso`: the J17S candidate processes (`ks2d.aniso_term2d`, `ks2d.grad_aniso_term2d`).
 
     2D analogue of `lyapunov_spectrum_ks` -- full Lyapunov spectrum of
     the 2D KS PDE via the variational ETDRK4 integrator
@@ -336,9 +340,9 @@ def lyapunov_spectrum_ks2d(
     `exponents`/`D_KY` are in the same flat-vector convention every other
     `LyapunovResult` in this module uses, so downstream code (Kaplan-Yorke,
     `n_positive`, etc.) needs no 2D-specific handling at all."""
-    step_fn = _ks2d_step_with_tangent_physical_space(cfg, M, cubic)
+    step_fn = _ks2d_step_with_tangent_physical_space(cfg, M, cubic, aniso, ganiso)
     if initial_state is None:
-        initial_state = spinup2d(cfg, np.random.default_rng(seed), M=M, cubic=cubic)
+        initial_state = spinup2d(cfg, np.random.default_rng(seed), M=M, cubic=cubic, aniso=aniso, ganiso=ganiso)
     initial_state_flat = initial_state.reshape(cfg.NX * cfg.NY)
 
     qr_every = max(1, int(round(qr_interval / cfg.dt)))

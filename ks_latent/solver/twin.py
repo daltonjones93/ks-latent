@@ -55,12 +55,12 @@ def terrain_forcing(cfg: KSConfig2D, amplitude: float, length: float = 5.0, seed
 def twin_truth(cfg: KSConfig2D, seed: int, lap_coef: float = 1.0, advect_x: float = 0.0,
                forcing_amp: float = 0.0, adjust_time: float = 100.0,
                cache_dir: str = "artifacts/cache", cubic: float = 0.0,
-               aniso: float = 0.0) -> tuple[np.ndarray, dict]:
+               aniso: float = 0.0, ganiso: float = 0.0) -> tuple[np.ndarray, dict]:
     """General I28 truth: returns `(u0, integrate_kwargs)` for `integrate2d(u0, cfg, n, **kwargs)`.
     Parametric error (`lap_coef`), missing mean-flow advection (`advect_x`, in x), or missing
     terrain-like forcing (`forcing_amp`). All zero/one: the standard perfect-model truth.
     J17A: `cubic = beta` is the missing process -beta P[u'^3] (`ks2d.cubic_term2d`)."""
-    if advect_x == 0.0 and forcing_amp == 0.0 and cubic == 0.0 and aniso == 0.0:
+    if advect_x == 0.0 and forcing_amp == 0.0 and cubic == 0.0 and aniso == 0.0 and ganiso == 0.0:
         # parametric-only (or standard): the original cache, so every I28 run shares one truth
         u0, op = twin_truth_setup(cfg, seed, lap_coef, adjust_time, cache_dir)
         return u0, ({} if op is None else {"op": op})
@@ -75,6 +75,8 @@ def twin_truth(cfg: KSConfig2D, seed: int, lap_coef: float = 1.0, advect_x: floa
         kw["cubic"] = cubic
     if aniso != 0.0:  # J17 option 2: -a u' u'_x
         kw["aniso"] = aniso
+    if ganiso != 0.0:  # J17S candidate 1: -(delta/2)(u_x^2 - u_y^2)
+        kw["ganiso"] = ganiso
     base = Path(cache_dir) / f"ks2d_spinup_L{cfg.Lx:g}_NX{cfg.NX}_dt{cfg.dt:g}_T200_seed{seed}.npy"
     if not base.exists():
         raise FileNotFoundError(f"{base}: standard spin-up cache missing")
@@ -82,7 +84,7 @@ def twin_truth(cfg: KSConfig2D, seed: int, lap_coef: float = 1.0, advect_x: floa
     if not kw:
         return u0, kw
     tag = f"a{lap_coef:g}_adv{advect_x:g}_f{forcing_amp:g}" + ("" if cubic == 0.0 else f"_cub{cubic:g}") \
-        + ("" if aniso == 0.0 else f"_ani{aniso:g}")
+        + ("" if aniso == 0.0 else f"_ani{aniso:g}") + ("" if ganiso == 0.0 else f"_gani{ganiso:g}")
     adj = Path(cache_dir) / f"ks2d_twin_L{cfg.Lx:g}_NX{cfg.NX}_dt{cfg.dt:g}_{tag}_adj{adjust_time:g}_seed{seed}.npy"
     if adj.exists():
         return np.load(adj), kw

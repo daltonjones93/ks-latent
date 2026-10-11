@@ -2499,6 +2499,46 @@ This mirrors unobserved moisture or microphysics in CM1.
   truths. **Latent wins** if its 3-seed mean is ≥ 10% lower and lower on every seed; mirror for a physics
   win; else tie. Floor: physics filter with the true (u, v) model, v unobserved.
 - **Launched 2026-10-10 ~13:45:** `run_j17b_all.sh` (caffeinated).
+- **Results (2026-10-10 19:05).** ε = 0.1: latent 0.483 / 0.481 / 0.465 (0.476), physics + ∇² estimation
+  0.447 / 0.443 / 0.436 (0.442): tie. ε = 0.2: latent 0.641 / 0.623 / 0.620 (0.628), physics + ∇²
+  estimation 0.596 / 0.604 / 0.597 (0.599): tie (physics lower on every seed, by 5%); floor (true u, v
+  model, v unobserved) 0.496 / 0.496 / 0.488; latent K = 1: 0.839. The pre-registered expectation (latent win
+  at ε = 0.2) failed. Diagnosis: (i) the hidden field acts largely as an extra ∇² term that estimation
+  absorbs (estimate → 1.12 at ε = 0.1, 1.17–1.20 at ε = 0.2; offline ∇² scan: state-dependent error
+  0.317 → 0.232 at a = 1.2 for ε = 0.2, 0.134 → 0.093 at a = 1.1 for ε = 0.1); (ii) the truth is not Markov in
+  u, which handicaps the single-state latent propagator too (latent error / σ_obs 0.51 → 0.55 → 0.64 with
+  ε). So J17B tests "hidden process with memory", not "misspecified physics". **No paper rewrite until the
+  memory test (J17B-H) and J17S are in (user, 2026-10-10).**
+- **J17B-H, memory test (user, 2026-10-10: "queue the two step test, except use 3 steps of memory").**
+  Propagator `mode="history"`, `n_history = 4` (current + 3 past latent states, 0.3 time units),
+  `backbone="local_mlp_2d"` (`_LocalMLPHistoryDeltaBody2D`: per-site token embedded from all 4 states);
+  same ε = 0.2 data, same frozen autoencoder (copied), same Stage-B recipe (`--n-history 4`). Filter:
+  each member carries its history; the history is analysed as extra channels per site (augmented
+  state, same local gain; observe the newest state). Tests: `tests/unit/test_history_local_mlp_2d.py`.
+  Model `p7c12d10_memB0.2_h4`; runs `h9_J17B_e0.2_h4_lat_T4_s{0,1,2}`, `_T1_s0`; queue
+  `run_j17b_hist.sh`. Expectation: if memory is the latent filter's limit, the error falls from 0.628
+  toward the floor 0.49 (a latent win would need ≤ 0.539 on the mean and every seed below physics).
+  Note v = (u_t − KS(u))/ε, so one past state identifies v in principle; 3 give robustness to noise.
+
+#### J17S — Markov missing-process truths, screening (user, 2026-10-10)
+**Goal.** A second structural test beside J17H with a missing *nonlinear process* (closer to unknown
+cloud physics), keeping the truth Markov in u so that only the physics side is misspecified.
+Criteria: bounded and chaotic (λ₁ > 0, D_KY comparable to KS's 81.8 at 44²); the state-dependent
+one-cycle error that remains after the best offline fit of everything the physics filter can estimate
+(a, b, g, uniform advection c) reaches ~0.1, ~0.2, ~0.35 σ_obs at three levels; little of it is bias.
+- **Candidate 1, `ganiso` δ:** truth u_t = −∇²u − ∇⁴u − ½[(1+δ)u_x² + (1−δ)u_y²] (anisotropic KS of
+  ion-eroded surfaces; Cuerno & Barabási 1995, Rost & Krug 1995 — verify before citing).
+  `ks2d.grad_aniso_term2d`. An isotropic g absorbs only the isotropic average.
+- **Candidate 2, `aniso` a:** truth u_t = KS(u) − a u′u′_x (Burgers-type steepening along x,
+  `ks2d.aniso_term2d`); transport speed ∝ local u, which a uniform advection cannot match.
+- **Screen** (`exp_j17s_screen.py`, `j17s_lyap.py`, queue `run_j17s.sh`; seed 3, 44²): statistics, chaos
+  (1e-6 separation), x/y gradient anisotropy; one-cycle error at KS parameters and at the Nelder–Mead best
+  fit of (a, b, g, cx, cy), split into bias and state-dependent parts; Lyapunov spectrum (150 directions).
+  Levels: δ ∈ {0 (reference: the fit must return 1, 1, 1, 0, 0 with ~0 error), 0.05, 0.1, 0.2, 0.3, 0.5, 0.7};
+  a ∈ {0.05, 0.1, 0.25, 0.5, 1}. Exact tangents tested (`tests/unit/test_ks2d_j17s_terms.py`).
+- Then (after user review): pick a candidate and three levels; data + latent training per level
+  (~2.3 h each on MPS); physics filter with all remedies including (a, b, g, c) estimation; same
+  pre-registered rule as J17H/J17B, with the prediction from the best-fit state-dependent error.
 
 **Effort:**
 - Variant A: ~0.5 day of code, ~30 min of data, ~5 h of training, ~4 h of runs, plus ~5 h per extra

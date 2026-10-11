@@ -190,8 +190,22 @@ def aniso_term2d(w: np.ndarray, a, KX: np.ndarray) -> np.ndarray:
     return -a * 0.5j * KX * fft2(u**2, axes=(-2, -1))  # -a (1/2) d_x (u'^2); k = 0 entry is 0 (KX = 0)
 
 
+def grad_aniso_term2d(w: np.ndarray, delta, KX: np.ndarray, KY: np.ndarray) -> np.ndarray:
+    """J17S candidate 1 (2026-10-10): the Fourier-space tendency `-(delta/2) P[u_x^2 - u_y^2]` of a batch
+    `(..., NX, NY)` of Fourier states (P = removal of the k = 0 mode). Added to standard 2D KS it gives the
+    anisotropic KS equation of ion-eroded surfaces (Cuerno & Barabasi 1995; Rost & Krug 1995 -- verify),
+    `u_t = -lap u - lap^2 u - (1/2)[(1+delta) u_x^2 + (1-delta) u_y^2]`: local, Markov, translation
+    invariant, depending only on derivatives of u. No isotropic member of the KS family (any a, b, g)
+    contains it; with an estimated g only its isotropic average is absorbed."""
+    ux = ifft2(1j * KX * w, axes=(-2, -1)).real
+    uy = ifft2(1j * KY * w, axes=(-2, -1)).real
+    out = -0.5 * np.asarray(delta) * fft2(ux**2 - uy**2, axes=(-2, -1))
+    out[..., 0, 0] = 0.0
+    return out
+
+
 def step2d(v: np.ndarray, op: ETDRK4Operator2D, forcing_hat: np.ndarray | None = None,
-           cubic: float = 0.0, aniso: float = 0.0) -> np.ndarray:
+           cubic: float = 0.0, aniso: float = 0.0, ganiso: float = 0.0) -> np.ndarray:
     """One ETDRK4 step in Fourier space (Kassam & Trefethen 2005, eq. 20)
     -- identical algebraic structure to `ks_latent.solver.ks.step`, only
     the nonlinear-term evaluation differs (see `_nonlinear2d`).
@@ -227,9 +241,10 @@ def step2d(v: np.ndarray, op: ETDRK4Operator2D, forcing_hat: np.ndarray | None =
     else:  # J17A: the missing -beta u'^3 process, also explicit
         nl1 = lambda w: nl0(w) + cubic_term2d(w, cubic)  # noqa: E731
     if aniso == 0.0:
-        nl = nl1
+        nl2 = nl1
     else:  # J17 option 2: the anisotropic -a u' u'_x process, also explicit
-        nl = lambda w: nl1(w) + aniso_term2d(w, aniso, KX)  # noqa: E731
+        nl2 = lambda w: nl1(w) + aniso_term2d(w, aniso, KX)  # noqa: E731
+    nl = nl2 if ganiso == 0.0 else (lambda w: nl2(w) + grad_aniso_term2d(w, ganiso, KX, KY))  # J17S cand. 1
     Nv = nl(v)
     a = c.E2 * v + c.Q * Nv
     Na = nl(a)
@@ -254,6 +269,7 @@ def integrate2d(
     forcing: np.ndarray | None = None,
     cubic: float = 0.0,
     aniso: float = 0.0,
+    ganiso: float = 0.0,
 ) -> np.ndarray:
     """Integrate `u0` (`(NX, NY)`) for `n_steps` solver steps of size
     `cfg.dt`. Returns `(n_snapshots + 1, NX, NY)` including the initial
@@ -274,7 +290,7 @@ def integrate2d(
     # advection is a translation, and the KS dynamics commute with translations). `forcing`:
     # time-independent f(x, y) (NX, NY) added to the right-hand side (zero-mean part only, since the
     # k = 0 mode is gauge). Use one or the other: with both, the splitting is no longer exact.
-    if advect is not None and (forcing is not None or cubic != 0.0 or aniso != 0.0):
+    if advect is not None and (forcing is not None or cubic != 0.0 or aniso != 0.0 or ganiso != 0.0):
         raise ValueError("integrate2d: advect cannot be combined with forcing or cubic (the splitting is exact only alone)")
     # J17A: `cubic = beta` adds the missing process -beta * P[u'^3] (see `cubic_term2d`).
     shift = None
@@ -285,7 +301,7 @@ def integrate2d(
     v = fft2(u0)
     snapshots = [u0.copy()]
     for step_idx in range(1, n_steps + 1):
-        v = step2d(v, op, forcing_hat, cubic, aniso)
+        v = step2d(v, op, forcing_hat, cubic, aniso, ganiso)
         if shift is not None:
             v = v * shift
         if step_idx % snapshot_every == 0:
@@ -317,7 +333,8 @@ def default_initial_condition2d(cfg: KSConfig2D, rng: np.random.Generator) -> np
 
 
 def step_with_tangent2d(
-    v: np.ndarray, dV: np.ndarray, op: ETDRK4Operator2D, cubic: float = 0.0, aniso: float = 0.0
+    v: np.ndarray, dV: np.ndarray, op: ETDRK4Operator2D, cubic: float = 0.0, aniso: float = 0.0,
+    ganiso: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Advance the base state `v` (`(NX,NY)`) and a batch of tangent
     vectors `dV` (`(k, NX, NY)`, complex, Fourier space) together, for
@@ -343,6 +360,10 @@ def step_with_tangent2d(
         ux = ifft2(1j * KX * state).real
         uy = ifft2(1j * KY * state).real
         N = -0.5 * fft2(ux**2 + uy**2)
+        if ganiso != 0.0:  # J17S candidate 1: -(delta/2) P[u_x^2 - u_y^2]
+            Ng = -0.5 * ganiso * fft2(ux**2 - uy**2)
+            Ng[0, 0] = 0.0
+            N = N + Ng
         if cubic == 0.0 and aniso == 0.0:
             return (ux, uy, None, None), N
         s0 = state.copy()
@@ -360,6 +381,10 @@ def step_with_tangent2d(
         dux = ifft2(1j * KX[None, :, :] * dstate, axes=(-2, -1)).real
         duy = ifft2(1j * KY[None, :, :] * dstate, axes=(-2, -1)).real
         out = -fft2(ux[None, :, :] * dux + uy[None, :, :] * duy, axes=(-2, -1))
+        if ganiso != 0.0:  # derivative of -(delta/2)(u_x^2 - u_y^2): -delta (u_x du_x - u_y du_y)
+            dg = -ganiso * fft2(ux[None, :, :] * dux - uy[None, :, :] * duy, axes=(-2, -1))
+            dg[:, 0, 0] = 0.0
+            out = out + dg
         if u2 is not None:
             d0 = dstate.copy()
             d0[:, 0, 0] = 0.0
@@ -409,12 +434,13 @@ def step_with_tangent2d(
 
 
 def spinup2d(cfg: KSConfig2D, rng: np.random.Generator, *, M: int = 32, cubic: float = 0.0,
-             aniso: float = 0.0) -> np.ndarray:
+             aniso: float = 0.0, ganiso: float = 0.0) -> np.ndarray:
     """Discard `cfg.spinup_time` of transient, return the resulting `(NX,NY)` state. `cubic`: J17A's
     missing-process strength (see `cubic_term2d`)."""
     u0 = default_initial_condition2d(cfg, rng)
     n_spinup_steps = int(round(cfg.spinup_time / cfg.dt))
     if n_spinup_steps == 0:
         return u0
-    traj = integrate2d(u0, cfg, n_spinup_steps, snapshot_every=n_spinup_steps, M=M, cubic=cubic, aniso=aniso)
+    traj = integrate2d(u0, cfg, n_spinup_steps, snapshot_every=n_spinup_steps, M=M, cubic=cubic, aniso=aniso,
+                       ganiso=ganiso)
     return traj[-1]
