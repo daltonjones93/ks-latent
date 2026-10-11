@@ -59,3 +59,12 @@ Text moved from paper1 §1–6, §8–10 and App. A–D, F, then edited per S3.1
 - **Bibliography (S3.11).** 29 DA-only entries pruned; 57 cited; zero bibtex warnings.
 - **Number check (S3.12).** 0 UNMATCHED, 0 SUSPECT; the Fig. 3 axis-range entries ported to
   EXPLAINED for paperI.
+
+## 2026-10-11 — Correction: tangent directions of the model spectra
+
+§3.7 and App. C said every model spectrum uses all d_lat tangent directions. Nine of the 207
+evaluations in `artifacts/experiments/appendix_D_evaluations.csv` use fewer: the 2D KS models at
+88² (512 of 1536) and the 12-channel models (384 at 44², 512 at 66²). Their D_KY is unaffected:
+Benettin with K vectors gives the leading K exponents, and the computation raises an error unless
+the cumulative sum turns negative within them (largest D_KY among the nine: 334.6 < 512). Both
+sentences now say "all d_lat, or 384–512 where d_lat is larger". Found while writing Paper II App. C.

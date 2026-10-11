@@ -198,7 +198,9 @@ run & 10 & 20 & 30 & 40 & last 20 \\
 \label{app:model_spectra}
 %----------------------------------------------------------------------
 
-Model spectra use all $\dlat$ tangent directions, a warm-up of 200
+Model spectra use all $\dlat$ tangent directions (or $384$--$512$ where $\dlat$ is
+larger, always beyond the index at which the cumulative sum of exponents
+turns negative), a warm-up of 200
 steps, 2000 steps and a QR factorization every 10 steps
 (Sec.~\ref{sec:evaluation}). The tangent vectors are propagated in
 single precision by forward-mode differentiation, and the QR is done in

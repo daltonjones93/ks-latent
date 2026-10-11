@@ -455,7 +455,8 @@ where $R^{(q)}$ is the triangular factor of the $q$-th reorthonormalization
 and $n$ the number of model steps. From each spectrum we report
 $\lambda_1$, the number of positive exponents $n_+$, and $\DKY$. Each
 model spectrum uses all $\dlat$
-tangent directions, a warm-up of 200 steps and $n=2000$ steps (2000 time
+tangent directions, or $384$--$512$ where $\dlat$ is larger (the 2D KS models at
+$88^2$ and the 12-channel models of Appendix~\ref{app:tables}), a warm-up of 200 steps and $n=2000$ steps (2000 time
 units in 1D, 200 in 2D KS, 400 in Kolmogorov flow); the computation
 raises an error if the cumulative sum in Eq.~\eqref{eq:dky} never turns
 negative, so $\DKY$ is always bracketed rather than extrapolated. The

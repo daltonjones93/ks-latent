@@ -28,58 +28,59 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 |---|---|---|---|
 | appendix/C_ground_truth.tex | 41 | 0.344 | 152 |
 | appendix/C_ground_truth.tex | 53 | 0.84 | 33 |
-| appendix/C_ground_truth.tex | 86 | 3.5 | 53 |
-| appendix/C_ground_truth.tex | 88 | 22.5 | 20 |
-| appendix/C_ground_truth.tex | 96 | 3.5 | 53 |
+| appendix/C_ground_truth.tex | 86 | 3.5 | 56 |
+| appendix/C_ground_truth.tex | 88 | 22.5 | 21 |
+| appendix/C_ground_truth.tex | 96 | 3.5 | 56 |
 | appendix/C_ground_truth.tex | 119 | 56.84 | 36 |
-| appendix/C_ground_truth.tex | 123 | 11.3 | 25 |
-| appendix/C_ground_truth.tex | 123 | 12.4 | 27 |
-| appendix/C_ground_truth.tex | 173 | 81.8 | 32 |
+| appendix/C_ground_truth.tex | 123 | 11.3 | 27 |
+| appendix/C_ground_truth.tex | 123 | 12.4 | 28 |
+| appendix/C_ground_truth.tex | 173 | 81.8 | 33 |
 | appendix/C_ground_truth.tex | 174 | 192.5 | 10 |
-| appendix/C_ground_truth.tex | 217 | 23.26 | 37 |
-| appendix/C_ground_truth.tex | 225 | 26.0 | 24 |
-| appendix/C_ground_truth.tex | 256 | 0.85 | 35 |
+| appendix/C_ground_truth.tex | 219 | 23.26 | 37 |
+| appendix/C_ground_truth.tex | 227 | 26.0 | 25 |
+| appendix/C_ground_truth.tex | 258 | 0.85 | 37 |
 | appendix/D_tables.tex | 24 | 84.7 | 26 |
 | appendix/D_tables.tex | 25 | 188.5 | 17 |
-| appendix/D_tables.tex | 25 | 81.8 | 32 |
+| appendix/D_tables.tex | 25 | 81.8 | 33 |
 | appendix/D_tables.tex | 25 | 192.5 | 10 |
-| appendix/D_tables.tex | 27 | 1.7 | 87 |
-| appendix/D_tables.tex | 34 | 0.35 | 106 |
-| main.tex | 23 | 0.75 | 32 |
-| sections/02_background.tex | 20 | 0.16 | 76 |
-| sections/03_method.tex | 238 | 1.26 | 16 |
-| sections/03_method.tex | 355 | 0.10 | 905 |
-| sections/03_method.tex | 381 | 0.65 | 32 |
-| sections/04_systems.tex | 52 | 0.39 | 99 |
-| sections/04_systems.tex | 60 | 22.5 | 20 |
-| sections/04_systems.tex | 63 | 0.16 | 76 |
+| appendix/D_tables.tex | 26 | 83.5 | 11 |
+| appendix/D_tables.tex | 27 | 1.7 | 92 |
+| appendix/D_tables.tex | 34 | 0.35 | 108 |
+| main.tex | 23 | 0.75 | 33 |
+| sections/02_background.tex | 20 | 0.16 | 77 |
+| sections/03_method.tex | 238 | 1.26 | 18 |
+| sections/03_method.tex | 355 | 0.10 | 929 |
+| sections/03_method.tex | 381 | 0.65 | 33 |
+| sections/04_systems.tex | 52 | 0.39 | 104 |
+| sections/04_systems.tex | 60 | 22.5 | 21 |
+| sections/04_systems.tex | 63 | 0.16 | 77 |
 | sections/04_systems.tex | 63 | 22.4 | 25 |
 | sections/04_systems.tex | 89 | 0.344 | 152 |
-| sections/04_systems.tex | 96 | 82.0 | 30 |
+| sections/04_systems.tex | 96 | 82.0 | 31 |
 | sections/04_systems.tex | 97 | 192.5 | 10 |
-| sections/04_systems.tex | 163 | 81.8 | 32 |
+| sections/04_systems.tex | 163 | 81.8 | 33 |
 | sections/04_systems.tex | 163 | 192.5 | 10 |
-| sections/04_systems.tex | 198 | 0.39 | 99 |
+| sections/04_systems.tex | 198 | 0.39 | 104 |
 | sections/04_systems.tex | 199 | 0.344 | 152 |
 | sections/05_results_1d.tex | 34 | 0.222 | 13 |
 | sections/05_results_1d.tex | 34 | 0.223 | 26 |
 | sections/05_results_1d.tex | 101 | 1.10 | 83 |
-| sections/05_results_1d.tex | 108 | 0.002 | 26 |
+| sections/05_results_1d.tex | 108 | 0.002 | 28 |
 | sections/05_results_1d.tex | 108 | 0.003 | 20 |
-| sections/05_results_1d.tex | 113 | 3.5 | 53 |
-| sections/06_results_2d.tex | 163 | 82.0 | 30 |
+| sections/05_results_1d.tex | 113 | 3.5 | 56 |
+| sections/06_results_2d.tex | 163 | 82.0 | 31 |
 | sections/06_results_2d.tex | 163 | 84.0 | 12 |
 | sections/06_results_2d.tex | 165 | 85.6 | 12 |
-| sections/06_results_2d.tex | 171 | 24.5 | 11 |
-| sections/06_results_2d.tex | 172 | 17.4 | 16 |
+| sections/06_results_2d.tex | 171 | 24.5 | 12 |
+| sections/06_results_2d.tex | 172 | 17.4 | 17 |
 | sections/06_results_2d.tex | 176 | 23.7 | 18 |
-| sections/06_results_2d.tex | 176 | 24.5 | 11 |
-| sections/06_results_2d.tex | 192 | 1.7 | 87 |
-| sections/06_results_2d.tex | 212 | 9.1 | 39 |
-| sections/06_results_2d.tex | 213 | 10.0 | 867 |
+| sections/06_results_2d.tex | 176 | 24.5 | 12 |
+| sections/06_results_2d.tex | 192 | 1.7 | 92 |
+| sections/06_results_2d.tex | 212 | 9.1 | 40 |
+| sections/06_results_2d.tex | 213 | 10.0 | 891 |
 | sections/06_results_2d.tex | 281 | 0.15 | 95 |
-| sections/07_failure_modes.tex | 55 | 1.40 | 23 |
-| sections/08_discussion.tex | 10 | 82.0 | 30 |
+| sections/07_failure_modes.tex | 55 | 1.40 | 26 |
+| sections/08_discussion.tex | 10 | 82.0 | 31 |
 | sections/08_discussion.tex | 10 | 84.0 | 12 |
 
 ## Matched (SOURCE, n < 10 files)
@@ -91,19 +92,18 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | appendix/C_ground_truth.tex | 88 | 5.26 | 1 | artifacts/experiments/spectra/ks2d_x1.5.json |
 | appendix/C_ground_truth.tex | 119 | 38.68 | 4 | artifacts/experiments/crop/truth_a005_x2_seed1.json, artifacts/experiments/crop/truth_a0p05_x2_seed1_T120.json |
 | appendix/C_ground_truth.tex | 120 | 53.89 | 6 | artifacts/experiments/crop/truth_a005_x2_seed2.json, artifacts/experiments/crop/truth_a0p05_x2_seed2_T120.json |
-| appendix/C_ground_truth.tex | 215 | 44.62 | 3 | artifacts/experiments/da2d/h9_K1u_L44_T1_N128.json, artifacts/experiments/e1_model/summary_1d_transfer.json |
-| appendix/C_ground_truth.tex | 216 | 83.51 | 1 | artifacts/experiments/lyap_dtype_control.json |
-| appendix/C_ground_truth.tex | 216 | 83.76 | 2 | artifacts/experiments/da2d/h9_I28_a1.1_lat_rtps0.7.json, artifacts/experiments/lyap_dtype_control.json |
-| appendix/C_ground_truth.tex | 217 | 22.75 | 6 | artifacts/da_pff_ltransfer_d2_pff_L200_gc_N64_sp6.25.json, artifacts/experiments/da2d/da2d_C_L220_local_N64_s0.json |
-| appendix/D_tables.tex | 26 | 83.5 | 8 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/p7c12_ks2d_x1.0_seed0.json |
-| appendix/D_tables.tex | 26 | 190.4 | 4 | artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens256.json, artifacts/experiments/appendix_D_evaluations.csv |
+| appendix/C_ground_truth.tex | 217 | 44.62 | 3 | artifacts/experiments/da2d/h9_K1u_L44_T1_N128.json, artifacts/experiments/e1_model/summary_1d_transfer.json |
+| appendix/C_ground_truth.tex | 218 | 83.51 | 1 | artifacts/experiments/lyap_dtype_control.json |
+| appendix/C_ground_truth.tex | 218 | 83.76 | 2 | artifacts/experiments/da2d/h9_I28_a1.1_lat_rtps0.7.json, artifacts/experiments/lyap_dtype_control.json |
+| appendix/C_ground_truth.tex | 219 | 22.75 | 6 | artifacts/da_pff_ltransfer_d2_pff_L200_gc_N64_sp6.25.json, artifacts/experiments/da2d/da2d_C_L220_local_N64_s0.json |
+| appendix/D_tables.tex | 26 | 190.4 | 5 | artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens256.json, artifacts/experiments/appendix_D_evaluations.csv |
 | sections/03_method.tex | 231 | 37.5 | 7 | artifacts/experiments/da2d/h9_J18a_d30_T4_s2.json, artifacts/experiments/da2d/h9_L220_I89_T4.json |
 | sections/04_systems.tex | 64 | 5.26 | 1 | artifacts/experiments/spectra/ks2d_x1.5.json |
 | sections/04_systems.tex | 64 | 0.049 | 4 | artifacts/experiments/da2d/h9_L220_I89_T4.json, artifacts/experiments/da2d/i11_I28W_adv2_rtps0.9.json |
 | sections/04_systems.tex | 64 | 5.20 | 4 | artifacts/experiments/a2_1x_rescoring_full.json, artifacts/experiments/da2d/cost_summary.json |
 | sections/04_systems.tex | 64 | 0.043 | 5 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
 | sections/04_systems.tex | 65 | 0.048 | 4 | artifacts/experiments/da2d/h9_L44_I89_T4_st16.json, artifacts/experiments/da2d/i11_I28W_frc0.2_rtps0.json |
-| sections/04_systems.tex | 97 | 189.1 | 3 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/k_xs01_v2_x2_seed0.json |
+| sections/04_systems.tex | 97 | 189.1 | 4 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/k_xs01_v2_x2_seed0.json |
 | sections/05_results_1d.tex | 68 | 0.2125 | 1 | artifacts/experiments/da2d/i11_J17H_p5_c16_rtps0.5_s0.json |
 | sections/05_results_1d.tex | 87 | 0.2211 | 1 | artifacts/experiments/e1_model/e4_seed2_L100_ic0_normalized.json |
 | sections/05_results_1d.tex | 88 | 0.2218 | 3 | artifacts/experiments/da2d/j16_model_error_mcub_scan_0.0044.json, artifacts/experiments/e1_model/e4_seed1_L200_ic0_normalized.json |
@@ -113,5 +113,5 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | sections/06_results_2d.tex | 127 | 0.042 | 7 | artifacts/experiments/a10_selection/k_xs01_v2.json, artifacts/experiments/da2d/j16_model_error_cubscan_0.0022.json |
 | sections/06_results_2d.tex | 127 | 0.043 | 5 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
 | sections/06_results_2d.tex | 161 | 83.3 | 9 | artifacts/experiments/da2d/da2d_B2_PN_c1.5_sd0.1_ln4.json, artifacts/experiments/da2d/da2d_D7_L330_local_N64_s1.json |
-| sections/06_results_2d.tex | 165 | 82.5 | 7 | artifacts/experiments/da2d/h9_K10a_st16_T4_300.json, artifacts/experiments/da2d/h9_P2_L44_I2_T16_N4_s2.json |
+| sections/06_results_2d.tex | 165 | 82.5 | 8 | artifacts/experiments/da2d/h9_K10a_st16_T4_300.json, artifacts/experiments/da2d/h9_P2_L44_I2_T16_N4_s2.json |
 | sections/08_discussion.tex | 51 | 0.043 | 5 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
