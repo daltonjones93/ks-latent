@@ -16,11 +16,12 @@ covariance \citep{houtekamermitchell2001,gaspari1999}, by analysing each
 grid point from nearby observations
 \citep{ott2004,hunt2007}, or by correcting sampling error without a
 distance \citep{anderson2012}. The local ensemble transform Kalman filter
-(LETKF) of \citet{hunt2007}, the form used here, computes one analysis per
-grid point or region from the observations within a cut-off radius,
-inflating the error variance of each observation with its distance
-(observation-space or R-localization), and applies a deterministic
-transform to the ensemble perturbations. The two common localizations are
+(LETKF) of \citet{hunt2007} computes one analysis per grid point or region
+from the observations within a cut-off radius, inflating the error variance
+of each observation with its distance (observation-space or
+R-localization), and applies a deterministic transform to the ensemble
+perturbations. Our latent filter uses the same local-analysis form with the
+perturbed-observation update; the physics-based comparator is an LETKF. The two common localizations are
 related but not equivalent \citep{sakovbertino2011,greybush2011}. The case
 for localization rests on local low dimensionality \citep{patil2001}: the
 forecast errors within a region span few directions. Without

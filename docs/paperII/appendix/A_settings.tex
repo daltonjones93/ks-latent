@@ -36,7 +36,7 @@ $X=Z-\bar z$ the perturbations, $B=X^\top X/(\Nens-1)$, $J$ the Jacobian of $h=\
 $\bar z$, and $\rho$ the Gaspari--Cohn taper \citep{gaspari1999} of the site distance, of half-width
 $1.5$ sites in 2D (zero at 3 sites and beyond) and 3 sites in 1D.
 
-\para{The 2D filter.} Each tiling runs the deterministic local transform below at every site,
+\para{The 2D filter.} Each tiling runs the per-site filter below (perturbed observations) at every site,
 followed by relaxation to prior spread (RTPS) \citep{whitakerhamill2012}: for every latent coordinate $j$,
 with forecast and analysis spreads $\sigma^f_j$ and $\sigma^a_j$, the analysis perturbations are
 multiplied by $1+\alpha(\sigma^f_j-\sigma^a_j)/\sigma^a_j$, $\alpha=0.7$. The forecast is $\Fp$ applied
@@ -55,8 +55,9 @@ tiling; its mean is the blended analysis and its spread the reported spread. Wit
 $w_k=1/K$. The blended fields are output only: each tiling's next forecast starts from its own
 analysis ensemble.
 
-\para{Filters used in 1D.} The 1D experiments use a single tiling, no RTPS, model noise $0.08$, and
-one of the following analyses.
+\para{Analysis updates.} The 2D experiments use the per-site filter below. The 1D experiments use
+a single tiling, no RTPS, model noise $0.08$, and the dense filter or the particle flow filter, with
+or without sampling error correction.
 
 \para{Dense filter.} With perturbed observations
 $y^{(e)}=y+\varepsilon^{(e)}$, $\varepsilon^{(e)}\sim\mathcal N(0,R)$,
@@ -95,10 +96,9 @@ $Y=X_{N_s}J_s^\top\in\R^{\Nens\times|U_s|}$,
 and site $s$'s analysis ensemble is $\bar z_s + (\bar w\mathbf 1^\top+W)^\top X_s$
 \citep{hunt2007}. For a linear $h$ without localization it reproduces
 the Kalman update computed with the ensemble covariance exactly (unit
-test). It is the analysis of every 2D experiment. Its stochastic counterpart, the per-site filter
-above, gave the same skill to within $0.15$ at every ensemble size with an earlier single-tiling
-filter at $44^2$ (decisions log, D4), while the deterministic transform took about $40\%$ less
-CPU time, having no observation draws.
+test). With an earlier single-tiling filter at $44^2$ it gave the same skill as the per-site
+perturbed-observation filter to within $0.15$ at every ensemble size, in about $40\%$ less CPU time
+(decisions log, D4); every experiment in this paper uses the perturbed-observation update.
 
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,

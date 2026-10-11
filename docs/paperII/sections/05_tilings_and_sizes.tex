@@ -31,7 +31,7 @@ standard deviation $0.1$ per latent coordinate. Each run has $100$
 cycles, and all reported values are steady-state averages over cycles
 $51$--$100$.
 
-\para{The filter.} The per-site local ensemble transform filter of
+\para{The filter.} The per-site ensemble filter of
 Sec.~\ref{sec:da_method}, Gaspari--Cohn half-width $1.5$ sites, RTPS
 $\alpha=0.7$, model noise $0.02$ per coordinate and step, $64$ members per
 tiling and four shifted tilings blended by Eq.~\eqref{eq:blend}. These
@@ -217,7 +217,7 @@ density of $0.043$ per unit area and the taper's support (radius $16.5$
 length units) gives about $37$, consistent with that saturation.
 
 \para{Without localization.} The same filter with the taper set to one
-everywhere is the global ETKF in the latent space. Its error grows with
+everywhere is a global ensemble Kalman filter in the latent space. Its error grows with
 the domain at a fixed ensemble, and it stays bounded only while the
 ensemble is larger than the number of unstable directions of the
 attractor, $42$--$44$ at $44^2$, $93$--$101$ at $66^2$ and, extrapolating that density, about $170$ at $88^2$. At $44^2$,

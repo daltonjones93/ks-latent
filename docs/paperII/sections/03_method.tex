@@ -96,12 +96,12 @@ space is $h = \Hobs\circ\Dec$. Nothing in the filter uses the equations
 of the system: the model is the learned propagator, and the only
 physical input is the observation network.
 
-\para{The per-site filter.} The 2D experiments use a local ensemble
-transform Kalman filter in the local-analysis form of \citet{hunt2007},
-run once per site of the lattice. Site $s$ is updated from the
-observations whose taper value $\rho_i$ with respect to $s$ is positive,
-each with its error variance divided by $\rho_i$ (R-localization), using
-the deterministic ensemble transform of \citet{hunt2007}. The taper is the
+\para{The per-site filter.} The 2D experiments use an ensemble Kalman
+filter in the local-analysis form of \citet{hunt2007}, run once per site of
+the lattice. Site $s$ is updated from the observations whose taper value
+$\rho_i$ with respect to $s$ is positive, each with its error variance
+divided by $\rho_i$ (R-localization), using the perturbed-observation
+update \citep{burgers1998,houtekamermitchell1998}. The taper is the
 Gaspari--Cohn function \citep{gaspari1999} of the toroidal site distance
 $\dist(j,k)$, with half-width $1.5$ sites. After each analysis the
 ensemble spread is relaxed towards the forecast spread, coordinate by

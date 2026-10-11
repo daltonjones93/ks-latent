@@ -108,3 +108,15 @@ si2025latentensf → ∘ (they compare with a true-model filter, which the colum
 Latent-EnSF statement softened to its own wording ("may lose the local structure"), and bach2025 described as a
 learned gain correction with learned distance localization, at its training size. bocquet2020 not re-read (grouped
 with brajard2020; same framework).
+
+## 2026-10-11 — Correction: the latent filter's update is perturbed-observation, not a transform
+
+paper1 (§3.8, App. E.2) and the first Paper II draft said every 2D experiment uses the deterministic
+per-site ensemble transform. The code says otherwise: `scripts/exp_h9_tiled_da.py` (every 2D latent run)
+uses `LETKFLocal2D`, the per-site perturbed-observation EnKF with R-localization, and the decision log of
+2026-10-08 (D4) records the deterministic `LETKFLocal2DETKF` as "not adopted" (equal skill to within 0.15
+at every ensemble size, but N = 16 below the adoption threshold). Paper II §2.1, §3.2, §5.1, §5.4 and App. A
+now describe the latent filter as a per-site ensemble Kalman filter in the local-analysis form of Hunt et al.
+with perturbed observations; the physics-based comparator (`letkf_phys.py`) is a deterministic LETKF, as
+stated. Prop. 1(b) covers both updates, so nothing else changes. paper1 is frozen and keeps the error.
+Found while writing the Kolmogorov filter (which uses the same `LETKFLocal2D`).

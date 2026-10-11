@@ -29,7 +29,7 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 |---|---|---|---|
 | appendix/A_settings.tex | 26 | 0.01 | 366 |
 | appendix/A_settings.tex | 37 | 1.5 | 343 |
-| appendix/A_settings.tex | 99 | 0.15 | 106 |
+| appendix/A_settings.tex | 100 | 0.15 | 106 |
 | appendix/A_settings.tex | 146 | 0.640 | 26 |
 | appendix/A_settings.tex | 146 | 0.634 | 26 |
 | appendix/A_settings.tex | 146 | 0.996 | 27 |
@@ -65,7 +65,7 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | appendix/D_da_details.tex | 111 | 0.01 | 366 |
 | appendix/E_reproducibility.tex | 68 | 1.5 | 343 |
 | main.tex | 23 | 0.75 | 33 |
-| sections/02_background.tex | 89 | 2.4 | 55 |
+| sections/02_background.tex | 90 | 2.4 | 55 |
 | sections/03_method.tex | 74 | 0.10 | 978 |
 | sections/03_method.tex | 106 | 1.5 | 343 |
 | sections/03_method.tex | 201 | 0.22 | 108 |
