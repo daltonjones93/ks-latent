@@ -108,9 +108,8 @@ cycle independently and are combined only for output.
 (Proposition~\ref{prop:blockdiag}), and the blend is a fixed linear map
 of their outputs, so the composite analysis is exactly local too. The
 four filters are independent and run in parallel; run in one process,
-four tilings cost about $2.3$ times one at $220^2$ in our earlier
-measurement, because the truth integration and the observation draws are shared
-\placeholder{P2: clean timing from I14} (Sec.~\ref{sec:da_cost}).
+four tilings cost $2.5$--$2.9$ times one at every size, because the truth
+integration and the observation draws are shared (Sec.~\ref{sec:da_cost}).
 
 \begin{figure*}[htbp]
 \centering
@@ -225,11 +224,20 @@ tiling at both sizes. Equation~\eqref{eq:nens_local} with the 2D KS
 density of $0.043$ per unit area and the taper's support (radius $16.5$
 length units) gives about $37$, consistent with that saturation.
 
-\para{Without localization.} \placeholder{P1: unlocalized filter (the same
-filter with the taper set to 1), 64 and 128 members, one and four tilings,
-at $44^2$, $66^2$, $88^2$; truth $n_+ = 42$--$44$ at $44^2$ and $93$--$101$ at $66^2$. Expected
-from the 6-channel record: works where $\Nens > n_+$, fails beyond;
-state whether the tilings rescue it.}
+\para{Without localization.} The same filter with the taper set to one
+everywhere is the global ETKF in the latent space. Its error grows with
+the domain at a fixed ensemble, and it stays bounded only while the
+ensemble is larger than the number of unstable directions of the
+attractor, $42$--$44$ at $44^2$, $93$--$101$ at $66^2$ and about $170$ at $88^2$. At $44^2$,
+with 64 and 128 members, it reaches $0.51$ and $0.37$ with four tilings
+($0.69$ and $0.50$ with one), against $0.32$ localized. At $66^2$, 64
+members fail ($2.26$ with four tilings, $3.22$ with one, against
+interpolation's $0.82$), while 128 members give $0.49$ and $0.67$. At
+$88^2$ both fail: $3.40$ and $1.77$ with four tilings, $4.07$ and $2.59$ with
+one. The tilings reduce the error in every case but do not rescue a filter
+whose ensemble is too small for the attractor. The localized filter,
+with 64 members per tiling, gives $0.32$, $0.31$ and $0.30$ at the same three
+sizes.
 
 \para{Long runs.} Over 300 cycles at $220^2$ the error averages $0.31$ in each of cycles 51--100,
 101--200 and 201--300, at a calibration of $0.97$ (Table~\ref{tab:da_robust}): the filter does not drift.
@@ -468,8 +476,16 @@ standard deviation $0.1$, against $53\%$), while neither model pulls smooth or
 latent-space perturbations back towards the attractor; those pass through
 unchanged. The benefit is better reconstruction and small-scale
 denoising, not a projection of the analysis onto the attractor.
-\placeholder{P4: training noise $0.3$ --- does the gain grow, saturate, or
-reverse?}
+More noise does not help further. A model trained with noise of standard
+deviation $0.3$, three times the observation error, gives $0.343$, $0.332$ and
+$0.328$ at $44^2$ (seeds 0--2, four tilings) and $0.334$ at $220^2$, worse than the
+model trained at the observation noise ($0.324$, $0.310$, $0.302$; $0.312$) and no
+better than the clean-trained one ($0.338$, $0.322$, $0.320$; $0.326$). Its dynamics
+are as accurate (Kaplan--Yorke dimension within $1.4\%$ of the truth's at $44^2$)
+and its decoder floor is lower still ($0.22$--$0.23$ with one tiling,
+$0.12$--$0.13$ with four), but the filter is over-dispersed, with a calibration
+of $1.06$--$1.10$. The best training noise is therefore near the observation
+error, at least among the three levels we tried.
 
 That a model of the dynamics can be learned from noisy fields without
 loss matters for the comparison of Sec.~\ref{sec:da_model_error}:
@@ -628,56 +644,47 @@ and that number doubles with the domain.}
 \end{figure*}
 
 
-\para{\placeholder{To be rewritten (Block K5.8): cost and memory from the clean I14 timing. The
-subsection below is the previous text, for the superseded single-tiling filter.}}
-
 %----------------------------------------------------------------------
 \subsection{Cost and memory}
 \label{sec:da_cost}
 %----------------------------------------------------------------------
 
-Table~\ref{tab:da_cost} gives what the filters cost. Memory is the peak
-resident memory of the filter alone, measured as the peak over a run
-minus the peak once the truth has been generated. The per-site filter
-needs $0.12$, $0.39$, $0.56$, $3.35$ and $4.30$~GB at $\dlat=384$, $864$, $1536$,
-$9600$ and $21\,600$. From $88^2$ to $220^2$ the latent dimension grows
-$6.25$-fold and the memory $5.96$-fold, and from $220^2$ to $330^2$ the
-dimension grows $2.25$-fold and the memory $1.28$-fold: the filter's memory
-grows no faster than the domain area, as Proposition~\ref{prop:blockdiag}
-implies. The dense filter needs the
-same at the native size but $16.75$~GB at $220^2$, about 24 copies of one
-$\dlat\times\dlat$ matrix; at $330^2$ a single such matrix is $3.5$~GB and at
-$440^2$ it is $11$~GB, so we did not run it there.
-
-Time is less favourable to the per-site filter at small sizes. Over a
-whole run, including the integration of the PDE truth, the per-site
-filter takes two to four times the dense filter's CPU time up to $88^2$,
-because it loops over sites in Python while the dense filter performs a
-few large matrix products. The two cross between $88^2$ and $220^2$
-($1450$ against $1914$~s at $220^2$), and from there the per-site filter's
-time grows in proportion to the area ($\times4.4$ from $220^2$ to $440^2$
-for $\times4$ in area). The deterministic variant is about $40\%$ faster
-than the perturbed-observation one, having no observation draws. The
-CPU times carry run-to-run noise of tens of percent from other jobs on
-the same machine (the $66^2$ point is slower than the $88^2$ one); we
-have not profiled the per-site loop, which is the obvious target for a
-vectorized implementation. The observation Jacobian itself is cheap:
-its twelve forward passes take $2.4$~ms at $44^2$ and $119$~ms at $440^2$, where
-dense reverse mode would need one pass per observation
+Table~\ref{tab:da_cost} gives what the filter costs, measured one run at
+a time on an otherwise idle workstation (three threads, 64 members per
+tiling, 100 cycles). The times are for the whole run, including the
+integration of the PDE truth and the observation draws. One tiling takes
+$9$~s at $44^2$ and $1266$~s at $440^2$, four tilings $26$~s and $3542$~s, or $35$~s per
+cycle at $\dlat=76\,800$ per tiling. Over the full range, a factor of 100 in
+area, the time grows almost in proportion to the area (least-squares
+slope $1.05$ on log axes for both one and four tilings); above $220^2$ it
+grows somewhat faster (slope $1.3$), although the work per site does not
+depend on the domain; we have not identified the cause (memory traffic is
+the likely one). Four tilings in one process cost $2.5$--$2.9$ times
+one, not four, because the truth and the observations are shared; the
+tilings are independent and could run in parallel, which we did not time. Peak
+memory, $0.7$~GB at $44^2$ and $14.6$ and $17.2$~GB at $440^2$ for one and four
+tilings, grows more slowly than the area (slope $0.75$) and includes the
+stored truth trajectory, $6.6$~GB at $440^2$. The per-site filter never forms a
+$\dlat\times\dlat$ matrix, which at $440^2$ would take $47$~GB in double precision.
+We have not profiled the per-site loop, which runs in Python and is the
+obvious target for a vectorized implementation. The observation Jacobian
+itself is cheap: its twelve forward passes take $2.4$~ms at $44^2$ and $119$~ms at
+$440^2$, where dense reverse mode would need one pass per observation
 (Appendix~\ref{app:da_jacobian}).
 
 \begin{table}[htbp]
-\caption{Cost of the per-site and dense filters, 2D KS, $\Nens=64$, 100
-cycles. $\dlat$: latent dimension; filter memory: peak resident memory
-minus the peak after the truth is generated (GB); $\dlat^2$: memory of one
-dense $\dlat\times\dlat$ matrix in double precision (GB); CPU: whole-run
-user plus system time, including the PDE truth (s). ---: not run, or no
-clean memory measurement yet.}
+\caption{Cost of the latent filter, 2D KS, 64 members per tiling,
+observation spacing $2.75$, 100 cycles, one run at a time (three threads).
+$\dlat$: latent dimension per tiling; wall: whole-run wall time including
+the PDE truth (s); 4/1: ratio of four tilings to one in one process;
+per cycle: wall time per cycle with four tilings (s); peak memory: peak
+resident memory of the whole run (GB), which includes the stored truth
+trajectory (last column, GB).}
 \label{tab:da_cost}
 \begin{ruledtabular}
-\begin{tabular}{lcccccc}
-size & $\dlat$ & \multicolumn{2}{c}{filter memory} & $\dlat^2$ & \multicolumn{2}{c}{CPU} \\
- & & per-site & dense & & per-site & dense \\
+\begin{tabular}{lcccccccc}
+size & $\dlat$ & \multicolumn{2}{c}{wall (s)} & 4/1 & per cycle & \multicolumn{2}{c}{peak memory} & truth \\
+ & & $K=1$ & $K=4$ & & $K=4$ & $K=1$ & $K=4$ & \\
 \hline
 \tabinput{tables/tab_da_cost}
 \end{tabular}
