@@ -2973,7 +2973,8 @@ Each subsection lists its inputs; text options are given where a result is pendi
 ### K11 `[~]` Number provenance and consistency (absorbs J14)
 - Extend `check_numbers.py` to every Part II number in §1, §7, §9, §10, the abstract and the key
   points; tables regenerated from JSONs only; a G2/G3-style pass on §7; the three decimal
-  conventions fixed (RMSE to 3 decimals in tables, 2 in text; ratios to 2). ~0.5 day.
+  conventions fixed (RMSE to 3 decimals in tables, 2 in text; ratios to 2). **User 2026-10-11: keep 3 decimals
+  for RMSE in text** (comparisons depend on the third decimal). ~0.5 day.
 
 - **2026-10-11 progress:** P1 (K1u unlocalized), P2 + §7.8 (I14; `tab_da_cost.py` rewritten for the Part II
   filter, dense-filter columns dropped per K1) and P4 (J18a σ = 0.3: worse than σ = 0.1, no better than clean;
