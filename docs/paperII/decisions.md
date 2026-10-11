@@ -75,3 +75,18 @@ What was written, and the choices made in writing it:
   alone).
 - **Number check:** 0 UNMATCHED, 0 SUSPECT; two EXPLAINED entries (the 2D KS densities 0.0424 and
   0.0434, means of the truth runs over the area).
+
+## 2026-10-11 — J17G: the physics-based filter's tuning grid was incomplete (user approved the fix)
+
+The J17G runs (`scripts/run_j17g.sh`) tuned the wrong-model filter over c ∈ {8.25, 16} × RTPS ∈ {0.5,
+0.7, 0.9, 1.0}, narrower than the grid App. D states for every physics-based filter (c ∈ {8.25, 16, 24} ×
+RTPS ∈ {0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0}, multiplicative inflation 1.1/1.2), and ran the true-model
+filter only at the wrong model's best setting. At δ = 0.2 that true-model filter reached 0.469
+(0.468/0.476/0.463), worse than the latent filter's 0.341, with spread/error 3.3, so the comparison was
+limited by the physics filter's tuning. Results before the fix (provisional, not for the paper):
+δ = 0.1: physics 0.328 (0.324/0.326/0.333; best c8.25 RTPS 0.7, no remedy helped), latent 0.310
+(0.300/0.307/0.323) → tie (−5.5%); δ = 0.2: physics 0.489 (0.480/0.496/0.492; c8.25 RTPS 0.9 + a,b,g
+estimation), latent 0.341 (0.341/0.345/0.337) → latent wins (−30%). `scripts/run_j17g_tune.sh` completes
+the grid for both filters (true-model runs tagged `true_`), reruns the remedies at the new best tuning and
+the best configuration on seeds 1–2; driver `run_j17g_tune_all.sh` (δ = 0.2 and 0.1, then 0.3; log
+`artifacts/logs/j17g_tune.log`). P7 is written from these tuned results only.
