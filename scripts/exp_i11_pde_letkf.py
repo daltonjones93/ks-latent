@@ -29,14 +29,14 @@ import torch
 from ks_latent.config import KSConfig2D
 from ks_latent.da.geometry2d import deployment_grid_2d, training_dx
 from ks_latent.da.letkf_phys import LocalETKFPhys2D
-from ks_latent.solver.ks2d import aniso_term2d, cubic_term2d, _nonlinear2d, get_operator2d, integrate2d, spinup2d
+from ks_latent.solver.ks2d import aniso_term2d, grad_aniso_term2d, cubic_term2d, _nonlinear2d, get_operator2d, integrate2d, spinup2d
 from ks_latent.utils.seeding import set_seed
 
 AE = "artifacts/stage1_ae_kolmogorov_crop_p7b_ks2d.pt"  # only for the grid and normalization
 
 
 def step_batch(v: np.ndarray, op, forcing_hat: np.ndarray | None = None, shift: np.ndarray | None = None,
-               cubic: float = 0.0, aniso: float = 0.0, nl_coef=1.0) -> np.ndarray:
+               cubic: float = 0.0, aniso: float = 0.0, nl_coef=1.0, ganiso: float = 0.0) -> np.ndarray:
     """`ks2d.step2d` for a batch `(N, NX, NY)` of Fourier states (same ETDRK4 algebra; the k=0
     mode is zeroed per member, which `step2d`'s `v[0, 0] = 0` would get wrong on a batch)."""
     c, KX, KY = op.coeffs, op.KX, op.KY
@@ -49,7 +49,8 @@ def step_batch(v: np.ndarray, op, forcing_hat: np.ndarray | None = None, shift: 
     if cubic.ndim == 1:  # per-member coefficients (J17C online estimation): broadcast over the grid
         cubic = cubic[:, None, None]
     nl1 = nl0 if not np.any(cubic) else (lambda w: nl0(w) + cubic_term2d(w, cubic))  # J17A/J17C cubic term
-    nl = nl1 if aniso == 0.0 else (lambda w: nl1(w) + aniso_term2d(w, aniso, KX))  # J17 option 2
+    nl2 = nl1 if aniso == 0.0 else (lambda w: nl1(w) + aniso_term2d(w, aniso, KX))  # J17 option 2
+    nl = nl2 if ganiso == 0.0 else (lambda w: nl2(w) + grad_aniso_term2d(w, ganiso, KX, KY))  # J17G
     Nv = nl(v)
     a = c.E2 * v + c.Q * Nv
     Na = nl(a)
@@ -151,6 +152,8 @@ def main() -> None:
     ap.add_argument("--model-memory", default=None,
                     help="J17B floor / wrong-tau runs: the filter's model carries its own (u, v) with these "
                          "'eps,tau,kappa[,coupling]'; v is unobserved and updated through ensemble covariances")
+    ap.add_argument("--truth-ganiso", type=float, default=0.0, help="J17G: truth has -(delta/2)(u_x^2 - u_y^2)")
+    ap.add_argument("--model-ganiso", type=float, default=0.0, help="J17G: filter model's delta (floor runs)")
     ap.add_argument("--truth-cubic", type=float, default=0.0, help="J17A: truth's cubic damping beta")
     ap.add_argument("--model-cubic-coef", type=float, default=0.0, help="J17A: filter model's cubic beta (floor runs)")
     ap.add_argument("--norm-std", type=float, default=None,
@@ -183,7 +186,7 @@ def main() -> None:
         truth = integrate_memory(u0, v0, kcfg, n_steps_cycle * a.n_cycles, tmp)[0]
     else:
         u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
-                                 cubic=a.truth_cubic)
+                                 cubic=a.truth_cubic, ganiso=a.truth_ganiso)
         truth = integrate2d(u0, kcfg, n_steps=n_steps_cycle * a.n_cycles, **truth_kw)  # field units, (T+1, NX, NX)
     M = a.model_nx or NX
     if NX % M or a.obs_stride % (NX // M):
@@ -289,8 +292,8 @@ def main() -> None:
                     V, Wv = step_memory(V, Wv, mmop)
                     Vfree, Wvfree = step_memory(Vfree, Wvfree, mmop)
                     continue
-                V = step_batch(V, op_e, m_forc, shift_e, cub_e, nl_coef=g_e)
-                Vfree = step_batch(Vfree[None], op, m_forc, m_shift, a.model_cubic_coef, nl_coef=a.model_nl_coef)[0]
+                V = step_batch(V, op_e, m_forc, shift_e, cub_e, nl_coef=g_e, ganiso=a.model_ganiso)
+                Vfree = step_batch(Vfree[None], op, m_forc, m_shift, a.model_cubic_coef, nl_coef=a.model_nl_coef, ganiso=a.model_ganiso)[0]
             Xf = sfft.ifft2(V).real.reshape(N, -1)  # (N, M*M)
             if me is not None:
                 if a.bias_correct:

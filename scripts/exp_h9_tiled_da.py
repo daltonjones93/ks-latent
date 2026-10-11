@@ -96,6 +96,7 @@ def main() -> None:
     ap.add_argument("--forecast-leads", type=int, default=60)
     ap.add_argument("--truth-memory", default=None,
                     help="J17B: 'eps,tau,kappa[,coupling]' -- truth has the hidden memory field v (ks2d_memory.py)")
+    ap.add_argument("--truth-ganiso", type=float, default=0.0, help="J17G: truth has -(delta/2)(u_x^2 - u_y^2)")
     ap.add_argument("--truth-cubic", type=float, default=0.0,
                     help="J17A: truth u_t = KS(u) - beta P[u'^3] (the latent model is trained on that system's data)")
     ap.add_argument("--tiling-reset", action="store_true",
@@ -178,7 +179,7 @@ def main() -> None:
         truth = integrate_memory(u0, v0, kcfg, a.n_prop_steps * n_cyc_truth * kcfg.snapshot_every, mp)[0]
     else:
         u0, truth_kw = twin_truth(kcfg, a.seed, a.truth_lap_coef, a.truth_advect_x, a.truth_forcing_amp,
-                                 cubic=a.truth_cubic)
+                                 cubic=a.truth_cubic, ganiso=a.truth_ganiso)
         truth = integrate2d(u0, kcfg, n_steps=a.n_prop_steps * n_cyc_truth * kcfg.snapshot_every, **truth_kw)
     truth = ((truth.reshape(truth.shape[0], -1) - mean) / std).reshape(-1, NX, NX)
 
@@ -235,7 +236,7 @@ def main() -> None:
     gen = torch.Generator().manual_seed(a.seed)
     Zc = []
     if a.ic_climatology:  # I16a: members drawn from an independent climatology, no knowledge of the truth
-        if a.truth_memory or a.truth_cubic or a.truth_lap_coef != 1.0 or a.truth_advect_x or a.truth_forcing_amp:
+        if a.truth_memory or a.truth_cubic or a.truth_ganiso or a.truth_lap_coef != 1.0 or a.truth_advect_x or a.truth_forcing_amp:
             raise ValueError("--ic-climatology is implemented for the standard truth only")
         cc = Path(f"artifacts/cache/ks2d_spinup_L{g.L:g}_NX{NX}_dt{dt:g}_T200_seed3.npy")
         if not cc.exists():

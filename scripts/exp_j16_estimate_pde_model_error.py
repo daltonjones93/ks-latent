@@ -40,6 +40,7 @@ def main() -> None:
     ap.add_argument("--model-order", type=float, default=4.0, help="J17H: damping order of the model (KS: 4)")
     ap.add_argument("--model-hyper-coef", type=float, default=1.0, help="J17H: b")
     ap.add_argument("--model-nl-coef", type=float, default=1.0, help="J17H: g")
+    ap.add_argument("--truth-ganiso", type=float, default=0.0, help="J17G: truth has -(delta/2)(u_x^2 - u_y^2)")
     ap.add_argument("--truth-memory", default=None, help="J17B: 'eps,tau,kappa[,coupling]' hidden-memory truth")
     ap.add_argument("--truth-cubic", type=float, default=0.0, help="J17A: truth u_t = KS(u) - beta P[u'^3]")
     ap.add_argument("--n-starts", type=int, default=100)
@@ -53,11 +54,11 @@ def main() -> None:
     M = a.model_nx or NX
     cfg = KSConfig2D(Lx=a.L, Ly=a.L, NX=NX, NY=NX, dt=dt, snapshot_every=5, spinup_time=200.0, seed=a.seed)
     mcfg = KSConfig2D(Lx=a.L, Ly=a.L, NX=M, NY=M, dt=dt, snapshot_every=5, spinup_time=200.0, seed=a.seed)
-    if a.truth_cubic == 0.0 and a.truth_aniso == 0.0:
+    if a.truth_cubic == 0.0 and a.truth_aniso == 0.0 and a.truth_ganiso == 0.0:
         u0, tkw = np.load(f"artifacts/cache/ks2d_spinup_L{a.L:g}_NX{NX}_dt{dt:g}_T200_seed{a.seed}.npy"), {}
     else:  # J17A: start on the new system's attractor (cached 100-unit adjustment, as the DA truths)
         from ks_latent.solver.twin import twin_truth
-        u0, tkw = twin_truth(cfg, a.seed, cubic=a.truth_cubic, aniso=a.truth_aniso)
+        u0, tkw = twin_truth(cfg, a.seed, cubic=a.truth_cubic, aniso=a.truth_aniso, ganiso=a.truth_ganiso)
     n_cyc = a.n_prop_steps * cfg.snapshot_every  # solver steps per cycle
     if a.truth_memory:  # J17B: the KS model's one-cycle error against the hidden-memory truth
         from exp_i11_pde_letkf import parse_memory
