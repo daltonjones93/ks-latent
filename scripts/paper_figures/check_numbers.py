@@ -55,6 +55,14 @@ files.add(EXP / "appendix_D_evaluations.csv")
 
 index = defaultdict(set)  # printed string -> set of files
 
+# K11 (2026-10-11): strict Part II check. Numbers in the Part II text may only come from the Part II
+# results (the 12-channel model p7c12*, its filters, the physics comparator, the 1D DA files) or the
+# Part II tables; a match only in Part I or superseded-filter files (da2d_*) is reported as SUSPECT.
+P2_TEX = {"sections/07_data_assimilation.tex", "appendix/E_da_details.tex", "appendix/F_reproducibility.tex"}
+P2_TABLES = ("tab07_p2_", "tab_da_cost", "tabE_p2_", "tab07_1d_da")
+P2_SRC = re.compile(r"(da2d/(h9_|i11_|j16_|j17|j18|jacobian_timing_F4_p7c12|cost_summary|seams|gaussianity|i24|i30|probe|leaky|hybrid))"
+                    r"|p7c12|da_pff_ltransfer|e3_sec_vs_gc|truth_ks2d")
+
 
 def add_value(v, src):
     if not isinstance(v, (int, float)) or isinstance(v, bool) or v != v:
@@ -92,9 +100,12 @@ for f in sorted(files):
     except (json.JSONDecodeError, UnicodeDecodeError):
         continue
 
-table_tokens = set()
+table_tokens, p2_table_tokens = set(), set()
 for t in glob.glob(str(P1 / "tables/*.tex")):
-    table_tokens.update(NUM.findall(Path(t).read_text()))
+    toks = NUM.findall(Path(t).read_text())
+    table_tokens.update(toks)
+    if Path(t).name.startswith(P2_TABLES):
+        p2_table_tokens.update(toks)
 
 # ---------- text numbers ----------
 tex_files = sorted(glob.glob(str(P1 / "sections/*.tex")) + glob.glob(str(P1 / "appendix/*.tex")) + [str(P1 / "main.tex")])
@@ -113,6 +124,9 @@ for tf in tex_files:
                 status, n = "EXPLAINED", 0
             else:
                 status, n = "UNMATCHED", 0
+            if str(Path(tf).relative_to(P1)) in P2_TEX and status in ("TABLE", "SOURCE") and \
+                    tok not in p2_table_tokens and not any(P2_SRC.search(f) for f in index.get(tok, ())):
+                status, n = "SUSPECT", len(index.get(tok, ()))
             counts[status] += 1
             rows.append((Path(tf).relative_to(P1), ln, tok, status, n,
                          sorted(index.get(tok, []))[:2] if status == "SOURCE" else []))
@@ -127,6 +141,10 @@ out = ["# Number-provenance check (task G2)", "",
        "value.", "",
        "## Unmatched (check by hand)", "", "| file | line | number |", "|---|---|---|"]
 out += [f"| {f} | {ln} | {tok} |" for f, ln, tok, s, n, _ in rows if s == "UNMATCHED"]
+out += ["", "## Suspect (Part II text; matches only Part I or superseded-filter results)", "",
+        "| file | line | number | files | e.g. |", "|---|---|---|---|---|"]
+out += [f"| {f} | {ln} | {tok} | {n} | {', '.join(sorted(index.get(tok, []))[:2])} |"
+        for f, ln, tok, s, n, _ in rows if s == "SUSPECT"]
 out += ["", "## Explained (checked by hand)", "", "| file | line | number | why |", "|---|---|---|---|"]
 out += [f"| {f} | {ln} | {tok} | {EXPLAINED[(str(f), tok)]} |" for f, ln, tok, s, n, _ in rows if s == "EXPLAINED"]
 out += ["", "## Weak matches (SOURCE, n ≥ 10 files)", "", "| file | line | number | files |", "|---|---|---|---|"]
