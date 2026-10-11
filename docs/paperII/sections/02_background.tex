@@ -59,10 +59,11 @@ reduced-order autodifferentiable ensemble Kalman filter of
 does not pursue covariance localization, and the latent autoencoder
 filter of \citet{tong2026laeenkf} lists it as future work. The reason is
 structural: a global latent vector has no notion of distance, so there is
-nothing to taper. Latent score-based filters note that a generic encoding
-destroys the local structure that LETKF-type methods exploit
-\citep{si2025latentensf}, and learned corrections to ensemble filters can
-outperform a tuned LETKF on KS \citep{bach2025}.
+nothing to taper. Latent score-based filters note that encoding the state
+into a latent vector may lose the local structure that LETKF-type methods
+exploit \citep{si2025latentensf}. Learned corrections to the ensemble Kalman
+gain, with a learned distance-based localization, can outperform a tuned
+LETKF on KS at the size they were trained on \citep{bach2025}.
 
 \citet{jones2026transfer}, hereafter Paper~I, take the opposite route: a
 latent \emph{field} on a lattice of sites, built from weight-shared
@@ -128,12 +129,12 @@ filter that uses the true model.}
 \begin{tabular}{lcccc}
 Work & Latent DA & Localized & Other sizes & Wrong model \\
 \hline
-\citet{peyron2021} & \checkmark & --- & --- & --- \\
+\citet{peyron2021} & \checkmark & --- & --- & $\circ$ \\
 \citet{chen2023roadenkf} & \checkmark & --- & --- & --- \\
-\citet{pasmans2025} & \checkmark & --- & --- & --- \\
-\citet{tong2026laeenkf} & \checkmark & --- & --- & --- \\
-\citet{si2025latentensf} & \checkmark & --- & --- & --- \\
-\citet{bach2025} & --- & --- & --- & $\circ$ \\
+\citet{pasmans2025} & \checkmark & --- & --- & $\circ$ \\
+\citet{tong2026laeenkf} & \checkmark & --- & --- & $\circ$ \\
+\citet{si2025latentensf} & \checkmark & --- & --- & $\circ$ \\
+\citet{bach2025} & --- & \checkmark & --- & $\circ$ \\
 \citet{brajard2020,bocquet2020} & --- & --- & --- & $\circ$ \\
 This work & \checkmark & \checkmark & \checkmark & \checkmark \\
 \end{tabular}

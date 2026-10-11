@@ -90,3 +90,21 @@ estimation), latent 0.341 (0.341/0.345/0.337) → latent wins (−30%). `scripts
 the grid for both filters (true-model runs tagged `true_`), reruns the remedies at the new best tuning and
 the best configuration on seeds 1–2; driver `run_j17g_tune_all.sh` (δ = 0.2 and 0.1, then 0.3; log
 `artifacts/logs/j17g_tune.log`). P7 is written from these tuned results only.
+
+## 2026-10-11 — Prior-work table checked against the papers (user: check them yourself; arXiv HTML)
+
+| work | source read | latent DA | localized | other sizes | wrong model |
+|---|---|---|---|---|---|
+| peyron2021 | arXiv:2104.00430 PDF | ✓ (ETKF-Q-L, 40-dim latent of a 400-dim augmented L96) | — (none mentioned) | — | ∘ (full-space ETKF-Q with the true L96 dynamics and an additive model-error term σ_Q) |
+| chen2023roadenkf | arXiv:2301.11961 HTML | ✓ | — ("we do not pursue the covariance localization approach") | — | — (baselines SINDy-AE, AD-EnKF: learned models) |
+| pasmans2025 | arXiv:2502.12987 HTML | ✓ (VAE pair) | — (convolutional VAE as future work) | — | ∘ (ETKF with the same physical model; conceptual circle model) |
+| tong2026laeenkf | arXiv:2603.06752 HTML | ✓ (learned linear latent dynamics) | — (future work; baselines localized) | — | ∘ (physical-space EnKF with the nonlinear model; "true" not stated explicitly, twin setting) |
+| si2025latentensf | arXiv:2409.00127 HTML | ✓ | — (only the Latent-LETKF baseline) | — | ∘ (filters share the same model: shallow-water solver / FourCastNet) |
+| bach2025 | arXiv:2504.17836v4 HTML | — (physical-space learned gain correction) | **✓ (learned distance-based localization; was "—")** | — (transfer across ensemble size only) | ∘ |
+| brajard2020 / bocquet2020 | arXiv:2001.01520 PDF | — | — (N = 30, "localization unnecessary") | — | ∘ (DA with true L96: 0.34 vs surrogate 0.80, i.e. 2.4×; interpolation 2.32) |
+
+Changes: bach2025 localized → ✓; the "wrong model" entry of peyron2021, pasmans2025, tong2026laeenkf and
+si2025latentensf → ∘ (they compare with a true-model filter, which the column's ∘ denotes). §2.2 text: the
+Latent-EnSF statement softened to its own wording ("may lose the local structure"), and bach2025 described as a
+learned gain correction with learned distance localization, at its training size. bocquet2020 not re-read (grouped
+with brajard2020; same framework).
