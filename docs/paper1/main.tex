@@ -78,10 +78,9 @@ larger one simply by adding lattice points. We check this transfer with the stri
 available, the model's own Lyapunov spectrum against that of the true equations, in three
 systems. The same locality lets data assimilation, the combination of a model with
 observations used in weather forecasting, run in the learned space with a small, fixed
-ensemble, whether the domain is small or a hundred times larger. No forecast
-model of the weather is perfect; we find that a filter built on equations that are only slightly wrong
-is still better than a surrogate learned from noisy measurements, but the surrogate is better once
-the equations are wrong in ways that their usual corrections cannot repair.
+ensemble, whether the domain is small or a hundred times larger.
+% TODO(J17G, user 2026-10-11): restore a sentence comparing the learned filter with a physics-based
+% one once J17G is in; do not base it on J17B (non-Markov truth, not a fair test).
 
 \input{sections/01_introduction}
 \input{sections/02_background}
