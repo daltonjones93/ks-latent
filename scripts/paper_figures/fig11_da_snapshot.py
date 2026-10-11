@@ -1,57 +1,70 @@
-"""Figure 11 (task F3): one steady-state analysis of the per-site latent filter at 330^2
-(d_lat = 21 600, 64 members; cycle 78 of 100).
+"""Figure 11 (task K3f): one steady-state analysis of the Part II latent filter at 440^2
+(p7c12d10_ks2d, d_lat = 76 800 per tiling, 64 members, observation stride 8; cycle 99 of 100).
 
-Top row, full domain: truth, free run (same model, no observations), analysis (decoded ensemble
-mean), analysis error. Bottom row: the same four fields in a 55 x 55 window (10 x 10 sites), with
-the observation sites on the truth panel and patch edges on the error panel.
-All fields divided by the training standard deviation; one shared diverging colormap with
-symmetric limits. Source: artifacts/experiments/da2d/da2d_D6_L330_local_N64_s0_fields.npz
-(run_da_pff_2d_ltransfer.py --phys-rmse --save-fields 10).
+Top row, full domain: truth, the analysis of one tiling, the blend of four shifted tilings, and the
+two analysis errors. Bottom row: the same five fields in a 55 x 55 window (10 x 10 sites), with the
+observation sites on the truth panel and tiling 0's patch edges on the error panels, so the seams of
+the single tiling and their removal by the blend are visible.
+Fields (stored in field units) divided by the training standard deviation for display; RMSE in field units,
+as in the tables. Separate symmetric colour limits for fields and errors.
+Source: artifacts/experiments/da2d/h9_K10e_L440_T4_fields_fields.npz
+(exp_h9_tiled_da.py --L 440 --n-tilings 4 --save-fields 3, scripts/run_k10.sh).
 """
 import numpy as np
 from matplotlib.patches import Rectangle
 
-from _style import COL2, EXP, INK, ROOT, panel_label, plt, save
+from _style import COL2, EXP, INK, ROOT, plt, save
 
-SRC = EXP / "da2d/da2d_D6_L330_local_N64_s0_fields.npz"
+SRC = EXP / "da2d/h9_K10e_L440_T4_fields_fields.npz"
 D = np.load(SRC)
-STD = 6.172126667325263  # training normalization std of the 2D KS model (checkpoint)
-CYCLE = 78
-i = int(np.nonzero(D["cycles"] == CYCLE)[0][0])
-L, NX, ns, s = float(D["L"]), int(D["NX"]), int(D["n_sites"]), int(D["obs_stride"])
+CYCLE = 99
+i = int(np.nonzero(D["cycle"] == CYCLE)[0][0])
+L, NX, ns, s = float(D["L"]), int(D["NX"]), int(D["n_sites"]), 8
 dx, h = L / NX, L / ns
-F = {"truth": D["truth"][i] / STD, "free run": D["free"][i] / STD, "analysis": D["analysis"][i] / STD}
-F["analysis error"] = F["analysis"] - F["truth"]
-rms = {k: float(np.sqrt(np.mean((v * STD if k == "analysis error" else (v - F["truth"]) * STD) ** 2)))
-       for k, v in F.items() if k != "truth"}
-VMAX = 3.0
-x0, w = 22 * h, 10 * h  # zoom window: sites 22-31 in x and y
+STD = 6.172126667325263  # training normalization std of p7c12d10_ks2d (checkpoint)
+tr = D["truth"][i] / STD
+F = {"truth": tr, "one tiling": D["tiling0"][i] / STD, "four tilings": D["blend"][i] / STD}
+F["error, one tiling"] = F["one tiling"] - tr
+F["error, four tilings"] = F["four tilings"] - tr
+rms = {"one tiling": STD * float(np.sqrt(np.mean(F["error, one tiling"] ** 2))),
+       "four tilings": STD * float(np.sqrt(np.mean(F["error, four tilings"] ** 2)))}
+VMAX, EMAX = 3.0, 0.25
+x0, w = 40 * h, 10 * h  # zoom window: sites 40-49 in x and y
 e = np.linspace(0, L, NX + 1)
 
-fig, axes = plt.subplots(2, 4, figsize=(COL2, 3.25), gridspec_kw={"hspace": 0.35, "wspace": 0.08})
+fig, axes = plt.subplots(2, 5, figsize=(COL2, 2.75), gridspec_kw={"hspace": 0.3, "wspace": 0.06})
 for j, (name, fld) in enumerate(F.items()):
+    err = name.startswith("error")
     for r, ax in enumerate(axes[:, j]):
-        im = ax.pcolormesh(e, e, fld.T, cmap="RdBu_r", vmin=-VMAX, vmax=VMAX, shading="flat", rasterized=True)
+        im = ax.pcolormesh(e, e, fld.T, cmap="RdBu_r", vmin=-(EMAX if err else VMAX), vmax=EMAX if err else VMAX,
+                           shading="flat", rasterized=True)
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         if r == 0:
-            title = name if name == "truth" else f"{name}\n(RMSE {rms['free run' if name == 'free run' else 'analysis']:.2f})"
-            ax.set_title(title, fontsize=7.5, pad=3)
+            ax.set_title(name, fontsize=7, pad=3)
+            if err:
+                ax.text(0.97, 0.03, f"RMSE {rms[name.replace('error, ', '')]:.2f}", transform=ax.transAxes, ha="right",
+                        va="bottom", fontsize=7, color=INK, bbox=dict(fc="white", ec="none", pad=1.0, alpha=0.85))
             ax.add_patch(Rectangle((x0, x0), w, w, fill=False, ec=INK, lw=0.7))
         else:
             ax.set_xlim(x0, x0 + w); ax.set_ylim(x0, x0 + w)
-    if j == 0:
-        ob = np.arange(0, NX, s) * dx
-        X, Y = np.meshgrid(ob[(ob >= x0) & (ob < x0 + w)], ob[(ob >= x0) & (ob < x0 + w)])
-        axes[1, 0].plot(X.ravel(), Y.ravel(), ".", color=INK, ms=0.8)
-    if name == "analysis error":
-        for k in range(23, 32):
-            axes[1, j].axvline(k * h, color=INK, lw=0.25, alpha=0.5)
-            axes[1, j].axhline(k * h, color=INK, lw=0.25, alpha=0.5)
-for ax, letter in zip(axes.ravel(), "abcdefgh"):
-    panel_label(ax, letter)
-axes[0, 0].set_ylabel(r"$330^2$", fontsize=7.5)
-axes[1, 0].set_ylabel(r"$55\times55$ window", fontsize=7.5)
-cax = fig.add_axes([0.92, 0.18, 0.012, 0.64])
-cb = fig.colorbar(im, cax=cax); cb.ax.set_title(r"$u/\sigma$", fontsize=7.5, pad=4); cb.outline.set_linewidth(0.4)
+            if err:
+                for k in range(41, 50):
+                    ax.axvline(k * h, color=INK, lw=0.25, alpha=0.5); ax.axhline(k * h, color=INK, lw=0.25, alpha=0.5)
+    if err:
+        im_e = im
+    elif j == 0:
+        im_f = im
+ob = np.arange(0, NX, s) * dx
+X, Y = np.meshgrid(ob[(ob >= x0) & (ob < x0 + w)], ob[(ob >= x0) & (ob < x0 + w)])
+axes[1, 0].plot(X.ravel(), Y.ravel(), ".", color=INK, ms=0.5)
+for ax, letter in zip(axes.ravel(), "abcdefghij"):  # inside the panel: five columns leave no room outside
+    ax.text(0.03, 0.97, f"({letter})", transform=ax.transAxes, ha="left", va="top", fontsize=7, fontweight="bold",
+            color=INK, bbox=dict(fc="white", ec="none", pad=1.0, alpha=0.85))
+axes[0, 0].set_ylabel(r"$440^2$", fontsize=7)
+axes[1, 0].set_ylabel(r"$55\times55$ window", fontsize=7)
+for im_, y0, lab in ((im_f, 0.53, r"$u/\sigma$"), (im_e, 0.12, r"error$/\sigma$")):
+    cax = fig.add_axes([0.92, y0, 0.01, 0.33])
+    cb = fig.colorbar(im_, cax=cax); cb.ax.set_title(lab, fontsize=7, pad=3); cb.outline.set_linewidth(0.4)
+    cb.ax.tick_params(labelsize=7)
 save(fig, "fig11_da_snapshot", [str(SRC.relative_to(ROOT))])
-print(rms)
+print(rms, float(tr.std()))

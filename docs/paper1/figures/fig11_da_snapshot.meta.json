@@ -1,8 +1,8 @@
 {
   "figure": "fig11_da_snapshot",
-  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
-  "timestamp_utc": "2026-10-09T12:00:46Z",
+  "git_sha": "3cbf70888b2ddef41c9dce00e685329883ccc38b",
+  "timestamp_utc": "2026-10-11T11:35:31Z",
   "inputs": [
-    "artifacts/experiments/da2d/da2d_D6_L330_local_N64_s0_fields.npz"
+    "artifacts/experiments/da2d/h9_K10e_L440_T4_fields_fields.npz"
   ]
 }
