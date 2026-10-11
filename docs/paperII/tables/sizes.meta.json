@@ -1,0 +1,71 @@
+{
+  "table": "sizes",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:50:55Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_D10_L220_I1_T1.json",
+    "artifacts/experiments/da2d/h9_D10_L220_I1_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L220_I1_T4_s1.json",
+    "artifacts/experiments/da2d/h9_D10_L330_I1_T1.json",
+    "artifacts/experiments/da2d/h9_D10_L330_I1_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L330_I1_T4_s1.json",
+    "artifacts/experiments/da2d/h9_D10_L440_I1_T1.json",
+    "artifacts/experiments/da2d/h9_D10_L440_I1_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L88_I1_T1.json",
+    "artifacts/experiments/da2d/h9_D10_L88_I1_T4.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T1_s0.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s1.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T1_N64.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T4_N64.json"
+  ],
+  "summary": {
+    "44": {
+      "d": 768,
+      "K1": 0.4565965894487815,
+      "K4": [
+        0.3239509037531639,
+        0.3102447975525827,
+        0.30242543923005577
+      ]
+    },
+    "66": {
+      "d": 1728,
+      "K1": 0.4229822730987705,
+      "K4": [
+        0.3069814913984914
+      ]
+    },
+    "88": {
+      "d": 3072,
+      "K1": 0.42302857414596007,
+      "K4": [
+        0.30436368369722605
+      ]
+    },
+    "220": {
+      "d": 19200,
+      "K1": 0.4339546616585902,
+      "K4": [
+        0.31191988567184814,
+        0.3082301888112456
+      ]
+    },
+    "330": {
+      "d": 43200,
+      "K1": 0.45190436053308497,
+      "K4": [
+        0.3262026670299762,
+        0.31629356042506734
+      ]
+    },
+    "440": {
+      "d": 76800,
+      "K1": 0.43404102376829196,
+      "K4": [
+        0.31050692504466393
+      ]
+    }
+  }
+}

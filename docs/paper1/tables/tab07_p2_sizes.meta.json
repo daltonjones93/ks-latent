@@ -1,13 +1,8 @@
 {
+  "table": "tab07_p2_sizes",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:47:24Z",
   "inputs": [
-    "artifacts/experiments/da2d/h9_I33_d10_T1_s0.json",
-    "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
-    "artifacts/experiments/da2d/h9_I33_d10_T4_s1.json",
-    "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
-    "artifacts/experiments/da2d/h9_K1l_L66_T1_N64.json",
-    "artifacts/experiments/da2d/h9_K1l_L66_T4_N64.json",
-    "artifacts/experiments/da2d/h9_D10_L88_I1_T1.json",
-    "artifacts/experiments/da2d/h9_D10_L88_I1_T4.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T1.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T4.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T4_s1.json",
@@ -15,7 +10,15 @@
     "artifacts/experiments/da2d/h9_D10_L330_I1_T4.json",
     "artifacts/experiments/da2d/h9_D10_L330_I1_T4_s1.json",
     "artifacts/experiments/da2d/h9_D10_L440_I1_T1.json",
-    "artifacts/experiments/da2d/h9_D10_L440_I1_T4.json"
+    "artifacts/experiments/da2d/h9_D10_L440_I1_T4.json",
+    "artifacts/experiments/da2d/h9_D10_L88_I1_T1.json",
+    "artifacts/experiments/da2d/h9_D10_L88_I1_T4.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T1_s0.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s1.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s2.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T1_N64.json",
+    "artifacts/experiments/da2d/h9_K1l_L66_T4_N64.json"
   ],
   "summary": {
     "44": {

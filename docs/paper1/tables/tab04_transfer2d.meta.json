@@ -1,4 +1,7 @@
 {
+  "table": "tab04_transfer2d",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:47:22Z",
   "inputs": [
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed0.json",
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed1.json",

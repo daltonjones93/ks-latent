@@ -1,7 +1,7 @@
 {
   "table": "tab02_truth",
-  "git_sha": "2cd9da06f050e44277b7f55b2a1b7a6896be1f36",
-  "timestamp_utc": "2026-10-08T22:21:02Z",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:47:22Z",
   "inputs": [
     "artifacts/experiments/crop/truth_a005_x3_seed0.json",
     "artifacts/experiments/crop/truth_a0p025_x1_seed0.json",

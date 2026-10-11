@@ -12,7 +12,7 @@ import json
 
 import numpy as np
 
-from _style import AQUA, COL1, EXP, INK, INK2, MUTED, ORANGE, ROOT, panel_label, plt, save
+from _style import AQUA, COL1, EXP, INK, INK2, MUTED, ORANGE, ROOT, panel_label, plt, save, write_table
 
 D = EXP / "da2d"
 LAM1, CYC = 0.165, 0.5
@@ -53,6 +53,5 @@ for L in (1, 5, 10, 20, 40, 60):
     i = L - 1
     cells = [f"{A[k][:, i].mean():.2f}" for k in keys]
     rows.append(f"{L} & {L * CYC * LAM1:.2f} & " + " & ".join(cells) + f" & {(A['blend'][:, i] / A['tiling0'][:, i]).mean():.2f} \\\\")
-(ROOT / "docs/paper1/tables/tab07_p2_forecast.tex").write_text("\n".join(rows) + "\n")
-(ROOT / "docs/paper1/tables/tab07_p2_forecast.meta.json").write_text(json.dumps({"inputs": inputs}, indent=2))
+write_table("tab07_p2_forecast", "\n".join(rows) + "\n", inputs)
 print("\n".join(rows))

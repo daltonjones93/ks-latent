@@ -1,0 +1,83 @@
+%% Paper II of the split of docs/paper1 (docs/split_paper_tasks.md): data assimilation.
+%% Target: JAMES (S0.2), AGU class.
+\PassOptionsToPackage{natbibapa}{apacite}% keep \citet / \citep with apacite
+\documentclass[draft]{PJ2019}
+
+\usepackage{amsmath,amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{xspace}
+\usepackage[group-separator={,}]{siunitx}
+\usepackage[hidelinks]{hyperref}
+
+\input{macros}
+
+% Float placement for a single-column draft: let figures and tables sit near their first
+% mention (the REVTeX top-only placement pushed most of them to the end of the paper).
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\journalname{Draft}
+
+\begin{document}
+
+\title{Exactly local ensemble data assimilation in a learned latent field}
+
+\authors{Dalton Jones\affil{1}, Peter Jan van Leeuwen\affil{1}}
+
+\affiliation{1}{Department of Atmospheric Science, Colorado State University, Fort Collins, USA}
+
+\correspondingauthor{Dalton Jones}{daltjone@colostate.edu}
+
+% Key points: AGU limit of three, at most 140 characters each, no special characters.
+\begin{keypoints}
+\item \placeholder{S4.1: key point 1}
+\item \placeholder{key point 2}
+\item \placeholder{key point 3}
+\end{keypoints}
+
+\begin{abstract}
+\placeholder{S4.1: abstract, at most 250 words}
+\end{abstract}
+
+\section*{Plain Language Summary}
+\placeholder{S4.1: plain language summary}
+
+\input{sections/01_introduction}
+\input{sections/02_background}
+\input{sections/03_method}
+\input{sections/04_system}
+\input{sections/05_tilings_and_sizes}
+\input{sections/06_physics_comparison}
+\input{sections/07_noisy_training}
+\input{sections/08_forecasts_cost}
+\input{sections/09_one_dimension}
+\input{sections/10_kolmogorov}
+\input{sections/11_discussion}
+\input{sections/12_conclusions}
+
+\appendix
+\input{appendix/A_settings}
+\input{appendix/B_proof}
+\input{appendix/C_ground_truth}
+\input{appendix/D_da_details}
+\input{appendix/E_reproducibility}
+
+\section*{Open Research Section}
+% TODO(G5): repository and DOI for code, trained models and the result files.
+\placeholder{data availability}
+
+\section*{Conflict of Interest}
+The authors have no conflicts to disclose.
+
+\bibliography{refs}
+
+\end{document}

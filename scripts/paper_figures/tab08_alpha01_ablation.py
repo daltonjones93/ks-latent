@@ -9,7 +9,7 @@ import json
 import numpy as np
 import torch
 
-from _style import ART, EXP, MAIN_A01, ROOT
+from _style import ART, EXP, MAIN_A01, write_table
 from _truths import runs
 
 TAGS = ["k_xs01", "k_xs01_v2", "k_xs01_v3", "k_xs01_v4", "k_xs01_v5", "k_xs01_v7"]
@@ -30,5 +30,5 @@ for i, tag in enumerate(TAGS):
     lines.append(f"{name} & {cp['k_max']} & {ca.get('logdet_eps', 1e-3):g} & {ca['w_var']:g} / {ca['w_logdet']:g} & "
                  f"{c['val_k8']:.4f} & {100*c['max_abs_deviation']:.1f} & "
                  + " & ".join(f"{e:.1f}" for e in errs) + " \\\\")
-(ROOT / "docs/paper1/tables/tab08_alpha01_ablation.tex").write_text("\n".join(lines) + "\n")
+write_table("tab08_alpha01_ablation", "\n".join(lines) + "\n", main_alpha01_model=MAIN_A01)
 print("\n".join(lines))

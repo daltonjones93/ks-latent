@@ -10,6 +10,8 @@ figure carries a legend or direct labels.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -22,7 +24,24 @@ import matplotlib.pyplot as plt
 ROOT = Path(__file__).resolve().parents[2]
 ART = ROOT / "artifacts"
 EXP = ART / "experiments"
-OUT = ROOT / "docs/paper1/figures"
+# Output directories. Default: the reference draft `docs/paper1`. The split papers set
+# PAPER_OUT / PAPER_TABLES (e.g. `make paperI`), and there figures and tables are saved under
+# their content name, without the paper1 numbering prefix (docs/split_paper_tasks.md S1.1-S1.3).
+_P1_FIGS, _P1_TABLES = ROOT / "docs/paper1/figures", ROOT / "docs/paper1/tables"
+OUT = Path(os.environ.get("PAPER_OUT", _P1_FIGS)).resolve()
+TABLES = Path(os.environ.get("PAPER_TABLES", _P1_TABLES)).resolve()
+_PREFIX = re.compile(r"^(fig|tab)[0-9A-Z]{0,2}[0-9]?_(p2_)?")
+# Where the stripped name would be vague (the "p2_" of paper1's Part II also goes).
+_CONTENT = {"fig09_p2_da": "da_2d", "tabD_ks2d": "eval_ks2d", "tabD_kolm01": "eval_kolm01",
+            "tabD_kolm005": "eval_kolm005", "tabD_kolm0025": "eval_kolm0025", "tabD_spectra": "eval_spectra",
+            "tab02_truth": "truth_dky", "tabE_networks": "networks_superseded"}
+
+
+def content_name(name: str, outdir: Path) -> str:
+    """`fig13_tilings` -> `tilings` outside docs/paper1; unchanged inside it (paper1 keeps its numbers)."""
+    if outdir in (_P1_FIGS.resolve(), _P1_TABLES.resolve()):
+        return name
+    return _CONTENT.get(name, _PREFIX.sub("", name))
 
 BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
 INK, INK2, MUTED, GRID = "#0b0b0b", "#52514e", "#8c8b86", "#e6e5e1"
@@ -80,26 +99,48 @@ def panel_label(ax, letter: str) -> None:
             fontsize=9, fontweight="bold", color=INK)
 
 
+def _git_sha() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    except Exception:  # noqa: BLE001 -- provenance is best-effort, never blocks an output
+        return "unknown"
+
+
 def save(fig, name: str, inputs: list[str]) -> Path:
-    """Write `docs/paper1/figures/<name>.pdf` plus a provenance sidecar."""
+    """Write `<OUT>/<name>.pdf` plus a provenance sidecar (name per `content_name`)."""
     OUT.mkdir(parents=True, exist_ok=True)
+    name = content_name(name, OUT)
     pdf = OUT / f"{name}.pdf"
     fig.savefig(pdf)
     prev = __import__("os").environ.get("FIG_PREVIEW_DIR")
     if prev:  # PNG preview for visual checks (not part of the paper)
         Path(prev).mkdir(parents=True, exist_ok=True)
         fig.savefig(Path(prev) / f"{name}.png", dpi=170)
-    try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    except Exception:  # noqa: BLE001 -- provenance is best-effort, never blocks a figure
-        sha = "unknown"
     (OUT / f"{name}.meta.json").write_text(json.dumps({
-        "figure": name, "git_sha": sha,
+        "figure": name, "git_sha": _git_sha(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "inputs": sorted(inputs),
     }, indent=2))
     print(f"wrote {pdf}")
     return pdf
+
+
+def write_table(name: str, body: str, inputs: list[str] | None = None, **extra) -> Path:
+    """Write `<TABLES>/<name>.tex` (name per `content_name`) plus a provenance sidecar.
+
+    `body` is written verbatim. The sidecar records the git SHA, a timestamp, the sorted input
+    files and any `extra` keys (e.g. a summary the text quotes)."""
+    TABLES.mkdir(parents=True, exist_ok=True)
+    name = content_name(name, TABLES)
+    tex = TABLES / f"{name}.tex"
+    tex.write_text(body)
+    (TABLES / f"{name}.meta.json").write_text(json.dumps({
+        "table": name, "git_sha": _git_sha(),
+        "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "inputs": sorted(set(inputs or [])), **extra,
+    }, indent=2, default=str))
+    print(f"wrote {tex}")
+    return tex
 
 
 def load(path: Path) -> dict:

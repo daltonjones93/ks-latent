@@ -1,4 +1,7 @@
 {
+  "table": "tab07_p2_forecast",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:47:31Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_I7_T4_s0.json",
     "artifacts/experiments/da2d/h9_I7_T4_s1.json",

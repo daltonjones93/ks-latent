@@ -5,7 +5,7 @@ artifacts/e3_sec_vs_gc_ltransfer_d3_L200_{pff_sec_psd,serial_sec_enkf_none}_N{N}
 Writes docs/paper1/tables/tab07_1d_da.tex."""
 import json
 
-from _style import ART, ROOT
+from _style import ART, write_table
 
 NS = [8, 16, 32, 64, 128, 256]
 
@@ -30,5 +30,7 @@ for N in NS:
     cells.append(f(sk(f"e3_sec_vs_gc_ltransfer_d3_L200_pff_sec_psd_N{N}.json")))
     cells.append(f(sk(f"e3_sec_vs_gc_ltransfer_d3_L200_serial_sec_enkf_none_N{N}.json")))
     rows.append(f"{N} & " + " & ".join(cells) + " \\\\")
-(ROOT / "docs/paper1/tables/tab07_1d_da.tex").write_text("\n".join(rows) + "\n")
+write_table("tab07_1d_da", "\n".join(rows) + "\n",
+            ["artifacts/da_pff_ltransfer_d1_{pff,letkf}_L{200,400}_{none,gaspari_cohn}_nens{N}.json",
+             "artifacts/e3_sec_vs_gc_ltransfer_d3_L200_{pff_sec_psd,serial_sec_enkf_none}_N{N}.json"])
 print("\n".join(rows))

@@ -1,0 +1,16 @@
+{
+  "table": "robustness",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:50:56Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_D10_L44_rtps0.5.json",
+    "artifacts/experiments/da2d/h9_D10_L44_rtps0.9.json",
+    "artifacts/experiments/da2d/h9_I16a_clim_T1.json",
+    "artifacts/experiments/da2d/h9_I16a_clim_T4.json",
+    "artifacts/experiments/da2d/h9_I16b_R0.5x_T4.json",
+    "artifacts/experiments/da2d/h9_I16b_R2x_T4.json",
+    "artifacts/experiments/da2d/h9_I16c_L220_300cyc_T4.json",
+    "artifacts/experiments/da2d/h9_I33_d10_T4_s0.json",
+    "artifacts/experiments/da2d/h9_K10a_st16_T4_300.json"
+  ]
+}

@@ -20,10 +20,9 @@ import re
 
 import numpy as np
 
-from _style import EXP, MAIN_A01, ROOT
+from _style import EXP, MAIN_A01, ROOT, write_table
 from _truths import runs
 
-OUT = ROOT / "docs/paper1/tables"
 TRUTH = {("ks2d", 1.0): None, ("ks2d", 1.5): None}
 TSYS = {"ks2d": "ks2d", 0.1: "kolm0.1", 0.05: "kolm0.05", 0.025: "kolm0.025"}
 
@@ -142,5 +141,5 @@ for sys_key, tags in ORDER.items():
         if tag == MAIN_A01:
             label += "$^\\star$"
         lines.append(f"{label} & {DESC.get(tag, '')} & " + " & ".join(cells) + " \\\\")
-    (OUT / f"{FILE[sys_key]}.tex").write_text("\n".join(lines) + "\n")
+    write_table(FILE[sys_key], "\n".join(lines) + "\n", main_alpha01_model=MAIN_A01)
 print(f"wrote {len(rows_csv)} rows to appendix_D_evaluations.csv and {len(ORDER)} tables")

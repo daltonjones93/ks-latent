@@ -1,0 +1,19 @@
+{
+  "figure": "1d_spectra",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:50:47Z",
+  "inputs": [
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_groundtruth_lyapunov_L100_fullspec.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_groundtruth_lyapunov_L200_fullspec.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_groundtruth_lyapunov_L400_fullspec_omp1.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L100_ic0_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L100_ic1_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L100_ic2_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L200_ic0_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L200_ic1_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L200_ic2_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L400_ic0_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L400_ic1_normalized.json",
+    "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_model/section224_L400_ic2_normalized.json"
+  ]
+}

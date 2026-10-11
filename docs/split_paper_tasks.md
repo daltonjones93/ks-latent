@@ -20,7 +20,7 @@ memory: every table body is `\tabinput` of a generated file and every figure com
 
 ## S0 Decisions (user; before any writing)
 
-- **S0.1 `[ ]` Confirm the split line.** Paper I = dynamics and transfer; Paper II = data assimilation.
+- **S0.1 `[x]` Confirmed 2026-10-11 (user). The split line.** Paper I = dynamics and transfer; Paper II = data assimilation.
   The per-patch decoder (§6.3) stays in Paper I as an architecture result with one forward pointer;
   Proposition 4 (block-diagonal Jacobian) and its proof move to Paper II. ~5 min.
 - **S0.2 `[x]` Target journals and formats (decided 2026-10-11).** Paper I: Chaos. Paper II: **JAMES**
@@ -47,24 +47,45 @@ memory: every table body is `\tabinput` of a generated file and every figure com
 
 ## S1 Infrastructure (so both papers build from the same results without touching `paper1`)
 
-- **S1.1 `[ ]` Figure output directory per paper.** `scripts/paper_figures/_style.py`: `OUT` from
+- **S1.1 `[x]` Figure output directory per paper.** `scripts/paper_figures/_style.py`: `OUT` from
   the environment (`PAPER_OUT`, default `docs/paper1/figures`); `save()` unchanged otherwise.
   Check: regenerating any paper1 figure with the default still writes to `docs/paper1/figures`. ~20 min.
-- **S1.2 `[ ]` Table output directory per paper.** Same for every `tab*.py` (`PAPER_TABLES`, default
+- **S1.2 `[x]` Table output directory per paper.** Same for every `tab*.py` (`PAPER_TABLES`, default
   `docs/paper1/tables`); sidecar `.meta.json` written next to the table. ~30 min.
-- **S1.3 `[ ]` Figure numbering per paper.** Figure scripts save under their *content* name
+- **S1.3 `[x]` Figure numbering per paper.** Figure scripts save under their *content* name
   (`concept`, `systems`, …); each paper's `main.tex` includes by content name, so the same script
   serves both papers without renumbering; the "figNN_" prefixes are dropped in the new directories
   (keep them in `paper1`). Check: `ls docs/paperI/figures` shows content names only. ~30 min.
-- **S1.4 `[ ]` `check_numbers.py --paper paperI|paperII`.** Paths from the argument; the Part II strict
+- **S1.4 `[x]` `check_numbers.py --paper paperI|paperII`.** Paths from the argument; the Part II strict
   class applies to Paper II's sections; writes `docs/<paper>/number_check.md`. ~20 min.
-- **S1.5 `[ ]` Skeletons.** `docs/paperI/{main.tex,macros.tex,refs.bib,sections/,appendix/,figures/,tables/}`
+- **S1.5 `[x]` Skeletons.** `docs/paperI/{main.tex,macros.tex,refs.bib,sections/,appendix/,figures/,tables/}`
   and the same for `paperII`; `macros.tex` and `refs.bib` copied (not symlinked) so each paper can
   diverge; `PJ2019.cls` copied. `main.tex` compiles empty with the class. ~20 min.
-- **S1.6 `[ ]` Build and check targets.** `make paperI`, `make paperII` (latexmk + `check_numbers`
+- **S1.6 `[x]` Build and check targets.** `make paperI`, `make paperII` (latexmk + `check_numbers`
   + undefined-reference grep), `make paper1` unchanged. ~20 min.
-- **S1.7 `[ ]` Decision log.** `docs/paperI/decisions.md` and `docs/paperII/decisions.md` start with a
+- **S1.7 `[x]` Decision log.** `docs/paperI/decisions.md` and `docs/paperII/decisions.md` start with a
   pointer to `paper1/decisions.md` and record only split-time decisions. ~10 min.
+
+
+**S1 done 2026-10-11.** What exists now:
+- `_style.py`: `OUT`/`TABLES` from `PAPER_OUT`/`PAPER_TABLES` (default paper1), `content_name()`
+  (prefix and `p2_` stripped outside paper1, overrides for vague names: `fig09_p2_da` → `da_2d`,
+  `tabD_*` → `eval_*`, `tab02_truth` → `truth_dky`), and `write_table()`, which every table script
+  now uses (tex + `.meta.json` with SHA, time, inputs). All 25 paper1 table bodies were byte-identical
+  before and after the refactor; 15 tables gained a sidecar they lacked.
+- `check_numbers.py --paper paper1|paperI|paperII`; EXPLAINED entries are per paper (carry them
+  over when a number moves); the strict class covers every file of paperII.
+- Skeletons `docs/paperI` (sections 01 introduction … 07 failure modes, 08 discussion,
+  09 conclusions; App. A–E) and `docs/paperII` (01 introduction … 05 tilings and sizes,
+  06 physics comparison, 07 noisy training, 08 forecasts/cost, 09 one dimension, 10 Kolmogorov,
+  11 discussion, 12 conclusions; App. A–E). Every stub names its task and its paper1 source, and
+  renders a red `\placeholder`. Stubs carry no `\label`, so moved text brings its own labels.
+- `make paperI|paperII|paper1` (latexmk, number check, undefined/duplicate-reference check,
+  count of placeholders left) and `make paperI-assets|paperII-assets` (tables, then figures, into
+  the paper's directories; asset lists in the Makefile). Assets regenerate in ~35 s for both.
+  Figure 1 is still the full four-panel version in both until S3.8/S4.17.
+- `tests/unit/test_paper_paths.py`: content names, no collisions, env redirect, sidecar.
+- `docs/paperI/decisions.md`, `docs/paperII/decisions.md`.
 
 ---
 
@@ -138,10 +159,10 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   sentence changed to "and, as the companion paper shows, makes the latent observation operator
   exactly local"; §8 whole. Fix cross-references (`sec:da_results` → a `\citet{paperII}` entry in
   `refs.bib` with "submitted"). ~1 h.
-- **S3.6 `[ ]` §7 Discussion (old §9).** Paras 1–4; limitations items 1–5; outlook rewritten for the
+- **S3.6 `[ ]` §8 Discussion (old §9).** Paras 1–4; limitations items 1–5; outlook rewritten for the
   dynamics (other extensive systems; forecasting; what a learned model's transfer error says about
   extensivity). Drop "What locality buys in DA" and "When to prefer a learned model". ~1 h.
-- **S3.7 `[ ]` §8 Conclusions (old §10).** Paras 1, 2 and the closing rule; the DA paragraph replaced by
+- **S3.7 `[ ]` §9 Conclusions (old §10).** Paras 1, 2 and the closing rule; the DA paragraph replaced by
   one sentence pointing to Paper II. ~30 min.
 - **S3.8 `[ ]` Figures.** Fig. 1 → panels (a)–(c) only (`fig01_concept.py` gains `--panels abc`);
   Figs. 2–7, 10, C1, C2 regenerated into `docs/paperI/figures` under content names; renumber

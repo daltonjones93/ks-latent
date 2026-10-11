@@ -30,6 +30,8 @@ docs/**/*.synctex.gz
 docs/ks_local_field_ltransfer.pdf
 docs/advisor_summary.pdf
 docs/paper1/main.pdf
+docs/paperI/main.pdf
+docs/paperII/main.pdf
 
 # Generated animation frames (script outputs, like docs/figures/).
 docs/anim_frames/

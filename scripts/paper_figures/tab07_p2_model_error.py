@@ -17,7 +17,7 @@ import re
 
 import numpy as np
 
-from _style import EXP, ROOT
+from _style import EXP, ROOT, write_table
 
 D = EXP / "da2d"
 inputs = []
@@ -161,8 +161,6 @@ for eps in ("0.1", "0.2"):
                 f"{'---' if not b or b[0] in tuned else remedy_name(b[0])} & {out} \\\\")
     summary.append({"case": f"hidden field eps={eps}", "latent": lat, "floor": flo, "tuned": t and t[1], "best": b and b[1]})
 
-out = ROOT / "docs/paper1/tables/tab07_p2_model_error.tex"
-out.write_text("\n".join(rows) + "\n")
-out.with_suffix(".meta.json").write_text(json.dumps({"inputs": sorted(set(inputs))}, indent=2))
+write_table("tab07_p2_model_error", "\n".join(rows) + "\n", inputs)
 (D / "model_error_summary.json").write_text(json.dumps(summary, indent=2))
 print("\n".join(rows))

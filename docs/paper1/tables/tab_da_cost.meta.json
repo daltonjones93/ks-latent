@@ -1,0 +1,17 @@
+{
+  "table": "tab_da_cost",
+  "git_sha": "f1adecd426b7d43b4984e29c730304b8b42cef24",
+  "timestamp_utc": "2026-10-11T13:47:30Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_I14_L220_T1.json",
+    "artifacts/experiments/da2d/h9_I14_L220_T4.json",
+    "artifacts/experiments/da2d/h9_I14_L330_T1.json",
+    "artifacts/experiments/da2d/h9_I14_L330_T4.json",
+    "artifacts/experiments/da2d/h9_I14_L440_T1.json",
+    "artifacts/experiments/da2d/h9_I14_L440_T4.json",
+    "artifacts/experiments/da2d/h9_I14_L44_T1.json",
+    "artifacts/experiments/da2d/h9_I14_L44_T4.json",
+    "artifacts/experiments/da2d/h9_I14_L88_T1.json",
+    "artifacts/experiments/da2d/h9_I14_L88_T4.json"
+  ]
+}

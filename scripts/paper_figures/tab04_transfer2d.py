@@ -6,7 +6,7 @@ import json
 
 import numpy as np
 
-from _style import EXP, MAIN_A01, ROOT
+from _style import EXP, MAIN_A01, ROOT, write_table
 from _truths import runs
 
 ROWS = [("2D KS", "p7b_ks2d", "ks2d", [("1.0", 1.0), ("1.5", 1.5), ("2.0", None)], (0, 1, 2)),
@@ -35,6 +35,5 @@ for label, tag, tsys, sizes, seeds in ROWS:
         cells.append(f"{m:.1f} ({len(vals)}), ${100*np.mean(errs):.1f}\\%$")
     sizes_txt = "$44^2$, $66^2$, $88^2$" if tsys == "ks2d" else "$1\\times,2\\times,3\\times$"
     lines.append(f"{label} & {sizes_txt} & " + " & ".join(cells) + " \\\\")
-(ROOT / "docs/paper1/tables/tab04_transfer2d.tex").write_text("\n".join(lines) + "\n")
-(ROOT / "docs/paper1/tables/tab04_transfer2d.meta.json").write_text(json.dumps({"inputs": sorted(set(inputs)), "main_alpha01_model": MAIN_A01}, indent=2))
+write_table("tab04_transfer2d", "\n".join(lines) + "\n", inputs, main_alpha01_model=MAIN_A01)
 print("\n".join(lines))
