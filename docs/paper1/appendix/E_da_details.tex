@@ -172,13 +172,13 @@ one-cycle error of Table~\ref{tab:da_model_error} is the standard deviation of $
 
 Figure~\ref{fig:jacobian_timing} times the latent observation Jacobian at
 every deployment size, with the observation network of the runs. The
-coloured construction, $c=6$ forward-mode passes through the decoder,
-gives the same matrix as dense reverse-mode differentiation to the last
-digit (largest difference $0$ up to $132^2$), and its time grows slightly
-more slowly than the latent dimension: $1.3$~ms at $44^2$ and $49$~ms at $440^2$.
-Reverse mode needs one pass per observation and grows almost with the
-square of the dimension, $52$ times slower at $132^2$; we did not run it
-beyond that size.
+coloured construction, $c=12$ forward-mode passes through the decoder,
+gives the same matrix as dense reverse-mode differentiation to single
+precision (largest difference $2\times10^{-7}$ up to $132^2$), and its time grows
+slightly more slowly than the latent dimension: $2.4$~ms at $44^2$ and
+$119$~ms at $440^2$. Reverse mode needs one pass per observation and grows
+almost with the square of the dimension, $32$ times slower at $132^2$; we did
+not run it beyond that size.
 
 \begin{figure}[htbp]
 \centering
@@ -186,7 +186,7 @@ beyond that size.
 \caption{Wall time per observation Jacobian against latent dimension,
 2D KS, observation spacing $2.75$, four CPU threads, median of three: dense
 reverse mode (one pass per observation) and the coloured construction
-used by the per-site filter (six forward passes). The two agree exactly
+used by the per-site filter (twelve forward passes). The two agree exactly
 where both were computed. Slopes are least-squares power-law fits.}
 \label{fig:jacobian_timing}
 \end{figure}
