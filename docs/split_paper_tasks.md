@@ -440,6 +440,9 @@ data (R4).
   box without a wrap at reach 6), data generated in advance (`scripts/run_r4_gen_reach.sh`: 64 × 66², 48 × 77²,
   about the same area as the 44² set). If reach 5–6 reaches ~0.32, Paper II pivots to that small box (440² is then
   25–40× the training area).
+- **R4 fallback (user, 2026-10-12).** Paper I adopts C (and the small-box Kolmogorov model if it transfers) regardless
+  of D. If neither more 44² data nor reach 5–6 (66²/77²) brings D near the Paper II model, Paper II keeps its current
+  model (windows of 264²) and states that route; the small-box filter result is then at most a remark.
 - **R4K `[~]` Kolmogorov small-source test (user, 2026-10-12; `scripts/run_r4k_kolmogorov.sh`, after the R4 training
   lane).** 1× box data (α = 0.05), crops 8 sites in x with full height, reach 3, equal-work batches; c = 6 (Paper I)
   and c = 12 with data noise 0.1 (Paper II). D_KY at 1×/2×/3× against the per-IC truths; the tiled filter at 1× and
