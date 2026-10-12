@@ -122,7 +122,10 @@ $0.39$, snapshot interval $\Delta t=1.0$), with $16$ sites of length $6.25$,
 $c=3$ channels, and an encoder and decoder that mix six neighbouring sites
 ($\Renc=\Rdec=6$). Its decoder is therefore not per-patch, and
 Proposition~\ref{prop:blockdiag} does not apply; the 1D filters localize
-the latent covariance instead (Appendix~\ref{app:da_filters}). Paper~I shows
+the latent covariance instead (Appendix~\ref{app:da_filters}). A per-patch 1D model ($c=6$,
+$\Renc=\Rdec=0$, trained the same way on noisy fields) reproduces the dynamics as well ($\DKY/L\approx0.22$
+at $L=100$, $200$ and $400$) but assimilates about twice as badly (analysis errors $0.84$--$0.96$ against
+$0.43$--$0.45$ with 64 members and Gaspari--Cohn localization), so we keep the model above. Paper~I shows
 that this model transfers to $L=200$ and $400$ with its $\DKY$ within about one
 percent of the truth's. The truth has $\DKY=45.2$ and $26$--$27$ positive exponents
 at $L=200$, and $\DKY=89.6$ and $51$ positive exponents at $L=400$, so the number of

@@ -130,3 +130,23 @@ only by whole forcing periods (32 grid points), a half-patch y-shift is a quarte
 propagator, which never saw that phase, produces wrong dynamics. Every Kolmogorov run uses x-only offsets
 (0, 4, 8, 12 grid points for four tilings). The Kolmogorov section must say why the tilings differ from 2D KS.
 Smoke outputs: `artifacts/experiments/kda/k_smoke_c19_*.json`.
+
+## 2026-10-12 — P7, P9, Kolmogorov section, 1D sentence written
+
+- **P7 (J17G, tuned physics filter, full App. D grid):** δ = 0.1: physics 0.328 (0.324–0.333, c8.25 RTPS 0.7,
+  no remedy helped) vs latent 0.310 (0.300–0.323) → tie (−5.5%, lower on every seed); δ = 0.2: 0.433
+  (0.427–0.440, c8.25 RTPS 0.8 + a,b,g est.) vs 0.341 → latent 1.27×; δ = 0.3: 0.485 (0.470–0.496, same
+  setting) vs 0.376 → latent 1.29×. True-model filter (also fully tuned): 0.087, 0.087, 0.096. State-dependent
+  one-cycle errors 0.094 / 0.194 / 0.323 (0.15 / 0.31 / 0.49 σ_obs, `j16_model_error_gani*.json`): the tie
+  sits just below the σ_obs/6 crossover and the wins above it. The tuned-only column is seed 0 only (marked ∗);
+  the 256-member contingency was not needed. Table and Fig. model_error regenerated with three J17G rows
+  (squares in panel a).
+- **P9 (J5, 220², seed 0):** physics with online estimation 0.421 (∇² 1.25) and 0.446 (advection 1) vs latent
+  0.312 (`h9_D10_L220_I1_T4`): ratios 1.35 / 1.43, as at 44² (1.35 / 1.40).
+- **Kolmogorov (SK6):** 12-channel per-patch model `k_xs005_c12d10` (noisy strips, k_max 32). The D_KY check
+  in `exp_crop_eval.py` compares against stale hard-coded truths (23.26 at 1×, 56.84 at 2×; the reported
+  "15.7%" at 2× is against 56.84). The paper uses Paper I's truth table instead: 22.4 / 47.9 / 69.8 against
+  means 21.5 / 48.6 and single run 75.2 → +4% / −1% / −7%. DA: 1× 0.115 (0.105–0.124) vs interpolation 0.202,
+  one tiling 0.147; 3× 0.113 vs 0.201, one tiling 0.137; spread/error 0.52–0.58 (four tilings), 0.70–0.73 (one).
+- **1D:** the per-patch model (`pp1d_c6d10`) assimilates ~2× worse (0.84–0.96 vs 0.43–0.45 at N = 64, GC);
+  the current 1D model stays; one sentence in §4.3.

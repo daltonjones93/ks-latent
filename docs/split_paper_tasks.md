@@ -224,7 +224,7 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   members table. ~30 min.
 - **S4.9 `[x]` §5.4 One model from 44² to 440² (old §7.4).** Move with Fig. (da_2d), Fig. (snapshot)
   and the sizes table; the "without localization" paragraph stays here. ~30 min.
-- **S4.10 `[~]` §6 Learned versus physics-based filters (old §7.5).** Move; fill P7 (J17G) and P9 (J5)
+- **S4.10 `[x]` §6 Learned versus physics-based filters (old §7.5).** Move; fill P7 (J17G) and P9 (J5)
   when they land; regenerate the model-error table and Fig. (model_error) with the J17G rows; the
   J17B paragraph stays as the non-Markov case (the 2026-10-11 framing). ~2 h after the runs.
 - **S4.11 `[x]` §7 Trained only on noisy data (old §7.6).** Move; the round-trip appendix with it. ~30 min.
@@ -309,7 +309,7 @@ propagator's dynamics break; 2 tilings in x 0.190; **4 tilings in x only 0.174**
 (12% of the field std, 4% in 2D KS) is the main limit for the 6-channel model. SK5 queued
 (`scripts/run_kda_da.sh`, caffeinated): after the KDA training and D_KY check, 1× four tilings seeds 0–2 and one
 tiling, 3× four and one tiling, plus RTPS 0.9 and model noise 0.04 at 1× (log `artifacts/logs/kda_da.log`).
-- **SK6 `[ ]` Results in Paper II.** A subsection "A second system: Kolmogorov flow" (≤ 400 words):
+- **SK6 `[x]` Results in Paper II.** A subsection "A second system: Kolmogorov flow" (≤ 400 words):
   error vs interpolation and the decoder floors, one tiling vs four, calibration, 1× vs 3×; one row
   block in the sizes table (or its own small table, `tabK_kolm_da.py`); one panel (vorticity truth,
   analysis, error at 3×) added to the snapshot figure or as a separate figure. Remove "Kolmogorov
@@ -336,7 +336,7 @@ encoder and decoder, so Prop. 1 holds in 1D; noisy training at 0.1), instead of 
   short breaks it; bank layout; seam wrap; size independence). Run only if A transfers poorly or the
   user wants 2D-identical training.
 - **S1D result (2026-10-12): keep the current 1D model.** Per-patch c6 model (pp1d_c6d10) transfers well (D_KY/L 0.22 at L=100/200/400) but its DA is ~2x worse: PFF+GC N=64 0.958 (L=200) / 0.910 (L=400) vs 0.427 / 0.425 for the current model; LETKF+GC N=64 0.837 / 0.882 vs 0.453 / 0.452. S1D.3 reduces to one sentence in §4.3 (a per-patch 1D model was tried and assimilates worse, so Prop. 1 is not used in 1D). Option B not run.
-- **S1D.3 `[ ]` Update Paper II with the per-patch 1D results** (after S1D.1, or S1D.2 if run): §4.3 (the
+- **S1D.3 `[x]` Update Paper II with the per-patch 1D results** (after S1D.1, or S1D.2 if run): §4.3 (the
   1D model is per-patch and noisy-trained; drop the "Prop. 1 does not apply" sentence; its D_KY
   validation, a row block in Table `model_validation`); §9 and App. D (regenerate `fig08_1d_da.py`,
   `tab07_1d_da.py` from the new runs; re-check "ensemble doubles with the domain" and "GC beats SEC");

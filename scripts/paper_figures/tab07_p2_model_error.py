@@ -154,12 +154,35 @@ for eps in ("0.1", "0.2"):
     t, _ = pick(tuned); b, _ = pick({**tuned, **rem})
     if b and lat:
         out = outcome(b[1], lat).replace("latent", "latent").replace("physics", "physics")
-        out += f"; latent ${np.mean(lat):.3f}$"
+        out += f"; ${np.mean(lat):.3f}$"
     else:
         out = "\\placeholder{P7}"
     rows.append(f"hidden field $\\varepsilon={eps}$ & {one} & {fmt(t[1] if t else None)} & {fmt(b[1] if b else None)} & "
                 f"{'---' if not b or b[0] in tuned else remedy_name(b[0])} & {out} \\\\")
     summary.append({"case": f"hidden field eps={eps}", "latent": lat, "floor": flo, "tuned": t and t[1], "best": b and b[1]})
+
+# J17G: Markov missing process (anisotropic gradient nonlinearity), own latent model and units. The tuning grid
+# (App. D) runs on seed 0 only; the best configuration (with remedies) and the true-model filter on seeds 0-2.
+for d in ("0.1", "0.2", "0.3"):
+    allc = {k: v for k, v in j17(f"J17G_d{d}_pde", ".").items()}
+    tuned = {k: v for k, v in allc.items() if not re.search("abg|bc", k)}
+    rem = {k: v for k, v in allc.items() if re.search("abg|bc", k)}
+    lat = seeds([f"J17G_d{d}_lat_T4_s{k}" for k in range(3)])
+    tr = j17(f"J17G_d{d}_true", ".")
+    tb, _ = pick(tr)
+    t0 = min((ana(v[0]), k) for k, v in tuned.items() if ana(v[0]) is not None)
+    t3 = seeds(tuned[t0[1]])  # all three seeds only where the tuned setting was also the best
+    tcell = fmt(t3) if t3 else "$%.3f^{\\ast}$" % t0[0]
+    b, _ = pick({**tuned, **rem})
+    j = json.loads((D / f"j16_model_error_gani{d}.json").read_text())
+    inputs.append(f"artifacts/experiments/da2d/j16_model_error_gani{d}.json")
+    one = f"${j['residual_rms']:.3f}$ / ${j['sigma']:.3f}$"
+    out = (outcome(b[1], lat) + f"; ${np.mean(lat):.3f}$") if b and lat else "\\placeholder{P7}"
+    rows.append(f"missing process $\\delta={d}$ & {one} & {tcell} & {fmt(b[1] if b else None)} & "
+                f"{'---' if not b or b[0] in tuned else remedy_name(b[0])} & {out} \\\\")
+    summary.append({"case": f"missing process delta={d}", "one_cycle_state": j["sigma"], "latent": lat,
+                    "true_model": tb and tb[1], "tuned_s0": t0[0], "best": b and b[1], "best_cfg": b and b[0],
+                    "norm_std": json.loads((D / f"i11_{b[0]}_s0.json").read_text())["args"]["norm_std"] if b else None})
 
 write_table("tab07_p2_model_error", "\n".join(rows) + "\n", inputs)
 (D / "model_error_summary.json").write_text(json.dumps(summary, indent=2))
