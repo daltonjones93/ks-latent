@@ -505,6 +505,21 @@ data (R4).
   the new facts; 45. `check_numbers.py --paper paperI` 0 UNMATCHED/0 SUSPECT; 46. grayscale/zoom check of the new
   figures (S6.1); 47. citation check for any new reference; 48. `docs/paperI/decisions.md` entries for every change;
   49. a fresh internal referee pass on the rewritten paper before the coauthor hand-off.
+- **R11 `[ ]` Two training routes, one rule (user, 2026-10-12; add if R4/R4K work out).** Keep both routes in
+  Paper I and present them as one principle: *the propagator must never read a site that is not forced from data
+  within its reach.* (a) **Small periodic box → large domain**: satisfied when reach < half the box; cheap data,
+  for systems that are extensive at the box size and homogeneous (KS, Kolmogorov, periodic shallow water).
+  (b) **Windows of a large simulation → full domain**: satisfied by the forced halo (Prop. 2); the general route for
+  inhomogeneous or organized systems that a small box cannot host and for data that are windows of larger dynamics
+  (CM1 squall lines: cold pool, environmental gradients, mesoscale organization; radar/reanalysis regions) — the
+  limited-area-model setting. The old box failure is then the rule violated (reach 6 wraps an 8-site ring), shown by
+  the R4 wrap control. Add: a side-by-side table of the two routes per system (D_KY errors, seeds, training cost);
+  a test of where only windows work (candidate: Kolmogorov α = 0.025, whose truth density per box rises with width,
+  i.e. not extensive at the box size); a discussion paragraph on choosing the route (measure the interaction range
+  first: for shallow water, gravity waves make the per-step range wave speed × Δt, which may force a large box and so
+  favour windows; for CM1, windows). Paper II: one filter model (D if it matches the current 12-channel model), with
+  one 440² run of the other route's model to show the filter does not depend on how the model was trained; the
+  outlook ties the window route to CM1 (Paper 3).
 - **R5 `[ ]` Optional: source-size sweep** (windows of 132² and 88² sources) — how small the training simulation can
   be; useful for planning CM1 runs.
 - **R6 `[ ]` Paper II ensemble budget.** P7 says "same observations and ensemble resources": false (latent 4 × 64 vs
