@@ -40,7 +40,7 @@ memory: every table body is `\tabinput` of a generated file and every figure com
   Paper II is otherwise written to stand alone (its own model description, its own validation table).
 - **S0.5 `[x]` Kolmogorov flow in Paper II (decided 2026-10-11): latent filter only**, with a
   noisy-trained 12-channel model, no physics-based comparator. Block SK below.
-- **S0.6 `[ ]` Pending results that Paper II waits for:** J17G (P7, running), J5 (P9, running), the
+- **S0.6 `[x]` Pending results that Paper II waits for:** J17G (P7, running), J5 (P9, running), the
   plain-language-summary sentence (removed 2026-10-11). Paper II's §5 is written against P7's outcome.
 
 ---
@@ -290,7 +290,7 @@ Purpose: show that the filter is not specific to KS, on a second system whose ch
 by a forcing (anisotropic, a fixed channel height). Latent filter only; the physics-based comparison
 stays a KS result. α = 0.05, the drag whose canonical models are best documented in Paper I.
 
-- **SK1 `[~]` Model.** `k_xs005_c12d10`: the canonical α = 0.05 x-strip recipe (`k_xs005_noreg`
+- **SK1 `[x]` Model.** `k_xs005_c12d10`: the canonical α = 0.05 x-strip recipe (`k_xs005_noreg`
   flags) with c = 12 and training noise 0.1, i.e. the Paper II KS recipe. Queued
   (`scripts/run_kda_train.sh`, caffeinated): starts after the third J17G training (~13:30), ~3 h,
   then D_KY at 1×/2×/3× (seed 0) against the α = 0.05 truths. Check: D_KY within the spread of the
@@ -307,7 +307,7 @@ stays a KS result. α = 0.05, the drag whose canonical models are best documente
   propagator steps per cycle) against the Kolmogorov Lyapunov time (6–16 time units) so a cycle is
   a comparable fraction of a Lyapunov time to the KS runs; keep the KS filter settings (GC 1.5 sites,
   RTPS 0.7, 64 members, noise 0.02) unless the smoke diverges. ~2 h.
-- **SK5 `[~]` Runs.** 1×: one and four tilings, seeds 0–2; 3×: one and four tilings, seed 0; 100
+- **SK5 `[x]` Runs.** 1×: one and four tilings, seeds 0–2; 3×: one and four tilings, seed 0; 100
   cycles. Queue with caffeinate. ~3–4 h unattended.
 **SK2–SK5 status, 2026-10-11.** Code: `scripts/exp_k_tiled_da.py` (Kolmogorov truth from the training
 metadata at the training spacing, rectangular strip, same per-site filter and Hann blend as 2D KS) and
@@ -390,11 +390,16 @@ the only references added in the split are the two companion papers. Left: S6.3 
 
 ## S6 Finishing
 
-- **S6.1 `[~]` Grayscale and 50 %-zoom check** of every figure in both papers (contract §F). ~1 h.
-- **S6.2 `[~]` Citation verification** for any reference added during the split (the B13 search-log
+- **S6.1 `[x]` Grayscale and 50 %-zoom check** of every figure in both papers (contract §F). ~1 h.
+- **S6.2 `[x]` Citation verification** for any reference added during the split (the B13 search-log
   convention in `paper1/decisions.md`). ~1 h.
 - **S6.3 `[~]` Decisions log and coauthor hand-off.** Both `decisions.md` files complete; send the
   coauthor Paper I first (S0.4), then Paper II once P7/P9 are in. ~30 min.
+- **S6.1/S6.2 done 2026-10-12.** Paper II figures checked in grayscale at 72 dpi: two fixes (the uniform-average
+  bars in `tilings`(b) hatched; the four-tiling decoder floor in `da_2d`(a) dash-dot); the diverging colour maps of
+  `da_snapshot` and `systems_ks2d` keep their sign only in colour, as in Paper I. Citations: the only entries added
+  or changed since the split are the two companion papers (`jones2026transfer`, `jones2026da`), whose titles match
+  the papers; every other entry is byte-identical to the B13-verified `paper1/refs.bib`.
 - **S6.4 `[ ]` Release.** Tag the commit; fill the TODO(G8) archive line in both reproducibility
   appendices. ~30 min.
 

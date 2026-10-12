@@ -82,7 +82,7 @@ for L, (t4, t1) in SIZES.items():
         k1.append((ar(L), s1["blend"])); fl1.append((ar(L), s1["floor1"]))
 for pts, lab, col, ls, mk in ((k4, "4 tilings", AQUA, "-", None), (k1, "1 tiling", INK2, "-", "s"),
                               (interp, "interpolation", MUTED, "--", None), (fl1, "decoder, 1 tiling", INK2, ":", None),
-                              (fl4, "decoder, 4 tilings", AQUA, ":", None)):
+                              (fl4, "decoder, 4 tilings", AQUA, "-.", None)):
     x, y = zip(*pts)
     b.plot(x, y, ls=ls, marker=mk, color=col, lw=1.0 if ls != "-" else 1.3, ms=3, label=lab)
 unl = [(ar(L), S(f"K1u_L{L}_T4_N64")) for L in (44, 66, 88)]

@@ -96,7 +96,8 @@ dg = J("h9_D10_L44_diag_T4.json")["steady"]["diag"]
 nb = len(dg["bands"]); xb = np.arange(nb); wbar = 0.2
 for i, (k, lab, col) in enumerate((("tiling0_var", "1 tiling", INK2), ("blend_var", "Hann blend", AQUA),
                                    ("uniform_var", "uniform average", ORANGE))):
-    d_.bar(xb + (i - 1) * wbar, dg[k], width=wbar, color=col, label=lab)
+    d_.bar(xb + (i - 1) * wbar, dg[k], width=wbar, color=col, label=lab,  # hatch: tells the blend from the
+           hatch="////" if k == "uniform_var" else None, edgecolor="white", lw=0)  # uniform average in grayscale
 d_.plot(xb + wbar, dg["uniform_var_predicted"], "_", color=INK, ms=7, mew=1.2, label=r"$\mathbf{1}^\top C\mathbf{1}/K^2$")
 d_.set_xticks(xb); d_.set_xticklabels(["<0.6", "0.6–\n1.1", "1.1–\n1.6", ">1.6"], fontsize=6)
 d_.set_ylim(0, 0.125); d_.set_yticks([0, 0.02, 0.04, 0.06, 0.08])
