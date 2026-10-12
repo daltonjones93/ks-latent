@@ -66,7 +66,7 @@ exploit \citep{si2025latentensf}. Learned corrections to the ensemble Kalman
 gain, with a learned distance-based localization, can outperform a tuned
 LETKF on KS at the size they were trained on \citep{bach2025}.
 
-\citet{jones2026transfer}, hereafter Paper~I, take the opposite route: a
+Paper~I \citep{jones2026transfer} takes the opposite route: a
 latent \emph{field} on a lattice of sites, built from weight-shared
 operators of finite reach, so that one trained model runs on domains of any
 size and reproduces the true Lyapunov spectra, $\DKY$ and their growth with
@@ -115,9 +115,6 @@ setting; shifted tilings that remove the errors tied to the patch lattice;
 and a comparison with physics-based filters whose models are wrong in ways
 that their standard remedies can and cannot correct.
 
-% G-pass (docs/paperII/decisions.md, S4.3): every entry of the prior rows is to be checked against
-% the paper itself before submission; the "latent DA"/"localized" entries for bach2025 and the
-% "wrong model" entries are the least certain.
 \begin{table}[htbp]
 \caption{Closest prior work. ``Latent DA'': the analysis is computed in a
 learned latent space; ``Localized'': the filter is localized; ``Other

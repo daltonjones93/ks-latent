@@ -1,5 +1,34 @@
 %======================================================================
 \section{Conclusions}
+\label{sec:conclusions}
 %======================================================================
-% TODO(S4.15): paper1 §10 para 3, expanded.
-\placeholder{S4.15: Conclusions}
+
+A learned latent field gives ensemble data assimilation in a latent space
+what a latent vector cannot: a distance. With a decoder that reconstructs
+each patch from its own site, the latent observation operator is exactly
+local, so a per-site ensemble filter in the latent space is exact and its
+observation Jacobian costs a fixed number of forward passes at any domain
+size. The error that exact locality ties to the patch lattice is removed by
+running the filter on four copies of the lattice shifted by half a patch
+and blending them, which lowers the analysis error by about $30\%$ with the
+same model.
+
+Because the filter is local, neither its accuracy nor its ensemble depends
+on the domain. With one model, trained only on noisy fields, and one
+setting, it analyses two-dimensional Kuramoto--Sivashinsky fields to an
+error of $0.30$--$0.33$ on every domain from $44^2$ to $440^2$, against $0.82$ for
+interpolating the observations, with about 32 members per tiling, while an
+unlocalized filter fails once the attractor has more unstable directions
+than the ensemble has members. The same construction, with tilings shifted
+only along the flow's symmetry, gives errors $43$--$44\%$ below interpolation in
+Kolmogorov flow, on one box and on a domain three times wider.
+
+Against a physics-based filter whose model is wrong, and which is given
+online parameter estimation and bias correction, the latent filter loses
+when the model's error is small or correctable and wins once the part of
+that error which bias correction cannot remove exceeds about a sixth of the
+observation error. That number, measured on chosen errors in one system,
+is the quantity to estimate before replacing a physical model by a learned
+one: where the structural error of the physical model is large and the
+observations are good, a local model learned from noisy data is the better
+forecast model for an ensemble filter, at any domain size.

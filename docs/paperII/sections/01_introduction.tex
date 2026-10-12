@@ -1,5 +1,104 @@
 %======================================================================
 \section{Introduction}
+\label{sec:introduction}
 %======================================================================
-% TODO(S4.2): new.
-\placeholder{S4.2: Introduction}
+
+Ensemble filters estimate the uncertainty of a forecast from a small
+ensemble of model runs, and in high-dimensional systems they work only
+because of localization: each region is analysed from nearby observations
+with covariances estimated from the ensemble, and distant, spurious
+correlations are suppressed \citep{houtekamermitchell2001,ott2004,hunt2007}.
+The case for it is strongest in spatially extended chaos. There the forecast
+errors within a region span few directions \citep{patil2001}, while the
+number of unstable directions of the whole attractor, like its
+Kaplan--Yorke dimension $\DKY$, grows in proportion to the domain
+\citep{ruelle1982,manneville1985,egolfgreenside1994}. A filter without
+localization needs at least as many members as there are unstable and
+neutral directions \citep{bocquetcarrassi2017,takeda2026}, so its ensemble
+must grow with the domain; a localized one needs only enough members for
+the directions inside its local region.
+
+Data assimilation in a learned latent space has so far given up this
+remedy. Filters in the latent space of an autoencoder compress the whole
+field into one latent vector and estimate its covariance from the ensemble
+\citep{peyron2021,chen2023roadenkf,pasmans2025,tong2026laeenkf,si2025latentensf}.
+A latent vector has no notion of distance, so there is nothing to taper:
+recent latent filters either do not localize or leave localization for
+future work \citep{chen2023roadenkf,tong2026laeenkf}, and the dimension of
+the vector, fixed at training time, ties the model to one domain size. For
+the large, extensively chaotic domains on which ensemble data
+assimilation is used in practice, both are limits of principle rather than
+of implementation.
+
+A companion paper \citep[hereafter Paper~I]{jones2026transfer} makes the latent a
+\emph{field}: a few channels at each site of a lattice that tiles the
+domain, encoded, decoded and propagated by operators that are shared by
+all sites and read a bounded neighbourhood. One trained model therefore
+runs on a domain of any size by adding sites. Paper~I validates this
+transfer against the model's own Lyapunov spectrum: trained on windows of
+one large simulation, the two-dimensional Kuramoto--Sivashinsky (KS) model
+reproduces the true $\DKY$ to within $0.6$--$2\%$ at $44^2$ and $66^2$. A latent field has a geometry, and this paper asks
+what that geometry is worth to an ensemble filter.
+
+The answer has three parts. First, locality can be made exact: with a
+decoder that reconstructs each patch from its own site, the observations
+of a patch depend on that site alone, the latent observation operator is
+block-diagonal, and a per-site ensemble filter in the latent space is
+exact rather than approximate. Second, the error that exact locality
+leaves, tied to the patch lattice, is removed by running the filter on
+shifted copies of the lattice and blending the analyses, without
+retraining. Third, the localized filter keeps its accuracy and its
+ensemble size as the domain grows, because both are set by the local
+problem. These are properties of the method. Whether to use a learned
+model at all is a separate question, because a filter built on the
+correct equations is far more accurate than one built on a learned
+surrogate. Models of real systems are not correct, however, and for many
+systems, convection-permitting models of the atmosphere among them, the
+errors are structural and poorly known, while the errors of the
+observations are well characterized. We therefore train the model only on
+noisy fields and compare it with physics-based filters whose models are
+wrong in controlled ways and which are given the standard remedies for
+model error.
+
+\para{Contributions.}
+\begin{itemize}
+\item \emph{Exact locality in a learned latent space}
+  (Sec.~\ref{sec:method}). With a per-patch decoder the latent observation
+  Jacobian is block-diagonal (Proposition~\ref{prop:blockdiag}) and is
+  obtained from as many forward passes as there are channels, at any
+  domain size.
+\item \emph{Shifted tilings} (Sec.~\ref{sec:da_tilings}). Four copies of the
+  patch lattice shifted by half a patch, blended with smooth weights, lower
+  the analysis error by about $30\%$ with the same model; the gain comes
+  from the offsets, not from the extra members.
+\item \emph{One model and one setting from $44^2$ to $440^2$}
+  (Sec.~\ref{sec:da_2d}). In 2D KS the analysis error is $0.30$--$0.33$ on
+  every domain over a factor of 100 in area, against $0.81$--$0.83$ for
+  interpolating the observations, with an ensemble that saturates at
+  about 32 members per tiling at both sizes tested, while an unlocalized filter
+  fails once the attractor has more unstable directions than the ensemble
+  has members.
+\item \emph{Learned versus physics-based filters}
+  (Sec.~\ref{sec:da_model_error}). The latent filter loses to a
+  physics-based filter whose model error is small or correctable and wins
+  once the part of that error which bias correction cannot remove exceeds
+  about a sixth of the observation error. A missing process of
+  increasing strength, tuned for on both sides, gives a tie just below that
+  point and wins of $1.27$ and $1.29$ times above it.
+\item \emph{Training on noisy data} (Sec.~\ref{sec:da_noisy}). The model is
+  trained only on fields that carry observation-level noise, and assimilates
+  $4$--$5\%$ better than the same model trained on clean fields.
+\end{itemize}
+
+All experiments are twin experiments. The main system is 2D KS
+(Sec.~\ref{sec:system}); 1D KS shows how the ensemble an unlocalized filter
+needs grows with the domain and that a distance taper beats a distance-free
+correction (Sec.~\ref{sec:da_1d}), and Kolmogorov flow shows that the
+filter carries over to chaos organized by a forcing
+(Sec.~\ref{sec:kolmogorov_da}). The target we have in mind is the
+assimilation of convection-permitting simulations of organized convection,
+where the equations of the cloud processes are uncertain and the domain is
+set by the application. Section~\ref{sec:background} reviews the
+background, Sec.~\ref{sec:method} the model and the filter, and
+Secs.~\ref{sec:da_results}--\ref{sec:kolmogorov_da} the results;
+Sec.~\ref{sec:discussion} discusses them and their limitations.

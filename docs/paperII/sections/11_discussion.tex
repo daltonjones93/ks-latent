@@ -1,5 +1,83 @@
 %======================================================================
 \section{Discussion and limitations}
+\label{sec:discussion}
 %======================================================================
-% TODO(S4.14): paper1 §9 paras 5--6, limitation 6 expanded, new outlook.
-\placeholder{S4.14: Discussion and limitations}
+
+\para{What locality buys.} The latent field makes localization possible in a
+learned space, and with a per-patch decoder it makes it exact
+(Proposition~\ref{prop:blockdiag}). The ensemble a localized filter needs is
+then set by the local problem, about 32 members per tiling at both sizes
+tested, while an unlocalized filter needs more members than the attractor
+has unstable directions, a number that grows with the domain
+(Secs.~\ref{sec:da_2d} and \ref{sec:da_1d}). The price of exact locality is
+an error tied to the patch lattice, which the decoder does not remove; the
+shifted tilings remove most of it, because the tilings' errors are only
+weakly correlated, and they do so without retraining. The same
+construction worked in Kolmogorov flow once the tilings were restricted to
+the symmetries the model was trained on. The remaining analysis error is
+mostly the filter's, not the decoder's: the blended decoder floor is less
+than half of it (Sec.~\ref{sec:da_accuracy}). Better use of the ensemble
+inside each tiling, and models of the propagator's error in place of
+isotropic noise, are the natural next steps.
+
+\para{When to prefer a learned model.} A filter built on the correct
+equations is about four times more accurate than the latent filter, and one
+built on equations with a small or correctable error is still better. The
+comparison of Sec.~\ref{sec:da_model_error} locates the boundary: what
+matters is the part of the physical model's one-cycle forecast error that
+bias correction cannot remove, and the latent filter wins once it exceeds
+about a sixth of the observation error. The missing anisotropic process,
+whose strength we could set, places a tie at $0.15$ of the observation
+error and wins at $0.31$ and $0.49$, consistent with that boundary. Two
+features of the comparison carry over to real systems. The errors that
+parameter estimation and bias correction cannot reach are the structural
+ones, a wrong form of an operator or a process that is missing, and those
+are the errors of the models of convection and cloud processes that
+motivate this work. And the learned model needs no tuning for the error of
+the model it replaces: one setting served every case, while the
+physics-based filter worked only in a narrow window of its relaxation to
+prior spread. The model learned from noisy fields was slightly better than
+one learned from clean fields, so measurement error, the part of the error
+budget that is usually known, can be handled in training. A process with
+memory that the current field does not reveal limits both filters
+(Sec.~\ref{sec:da_model_error}); propagators with access to past states are
+the obvious remedy on the learned side.
+
+\para{Limitations.} We state them plainly.
+\begin{itemize}
+\item \emph{Twin experiments.} The truth is the system the model was trained
+  on, simulated, and observed with known Gaussian errors; real observations
+  have representativeness errors and biases that we did not model.
+\item \emph{Systems.} The main results are for one system, 2D KS, on
+  periodic squares; Kolmogorov flow was assimilated at two widths with one
+  model and without a physics-based comparator, and 1D KS with a model that
+  is not per-patch.
+\item \emph{Observations.} The networks are regular and dense, four
+  observations per site in the main experiments, of the full field. With
+  one observation per site the filter is four times better than
+  interpolation and stays bounded over 300 cycles, but on longer runs with
+  sparser networks the stability of the learned propagator becomes the
+  limit; failsafes for that regime are the subject of a follow-up study.
+\item \emph{Model errors.} The errors of the physics-based comparator were
+  chosen, not calibrated to a real model, and the crossover is located by
+  the cases we chose; its position in other systems remains to be measured.
+\item \emph{Training data.} The learned model was trained on complete,
+  noisy fields of the true system, which real data rarely provide; training
+  from sparse observations, by alternating assimilation and training
+  \citep{brajard2020,bocquet2020}, is untested with a latent field.
+\item \emph{Calibration.} The 2D KS ensemble is well calibrated with four
+  tilings, but the Kolmogorov ensemble is under-dispersed, and the
+  inflation was not retuned for it.
+\item \emph{Model noise.} Model error in the latent forecast is represented
+  by isotropic Gaussian noise of fixed size, not by the statistics of the
+  learned propagator's own error.
+\end{itemize}
+
+\para{Outlook.} The target is the assimilation of convection-permitting
+simulations of organized convection, such as squall lines, whose cloud
+processes are uncertain and whose state is mostly unobserved; that needs
+non-periodic, limited-area domains, which the forced halo of the training
+(Paper~I) already treats as its operating mode, and statistics of the
+learned model's own error in place of fixed isotropic noise. The
+ingredients carry over to any system whose chaos is extensive and whose
+dynamics are local at the scale of a few patches.
