@@ -420,6 +420,25 @@ data (R4).
   interior). Control: the same short-reach propagator trained on 264² windows, to separate the data from the reach.
   Evaluate D_KY at 44², 66² (truths) and 88² (extensive prediction ≈ 333); then the latent filter at 44²–440².
   The earlier box-trained model (full reach 6 on the 8-site ring, periodic wrap) failed by 14–23%.
+- **R4 first result (2026-10-12).** `r4c_ks2d_s44_r3` (44² data, c = 6, reach 3, batches 32/64): D_KY 83.1 at 44²
+  (+1.3% vs the 82.0 mean), 187.1 at 66² (−1.0% vs 189.0), 329.0 at 88² (−1.2% vs the extensive 333; canonical p7b
+  332–335). Train small, run large works in 2D KS once the propagator's window cannot wrap onto itself. The 6-channel
+  decoder floor at 44² is 0.66–0.69 for every 6-channel model (canonical p7b too), 0.25 for 12 channels: a channel
+  effect. Filter at 44²: 0.618 (p7b at the same settings 0.579; interpolation 0.829). Queue
+  (`scripts/run_r4_queue2.sh`): equal-work C, D (c = 12, noise 0.1, 44² data; filter at 44² and 440²), p7b at 440²,
+  A, B.
+- **R4K `[~]` Kolmogorov small-source test (user, 2026-10-12; `scripts/run_r4k_kolmogorov.sh`, after the R4 training
+  lane).** 1× box data (α = 0.05), crops 8 sites in x with full height, reach 3, equal-work batches; c = 6 (Paper I)
+  and c = 12 with data noise 0.1 (Paper II). D_KY at 1×/2×/3× against the per-IC truths; the tiled filter at 1× and
+  3×. Then α = 0.1 (box data exists) and α = 0.025 (box data to generate).
+- **R9 `[ ]` Paper I rewrite (user, 2026-10-12: "a complete rewrite for paper 1").** If R4/R4K hold: 2D and Kolmogorov
+  trained on the small periodic box with a propagator reach below half the box, transferring like 1D; the old
+  box-trained failure explained by the wrap-around (reach 6 on an 8-site ring), the window-trained models of a large
+  domain kept as the alternative route. Needs: second training seeds of the adopted small-source models, all three
+  drags, second ICs at every size, a truth at 88² (or the extensive prediction stated as such), the λ₁ comparison, the
+  interaction-range argument for the reach, new figures/tables, and every R2 disclosure. Paper II then uses the
+  small-source 12-channel model where it matches the current one (or adds it as "trained on 44², assimilated on
+  440²").
 - **R5 `[ ]` Optional: source-size sweep** (windows of 132² and 88² sources) — how small the training simulation can
   be; useful for planning CM1 runs.
 - **R6 `[ ]` Paper II ensemble budget.** P7 says "same observations and ensemble resources": false (latent 4 × 64 vs
