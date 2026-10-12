@@ -60,7 +60,11 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | appendix/D_da_details.tex | 103 | 1.00 | 1194 |
 | appendix/D_da_details.tex | 103 | 1.05 | 43 |
 | appendix/D_da_details.tex | 104 | 0.039 | 10 |
-| appendix/D_da_details.tex | 111 | 0.01 | 516 |
+| appendix/D_da_details.tex | 110 | 0.20 | 214 |
+| appendix/D_da_details.tex | 111 | 0.38 | 100 |
+| appendix/D_da_details.tex | 112 | 0.40 | 95 |
+| appendix/D_da_details.tex | 112 | 0.6 | 663 |
+| appendix/D_da_details.tex | 121 | 0.01 | 516 |
 | appendix/E_reproducibility.tex | 68 | 1.5 | 365 |
 | main.tex | 23 | 0.75 | 36 |
 | main.tex | 57 | 0.30 | 192 |
@@ -102,38 +106,34 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | sections/05_tilings_and_sizes.tex | 92 | 1.6 | 114 |
 | sections/05_tilings_and_sizes.tex | 92 | 3.9 | 57 |
 | sections/05_tilings_and_sizes.tex | 93 | 1.02 | 28 |
-| sections/05_tilings_and_sizes.tex | 149 | 0.30 | 192 |
-| sections/05_tilings_and_sizes.tex | 149 | 0.32 | 100 |
-| sections/05_tilings_and_sizes.tex | 153 | 0.33 | 85 |
-| sections/05_tilings_and_sizes.tex | 155 | 0.34 | 237 |
-| sections/05_tilings_and_sizes.tex | 155 | 0.39 | 109 |
-| sections/05_tilings_and_sizes.tex | 164 | 0.24 | 108 |
-| sections/05_tilings_and_sizes.tex | 164 | 0.25 | 231 |
-| sections/05_tilings_and_sizes.tex | 165 | 0.13 | 157 |
-| sections/05_tilings_and_sizes.tex | 165 | 0.14 | 98 |
-| sections/05_tilings_and_sizes.tex | 166 | 0.30 | 192 |
-| sections/05_tilings_and_sizes.tex | 166 | 0.33 | 85 |
-| sections/05_tilings_and_sizes.tex | 177 | 0.345 | 19 |
-| sections/05_tilings_and_sizes.tex | 178 | 1.22 | 44 |
-| sections/05_tilings_and_sizes.tex | 185 | 0.20 | 214 |
-| sections/05_tilings_and_sizes.tex | 186 | 0.38 | 100 |
-| sections/05_tilings_and_sizes.tex | 187 | 0.40 | 95 |
-| sections/05_tilings_and_sizes.tex | 187 | 0.6 | 663 |
-| sections/05_tilings_and_sizes.tex | 201 | 0.01 | 516 |
-| sections/05_tilings_and_sizes.tex | 203 | 0.42 | 126 |
-| sections/05_tilings_and_sizes.tex | 203 | 0.46 | 98 |
-| sections/05_tilings_and_sizes.tex | 204 | 0.13 | 157 |
-| sections/05_tilings_and_sizes.tex | 204 | 0.14 | 98 |
-| sections/05_tilings_and_sizes.tex | 216 | 16.5 | 15 |
-| sections/05_tilings_and_sizes.tex | 224 | 0.37 | 70 |
-| sections/05_tilings_and_sizes.tex | 225 | 0.50 | 636 |
-| sections/05_tilings_and_sizes.tex | 225 | 0.32 | 100 |
-| sections/05_tilings_and_sizes.tex | 227 | 0.49 | 78 |
-| sections/05_tilings_and_sizes.tex | 227 | 0.67 | 26 |
-| sections/05_tilings_and_sizes.tex | 228 | 1.76 | 13 |
-| sections/05_tilings_and_sizes.tex | 231 | 0.32 | 100 |
-| sections/05_tilings_and_sizes.tex | 231 | 0.30 | 192 |
-| sections/05_tilings_and_sizes.tex | 285 | 5.3 | 36 |
+| sections/05_tilings_and_sizes.tex | 145 | 0.30 | 192 |
+| sections/05_tilings_and_sizes.tex | 145 | 0.32 | 100 |
+| sections/05_tilings_and_sizes.tex | 149 | 0.33 | 85 |
+| sections/05_tilings_and_sizes.tex | 151 | 0.34 | 237 |
+| sections/05_tilings_and_sizes.tex | 151 | 0.39 | 109 |
+| sections/05_tilings_and_sizes.tex | 160 | 0.24 | 108 |
+| sections/05_tilings_and_sizes.tex | 160 | 0.25 | 231 |
+| sections/05_tilings_and_sizes.tex | 161 | 0.13 | 157 |
+| sections/05_tilings_and_sizes.tex | 161 | 0.14 | 98 |
+| sections/05_tilings_and_sizes.tex | 162 | 0.30 | 192 |
+| sections/05_tilings_and_sizes.tex | 162 | 0.33 | 85 |
+| sections/05_tilings_and_sizes.tex | 173 | 0.345 | 19 |
+| sections/05_tilings_and_sizes.tex | 174 | 1.22 | 44 |
+| sections/05_tilings_and_sizes.tex | 193 | 0.01 | 516 |
+| sections/05_tilings_and_sizes.tex | 195 | 0.42 | 126 |
+| sections/05_tilings_and_sizes.tex | 195 | 0.46 | 98 |
+| sections/05_tilings_and_sizes.tex | 196 | 0.13 | 157 |
+| sections/05_tilings_and_sizes.tex | 196 | 0.14 | 98 |
+| sections/05_tilings_and_sizes.tex | 208 | 16.5 | 15 |
+| sections/05_tilings_and_sizes.tex | 216 | 0.37 | 70 |
+| sections/05_tilings_and_sizes.tex | 217 | 0.50 | 636 |
+| sections/05_tilings_and_sizes.tex | 217 | 0.32 | 100 |
+| sections/05_tilings_and_sizes.tex | 219 | 0.49 | 78 |
+| sections/05_tilings_and_sizes.tex | 219 | 0.67 | 26 |
+| sections/05_tilings_and_sizes.tex | 220 | 1.76 | 13 |
+| sections/05_tilings_and_sizes.tex | 223 | 0.32 | 100 |
+| sections/05_tilings_and_sizes.tex | 223 | 0.30 | 192 |
+| sections/05_tilings_and_sizes.tex | 274 | 5.3 | 36 |
 | sections/06_physics_comparison.tex | 50 | 0.42 | 126 |
 | sections/06_physics_comparison.tex | 51 | 0.55 | 53 |
 | sections/06_physics_comparison.tex | 51 | 1.8 | 106 |
@@ -230,12 +230,12 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 |---|---|---|---|---|
 | appendix/D_da_details.tex | 104 | 0.046 | 3 | artifacts/experiments/a10_selection/decision.json, artifacts/experiments/da2d/j17s_screen_ganiso0.05.json |
 | sections/04_system.tex | 43 | 189.0 | 3 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/da2d/h9_K1l_L66_T4_N64_WRONG_unlocalized.json |
-| sections/05_tilings_and_sizes.tex | 179 | 0.461 | 7 | artifacts/experiments/da2d/h9_D10_L44_rtps0.5.json, artifacts/experiments/da2d/h9_D10_L88_I1_T1.json |
-| sections/05_tilings_and_sizes.tex | 216 | 0.043 | 5 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
-| sections/05_tilings_and_sizes.tex | 226 | 2.26 | 7 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/da2d/da2d_VAR_L44_mn0.02_g1_b100.json |
-| sections/05_tilings_and_sizes.tex | 226 | 3.22 | 8 | artifacts/experiments/a10_selection/k_xs01_v2.json, artifacts/experiments/da2d/h9_I16c_L220_300cyc_T4.json |
-| sections/05_tilings_and_sizes.tex | 228 | 3.40 | 6 | artifacts/da_sweep_phaseC2_global.csv, artifacts/experiments/da2d/h9_K10a_st16_T4_300.json |
-| sections/05_tilings_and_sizes.tex | 228 | 2.59 | 8 | artifacts/experiments/da2d/h9_K1u_L88_T1_N128.json, artifacts/experiments/da2d/h9_L44_C12P_st16_rtps0.5_s1.json |
+| sections/05_tilings_and_sizes.tex | 175 | 0.461 | 7 | artifacts/experiments/da2d/h9_D10_L44_rtps0.5.json, artifacts/experiments/da2d/h9_D10_L88_I1_T1.json |
+| sections/05_tilings_and_sizes.tex | 208 | 0.043 | 5 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
+| sections/05_tilings_and_sizes.tex | 218 | 2.26 | 7 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/da2d/da2d_VAR_L44_mn0.02_g1_b100.json |
+| sections/05_tilings_and_sizes.tex | 218 | 3.22 | 8 | artifacts/experiments/a10_selection/k_xs01_v2.json, artifacts/experiments/da2d/h9_I16c_L220_300cyc_T4.json |
+| sections/05_tilings_and_sizes.tex | 220 | 3.40 | 6 | artifacts/da_sweep_phaseC2_global.csv, artifacts/experiments/da2d/h9_K10a_st16_T4_300.json |
+| sections/05_tilings_and_sizes.tex | 220 | 2.59 | 8 | artifacts/experiments/da2d/h9_K1u_L88_T1_N128.json, artifacts/experiments/da2d/h9_L44_C12P_st16_rtps0.5_s1.json |
 | sections/06_physics_comparison.tex | 57 | 0.297 | 5 | artifacts/experiments/da2d/h9_L44_I2_T4_N16_s2p.json, artifacts/experiments/da2d/i11_J17H_p5_c16_rtps0.7_bc_q0_s0.json |
 | sections/06_physics_comparison.tex | 57 | 0.361 | 6 | artifacts/experiments/da2d/h9_I33_d10_T4_s1.json, artifacts/experiments/da2d/h9_I7_T4_s1.json |
 | sections/06_physics_comparison.tex | 87 | 0.620 | 6 | artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens16.json, artifacts/e3_sec_vs_gc_ltransfer_d3_L200_serial_sec_enkf_none_N256.json |

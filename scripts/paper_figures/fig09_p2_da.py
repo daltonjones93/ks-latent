@@ -16,7 +16,7 @@ import json
 
 import numpy as np
 
-from _style import AQUA, COL2, EXP, INK, INK2, MUTED, ORANGE, panel_label, plt, save
+from _style import AQUA, COL2, EXP, INK, INK2, MUTED, ORANGE, OUT, panel_label, plt, save
 
 D = EXP / "da2d"
 inputs = []
@@ -31,25 +31,36 @@ def S(tag):
     return d["steady"] | {"_pc": d["per_cycle"]} if d["steady"].get("diverged_at_cycle") is None else None
 
 
+# Paper II shows the Jacobian in Fig. 1(b), so its version drops panel (a) and relabels (b)-(f) as (a)-(e).
+P2 = "paperII" in str(OUT)
 fig = plt.figure(figsize=(COL2, 5.0))
-gs = fig.add_gridspec(2, 3, hspace=0.62, wspace=0.6)
-a, b, c = (fig.add_subplot(gs[0, i]) for i in range(3))
-d_, e, f = (fig.add_subplot(gs[1, i]) for i in range(3))
+if P2:
+    gs = fig.add_gridspec(2, 6, hspace=0.62, wspace=1.25)
+    a = None
+    b, c, d_ = (fig.add_subplot(gs[0, 2 * i:2 * i + 2]) for i in range(3))
+    e, f = fig.add_subplot(gs[1, 2:4]), fig.add_subplot(gs[1, 4:6])
+    LET = dict(zip("bcdef", "abcde"))
+else:
+    gs = fig.add_gridspec(2, 3, hspace=0.62, wspace=0.6)
+    a, b, c = (fig.add_subplot(gs[0, i]) for i in range(3))
+    d_, e, f = (fig.add_subplot(gs[1, i]) for i in range(3))
+    LET = {k: k for k in "abcdef"}
 
 # (a) Jacobian
-Jz = np.load(D / "jacobian_sparsity_L44_p7c12d10_ks2d.npz")
-inputs.append("artifacts/experiments/da2d/jacobian_sparsity_L44_p7c12d10_ks2d.npz")
-ch, nsite = int(Jz["channels"]), 12
-J = np.abs(Jz["J"][Jz["site"] < nsite][:, : nsite * ch])
-a.imshow(np.log10(J + 1e-12), cmap="Greys", vmin=-4, vmax=0.5, aspect="auto", interpolation="nearest")
-a.grid(False)
-for s in range(nsite + 1):
-    a.axvline(s * ch - 0.5, color=AQUA, lw=0.3)
-a.set_xlabel(f"latent coordinate ({ch} per site)"); a.set_ylabel("observation (by site)")
-a.set_xticks([0, 6 * ch, nsite * ch - 1]); a.set_xticklabels(["0", str(6 * ch), str(nsite * ch)]); a.set_yticks([])
-a.set_title(r"$|J|$ at $44^2$", fontsize=7.5, pad=8)
-panel_label(a, "a")
-offblock = float(J[np.arange(J.shape[0])[:, None], :].max())  # for the caption check below
+if a is not None:
+    Jz = np.load(D / "jacobian_sparsity_L44_p7c12d10_ks2d.npz")
+    inputs.append("artifacts/experiments/da2d/jacobian_sparsity_L44_p7c12d10_ks2d.npz")
+    ch, nsite = int(Jz["channels"]), 12
+    J = np.abs(Jz["J"][Jz["site"] < nsite][:, : nsite * ch])
+    a.imshow(np.log10(J + 1e-12), cmap="Greys", vmin=-4, vmax=0.5, aspect="auto", interpolation="nearest")
+    a.grid(False)
+    for s in range(nsite + 1):
+        a.axvline(s * ch - 0.5, color=AQUA, lw=0.3)
+    a.set_xlabel(f"latent coordinate ({ch} per site)"); a.set_ylabel("observation (by site)")
+    a.set_xticks([0, 6 * ch, nsite * ch - 1]); a.set_xticklabels(["0", str(6 * ch), str(nsite * ch)]); a.set_yticks([])
+    a.set_title(r"$|J|$ at $44^2$", fontsize=7.5, pad=8)
+    panel_label(a, LET["a"])
+    offblock = float(J[np.arange(J.shape[0])[:, None], :].max())  # for the caption check below
 
 # (b) RMSE vs area
 SIZES = {44: (["I33_d10_T4_s0", "I33_d10_T4_s1", "I33_d10_T4_s2"], "I33_d10_T1_s0"),
@@ -81,11 +92,16 @@ if unl:
 pm = json.loads((D / "i11_L44_st8_c24_rtps0.json").read_text())["steady"]["analysis"]
 inputs.append("artifacts/experiments/da2d/i11_L44_st8_c24_rtps0.json")
 b.plot([1], [pm], "*", color=INK, ms=6, label="PDE filter, true model")
-b.set_xscale("log"); b.set_ylim(0, 1.32); b.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
+b.set_xscale("log"); b.set_ylim(0, 1.0 if P2 else 1.32); b.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
 b.set_xlabel(r"area / $44^2$"); b.set_ylabel("analysis RMSE")
-b.legend(fontsize=5.6, loc="upper center", ncol=2, handlelength=1.4, columnspacing=0.6, borderaxespad=0.1,
-         bbox_to_anchor=(0.5, 1.03))
-panel_label(b, "b")
+if P2:  # panel (a)'s legend fills the left of the bottom row
+    lax = fig.add_subplot(gs[1, 0:2]); lax.axis("off")
+    lax.legend(*b.get_legend_handles_labels(), fontsize=5.8, loc="center", handlelength=1.6,
+               bbox_to_anchor=(0.45, 0.5), frameon=False)
+else:
+    b.legend(fontsize=5.6, loc="upper center", ncol=2, handlelength=1.4, columnspacing=0.6, borderaxespad=0.1,
+             bbox_to_anchor=(0.5, 1.03))
+panel_label(b, LET["b"])
 
 # (c) members per tiling
 for L, tags, col, mk in ((44, {8: "D10_L44_I3_N8", 16: "D10_L44_I3_N16", 32: "D10_L44_I3_N32", 64: "I33_d10_T4_s0",
@@ -98,7 +114,7 @@ for L, tags, col, mk in ((44, {8: "D10_L44_I3_N8", 16: "D10_L44_I3_N16", 32: "D1
     c.plot(x, y, marker=mk, color=col, ms=3, label=f"${L}^2$")
 c.set_xscale("log", base=2); c.set_xticks([8, 16, 32, 64, 128]); c.set_xticklabels(["8", "16", "32", "64", "128"])
 c.set_xlabel("members per tiling"); c.set_ylabel("analysis RMSE"); c.set_ylim(0.25, 0.5)
-c.legend(fontsize=6.5); panel_label(c, "c")
+c.legend(fontsize=6.5); panel_label(c, LET["c"])
 
 # (d) per-cycle at 440^2
 s4, s1 = S("D10_L440_I1_T4"), S("D10_L440_I1_T1")
@@ -109,7 +125,7 @@ d_.plot(cyc, s4["_pc"]["spread_blend"], color=AQUA, lw=0.9, ls="--", label="spre
 d_.plot(cyc, s1["_pc"]["blend"], color=INK2, lw=0.9, label="error, 1 tiling")
 d_.set_xlabel("cycle"); d_.set_ylabel("RMSE / spread"); d_.set_ylim(0, 0.8)
 d_.set_title(r"$440^2$, $d = 76\,800$", fontsize=7.5, pad=8)
-d_.legend(fontsize=6, loc="upper right"); panel_label(d_, "d")
+d_.legend(fontsize=6, loc="upper right"); panel_label(d_, LET["d"])
 
 # (e) equal resources
 groups = [("1×64", "D10_L44_I2_T1_N64_s{}"), ("2×32", "D10_L44_I2_T2_N32_s{}"), ("4×16", "D10_L44_I2_T4_N16_s{}"),
@@ -126,7 +142,7 @@ e.tick_params(axis="x", length=0, pad=2)
 e.set_ylabel("analysis RMSE"); e.set_ylim(0, 0.55); e.grid(axis="x", visible=False)
 e.text(1.0, 0.505, "64 in total", ha="center", fontsize=6.2, color=INK2)
 e.text(3.5, 0.505, "4×64", ha="center", fontsize=6.2, color=INK2)
-panel_label(e, "e")
+panel_label(e, LET["e"])
 
 # (f) number of tilings
 pts = [(1, "I33_d10_T1_s0"), (2, "D10_L44_I4_T2"), (4, "I33_d10_T4_s0"), (16, "D10_L44_I4_T16")]
@@ -143,6 +159,6 @@ f.annotate(f"uniform: {su['calib_blend']:.2f}", (4, su["blend"]), textcoords="of
 f.set_xscale("log", base=2); f.set_xticks([1, 2, 4, 16]); f.set_xticklabels(["1", "2", "4", "16"])
 f.text(0.97, 0.97, "labels: spread/error", transform=f.transAxes, ha="right", va="top", fontsize=6, color=INK2)
 f.set_xlabel("tilings $K$ (Hann weights)"); f.set_ylabel("analysis RMSE"); f.set_ylim(0.25, 0.5)
-panel_label(f, "f")
+panel_label(f, LET["f"])
 
 save(fig, "fig09_p2_da", inputs)

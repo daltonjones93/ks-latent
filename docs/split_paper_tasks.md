@@ -188,11 +188,11 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
 
 ## S4 Paper II (`docs/paperII/`)
 
-- **S4.1 `[ ]` Front matter.** Title; three key points (tilings; one model and one setting from 44²
+- **S4.1 `[x]` Front matter.** Title; three key points (tilings; one model and one setting from 44²
   to 440²; the crossover against physics-based filters, phrased after P7); abstract ≤ 250 words
   that states the model in one sentence and cites Paper I; PLS (restore the learned-vs-physics
   sentence only from J17G, per the user's 2026-10-11 instruction). ~1.5 h.
-- **S4.2 `[ ]` §1 Introduction (new).** Order: (i) ensemble DA needs localization, and in extensive
+- **S4.2 `[x]` §1 Introduction (new).** Order: (i) ensemble DA needs localization, and in extensive
   chaos the number of unstable directions grows with the domain (one paragraph, with the Lorenz-96
   and n₊+1 citations from old §1–2); (ii) latent DA with a global vector has no distance, so
   localization is unavailable and recent latent filters omit it (old §1 para 2 + §2.3's second
@@ -232,12 +232,12 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   (forecasts), the robustness and cost tables. ~45 min.
 - **S4.13 `[x]` The 1D results (old §7.8, Fig. 8, App. E.5).** Per S0.3: (a) §9 "The one-dimensional
   case" + App.; (b) App. only with two sentences in §5.4; (c) drop and delete the SEC background. ~1 h.
-- **S4.14 `[ ]` §10 Discussion.** Old §9 paras "What locality buys" and "When to prefer a learned
+- **S4.14 `[x]` §10 Discussion.** Old §9 paras "What locality buys" and "When to prefer a learned
   model"; limitations item 6 expanded into a list (twin experiments; one system; dense regular
   observations; chosen model errors; complete noisy training fields; Kolmogorov not assimilated;
   sparse-observation stability → Paper 2); outlook: CM1 (Paper 3), limited-area models, non-periodic
   domains (I27), model-error statistics (I22). ~1.5 h.
-- **S4.15 `[ ]` §11 Conclusions.** Old §10 para 3 expanded to three short paragraphs: exactness and
+- **S4.15 `[x]` §11 Conclusions.** Old §10 para 3 expanded to three short paragraphs: exactness and
   tilings; size invariance and the ensemble; the crossover. ~45 min.
 - **S4.16 `[x]` Appendices.** A' settings (12-channel model, noisy training, filter and comparator
   settings; from old Table A's last column and App. E.2–E.3); B' proof of Prop. 1 (old App. B.4);
@@ -247,19 +247,19 @@ Paper II ≈ 9,500 (7,000 from §7 + method + intro) → trim to ≤ 8,500 (S4.1
   block-diagonal observation Jacobian (old Fig. 9a, measured); (c) the four shifted tilings and the
   Hann weights (old Fig. 13a–b). Reuse `fig01_concept.py` panel (d) and `fig13_tilings.py`; one new
   script `fig_concept_da.py`. ~2 h.
-- **S4.18 `[ ]` Length pass.** Target ≤ 8,500 words main text. Candidates: §5.3 Gaussianity → App.;
+- **S4.18 `[x]` Length pass.** Target ≤ 8,500 words main text. Candidates: §5.3 Gaussianity → App.;
   §8 observation density → App. with one sentence; the cost section → one paragraph + table. ~1.5 h.
-- **S4.19 `[~]` Figures regenerated** into `docs/paperII/figures` under content names: tilings, da_2d,
+- **S4.19 `[x]` Figures regenerated** into `docs/paperII/figures` under content names: tilings, da_2d,
   snapshot, model_error, forecasts, (1d_da), jacobian_timing, systems_ks2d. Captions without
   "Part I/II". ~1 h.
-- **S4.20 `[ ]` Bibliography.** `refs.bib` pruned to the entries cited; add Paper I (arXiv id after
+- **S4.20 `[x]` Bibliography.** `refs.bib` pruned to the entries cited; add Paper I (arXiv id after
   S0.4). ~30 min.
-- **S4.21 `[ ]` Number check.** `check_numbers.py --paper paperII` with the strict class on every
+- **S4.21 `[x]` Number check.** `check_numbers.py --paper paperII` with the strict class on every
   section; zero UNMATCHED and zero SUSPECT; the by-hand trace of 2026-10-11
   (`paper1/k11_part2_verification.md`) re-applied to the moved text. ~1 h.
-- **S4.22 `[ ]` Self-containment read-through.** Every symbol (𝓛, c, p, R_enc, Ω, ρ, n₊, D_KY) defined
+- **S4.22 `[x]` Self-containment read-through.** Every symbol (𝓛, c, p, R_enc, Ω, ρ, n₊, D_KY) defined
   before use; no `\ref` to a Paper I label; the model's transfer is quoted, not assumed. ~1 h.
-- **S4.23 `[ ]` Journal formatting (after S0.2).** Class, citation style, figure widths, supplement
+- **S4.23 `[x]` Journal formatting (after S0.2).** Class, citation style, figure widths, supplement
   vs appendix, data-availability statement. ~2 h.
 
 
@@ -269,6 +269,18 @@ in `docs/paperII/decisions.md`). `make paperII` builds (48 pages, no undefined r
 conclusions: after J17G), S4.10's P7/P9 and the J17G rows of the model-error table and figure, SK6,
 S4.18 (sections now ~9,800 words with LaTeX, before introduction and discussion), S4.19's duplicate
 panels (Fig. da_2d(a) and Fig. tilings(a,b) repeat Fig. 1(b)–(d)), S4.20–S4.23.
+
+**S4 completed 2026-10-12.** Front matter (key points, abstract 249 words, PLS with the learned-vs-physics
+sentence from J17G), introduction (~880 words), discussion (~770) and conclusions (~310) written; main text
+~9,270 words (target 9,500 per the user's 2026-10-11 decision, which supersedes the 8,500 above; the
+Gaussianity paragraph moved to App. D). Duplicate panels dropped: Paper II variants of `fig09_p2_da.py`
+(no Jacobian panel; legend in the bottom row) and `fig13_tilings.py` (no schematic/weights; 2x2), selected by
+`PAPER_OUT` containing `paperII`, with all panel references relabelled. `refs.bib` pruned to the 47 cited
+entries. Number check 0 UNMATCHED / 0 SUSPECT; every K11 correction confirmed in the moved text; the new text
+traced by hand. Self-containment: SEC and Hann defined at first use; "vanishes on its patch edges" corrected
+to "is smallest on" (the weight is sin^2((t+1/2)pi/p), never zero). JAMES: journal name, Open Research
+statement, Acknowledgments. Left for the user: repository/DOI (S6.4), funding and CRediT (S6.3), Paper I's
+arXiv id for `refs.bib` (S0.4).
 
 ---
 

@@ -103,6 +103,16 @@ smooth noise (correlation length 4 grid points) it is $1.35$, $1.09$, $1.02$ and
 $1.01$ and $0.99$; for latent-space noise of standard deviation $0.05$--$0.2$ it is $1.00$--$1.05$ for both. The
 reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_j18b\_roundtrip.py}).
 
+\subsection{Gaussianity of the latent priors}
+\label{app:da_gauss}
+
+The latent coordinates are close to Gaussian in
+climatology (mean absolute skewness per coordinate $0.20$, excess kurtosis
+$-0.07$), and 16-member one-cycle priors show mean absolute skewness of $0.38$ in
+latent space and $0.40$ in physical space, within the sampling noise of about $0.6$
+for 16 members. At this cycle length the latent space offers neither an
+advantage nor a disadvantage for a Gaussian filter.
+
 \subsection{Run-to-run spread and transients}
 \label{app:da_tuning}
 
