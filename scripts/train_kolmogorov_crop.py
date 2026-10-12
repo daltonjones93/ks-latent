@@ -42,6 +42,8 @@ def main() -> None:
     p.add_argument("--crop-sites-y", type=int, default=None,
                    help="P7: also crop in y (2D crops for isotropic systems, e.g. 2D KS). Default: full periodic y.")
     p.add_argument("--window", type=int, default=3)
+    p.add_argument("--prop-layers", type=int, default=2,
+                   help="R4: propagator blocks; reach per step = prop_layers x window (sets the forced halo)")
     p.add_argument("--ae-steps", type=int, default=8000)
     p.add_argument("--prop-steps", type=int, default=6000)
     p.add_argument("--k-max", type=int, default=12, help="P9b: max rollout length in Stage B")
@@ -174,7 +176,7 @@ def main() -> None:
     # per layer for the consensus relaxation.
     per_layer = args.window + (args.consensus_n_iter * args.consensus_radius
                                if args.backbone == "local_mlp_2d_consensus" else 0)
-    halo = 0 if args.periodic_full else 2 * per_layer
+    halo = 0 if args.periodic_full else args.prop_layers * per_layer
     bands_flat = [float(x) for x in args.spectral_bands.split(",")]
     spectral_bands = tuple(zip(bands_flat[0::2], bands_flat[1::2]))
     pcfg = CropPropConfig(halo_sites=halo, halo_sites_y=halo if args.crop_sites_y else 0, seed=args.seed,
@@ -233,7 +235,7 @@ def main() -> None:
         n_history=max(args.n_history, 2) if args.n_history > 1 else 3,
         backbone=args.backbone, attn_window=args.window,
         local_mlp2d_n_sites_x=Pu, local_mlp2d_n_sites_y=bank_tr.shape[3], local_mlp2d_local_channels=c,
-        local_mlp2d_token_d_model=32, local_mlp2d_n_layers=2,
+        local_mlp2d_token_d_model=32, local_mlp2d_n_layers=args.prop_layers,
         consensus_n_iter=args.consensus_n_iter, consensus_radius=args.consensus_radius, **extra_cfg,
     )
     prop = AuxPropagator(prop_cfg).to(dev)

@@ -388,6 +388,59 @@ the only references added in the split are the two companion papers. Left: S6.3 
 
 ---
 
+## R Internal referee reviews and the 2D transfer question (2026-10-12)
+
+Two independent referee-style reviews (fresh agents, full read) recommended **major revision** for both papers;
+reports: `docs/paperI/internal_referee_report.md`, `docs/paperII/internal_referee_report.md`. Verify each point
+against the data before changing text. Verified so far: R1's premise (2D training windows, 40×40 sites = 220²,
+are larger than the 44²/66² evaluation domains; Kolmogorov windows 48 sites ≈ 6 boxes vs ≤ 3 evaluated), R6's
+ensemble counts, R7's stalled estimation. Not confirmed: the "35% low at 88²" point refers to the older `p7_ks2d`
+(215.9); the canonical `p7b_ks2d` gives 332–335 against the extensive prediction 0.043·88² ≈ 333.
+
+User decision (2026-10-12): the 2D method is "train on windows of one larger simulation, then deploy at other
+sizes", acceptable because it is how a CM1 model would be trained; but first try training on subsets of the 44²
+data (R4).
+
+- **R1 `[ ]` Paper I 2D framing.** Replace "zero-shot transfer to larger domains" in 2D by "trained on windows of one
+  large simulation, deployed on domains of other sizes without retraining"; keep the true small-to-large claim for
+  1D (L = 100 box to L = 400). State the source-domain size wherever 2D results appear: abstract, key points,
+  Fig. 1 caption, introduction, contributions, conclusions, Table A. Depends on R4's outcome.
+- **R2 `[ ]` Paper I disclosures (verify each first).** Precision vs truth uncertainty ("0.6–2%" against ±20% single
+  truths, mean of absolute errors); λ₁ of the 2D models 12–29% above the truth (1D +4–9%) not reported; the older
+  88² value (`p7`, 215.9) vs canonical; the order in which the truth-free selection rule was written and applied;
+  Lemma 1 framed as the law of total variance with its limits; "no drift" vs Table XVI (std 1.19× at 88²); a
+  global-latent or CNN baseline (or say why not); the 1D interaction-range measurement confounded by encoder reach;
+  ~30 minor items in the report.
+- **R3 `[ ]` Beyond-source check.** Free run of the canonical 2D KS model at 440² (beyond the 264² source) against a
+  true 440² simulation: field std, energy spectrum, correlation length. A few hours; supports Paper I and Paper II.
+- **R4 `[ ]` 2D small-source experiment (user, 2026-10-12).** c19-style per-patch model (encoder and decoder reach
+  0, c = 6) trained on windows of the 44² data (`ks2d_trajectories_default.h5`, 24 + 6 trajectories × 25 time
+  units). The propagator's reach must be short enough that a window of the 8-site box does not wrap onto itself:
+  reach 2 (window 1 × 2 layers, halo 2, 8-site crop, 4×4 interior) and reach 3 (window 3 × 1 layer, halo 3, 2×2
+  interior). Control: the same short-reach propagator trained on 264² windows, to separate the data from the reach.
+  Evaluate D_KY at 44², 66² (truths) and 88² (extensive prediction ≈ 333); then the latent filter at 44²–440².
+  The earlier box-trained model (full reach 6 on the 8-site ring, periodic wrap) failed by 14–23%.
+- **R5 `[ ]` Optional: source-size sweep** (windows of 132² and 88² sources) — how small the training simulation can
+  be; useful for planning CM1 runs.
+- **R6 `[ ]` Paper II ensemble budget.** P7 says "same observations and ensemble resources": false (latent 4 × 64 vs
+  physics 64). Fix the text; report matched-budget latent results (4 × 16: 0.318–0.352 at 44²); run 4 × 16 latent
+  filters for J17G δ = 0.1/0.2/0.3.
+- **R7 `[ ]` Paper II parameter estimation stalls.** Parameter spread hits its 0.005 floor by cycle 30–40; estimates
+  stick (∇² 1.25 → 1.17; advection 2 → 0.40; advection 1 → 0.07). Rerun the estimation cases with parameter inflation
+  (higher floor or parameter RTPS) and RTPS retuned with each remedy on; regenerate Table/Fig. model_error; recheck
+  the crossover.
+- **R8 `[ ]` Paper II other points.** State the training source (windows of 264²) and that 440² goes beyond it;
+  crossover x-axis (after bias correction, before estimation) and where the hidden-field cases sit; "a sixth of the
+  observation error" stated as a one-system result; the learned model's own one-cycle error (0.19) vs the crossover
+  (0.10); Prop. 1 framed by what exactness enables (tilings, size invariance), not as deep; the per-patch decoder's
+  cost and the overlapping-decoder alternative; noisy-training gain vs the run-to-run threshold; prior work to verify
+  (hybrid physics + learned correction, e.g. Pathak et al. 2018; Penny et al. 2022, JAMES); the partially run cubic
+  missing-process experiment; observation network aligned with the patch lattice; sparse-observation numbers
+  (0.769 / 0.798 / 0.77) inconsistent; notation reuse (c, p, K, h, ρ, U_s/N_s); figure/table order; Fig. da_2d(a)
+  clipping; Kolmogorov model settings in App. A.
+
+---
+
 ## S6 Finishing
 
 - **S6.1 `[x]` Grayscale and 50 %-zoom check** of every figure in both papers (contract §F). ~1 h.
