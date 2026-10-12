@@ -467,6 +467,13 @@ data (R4).
   wrap control as a limitations result. The wrap control (`r4w`, reach 6 on the full periodic box, 44²: 83.3, +1.9%)
   does not by itself establish wrap-around as the cause of the old failure; it is read alongside its 66² and 88² evals
   before the paper says so.
+- **R4 scheduling change (2026-10-12 15:10, user: "prioritize any jobs that will help us make that decision").**
+  (a) `run_r4_dbig.sh` gated the 144-trajectory D retrain (r4e) on "TRAIN LANE DONE", i.e. on every eval including
+  Kolmogorov 3×, which would have delayed the Paper II data test by about a day; replaced by `run_r4_dbig2.sh`
+  (starts at once; its 440² run waits only for D's own 440² result). (b) c = 6 Kolmogorov 3× (seed 0) started in
+  parallel with 2×, rather than after it; the queue skips it when its json exists. (c) c = 12 Kolmogorov 1× eval
+  (6.3 h, 150% CPU) paused with SIGSTOP (pid 14910; resume with `kill -CONT 14910`): c = 6 is the model R9a tests
+  first; c = 12 is the contingency. No result discarded.
 - **R10 `[ ]` Paper I rerun and reanalysis inventory (if R4/R4K hold; user 2026-10-12: "complete rewrite").**
   Everything in Paper I that rests on the 2D KS or Kolmogorov models, mapped from the figure/table generators and
   the sections. The 1D results (§5, Figs. 1d_transfer/1d_spectra, Table transfer1d) are unaffected: the 1D model is
