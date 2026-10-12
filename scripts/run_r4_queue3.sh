@@ -53,11 +53,11 @@ KK="--dataset $D/kolmogorov_trajectories_default.h5 --crop-sites 8 --window 3 --
 train_lane() {
   { evals2d $C; } &
   train $DT $K44 --local-channels 12 --data-noise 0.1 $SB; { evals2d $DT; } &
+  train $K6 $KK --local-channels 6 $SK; { evalsk $K6; } &
+  train $K12 $KK --local-channels 12 --data-noise 0.1 $SK; { evalsk $K12; } &
   train $WT $KW --local-channels 6 $SB; { evals2d $WT; } &
   train $S1 $K44 --local-channels 6 --seed 1 $SB; { evals2d $S1; } &
   train $S2 $K44 --local-channels 6 --seed 2 $SB; { evals2d $S2; } &
-  train $K6 $KK --local-channels 6 $SK; { evalsk $K6; } &
-  train $K12 $KK --local-channels 12 --data-noise 0.1 $SK; { evalsk $K12; } &
   wait; log "TRAIN LANE DONE"; }
 da_lane() {
   da $C 44 4; da $C 44 1; da $DT 44 4; da $C 440 4; da $DT 440 4; da p7b_ks2d 440 4
