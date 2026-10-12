@@ -140,11 +140,11 @@ $44^2$, steady-state analysis error in field units, mean over seeds 0--2
 (range). One-cycle error: the physics model's root-mean-square one-cycle
 forecast error from the true state on an independent trajectory, total
 and state-dependent (after subtracting its mean). Tuned: best RTPS and
-localization. Best: best configuration including online parameter
+localization (mean only). Best: best configuration including online parameter
 estimation (est.) or bias correction (bc), selected on seed 0. The latent
-filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field and
-missing-process cases, where the latent model was trained on that system and the comparison is in its
-field units, and the latent filter's error follows the outcome. $^\ast$Seed 0 only (the tuning grid runs on seed 0; the best configuration on seeds 0--2). Outcome: a filter
+filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field (hidden) and
+missing-process (missing) cases, where the latent model was trained on that system, the comparison is in
+its field units, and the latent filter's error follows the outcome. $^\ast$Seed 0 only (the tuning grid runs on seed 0; the best configuration on seeds 0--2). Outcome: a filter
 wins if its three-seed mean is at least $10\%$ lower and it is lower on every seed; the factor is the
 ratio of the means.}
 \label{tab:da_model_error}
