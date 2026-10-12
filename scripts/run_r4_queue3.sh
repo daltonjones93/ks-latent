@@ -39,13 +39,10 @@ da() { tag=$1; Ls=$2; T=$3; out=R4_${tag}_L${Ls}_T$T; [ -f $E/da2d/h9_$out.json 
 log "queue3 start"
 until [ -f $(ckpt $C) ] && ! pgrep -f "train_kolmogorov_crop.py --dataset .* --tag $C " > /dev/null; do sleep 60; done
 log "train $C done $(grep -E 'step 9000/9000' $L/crop_train_$C.log | tail -1)"
-ev2d $C 1.0 0; ev2d $C 1.5 0
-SAME=$($PY -c "
-import json; a=json.load(open('$CR/${C}_x1.0_seed0.json'))['model_D_KY']; b=json.load(open('$CR/${C}_x1.5_seed0.json'))['model_D_KY']
-print(int(abs(a/83.1-1)<0.02 and abs(b/187.1-1)<0.02))")
-if [ "$SAME" = 1 ]; then SB=""; SA=""; SK=""; log "C_eq matches the first C within 2%: default batches from here"
-else SB="--ae-batch 800 --prop-batch 1600"; SA="--ae-batch 356 --prop-batch 711"; SK="--ae-batch 192 --prop-batch 384"
-  log "C_eq differs from the first C by more than 2%: keeping equal-work batches"; fi
+# User 2026-10-12: C_eq vs the first C differed by 0.4% / 2.1% / 1.3% at 44^2 / 66^2 / 88^2, within the first C's
+# own IC spread (187.1 vs 183.5 at 66^2), so the batch scaling makes no measurable difference: default batches.
+SB=""; SK=""
+log "default batches for D, Kolmogorov, wrap control and seeds (C_eq within the IC spread of the first C)"
 DT=r4d_ks2d_s44_r3_c12d10; WT=r4w_ks2d_s44_r6_wrap; S1=r4c_ks2d_s44_r3_seed1; S2=r4c_ks2d_s44_r3_seed2; K6=r4k_c6_a005_s1x_r3; K12=r4k_c12d10_a005_s1x_r3
 K44="--dataset $D/ks2d_trajectories_default.h5 --crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 1"
 KW="--dataset $D/ks2d_trajectories_default.h5 --crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 2 --periodic-full"
