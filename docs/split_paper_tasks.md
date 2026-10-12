@@ -427,6 +427,19 @@ data (R4).
   effect. Filter at 44²: 0.618 (p7b at the same settings 0.579; interpolation 0.829). Queue
   (`scripts/run_r4_queue2.sh`): equal-work C, D (c = 12, noise 0.1, 44² data; filter at 44² and 440²), p7b at 440²,
   A, B.
+- **R4 log of decisions (2026-10-12, user-approved).** (1) First C used default batches; an equal-work rerun (batches
+  scaled to the canonical sites per step) gave D_KY within the IC spread of the first (82.8/183.1/324.6 vs
+  83.1/187.1/329.0), so all later models use default batches. (2) A and B (66² source, reach 4/5) dropped as
+  unnecessary once C worked; replaced by the reach-6 wrap control (`r4w_ks2d_s44_r6_wrap`, `--periodic-full`) and C
+  training seeds 1–2. Kolmogorov models moved ahead of those (they decide the Paper I rewrite). (3) D (c = 12, noise
+  0.1, 44² box, reach 3) filters at 0.408 at 44² (RTPS 0.7; 0.395 at RTPS 0.9) vs 0.324 for the Paper II model, with
+  an equally good decoder (floor 0.233/0.132 vs 0.251/0.137): the gap is the propagator. Two candidate causes, tested
+  in order: **data** (D saw 24 box trajectories, the Paper II model ~6× more area) → `r4e_ks2d_s44big_r3_c12d10`
+  on 144 new 44² trajectories (`scripts/gen_ks2d_box_large.py`, `scripts/run_r4_dbig.sh`); **reach** (3 vs 6) →
+  if data does not close it, c = 12 models with reach 5 on 66² (12 sites) and reach 6 on 77² (14 sites, the smallest
+  box without a wrap at reach 6), data generated in advance (`scripts/run_r4_gen_reach.sh`: 64 × 66², 48 × 77²,
+  about the same area as the 44² set). If reach 5–6 reaches ~0.32, Paper II pivots to that small box (440² is then
+  25–40× the training area).
 - **R4K `[~]` Kolmogorov small-source test (user, 2026-10-12; `scripts/run_r4k_kolmogorov.sh`, after the R4 training
   lane).** 1× box data (α = 0.05), crops 8 sites in x with full height, reach 3, equal-work batches; c = 6 (Paper I)
   and c = 12 with data noise 0.1 (Paper II). D_KY at 1×/2×/3× against the per-IC truths; the tiled filter at 1× and
