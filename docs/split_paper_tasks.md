@@ -455,6 +455,18 @@ data (R4).
   interaction-range argument for the reach, new figures/tables, and every R2 disclosure. Paper II then uses the
   small-source 12-channel model where it matches the current one (or adds it as "trained on 44², assimilated on
   440²").
+- **R9a `[ ]` Paper I decision rule (written 2026-10-12 12:30, before the 66²/88² and Kolmogorov 2×/3× evals came in;
+  the 44² results were already known).** Adopt the small-box paradigm for a system if, for that system's adopted model:
+  (i) **2D KS:** D_KY within 5% of the truth mean (82.0 / 189.0; 88² against the extensive prediction ≈ 333, stated as
+  such until R10 item 13) at 44², 66² and 88², on every training seed (3 seeds); (ii) **Kolmogorov (α = 0.05):** D_KY
+  at 1×, 2× and 3× within the per-IC truth spread (about ±20%; R2) of the multi-IC truth mean, and the mean over ICs
+  within 10%. If both systems pass: full rewrite (R9/R10/R11). If only 2D KS passes: rewrite the 2D KS parts, keep the
+  window-trained Kolmogorov model and say so. If Kolmogorov passes only for the c = 12 noisy model rather than c = 6:
+  adopt whichever passes, log it in `docs/paperI/decisions.md`, and use that model for both papers' Kolmogorov results.
+  If neither system passes: Paper I keeps the window-trained models and gains only the R2 disclosures, the seeds and the
+  wrap control as a limitations result. The wrap control (`r4w`, reach 6 on the full periodic box, 44²: 83.3, +1.9%)
+  does not by itself establish wrap-around as the cause of the old failure; it is read alongside its 66² and 88² evals
+  before the paper says so.
 - **R10 `[ ]` Paper I rerun and reanalysis inventory (if R4/R4K hold; user 2026-10-12: "complete rewrite").**
   Everything in Paper I that rests on the 2D KS or Kolmogorov models, mapped from the figure/table generators and
   the sections. The 1D results (§5, Figs. 1d_transfer/1d_spectra, Table transfer1d) are unaffected: the 1D model is
