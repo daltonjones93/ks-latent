@@ -6,6 +6,10 @@
 #   C  44^2 data (8 sites):  reach 3 (1 layer x window 3), crop 8, halo 3, 2x2 interior
 #   A  66^2 data (12 sites): reach 4 (2 layers x window 2), crop 12, halo 4, 4x4 interior
 #   B  66^2 data (12 sites): reach 5 (1 layer x window 5), crop 12, halo 5, 2x2 interior
+# Equal work per step (2026-10-12): small crops see far fewer patches (Stage A) and free interior sites (Stage B)
+# per step than the canonical 40x40-site crops, so the batches are scaled to the canonical sites per step
+# (Stage A 32 x 1600, Stage B 64 x 1600 sites): 44^2 crops (64 sites) 800 / 1600; 66^2 crops (144 sites) 356 / 711.
+# Tags end in _eq; the first r4c run (batch 32 / 64, decoder floor 0.66 vs 0.25) is kept for the record.
 # Trainings run one at a time on MPS (C, A, B); each model's D_KY evaluations (44^2, 66^2, 88^2; IC seeds 0-1)
 # run on CPU while the next model trains. Truth: 44^2 and 66^2 tables; 88^2 by the extensive prediction (~333).
 # Log: artifacts/logs/r4.log.
@@ -16,9 +20,9 @@ log() { echo "$(date '+%F %T') [R4] $*" >> $L/r4.log; }
 BASE="--n-offsets 16 --local-channels 6 --site-mix-radius 0 --n-site-mix-layers 0 --dec-site-mix-radius 0 \
 --dec-n-site-mix-layers 0 --k-max 32 --k-mid 16 --noise-end 0.02 --prop-steps 9000"
 RUNS=(
-  "r4c_ks2d_s44_r3|$D/ks2d_trajectories_default.h5|--crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 1"
-  "r4a_ks2d_s66_r4|$D/ks2d_residual_L1_transfer66.h5|--crop-sites 12 --crop-sites-y 12 --window 2 --prop-layers 2"
-  "r4b_ks2d_s66_r5|$D/ks2d_residual_L1_transfer66.h5|--crop-sites 12 --crop-sites-y 12 --window 5 --prop-layers 1"
+  "r4c_ks2d_s44_r3_eq|$D/ks2d_trajectories_default.h5|--crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 1 --ae-batch 800 --prop-batch 1600"
+  "r4a_ks2d_s66_r4_eq|$D/ks2d_residual_L1_transfer66.h5|--crop-sites 12 --crop-sites-y 12 --window 2 --prop-layers 2 --ae-batch 356 --prop-batch 711"
+  "r4b_ks2d_s66_r5_eq|$D/ks2d_residual_L1_transfer66.h5|--crop-sites 12 --crop-sites-y 12 --window 5 --prop-layers 1 --ae-batch 356 --prop-batch 711"
 )
 evals() { tag=$1
   for s in 0 1; do for sc in 1.0 1.5 2.0; do
@@ -27,7 +31,7 @@ evals() { tag=$1
     $PY scripts/exp_crop_eval_ks2d.py --ae-ckpt $A/stage1_ae_kolmogorov_crop_$tag.pt \
       --prop-ckpt $A/stage2_prop_kolmogorov_crop_$tag.pt --scale $sc --seed $s --tag ${tag}_x${sc}_seed$s $nd \
       >> $L/crop_eval_$tag.log 2>&1
-    log "eval $tag x$sc seed$s rc=$? $($PY -c "import json;d=json.load(open('$out'));print('D_KY',round(d['model_D_KY'],1),'n+',d.get('model_n_positive'),'lam1',round(d.get('model_lambda1',0),3),'err%',d.get('rel_err_pct'))" 2>/dev/null)"
+    rc=$?; log "eval $tag x$sc seed$s rc=$rc $($PY scripts/r4_summary.py dky $out)"
   done; done; log "evals $tag done"; }
 log "start"
 pids=()

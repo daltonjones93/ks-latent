@@ -42,6 +42,10 @@ def main() -> None:
     p.add_argument("--crop-sites-y", type=int, default=None,
                    help="P7: also crop in y (2D crops for isotropic systems, e.g. 2D KS). Default: full periodic y.")
     p.add_argument("--window", type=int, default=3)
+    p.add_argument("--ae-batch", type=int, default=None,
+                   help="R4: Stage A batch (default: CropAEConfig's 32); scale by 1600/crop_sites^2 for equal patches per step")
+    p.add_argument("--prop-batch", type=int, default=None,
+                   help="R4: Stage B batch (default: CropPropConfig's 64); scale by 1600/crop_sites^2 for equal sites per step")
     p.add_argument("--prop-layers", type=int, default=2,
                    help="R4: propagator blocks; reach per step = prop_layers x window (sets the forced halo)")
     p.add_argument("--ae-steps", type=int, default=8000)
@@ -151,6 +155,8 @@ def main() -> None:
     acfg = CropAEConfig(crop_sites=args.crop_sites, crop_sites_y=args.crop_sites_y, y_align=args.y_align,
                         mask_sites=enc_sites + dec_sites,
                         enc_sites=enc_sites, steps=args.ae_steps, seed=args.seed, w_grad=args.w_grad, **ae_kwargs)
+    if args.ae_batch is not None:
+        acfg.batch = args.ae_batch
     ae_path = A / f"stage1_ae_kolmogorov_crop_{args.tag}.pt"
     ae = KSAutoencoderLocalField2D(ae_cfg).to(dev)
     if ae_path.exists():
@@ -187,6 +193,8 @@ def main() -> None:
         pcfg.noise_in_start = args.noise_start
     if args.prop_lr is not None:
         pcfg.lr = args.prop_lr
+    if args.prop_batch is not None:
+        pcfg.batch = args.prop_batch
     if args.k_full:
         pcfg.k_mid_frac = pcfg.k_warmup_frac = 0.0
     prop_path = A / f"stage2_prop_kolmogorov_crop_{args.tag}.pt"
