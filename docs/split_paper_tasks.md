@@ -321,7 +321,7 @@ Purpose: make the 1D experiments of Paper II use the same kind of model as the 2
 encoder and decoder, so Prop. 1 holds in 1D; noisy training at 0.1), instead of Paper I's 1D model
 (reach 6, clean data), which §4.3 currently has to describe as an exception.
 
-- **S1D.1 `[~]` Option A (queued, `scripts/run_1d_perpatch.sh`, caffeinated, log `artifacts/logs/pp1d.log`).**
+- **S1D.1 `[x]` Option A (queued, `scripts/run_1d_perpatch.sh`, caffeinated, log `artifacts/logs/pp1d.log`).**
   Paper I's 1D recipe with encoder/decoder reach 0, c = 6, no spatial penalty, noisy data
   (`artifacts/datasets/stage1_trajectories_dtsnap1_noise0.1.h5`, `scripts/make_noisy_dataset.py`).
   Starts when the last J17G training is done; then D_KY at L = 100/200/400 from three ICs
@@ -335,6 +335,7 @@ encoder and decoder, so Prop. 1 holds in 1D; noisy training at 0.1), instead of 
   --tag pp1d_crop_c6d10`). Tests `tests/unit/test_crop1d.py` (1D forced-halo exactness, halo one site
   short breaks it; bank layout; seam wrap; size independence). Run only if A transfers poorly or the
   user wants 2D-identical training.
+- **S1D result (2026-10-12): keep the current 1D model.** Per-patch c6 model (pp1d_c6d10) transfers well (D_KY/L 0.22 at L=100/200/400) but its DA is ~2x worse: PFF+GC N=64 0.958 (L=200) / 0.910 (L=400) vs 0.427 / 0.425 for the current model; LETKF+GC N=64 0.837 / 0.882 vs 0.453 / 0.452. S1D.3 reduces to one sentence in §4.3 (a per-patch 1D model was tried and assimilates worse, so Prop. 1 is not used in 1D). Option B not run.
 - **S1D.3 `[ ]` Update Paper II with the per-patch 1D results** (after S1D.1, or S1D.2 if run): §4.3 (the
   1D model is per-patch and noisy-trained; drop the "Prop. 1 does not apply" sentence; its D_KY
   validation, a row block in Table `model_validation`); §9 and App. D (regenerate `fig08_1d_da.py`,
