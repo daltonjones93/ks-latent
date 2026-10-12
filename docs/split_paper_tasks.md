@@ -477,7 +477,7 @@ data (R4).
   14. Kolmogorov truths that rest on one 40-unit run (α = 0.1 at 1×; α = 0.05 at 3×; α = 0.025 at 1×, 2×, 3×):
       extend to 120 units or add ICs, as R2 requires (40-unit runs deviated by −17% to +23%).
   15. Truth-side λ₁ for the λ₁ comparison (already in the truth JSONs; tabulate).
-  *Figures (regenerate; Paper I is the frozen `docs/paperI`, regenerated via `make paperI-assets`):*
+  *Figures (regenerate into `docs/paperI` via `make paperI-assets`; `docs/paper1` stays frozen):*
   16. concept_transfer (Fig. 1): panel (c) shows window training on a large simulation → small periodic box with a
       forced halo and a reach shorter than half the box.
   17. systems (Fig. 2): panels (b), (c) show the 264² domain and the 16 × 2π strip → the 44² and 1× training boxes.
