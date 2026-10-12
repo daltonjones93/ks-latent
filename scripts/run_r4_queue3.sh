@@ -2,6 +2,8 @@
 # R4 queue 3 (user 2026-10-12): after equal-work C, check whether equal-work batches matter. If C_eq's D_KY at 44^2
 # and 66^2 (IC seed 0) is within 2% of the first C (83.1, 187.1), train D, A, B and the Kolmogorov models with the
 # default batches (32/64); otherwise keep equal-work batches. Filter lane as in run_r4_queue2.sh.
+# User 2026-10-12: A and B (66^2 source) dropped; instead the wrap control (same 44^2 recipe, reach 6 on the 8-site
+# periodic box via --periodic-full, so the propagator sees its own periodic image) and training seeds 1, 2 of C.
 cd "$(dirname "$0")/.."
 PY=/opt/homebrew/Caskroom/miniforge/base/envs/da_env/bin/python
 A=artifacts; L=$A/logs; E=$A/experiments; D=$A/datasets; CR=$E/crop
@@ -44,22 +46,21 @@ print(int(abs(a/83.1-1)<0.02 and abs(b/187.1-1)<0.02))")
 if [ "$SAME" = 1 ]; then SB=""; SA=""; SK=""; log "C_eq matches the first C within 2%: default batches from here"
 else SB="--ae-batch 800 --prop-batch 1600"; SA="--ae-batch 356 --prop-batch 711"; SK="--ae-batch 192 --prop-batch 384"
   log "C_eq differs from the first C by more than 2%: keeping equal-work batches"; fi
-DT=r4d_ks2d_s44_r3_c12d10; AT=r4a_ks2d_s66_r4; BT=r4b_ks2d_s66_r5; K6=r4k_c6_a005_s1x_r3; K12=r4k_c12d10_a005_s1x_r3
-[ -n "$SB" ] && { AT=${AT}_eq; BT=${BT}_eq; }
+DT=r4d_ks2d_s44_r3_c12d10; WT=r4w_ks2d_s44_r6_wrap; S1=r4c_ks2d_s44_r3_seed1; S2=r4c_ks2d_s44_r3_seed2; K6=r4k_c6_a005_s1x_r3; K12=r4k_c12d10_a005_s1x_r3
 K44="--dataset $D/ks2d_trajectories_default.h5 --crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 1"
-K66="--dataset $D/ks2d_residual_L1_transfer66.h5 --crop-sites 12 --crop-sites-y 12"
+KW="--dataset $D/ks2d_trajectories_default.h5 --crop-sites 8 --crop-sites-y 8 --window 3 --prop-layers 2 --periodic-full"
 KK="--dataset $D/kolmogorov_trajectories_default.h5 --crop-sites 8 --window 3 --prop-layers 1"
 train_lane() {
   { evals2d $C; } &
   train $DT $K44 --local-channels 12 --data-noise 0.1 $SB; { evals2d $DT; } &
-  train $AT $K66 --local-channels 6 --window 2 --prop-layers 2 $SA; { evals2d $AT; } &
-  train $BT $K66 --local-channels 6 --window 5 --prop-layers 1 $SA; { evals2d $BT; } &
+  train $WT $KW --local-channels 6 $SB; { evals2d $WT; } &
+  train $S1 $K44 --local-channels 6 --seed 1 $SB; { evals2d $S1; } &
+  train $S2 $K44 --local-channels 6 --seed 2 $SB; { evals2d $S2; } &
   train $K6 $KK --local-channels 6 $SK; { evalsk $K6; } &
   train $K12 $KK --local-channels 12 --data-noise 0.1 $SK; { evalsk $K12; } &
   wait; log "TRAIN LANE DONE"; }
 da_lane() {
   da $C 44 4; da $C 44 1; da $DT 44 4; da $C 440 4; da $DT 440 4; da p7b_ks2d 440 4
-  da $AT 44 4; da $BT 44 4; da $AT 440 4; da $BT 440 4
   until [ -f $(ckpt $K12) ] && ! pgrep -f "train_kolmogorov_crop.py --tag $K12 " > /dev/null; do sleep 60; done
   o=$($PY -c "import torch; ck=torch.load('$A/stage1_ae_kolmogorov_crop_$K12.pt', map_location='cpu', weights_only=False); ref=torch.load('$A/stage1_ae_kolmogorov_crop_k_xs005_c12d10.pt', map_location='cpu', weights_only=False); print(round(0.1 * ref['normalization_std'] / ck['normalization_std'], 5))")
   for sc in 1 3; do out=R4K_${K12}_x$sc; [ -f $E/kda/k_$out.json ] && continue
