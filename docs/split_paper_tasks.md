@@ -439,6 +439,72 @@ data (R4).
   interaction-range argument for the reach, new figures/tables, and every R2 disclosure. Paper II then uses the
   small-source 12-channel model where it matches the current one (or adds it as "trained on 44², assimilated on
   440²").
+- **R10 `[ ]` Paper I rerun and reanalysis inventory (if R4/R4K hold; user 2026-10-12: "complete rewrite").**
+  Everything in Paper I that rests on the 2D KS or Kolmogorov models, mapped from the figure/table generators and
+  the sections. The 1D results (§5, Figs. 1d_transfer/1d_spectra, Table transfer1d) are unaffected: the 1D model is
+  already trained on a small periodic box (L = 100, 16 sites) with reach 6 < half the ring, i.e. it obeys the new rule.
+  *Training runs (MPS):*
+  1. Adopted small-source models, per system: 2D KS (44² source) and Kolmogorov at α = 0.1, 0.05, 0.025 (1× box
+     source; α = 0.025 box data must first be generated, `kolmogorov_trajectories_*` recipe: 30 trajectories × 40 time
+     units). At least **three training seeds** each (Paper I had one for most 2D models; the referee's point).
+  2. **Causal control for the old box failure:** the same small-source recipe with the propagator reach 6 on the
+     8-site box (`--periodic-full`, wraps onto itself) vs reach 3 (does not). Without it "the wrap-around caused the
+     failure" is a hypothesis; the old box-trained models also differ in encoder reach and recipe.
+  3. **Reach sweep on the small box:** reach 1, 2, 3 (and 4 with a one-site wrap) at 44² and at the Kolmogorov 1×
+     box — the measured interaction range that justifies the chosen reach (replaces the 1D-only interaction-range
+     argument the referee called confounded; Paper I §3.3 says reach-1 propagators fail in Kolmogorov flow, which
+     must be reconciled with the new results).
+  4. Optional: k_max ablation for the small-source recipe (does it still need long rollouts? Paper I §7.3–7.4).
+  5. Decide whether the α = 0.1 training-variant study (Table alpha01_ablation, Fig. failure(a), the truth-free
+     selection rule) is redone with small-source models or kept as a window-trained study; if the canonical recipe
+     changes, apply the selection rule to the new variants and **state its pre-registration date honestly**.
+  *Evaluations (CPU):*
+  6. D_KY, n₊, λ₁ for every adopted model and seed at every size: 2D KS 44², 66², 88²; Kolmogorov 1×, 2×, 3×;
+     **three IC seeds per size** (the consolidation runs used two), all directions where d_lat allows (88²: 512 of
+     2304, as before, stated in App. C).
+  7. λ₁ against the truth for every model (2D models' λ₁ was 12–29% high and unreported) — a column in Table
+     transfer2d and in App. D.
+  8. Free-rollout statistics of the new models (`exp_rollout_stats_ks2d.py`, `exp_rollout_stats_kolmogorov.py`):
+     field std, band energies, drift over the rollout (replaces the "no drift" claim that Table XVI contradicts).
+  9. Reconstruction and spectra (`eval_spectra_recon.py` → Table eval_spectra) for the new models.
+  10. Unstable-subspace scale content (`exp_c8_unstable_subspace.py`, App. D.2) for the new Kolmogorov model at 3×.
+  11. Matched-IC comparison at native size (App. C.6) for the new Kolmogorov models.
+  12. The canonical window-trained models stay as a reported alternative: keep their numbers, add seeds only if
+      they remain in the main text.
+  *Truth runs (CPU, long):*
+  13. **2D KS at 88²** (none exists; the 88² checks use the extensive prediction ≈ 333): one or two 40-unit runs,
+      ~400 directions — about a day each.
+  14. Kolmogorov truths that rest on one 40-unit run (α = 0.1 at 1×; α = 0.05 at 3×; α = 0.025 at 1×, 2×, 3×):
+      extend to 120 units or add ICs, as R2 requires (40-unit runs deviated by −17% to +23%).
+  15. Truth-side λ₁ for the λ₁ comparison (already in the truth JSONs; tabulate).
+  *Figures (regenerate; Paper I is the frozen `docs/paperI`, regenerated via `make paperI-assets`):*
+  16. concept_transfer (Fig. 1): panel (c) shows window training on a large simulation → small periodic box with a
+      forced halo and a reach shorter than half the box.
+  17. systems (Fig. 2): panels (b), (c) show the 264² domain and the 16 × 2π strip → the 44² and 1× training boxes.
+  18. box_vs_window (Fig. 5): becomes wrap vs no-wrap (old box, reach-6 control, reach-3 small source, window-trained).
+  19. scaling (Fig. 6): new models, three training seeds, three ICs.
+  20. rollouts_spectra (Fig. 7): the new models at 88² and 3×.
+  21. failure (Fig. 10): per item 5.
+  22. appendix_panels (Fig. C2): per-IC scatter and reach/channel ablation with the new models (reach sweep).
+  23. truth_convergence (Fig. C1): add the new truth runs (88², extended Kolmogorov).
+  *Tables (regenerate):* 24. transfer2d (Table IV, + λ₁ and seeds); 25. truth_dky / truth_runs / running_* (new
+  truths); 26. eval_ks2d, eval_kolm01/005/0025 (App. D, all new models and controls); 27. eval_spectra;
+  28. architecture_dynamics (Table A: training domain, window, reach, batches, data); 29. alpha01_ablation per item 5.
+  *Text (rewrite):* 30. abstract, key points, lead paragraph, title (check "zero-shot domain transfer" still fits);
+  31. §1 introduction and contributions; 32. §2.3 what is and is not new; 33. §3.3 receptive fields (reach rule:
+  reach < half the training domain; interaction range from item 3); 34. §3.4 training on windows → training on a
+  small periodic box with a forced halo (Prop. 2 unchanged; the window of a periodic box), and windows of a large
+  domain as the alternative; 35. §3.6 canonical recipe; 36. §4 data (training sets: 44², 1× boxes; compute in
+  minutes); 37. §6 rewritten (box with wrap fails, without wrap transfers; windows of a large domain also work);
+  38. §7 failure modes reframed (the coupling section's "more non-local information makes it worse" now has a cause);
+  39. §8 discussion: "what transfer requires" (condition 2 becomes the reach/wrap rule), limitations, outlook;
+  40. §9 conclusions; 41. App. A, C (model-spectra precision, matched ICs), D, E (compute, seeds);
+  42. every R2 disclosure (precision, λ₁, selection-rule chronology, Lemma 1 framing, drift, baselines statement).
+  *Cross-paper and checks:* 43. Paper II text that quotes Paper I (§2.2, §3.1 "window training", §4.2, §5.1;
+  "D_KY within 0.6–2%", "windows of 264²") and the Paper II model decision (R9); 44. `shared_facts.py` updated for
+  the new facts; 45. `check_numbers.py --paper paperI` 0 UNMATCHED/0 SUSPECT; 46. grayscale/zoom check of the new
+  figures (S6.1); 47. citation check for any new reference; 48. `docs/paperI/decisions.md` entries for every change;
+  49. a fresh internal referee pass on the rewritten paper before the coauthor hand-off.
 - **R5 `[ ]` Optional: source-size sweep** (windows of 132² and 88² sources) — how small the training simulation can
   be; useful for planning CM1 runs.
 - **R6 `[ ]` Paper II ensemble budget.** P7 says "same observations and ensemble resources": false (latent 4 × 64 vs
