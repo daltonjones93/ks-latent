@@ -1054,8 +1054,9 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
 - [ ] P1-9 Final checks: `check_numbers.py --paper paperI`, decisions log, internal referee pass.
 
 **Paper II (`docs/paperII`)**
-- [~] P2-1 R6 sentence (matched-budget numbers). Main session.
-- [ ] P2-2 R7/R7b: regenerate Table/Fig. model_error (0.19 marker), rewrite §6, recheck abstract/key points/
+- [x] P2-1 R6 (2026-10-13, 4a0b165): §6 states the budget (latent 4 × 64 vs physics 64) and gives equal-count results
+  (4 × 16: KS 0.335; missing process 0.332/0.355/0.395 → tie, 1.22×, 1.23×). Other rows rechecked in P2-2.
+- [~] P2-2 R7/R7b (table script updated to include R7 runs, preview OK; waiting for R7b seeds): regenerate Table/Fig. model_error (0.19 marker), rewrite §6, recheck abstract/key points/
   conclusions. Draft now, numbers when R7b lands (~2–3 h).
 - [ ] P2-3 Cross-paper consistency pass (after Paper I's text settles).
 - [ ] P2-4 Optional small-box paragraph (p7b 440² control).
