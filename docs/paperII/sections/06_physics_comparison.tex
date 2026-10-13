@@ -18,7 +18,7 @@ physics-based filter is given every standard remedy for model error.
 model was trained on, and its error, $0.312$ averaged over seeds 0--2
 ($0.302$--$0.324$), is fixed: it was not tuned for this section. The
 comparator is the physical-space local ensemble transform filter of
-Sec.~\ref{sec:comparator}, with the same observations, whose forecast
+Sec.~\ref{sec:comparator}, with the same observations and 64 members, whose forecast
 model is wrong in one of four ways (Appendix~\ref{app:da_comparator}):
 \begin{itemize}
 \item \emph{a wrong coefficient}, $a\nabla^2u$ with $a=1.1$ or $1.25$;
@@ -126,9 +126,15 @@ $\delta=0.2$ they are $0.341$ ($0.337$--$0.345$) and $0.433$ ($0.427$--$0.440$),
 $0.376$ ($0.372$--$0.383$) and $0.485$ ($0.470$--$0.496$): the latent filter wins by $1.27$ and $1.29$
 times. Online estimation of $a$, $b$ and $g$ lowered the physics-based filter's seed-0 error by $2\%$ at
 $\delta=0.2$ and $10\%$ at $\delta=0.3$; bias correction did not help at $\delta=0.2$ and lowered it by $4\%$
-at $\delta=0.3$. The comparison is between two filters
-with the same observations and ensemble resources; with the true equations the physics-based filter is
-about four times better than either, as for the other cases.
+atWith the true equations the physics-based filter is about four times better than either,
+as for the other cases.
+
+\para{Ensemble budget.} The two filters see the same observations but not the same number of model
+states: the latent filter runs four tilings of 64 members (256 forecasts), the physics-based filter 64. At an equal count, four tilings of 16, the latent
+filter's error is $0.335$ ($0.318$--$0.352$; Sec.~\ref{sec:da_tilings}) instead of $0.312$, and for the
+missing process $0.332$, $0.355$ and $0.395$ at $\delta=0.1$, $0.2$ and $0.3$ (seeds 0--2). The missing-process
+outcomes are unchanged at equal count (a tie, then latent wins by $1.22$ and $1.23$ times instead of $1.27$
+and $1.29$). % TODO(P2-2): recheck every other row's outcome against 0.335 once R7b regenerates the table.he other cases.
 
 \para{Robustness.} The physics-based filter works only in a narrow window
 of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
