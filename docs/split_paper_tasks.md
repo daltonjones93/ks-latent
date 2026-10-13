@@ -990,22 +990,33 @@ only), which would explain why it transfers although its large-scale share also 
   two-step tangent mode, which exists for the global model), and DA must update lagged states consistently. Free
   learned channels (above) can store the same information without those costs; history is the natural ablation.
 
-**Z10a. History test for the C2-style α = 0.05 model (user idea, 2026-10-13; written down, not a priority, not
-queued).** Question: does a compressed history in each site's state stop the energy pile-up at large scales when a
-small-box model runs at 2×/3×? No overlapping patches.
-- *Model.* KC2 recipe on the 1× box (`kolmogorov_box1x_large_a0.05.h5`, 4× data, k_max 48, 12000 steps, reach 3,
-  c = 6), with a `mode="history"` local_mlp_2d propagator whose past states are compressed per site before entering
-  the update: a shared, per-site linear map c → m (m = 2, maybe 1), so the state is the 6 current channels plus
-  m·(H−1) history channels (H = 3 or 4). Per-site and shared across sites, so locality, reach and the forced-halo
-  rule are unchanged (the halo's history is forced from data like its current state).
-- *What exists.* `train_kolmogorov_crop.py --n-history H` already trains history propagators on forced-halo windows
-  (J17B, Paper II's hidden-field memory test; `forced_halo_rollout_history` in `ks_latent/training/crop.py`,
-  `rollout_history` on the propagator). New: the c → m compression (a small model change plus a test that m = c with
-  an identity map reproduces the current history model) and a history path in
-  `exp_rollout_stats_kolmogorov.py` (seed the history from the truth's spin-up states).
-- *Read-out first, D_KY only if justified.* Rollout statistics at 1×/2×/3× against the truth, as in Z9: |k| < 2
-  share at 2× (truth 0.146; KC2 0.441; window model 0.173) and vorticity std (truth 1.41; KC2 1.15). Go on to D_KY
-  only if the 2× share is within 1.5× of the truth's (the Z8 "fairly close" share criterion). D_KY then needs the
-  Lyapunov tangent on the extended state (z_t plus the compressed history) in `exp_crop_eval.py`, which is more work.
-- *Effort.* Small: about 2–3 h of code and tests, 25 min training, 1 h rollout statistics. Run it at low priority
-  after the R15 runs (options 1 and 2), one job at a time.
+**Z10a. Memory channels for the C2-style α = 0.05 model (user idea, 2026-10-13; corrected same day; written down,
+not a priority, not queued).** Question: if each site carries a few learned memory channels that only the
+propagator writes, does the small-box model stop piling energy into large scales at 2×/3×? No overlapping patches.
+- *State.* Per site: the c = 6 encoder channels as now (a function of the current field only; channel 0 the anchor;
+  the decoder reads only these) plus m < c memory channels (m = 1–2) that the encoder never produces. Encoding a field
+  gives memory = 0 ("unpopulated"); memory fills only as the propagator runs over a history of states. The
+  propagator maps (z_t, m_t) → (z_{t+1}, m_{t+1}) with the same local_mlp_2d reach, mixing both sets of channels.
+  It is a learned recurrent hidden state per site (not a delay embedding of past encoded states, which was the
+  first version of this note), and the map on the extended state is Markovian.
+- *Training (KC2 recipe on the 1× box, `kolmogorov_box1x_large_a0.05.h5`, 4× data, k_max 48, 12000 steps, reach 3).*
+  Windows of W + k encoded states: a warm-up of W steps with every site's encoder channels forced from data while the
+  memory evolves from 0, then the usual forced-halo rollout of k steps (halo encoder channels forced from data, halo
+  memory left to the model). Loss on the encoder channels only; gradients through the warm-up (short BPTT).
+- *Open design point, to settle in code and a test.* The forced-halo exactness argument (Paper I Prop. 2) covers
+  forced data; memory has no data, so halo memory near the window edge is computed without the sites beyond the
+  window, and memory can carry information sideways by one reach per step. Two options: (i) memory updates read only
+  their own site's memory plus neighbours' encoder channels, so memory never spreads sideways by itself and the
+  window computation stays exact given a long enough halo; (ii) allow sideways spread and size the halo for the
+  warm-up length, accepting an edge error that a test measures. (i) first.
+- *Evaluation.* Encode a truth spin-up history, run the warm-up with forced encoder channels to populate memory, then
+  roll out freely. Read-out first: rollout statistics at 1×/2×/3× against the truth, as in Z9: the 2× |k| < 2 share
+  (truth 0.146; KC2 0.441; window model 0.173) and vorticity std (truth 1.41; KC2 1.15). Go to D_KY only if the 2×
+  share is within 1.5× of the truth's (the Z8 "fairly close" share criterion). D_KY is then a standard Benettin run on
+  the extended state (z, m), since the map is Markovian; the memory adds directions that are probably contracting.
+  In DA, memory is an unobserved part of the ensemble state, updated through ensemble covariances.
+- *What exists / what is new.* Exists: forced-halo training and history-window banks (`ks_latent/training/crop.py`,
+  J17B's `forced_halo_rollout_history` as a template), local_mlp_2d. New: the extended-state propagator (m extra
+  channels in and out, zero memory at encode), the warm-up in training and in `exp_rollout_stats_kolmogorov.py`, and
+  tests (m = 0 reproduces KC2 exactly; locality/equivariance of the extended map; option (i) exactness on windows).
+  About 4–6 h of code and tests, 25 min training, 1 h rollout statistics. Low priority, after the R15 runs.
