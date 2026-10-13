@@ -910,3 +910,47 @@ solid: (i) the truth-side check for 2D KS (44² vs 88² statistics, no Lyapunov;
 **Unchanged:** C2 is the 2D KS small-box model (Z7); α = 0.1 adopts whichever of the C, C2 and C3 recipes the paper
 uses for 2D KS (C2), so that one recipe serves every system, if K-C2 passes at α = 0.1; otherwise r12 (C recipe),
 with the recipe difference stated.
+
+### Z9. R14 verdict: case B for Kolmogorov in Paper I (2026-10-13 08:40)
+
+**Result, against the Z8 thresholds (fixed before the runs).** Both C2-recipe and C3-recipe small-box models fail at
+α = 0.05:
+
+| model (α = 0.05) | D_KY 2× (truth 46.6) | D_KY 3× (truth 75.2) | \|k\| < 2 share 1× (truth 0.096) | 2× (truth 0.146) | box-period corr 2× (truth 0.41) |
+|---|---|---|---|---|---|
+| KC2 (4× data, k 48, 12000 steps) | 28.3 (−39%) | 30.3 (−60%) | 0.154 | 0.441 (3.0×) | −0.01 |
+| KC3 (KC2 + whole box supervised) | pending | pending | 0.214 | 0.359 (2.5×) | 0.23 |
+| old small box (R12, c = 12) | ≈ −45% | — | — | 0.420 | — |
+| window-trained `k_xs005` (route b) | (existing) | (existing) | 0.088 | 0.173 (1.18×) | 0.38 |
+| window-trained `k_xs0025`, α = 0.025 (truth 1× 0.144, 2× 0.277) | (existing) | (existing) | 0.196 | 0.375 (1.35×) | 0.21 (truth 0.21) |
+
+Neither is "fairly close" (the share criterion fails by itself), so **case B**: Kolmogorov stays in Paper I; α = 0.1
+uses the small box (route a), α = 0.05 and 0.025 the window-trained models (route b, train once, run at 1×/2×/3×);
+the small-box failure at α = 0.05 is reported with its mechanism (spurious large-scale energy, 2.5–3× the truth's,
+in both recipes). More data and a longer rollout did not help, which is itself informative: the failure is not
+under-training, it is what the box contains. The window models stay within 1.2–1.35× of the truth's large-scale
+share at 2×, which supports the reading. KC3 D_KY evals and the α = 0.1 KC2/KC3 runs continue (the α = 0.1 ones
+choose between the C2 recipe and r12 for route a, per Z8).
+
+**Caveat on the Z8 "pre-training check" (found 08:30, before using it in text).** The truth-side large-scale share
+also grows with box size for 2D KS (lowest band |k| < 0.35, 44² → 88²: 0.379 → 0.473, +25%, one run, r4c rollout
+statistics), and 2D KS transfers. So "share the same in a box twice as large" separates the systems only with a
+threshold chosen after the fact (between +25% and +50%). Likely reason: a band share mixes energy *per mode* with the
+*number* of modes, which grows with the box; KS has a flat low-k spectrum, so a bigger box adds modes at the same
+density. Test running (`scripts/exp_box_check.py`, truth only, 3 ICs per system, logs `box_check_*.log`): per-mode
+spectral density at the 2× box's new scale (k1/2) vs the 1× box's largest scale (k1), R_new, for 2D KS and
+Kolmogorov α = 0.1/0.05/0.025. **Use rule:** if R_new separates {2D KS, α = 0.1} from {α = 0.05, 0.025} with a gap
+across ICs, the check is stated in Paper I as a per-mode-density check, with the numbers. If not, drop the
+"pre-training check" claim; present the α = 0.05 failure as an observed limit with its mechanism, and the two routes
+as "small box where it transfers, windows otherwise" with no predictive claim. (Caveat on the measurement: the
+k1 shell of the 1× Kolmogorov box has 4 modes, so seed-to-seed scatter is large; averaging over 3 ICs and 200
+snapshots.)
+
+**Paper II (same morning).** R6 done: latent filter at matched budget (N 16 × 4 tilings) 0.332 / 0.355 / 0.395 at
+δ = 0.1/0.2/0.3 vs physics 0.328 / 0.432 / 0.483 → tie, latent, latent. R7 done (3 seeds): physics with working
+estimation ∇² 1.25 0.164, adv1 0.225, adv2 0.345 (latent 0.312: physics, physics, latent ~1.1× — check rule);
+J17G unchanged. R7b (started 08:15) applies the same fix to the other five estimation rows (∇² 1.1, damping 5/6,
+hidden ε 0.1/0.2) so every "est." row uses one remedy; §6 and the table are rewritten once after R7b.
+**Load.** 2D KS truths (88² IC 0, 66² IC 2) had been starved at nice 20 (75 s CPU in 11 h); restarted 08:14 at normal
+priority. Three 88² evals of superseded models (C seeds 1–2, wrap control) paused (PIDs in
+`artifacts/logs/paused_r4c_r4w_88.txt`).
