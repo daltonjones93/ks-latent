@@ -41,7 +41,7 @@
 \begin{keypoints}
 \item A filter in a learned local latent field is exactly local, and running it on four shifted patch lattices cuts the error by 30 percent
 \item One learned model trained only on noisy data and one filter setting give the same analysis error on domains from 44 by 44 to 440 by 440
-\item In our tests the learned filter beat tuned physics filters once their state-dependent model error passed a sixth of the observation error
+\item The learned filter beat physics filters with parameter estimation only for errors of model form, not for wrong parameters
 \end{keypoints}
 
 \begin{abstract}
@@ -56,10 +56,11 @@ Running it on four copies of the patch lattice shifted by half a patch and blend
 two-dimensional Kuramoto--Sivashinsky equation, one model trained only on noisy fields, with one
 filter setting, reaches errors of $0.30$--$0.33$ on every domain from $44^2$ to $440^2$,
 against $0.82$ for interpolating the observations; an unlocalized filter fails once the attractor has more unstable directions than the ensemble has members.
-Against physics-based filters with wrong models, given parameter estimation and bias
-correction, the latent filter loses when the model error is small or correctable and, in the
-configuration tested, wins once the part that bias correction cannot remove exceeds about a sixth of the
-observation error; a missing process of increasing strength is consistent with this crossover.
+Against physics-based filters with wrong models, given online parameter estimation and bias
+correction, the latent filter loses whenever the error lies in a parameter or a bias, however large,
+and, in the configuration tested, wins when the error lies in the form of the equations and the part
+that bias correction cannot remove exceeds about a fifth to a third of the observation error; a missing
+process of increasing strength is consistent with this.
 In Kolmogorov flow its errors are $43\%$ below interpolation.
 \end{abstract}
 
@@ -73,9 +74,10 @@ treatment has not been possible with them. We use a learned model that keeps a m
 at each point of a coarse grid, updated by the same local rule everywhere. Each grid point then
 depends only on nearby observations, the method works the same way on a small domain and on one a
 hundred times larger, and the learned model can be trained on noisy data alone. When the physical
-model used for comparison contained an error that tuning could not fix, the learned model gave
-better results in our tests once that error exceeded about a sixth of the measurement error; with an accurate
-physical model, the physical model remained much better.
+model used for comparison had an equation of the wrong form, which tuning and parameter estimation could
+not fix, the learned model gave better results in our tests once that error exceeded about a fifth to a
+third of the measurement error; when only a parameter was wrong, or the model was accurate, the physical
+model remained better.
 
 \input{sections/01_introduction}
 \input{sections/02_background}

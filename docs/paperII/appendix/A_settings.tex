@@ -164,7 +164,10 @@ The parameters are updated with a global ensemble transform using all observatio
 $\theta_a=\bar\theta+W^\top(\theta-\bar\theta)$ with the transform $W$ of the unlocalized filter computed from
 the prior observation perturbations, so that the analysis mean equals the ensemble Kalman regression
 of the parameters on the innovations \citep{anderson2001,ruiz2013}; the parameter spread is relaxed to
-its prior with weight $0.9$ and kept above $0.005$ ($0.5\%$ for $(a,b,g)$). \emph{Bias correction and
+its prior with weight $0.9$ and kept above a floor. With a floor of $0.005$ ($0.5\%$ for $(a,b,g)$)
+the spread reached it within 30--40 cycles and the estimates stopped short of the truth (the coefficient
+$1.25$ at $1.17$, the speed $2$ at $0.40$); the reported runs use $0.02$ ($2\%$), tried with $0.05$, and the
+state RTPS retuned to $r$ and $r-0.2$ around the tuned value, selected on seed 0 like the other settings. \emph{Bias correction and
 additive model error:} on an independent trajectory, the one-cycle residuals
 $r=u(t+T)-M\big(u(t)\big)$ of the wrong model $M$ from 100 true states give the bias $\bar r$, added to
 every forecast, and the spectrum and standard deviation of $r-\bar r$, from which additive noise with
