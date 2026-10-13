@@ -102,9 +102,11 @@ def main():
         lam = true_lyapunov(ics[0], a.n_lyap, 300, k)
         dky_true = ky_dim(lam)
         # model
-        ae, ae_cfg, _ = load_autoencoder_checkpoint_resized(ae_path, new_n_sites=N, new_NX=N)
+        patch = ck["ae_config"].NX // ck["ae_config"].n_sites
+        assert N % patch == 0
+        ae, ae_cfg, _ = load_autoencoder_checkpoint_resized(ae_path, new_n_sites=N // patch, new_NX=N)
         d = ae_cfg.n_sites * ae_cfg.local_channels
-        prop, _, _ = load_propagator_checkpoint_resized(prop_path, new_d_latent=d, new_n_tokens=N)
+        prop, _, _ = load_propagator_checkpoint_resized(prop_path, new_d_latent=d, new_n_tokens=N // patch)
         ae.eval(); prop.eval()
         with torch.no_grad():
             xn = torch.tensor((truth - mean) / std, dtype=torch.float32)  # (B,T+1,N)
@@ -140,7 +142,8 @@ def main():
         if not a.no_model_lyap and finite:
             nd = min(d, N + 8)
             try:
-                z01 = ae.encode(xn[0, 100:102]).numpy()
+                with torch.no_grad():
+                    z01 = ae.encode(xn[0, 100:102]).numpy()
                 res = lyapunov_spectrum_latent_propagator(prop, z01, mode="single_state", n_directions=nd,
                                                           n_steps=2000, qr_every=10, dt_snap=DT_SNAP,
                                                           warmup_steps=200, seed=0, max_abs_state=1e4)

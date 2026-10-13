@@ -1145,3 +1145,15 @@ model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of 
   Ablation: c = 1 (identity encoder, pure local propagator on x).
 - Registered rule (as Z8/R9a): at N = 48 (1×), 96, 192, 384 model D_KY within ±10% of the truth at the same N,
   and λ1 within ±15%; reported also: valid time (threshold 0.5 σ) in Lyapunov times, energy spectrum, std.
+- Results (2026-10-13 16:05; c3/c1 = no compression, latent 3N/N; p4c3/p3c2 = real compression 0.75N/0.67N):
+  | model | N | D_KY model/truth | λ1 model/truth | valid time (LT) |
+  |---|---|---|---|---|
+  | c3 | 48 / 96 | 32.8/32.2 (+1.9%) / 65.6/65.3 (+0.5%) | 1.83/1.68 (+9.5%) / 1.88/1.75 (+7.3%) | 3.1 / 2.8 |
+  | c1 | 48 / 96 / 192 | 31.1 (−3.3%) / 62.8 (−3.9%) / 125.0 (−4.3%) | 1.55 (−7.5%) / 1.70 (−3.0%) / 1.70 (−7.6%) | 3.0 / 2.8 / 3.0 |
+  | p4c3 | 48 / 96 / 192 | 5.4 / 11.7 / 27.5 (truth 32.2 / 65.3 / 130.6) | — | 0.9 |
+  | p3c2 | 48 / 96 / 192 | 0.0 / 5.6 / 12.9 | — | 0.3–0.4 |
+  Reading: the registered rule is met by c1 at N = 48, 96, 192 and by c3 at 48, 96 (c3 at 192 pending). Genuine
+  compression fails: per-patch reconstruction RMSE 0.29σ (4 sites → 3 channels) and 0.40σ (3 → 2), dynamics collapse.
+  L96 needs ~0.68 degrees of freedom per site (D_KY/N), so it is nearly incompressible, as RESULTS.md's L96 section
+  found for global latents. Z16 is a positive control for LOCALITY AND TRANSFER, not for reduction (user, 16:00: latent
+  as large as the state "defeats the purpose" for compression; agreed).

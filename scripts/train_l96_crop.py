@@ -47,7 +47,6 @@ from ks_latent.utils.device import get_device
 from ks_latent.utils.io import write_provenance
 
 A = Path("artifacts")
-PATCH = 1  # L96: one state variable per site
 REF_SITES = 16  # checkpoints are saved at 16 sites (NX = 16); sizes are independent of N
 
 
@@ -56,6 +55,7 @@ def main() -> None:
     p.add_argument("--profile", choices=["full", "smoke"], default="full")
     p.add_argument("--dataset", default="artifacts/datasets/lorenz96_trajectories_n256.h5")
     p.add_argument("--tag", default="l96_crop_c3")
+    p.add_argument("--patch", type=int, default=1, help="L96 sites per latent site")
     p.add_argument("--local-channels", type=int, default=3)
     p.add_argument("--hidden", type=int, default=32)
     p.add_argument("--site-mix-radius", type=int, default=0)
@@ -82,6 +82,7 @@ def main() -> None:
         args.ae_steps, args.prop_steps, args.n_offsets, args.crop_sites = 20, 20, 2, 24
         args.k_mid, args.k_max, args.device = 3, 4, "cpu"
 
+    PATCH = args.patch
     torch.manual_seed(args.seed)
     dev = get_device(args.device)
     with h5py.File(args.dataset, "r") as f:
