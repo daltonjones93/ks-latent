@@ -77,23 +77,32 @@ and $0.409$ for $\gamma=5$, $6$ and $8$: the physics-based filter wins at $\gamm
 $\gamma=6$, and loses at $\gamma=8$ ($1.31$ times, where estimation does not help); bias correction did not help
 these state-dependent errors (seed 0: $0.297$, $0.361$ and $0.440$, slightly worse than tuning alone).
 
-\para{What decides the comparison.} The kind of error first, then its size. No error that online
-estimation or bias correction can represent was won by the latent filter: five were physics wins and
-advection at speed 2 a tie. Among errors of form, the
-\emph{state-dependent} part of the one-cycle forecast error (the residual left after subtracting the
-mean one-cycle error, which bias correction removes) orders the outcome: damping order 5, at $0.069$,
-is a physics win; order 6, at $0.123$, a tie; order 8, at $0.201$, a latent win. For errors of form, in
-this configuration, the crossover therefore lies between about $0.12$ and $0.2$ in field units, a fifth to
-a third of the observation error. The missing process below was added before this band was located,
-with strengths chosen around an earlier, cruder estimate of the crossover; only its strongest level lies
-clearly above the band, so it confirms that side but does not narrow the band. This is a result for one system, one observation network, one cycle
+\para{What decides the comparison.} Define the model error after the remedy: the state-dependent part of the
+one-cycle forecast error (the residual left after subtracting its mean, which bias correction removes) of the
+physical model with the parameters the filter converged to, in units of the observation error
+(Fig.~\ref{fig:model_error}a). For a wrong coefficient or a spurious advection this is zero: estimation
+removes the whole error, and the physics-based filter wins at $a=1.1$, $a=1.25$ and advection $1$, and ties
+at advection $2$. For the cases in which no parameter can remove the error it is
+$0.09$, $0.15$ and $0.20$ in field units ($0.15$, $0.24$ and $0.33$ of the observation error) at damping
+orders $5$, $6$ and $8$, and $0.09$, $0.19$ and $0.28$ ($0.15$, $0.30$ and $0.43$) for the missing process;
+the hidden field, with the coefficient estimated, leaves $0.10$ and $0.26$ ($0.12$ and $0.26$). Ordered by
+this one quantity the outcomes are physics wins up to $0.15$ of the observation error (damping order $5$),
+ties between $0.12$ and $0.26$ (the missing process at $\delta=0.1$, damping order $6$, both hidden fields),
+and latent wins from $0.30$ upward (the missing process at $\delta=0.2$ and $0.3$, damping order $8$).
+The crossover therefore lies between about a quarter and a third of the observation error, and advection
+$2$ is the one exception, a tie at an error of zero. This ordering was found after the results were in
+(the first version of the axis used the error before the remedy, which orders the parametric cases
+wrongly because the remedy removes it), so we read it as a description, not a tested prediction; the
+missing process at $\delta=0.2$ and $0.3$ is the only set of cases whose strength was chosen before it
+was located, and both are on the latent side of it. It is a result for one system, one observation network, one cycle
 length, one ensemble size and one learned model, not a general constant. The latent filter's error,
 which sets the other side of the comparison, depends on all of them: it is $0.226$ with observations
-twice as many in each direction and $0.769$ with half as many (Sec.~\ref{sec:da_robust}). Nor is it a comparison of
-forecast errors alone: the learned model's own total one-cycle error (not only its state-dependent
-part), from the encoded true state and including its decoder floor, is $0.19$ (Sec.~\ref{sec:da_accuracy}; dashed line in Fig.~\ref{fig:model_error}a),
-larger than that of a physics model it ties with (damping order 6), so the outcome also depends on how
-each filter handles its model's error.
+twice as many in each direction and $0.769$ with half as many (Sec.~\ref{sec:da_robust}). Nor is it a
+comparison of forecast errors alone: the learned model's own total one-cycle error (not only its
+state-dependent part), from the encoded true state and including its decoder floor, is $0.19$
+(Sec.~\ref{sec:da_accuracy}; dashed line in Fig.~\ref{fig:model_error}a), so the outcome also depends on
+how each filter handles its model's error.
+
 \para{A hidden field.} A separate question is a truth that is not Markov in the observed field, which
 neither filter's model can represent: an
 unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
@@ -114,8 +123,8 @@ $0.493$, the same filter carrying its own $v$); both stay well below interpolati
 kind limits a Markov latent model as much as a misspecified physical one, and the remedy on the
 learned side, a propagator given past states, is outside this study.
 
-\para{A missing process.} The hidden field does not test the crossover between errors of form; a missing
-process that is Markov in $u$ does. The truth adds an anisotropic gradient nonlinearity,
+\para{A missing process.} The hidden field has memory the current field does not show; a missing process
+that is Markov in $u$ is a cleaner test of errors in the form of the equations. The truth adds an anisotropic gradient nonlinearity,
 $u_t=\mathrm{KS}(u)-\tfrac{\delta}{2}(u_x^2-u_y^2)$ with $\delta=0.1$, $0.2$ and $0.3$, and the
 physics-based filter's model is the isotropic KS equation. Joint online estimation of $a$, $b$ and $g$
 cannot represent a term that tells $x$ from $y$, so this error is structural, like the wrong damping
@@ -124,8 +133,8 @@ with the same recipe, and the latent filter keeps its single setting; the errors
 units. The physics-based filter was tuned over the full grid of Appendix~\ref{app:da_comparator} on seed
 0, with every remedy at its best setting, and so was a filter with the true equations, which reaches
 $0.087$, $0.087$ and $0.096$. The state-dependent one-cycle errors are $0.094$, $0.194$ and $0.323$, that is
-$0.15$, $0.31$ and $0.49$ of the observation error, so the first lies below the band found above, the second inside it and
-the third above it. The outcome is consistent with the band (Table~\ref{tab:da_model_error}, squares in
+$0.15$, $0.31$ and $0.49$ of the observation error (with the parameters estimated, $0.093$, $0.189$ and
+$0.282$: $0.15$, $0.30$ and $0.43$). The outcome is the one the ordering above gives (Table~\ref{tab:da_model_error}, squares in
 Fig.~\ref{fig:model_error}a). At $\delta=0.1$ the latent filter's error is $0.310$ ($0.300$--$0.323$) and
 the physics-based filter's $0.328$ ($0.323$--$0.334$): lower on every seed, but by $5.5\%$, a tie. At
 $\delta=0.2$ they are $0.341$ ($0.337$--$0.345$) and $0.432$ ($0.421$--$0.439$), and at $\delta=0.3$
@@ -166,7 +175,7 @@ result is a division by the kind of error. Errors that a parameter or a
 bias can represent are best handled by the physical model with online
 estimation or bias correction, at every magnitude we tested; errors in the form
 of the equations are not, and above a state-dependent one-cycle error of
-about a fifth to a third of the observation error the learned model was the
+about a quarter to a third of the observation error after the remedy the learned model was the
 better choice. That is the part of the model error that parameter
 estimation and bias correction cannot reach.
 
@@ -175,7 +184,8 @@ estimation and bias correction cannot reach.
 $44^2$, steady-state analysis error in field units, mean over seeds 0--2
 (range). One-cycle error: the physics model's root-mean-square one-cycle
 forecast error from the true state on an independent trajectory, total
-and state-dependent (after subtracting its mean). Tuned: best RTPS and
+and state-dependent (after subtracting its mean), before any remedy; Fig.~\ref{fig:model_error}a uses the
+state-dependent error of the model with the parameters the filter converged to. Tuned: best RTPS and
 localization (mean only). Best: best configuration including online parameter
 estimation (est.) or bias correction (bc), selected on seed 0. The latent
 filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field (hidden) and
@@ -208,7 +218,7 @@ tuned only, without remedies (log scale; RTPS 0 diverged or was worse than inter
 latent filter's single setting. Errors a parameter or a bias can represent (wrong coefficient,
 advection, forcing, grids) are won by the physics-based filter at every size except advection at
 speed 2; errors in the form of the equations (damping order, missing process) are won by the latent
-filter above a state-dependent one-cycle error of about a fifth to a third of the observation error;
+filter above a state-dependent one-cycle error of about a quarter to a third of the observation error after the remedy;
 and the physics-based filter works only in a narrow window of its tuning.}
 \label{fig:model_error}
 \end{figure*}
