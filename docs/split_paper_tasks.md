@@ -989,3 +989,23 @@ only), which would explain why it transfers although its large-scale share also 
   sub-site) shows up as memory, so past states can stand in for them. Costs: the phase space grows (Lyapunov needs the
   two-step tangent mode, which exists for the global model), and DA must update lagged states consistently. Free
   learned channels (above) can store the same information without those costs; history is the natural ablation.
+
+**Z10a. History test for the C2-style α = 0.05 model (user idea, 2026-10-13; written down, not a priority, not
+queued).** Question: does a compressed history in each site's state stop the energy pile-up at large scales when a
+small-box model runs at 2×/3×? No overlapping patches.
+- *Model.* KC2 recipe on the 1× box (`kolmogorov_box1x_large_a0.05.h5`, 4× data, k_max 48, 12000 steps, reach 3,
+  c = 6), with a `mode="history"` local_mlp_2d propagator whose past states are compressed per site before entering
+  the update: a shared, per-site linear map c → m (m = 2, maybe 1), so the state is the 6 current channels plus
+  m·(H−1) history channels (H = 3 or 4). Per-site and shared across sites, so locality, reach and the forced-halo
+  rule are unchanged (the halo's history is forced from data like its current state).
+- *What exists.* `train_kolmogorov_crop.py --n-history H` already trains history propagators on forced-halo windows
+  (J17B, Paper II's hidden-field memory test; `forced_halo_rollout_history` in `ks_latent/training/crop.py`,
+  `rollout_history` on the propagator). New: the c → m compression (a small model change plus a test that m = c with
+  an identity map reproduces the current history model) and a history path in
+  `exp_rollout_stats_kolmogorov.py` (seed the history from the truth's spin-up states).
+- *Read-out first, D_KY only if justified.* Rollout statistics at 1×/2×/3× against the truth, as in Z9: |k| < 2
+  share at 2× (truth 0.146; KC2 0.441; window model 0.173) and vorticity std (truth 1.41; KC2 1.15). Go on to D_KY
+  only if the 2× share is within 1.5× of the truth's (the Z8 "fairly close" share criterion). D_KY then needs the
+  Lyapunov tangent on the extended state (z_t plus the compressed history) in `exp_crop_eval.py`, which is more work.
+- *Effort.* Small: about 2–3 h of code and tests, 25 min training, 1 h rollout statistics. Run it at low priority
+  after the R15 runs (options 1 and 2), one job at a time.
