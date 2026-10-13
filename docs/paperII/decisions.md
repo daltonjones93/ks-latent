@@ -150,3 +150,76 @@ Smoke outputs: `artifacts/experiments/kda/k_smoke_c19_*.json`.
   one tiling 0.147; 3× 0.113 vs 0.201, one tiling 0.137; spread/error 0.52–0.58 (four tilings), 0.70–0.73 (one).
 - **1D:** the per-patch model (`pp1d_c6d10`) assimilates ~2× worse (0.84–0.96 vs 0.43–0.45 at N = 64, GC);
   the current 1D model stays; one sentence in §4.3.
+
+## R8 (2026-10-12) — referee points without new runs (internal_referee_report.md)
+
+R6 (ensemble budget) and R7 (parameter-estimation stall) are not in this entry: their runs are in progress
+and the P7 sentence "same observations and ensemble resources" is left for R6.
+
+1. **Training source** (M12/R8): §3.1 "Training on windows" now says the 2D KS windows are 40×40 sites (220²)
+   of one 264² simulation and that the assimilation runs to 440², larger than the training simulation; §4.1
+   adds that 330² and 440² exceed the training domain and every domain above 220² exceeds the largest window.
+2. **"A sixth of the observation error"** (M3c): stated as a result of this configuration (one system, network,
+   cycle length, ensemble size, learned model) in §6, abstract, key point 3, PLS, §1 contributions, §11, §12 and
+   the Fig. model_error caption, with the range 0.08–0.2 (between the largest physics win/tie and the smallest
+   latent win) and the latent filter's dependence on density (0.226 / 0.769 at spacing 1.4 / 5.5). Abstract:
+   "confirms this crossover" → "is consistent with". Conclusions no longer present the number as the quantity
+   that transfers; the quantity to estimate (the state-dependent one-cycle error relative to σ_obs) does.
+   Key point 3: "In our tests the learned filter beat tuned physics filters once their state-dependent model
+   error passed a sixth of the observation error" (137 characters).
+3. **Learned model's one-cycle error** (M3c): 0.19 field units, blended forecast from the encoded truth at lead
+   1 cycle (`tables/forecast.tex`, column "True state", mean over seeds 0–2, `fig16_forecasts.py`
+   `true_init_blend`), including the blended decoder floor 0.13–0.14. Replaces "is small" in §5.3; §6 states it
+   is larger than the state-dependent error of a physics model it ties with (damping order 6, 0.12), so the
+   crossover reflects how each filter handles its model's error, not the forecast errors alone. Not yet put on
+   the Fig. model_error axis (wait for R7, which regenerates that figure).
+4. **Proposition 1 framing** (M5): new paragraph after the proposition: elementary, restores the property a
+   physical-space LETKF with point observations has by construction; its value is what it enables (no
+   truncation of H, tilings, every domain size); "exact" refers to the observation operator, the filter stays a
+   localized finite-ensemble approximation with a gain linearized at the ensemble mean; holds for grid-point or
+   within-patch observations, not for spatially integrated ones. "is exact" → "needs no truncation of it" in the
+   abstract, §1 and §12; §11 "makes it exact" → "makes the observation operator exactly local". Prop. 1(b) now
+   names site s itself (minor 18). The title is unchanged (it says "exactly local", which is accurate for the
+   observation operator); flagged for the authors.
+5. **Per-patch decoder cost** (M5): §11 "What locality buys" adds the price (lattice-tied error), the R_dec = 1
+   alternative (banded, c·3² colours, neighbours in each per-site analysis), the 1D evidence (per-patch ~2×
+   worse) and that the 2D R_dec = 1 model was not trained.
+6. **Noisy-training gain vs the decision rule** (M6): 44² three-seed means 0.312 (noisy) vs 0.327 (clean),
+   4.5% lower and lower on every seed: below the 10% threshold, a tie by the rule. §7 "it is the better for it"
+   → "it loses nothing by it" plus the rule statement; §1 contribution 5 and §11 say "at least as good"
+   (4–5%, below the threshold).
+7. **Observation network aligned with the lattice** (M9): limitation bullet (stride 8, patch 16, offsets 8; every
+   tiling sees the same observation geometry; irregular, non-commensurate and integrated observations untested).
+8. **Sparse-network numbers** (minor 1): the 300-cycle runs' JSON "steady" is the mean of their last half
+   (cycles 151–300: 0.798 at stride 16, 0.308 at 220²), not the paper's window. `tabE_p2_robustness.py` now
+   reports error and calibration over cycles 51–300 for the long runs (0.776 / 1.05 at stride 16; 0.309 / 0.97 at
+   220²) and says so in the row header; §8 adds 0.776. 0.769 (100-cycle run, cycles 51–100) is unchanged.
+9. **Cubic missing process** (M3e): not mentioned in the paper before. Since §6 states the decision rule was
+   pre-registered, the stopped pre-registered case is now reported in one passage of §6 "Design": β = 1.1e-3,
+   one-cycle error 0.055 (0.050 state-dependent; `j16_model_error_cubA.json`), physics filter without remedies
+   0.190 on seed 0 (`i11_J17A_pde_c8.25_rtps0.7_s0.json`), a physics win consistent with the crossover; the
+   state-dependent part never exceeded 0.060 in the β scan (`j16_model_error_cubscan_*.json`), the truth
+   stopping being chaotic first; replaced by the anisotropic process.
+10. **Notation** (minor 13–17): latent observation operator h → H (site length keeps h, as in Paper I); Kalman
+   gain K → G; wavenumber magnitude K → k = |k|; tangent-vector count K → n_v (App. C); comparator localization
+   half-width c → L_loc; advection speed c → U; damping order p → γ (text and Fig. model_error labels, regenerated;
+   its label overlaps at x ≈ 0.1–0.4 remain for R7, which regenerates the figure); KY density ρ → ρ_KY (ρ stays the taper); RTPS weight α → α_R (α stays the
+   Kolmogorov drag); blend weights w_k → ω_k (w stays the propagator radius); App. B uses App. A's U_s
+   (observations) and N_s (sites).
+11. **Figure/table order** (minor 23): Fig. da_2d moved before Fig. tilings (now Figs. 3, 4) and Table sizes before
+   Table members (now Tables 3, 4); the §5.4 long-run sentence cites Sec. 8 instead of Table robustness, so main
+   tables are first cited in order 1–8 and figures 1–8 (appendix tables A1, D1 are cited early, as appendix
+   floats).
+12. **Fig. da_2d(a)** (minor 25): log y-axis (0.05–5) so the failing unlocalized filters (2.26 at 66², 3.40 at
+   88²) are in the frame; the 128-member unlocalized runs are added (`h9_K1u_L*_T4_N128`). Paper I's version of
+   the figure is unchanged (`P2` switch).
+13. **Kolmogorov model in App. A** (minor 8): `tabA_architecture.py` adds `k_xs005_c12d10` as a third column of
+   the Paper II table (Paper I's dynamics table drops "Part II" columns, unchanged); App. A text says three
+   models; §10 cites the table.
+14. **Prior work** (M10, M4): verified and added `pathak2018prl` (PRL 120, 024102), `pathak2018hybrid` (Chaos 28,
+   041101) and `penny2022` (JAMES 14, e2021MS002843; Lorenz-96 only, RNN-ETKF/4D-Var, LETKF-like localization
+   at 40 variables, baselines use the perfect model, no transfer across sizes — from the arXiv HTML). Cited in
+   §2.2 (local learned models; learned surrogate assimilated with domain localization), §2.3 (hybrid physics +
+   learned correction, not run here), §2.4 and §11 (limitation). Table 1 gains a Penny et al. row (latent DA:
+   hidden state of a recurrent network; localized; no other sizes; compared with the true model only).
+Also: App. A "(decisions log, D4)" removed (minor 22). Abstract kept at 250 words (math counted as one word).

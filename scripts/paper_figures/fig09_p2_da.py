@@ -85,14 +85,23 @@ for pts, lab, col, ls, mk in ((k4, "4 tilings", AQUA, "-", None), (k1, "1 tiling
                               (fl4, "decoder, 4 tilings", AQUA, "-.", None)):
     x, y = zip(*pts)
     b.plot(x, y, ls=ls, marker=mk, color=col, lw=1.0 if ls != "-" else 1.3, ms=3, label=lab)
-unl = [(ar(L), S(f"K1u_L{L}_T4_N64")) for L in (44, 66, 88)]
-unl = [(x, s["blend"]) for x, s in unl if s]
-if unl:
-    x, y = zip(*unl); b.plot(x, y, "^--", color=ORANGE, ms=3, lw=1.0, label="unlocalized, 4 tilings")
+for N, mk, lab in ((64, "^", "unlocalized, 4 tilings, 64"), (128, "v", "unlocalized, 4 tilings, 128")):
+    if N == 128 and not P2:
+        continue
+    unl = [(ar(L), S(f"K1u_L{L}_T4_N{N}")) for L in (44, 66, 88)]
+    unl = [(x, s["blend"]) for x, s in unl if s]
+    if unl:
+        x, y = zip(*unl)
+        b.plot(x, y, mk + ("--" if N == 64 else ":"), color=ORANGE, ms=3, lw=1.0,
+               label=lab if P2 else "unlocalized, 4 tilings")
 pm = json.loads((D / "i11_L44_st8_c24_rtps0.json").read_text())["steady"]["analysis"]
 inputs.append("artifacts/experiments/da2d/i11_L44_st8_c24_rtps0.json")
 b.plot([1], [pm], "*", color=INK, ms=6, label="PDE filter, true model")
-b.set_xscale("log"); b.set_ylim(0, 1.0 if P2 else 1.32); b.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
+if P2:  # R8 (2026-10-12): log axis so the failing unlocalized filters (2.26-3.40) stay in the frame
+    b.set_xscale("log"); b.set_yscale("log"); b.set_ylim(0.05, 5)
+    b.set_yticks([0.1, 0.2, 0.5, 1, 2]); b.set_yticklabels(["0.1", "0.2", "0.5", "1", "2"]); b.minorticks_off()
+else:
+    b.set_xscale("log"); b.set_ylim(0, 1.32); b.set_yticks([0, 0.2, 0.4, 0.6, 0.8])
 b.set_xlabel(r"area / $44^2$"); b.set_ylabel("analysis RMSE")
 if P2:  # panel (a)'s legend fills the left of the bottom row
     lax = fig.add_subplot(gs[1, 0:2]); lax.axis("off")

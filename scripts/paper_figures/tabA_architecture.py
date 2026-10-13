@@ -22,7 +22,8 @@ from _style import ART, EXP, MAIN_A01, ROOT, write_table
 from ks_latent.config import Stage1TrainingConfig, Stage2TrainingConfig
 
 MODELS_2D = [("2D KS", "p7b_ks2d"), ("2D KS, Part~II", "p7c12d10_ks2d"), ("Kolm., $\\alpha=0.1$", MAIN_A01),
-             ("Kolm., $\\alpha=0.05$", "c19_e0d0_c6"), ("Kolm., $\\alpha=0.025$", "k_xs0025")]
+             ("Kolm., $\\alpha=0.05$", "c19_e0d0_c6"), ("Kolm., $\\alpha=0.025$", "k_xs0025"),
+             ("Kolm., Part~II", "k_xs005_c12d10")]  # R8: the Kolmogorov DA model of Paper II, Sec. 10
 
 
 def load(p):
@@ -186,9 +187,11 @@ write_table("tabA_architecture_dynamics",
             "\n".join(render([n for n in names if "Part" not in n],
                              [r for r in rows if r != "training-data noise"])) + "\n",
             main_alpha01_model=MAIN_A01)
-# Paper II (S4.16): the two models its filters use, the 1D model of Paper I (Sec. 9) and the 12-channel
-# noisy-trained 2D KS model (every 2D experiment).
+# Paper II (S4.16; R8 2026-10-12 adds the Kolmogorov model): the three models its filters use, the 1D model of
+# Paper I (Sec. 9), the 12-channel noisy-trained 2D KS model (every 2D experiment) and the 12-channel
+# noisy-trained Kolmogorov model (alpha = 0.05, Sec. 10).
 write_table("tabA_architecture_da",
-            "\n".join(render(["1D KS", "2D KS, Part~II"], rows, labels=["1D KS", "2D KS, 12 channels"])) + "\n")
+            "\n".join(render(["1D KS", "2D KS, Part~II", "Kolm., Part~II"], rows,
+                              labels=["1D KS", "2D KS, 12 ch.", "Kolmogorov, 12 ch."])) + "\n")
 (EXP / "model_configs.json").write_text(json.dumps(record, indent=2, default=str))
 print("\n".join(lines))

@@ -6,7 +6,7 @@
 The protocol is that of Paper~I, which also validates the solvers; we
 summarize what the 2D KS truths of Sec.~\ref{sec:ks2d} rest on.
 
-\para{Lyapunov computation.} The base trajectory and $K$ tangent vectors
+\para{Lyapunov computation.} The base trajectory and $n_v$ tangent vectors
 are advanced together by the same ETDRK4 step, the tangent vectors by the
 exact Fr\'echet derivative of the right-hand side, which for
 $\tfrac12|\nabla u|^2$ follows from the product rule without
@@ -14,7 +14,7 @@ approximation; the $\bm k=0$ mode is projected out of the base trajectory
 and of every tangent vector. The tangent vectors are re-orthonormalized
 by a QR factorization every time unit, and the exponents are the time
 averages of $\log|R_{ii}|$ over a 40-unit window after a 20-unit warm-up,
-which follows a spin-up of 200 time units. $K=150$ at $44^2$ and $300$ at $66^2$,
+which follows a spin-up of 200 time units. $n_v=150$ at $44^2$ and $300$ at $66^2$,
 in both cases beyond the index at which the cumulative sum of exponents
 turns negative, so $\DKY$ is computed, not extrapolated. The truths use
 the grid of the model.

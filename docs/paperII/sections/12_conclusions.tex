@@ -6,8 +6,8 @@
 A learned latent field gives ensemble data assimilation in a latent space
 what a latent vector cannot: a distance. With a decoder that reconstructs
 each patch from its own site, the latent observation operator is exactly
-local, so a per-site ensemble filter in the latent space is exact and its
-observation Jacobian costs a fixed number of forward passes at any domain
+local, so a per-site ensemble filter in the latent space needs no truncation
+of it, and its observation Jacobian costs a fixed number of forward passes at any domain
 size. The error that exact locality ties to the patch lattice is removed by
 running the filter on four copies of the lattice shifted by half a patch
 and blending them, which lowers the analysis error by about $30\%$ with the
@@ -25,10 +25,11 @@ Kolmogorov flow, on one box and on a domain three times wider.
 
 Against a physics-based filter whose model is wrong, and which is given
 online parameter estimation and bias correction, the latent filter loses
-when the model's error is small or correctable and wins once the part of
-that error which bias correction cannot remove exceeds about a sixth of the
-observation error. That number, measured on chosen errors in one system,
-is the quantity to estimate before replacing a physical model by a learned
-one: where the structural error of the physical model is large and the
-observations are good, a local model learned from noisy data is the better
-forecast model for an ensemble filter, at any domain size.
+when the model's error is small or correctable and, in the configuration
+tested, wins once the part of that error which bias correction cannot
+remove exceeds about a sixth of the observation error. That number was
+measured on chosen errors in one system, with one observation network,
+cycle length, ensemble size and learned model, and its value elsewhere has
+to be measured; what carries over is the quantity to estimate before
+replacing a physical model by a learned one, the state-dependent part of
+its one-cycle forecast error relative to the observation error.

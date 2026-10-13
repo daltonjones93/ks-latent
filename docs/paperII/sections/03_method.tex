@@ -62,7 +62,10 @@ domains from $44^2$ to $440^2$.
 
 \para{Training on windows.} The model is trained on random windows of one
 large periodic simulation, not on a small periodic box, so that no
-training sample contains a whole periodic direction. The autoencoder is
+training sample contains a whole periodic direction. For the 2D KS model
+of this paper the windows are $40\times40$ sites ($220^2$) of one
+$264^2$ simulation (Sec.~\ref{sec:ks2d}); the assimilation experiments
+run up to $440^2$, larger than the training simulation itself. The autoencoder is
 trained first, on reconstruction with two regularizers on the channel
 covariance (a variance anchor and a log-determinant barrier against
 correlated collapse). With the encoder frozen, the propagator is then
@@ -92,7 +95,7 @@ $y_n = \Hobs(u_n) + \nu_n$, $\nu_n\sim\mathcal{N}(0,R)$, where $\Hobs$
 selects grid points on a regular network. The filter state is an
 ensemble $\{z^{(e)}\}_{e=1}^{\Nens}$ of latent fields, forecast with
 $\Fp$ plus additive model noise, and the observation operator in latent
-space is $h = \Hobs\circ\Dec$. Nothing in the filter uses the equations
+space is $H = \Hobs\circ\Dec$. Nothing in the filter uses the equations
 of the system: the model is the learned propagator, and the only
 physical input is the observation network.
 
@@ -105,7 +108,7 @@ update \citep{burgers1998,houtekamermitchell1998}. The taper is the
 Gaspari--Cohn function \citep{gaspari1999} of the toroidal site distance
 $\dist(j,k)$, with half-width $1.5$ sites. After each analysis the
 ensemble spread is relaxed towards the forecast spread, coordinate by
-coordinate, with weight $\alpha=0.7$ (relaxation to prior spread, RTPS;
+coordinate, with weight $\alpha_{\mathrm R}=0.7$ (relaxation to prior spread, RTPS;
 \citealp{whitakerhamill2012}); the forecast adds Gaussian model noise of
 standard deviation $0.02$ per latent coordinate at every propagator step.
 The 1D experiments of Sec.~\ref{sec:da_1d} also use a particle flow filter
@@ -119,7 +122,7 @@ latent space.
 \begin{proposition}[Block-diagonal observation Jacobian]
 \label{prop:blockdiag}
 Let $\Rdec=0$ and let $\Hobs$ select grid points. Then
-$\partial h_i/\partial z_{j,k} = 0$ for every channel $k$ unless
+$\partial H_i/\partial z_{j,k} = 0$ for every channel $k$ unless
 observation $i$ lies in patch $j$. Consequently:
 \begin{enumerate}
 \item[(a)] the full Jacobian $J\in\R^{m\times\dlat}$ is recovered exactly
@@ -128,19 +131,31 @@ observation $i$ lies in patch $j$. Consequently:
   number of observations $m$;
 \item[(b)] in the per-site filter with R-localization, with either the
   perturbed-observation or the ensemble-transform update, the analysis at
-  site $s$ depends only on the ensemble at the sites that own an
+  site $s$ depends only on the ensemble at $s$ and at the sites that own an
   observation within the taper support of $s$, and no row of $J$ is
   truncated in computing it.
 \end{enumerate}
 \end{proposition}
 
-The proof is in Appendix~\ref{app:proof}. Part (a) is a column colouring
+The proof is in Appendix~\ref{app:proof}. The proposition is elementary,
+an immediate consequence of the per-patch decoder: it restores in a learned
+latent space the property that a physical-space LETKF observing grid points
+has by construction, namely that each observation depends on one location.
+Its use lies in what it enables. The per-site analysis needs no truncation
+of $H$, so the only approximations of the filter are the usual ones of a
+localized, finite ensemble with a gain linearized at the ensemble mean
+(Appendix~\ref{app:da_filters}); \emph{exact} in this paper refers to the
+locality of the observation operator, not to the filter. The same holds on
+every domain size and on every shifted tiling (Sec.~\ref{sec:tilings_method}).
+It holds for observations of grid-point values, or of averages within one
+patch, and not for spatially integrated observations, such as radiances,
+whose operator reaches several patches. Part (a) is a column colouring
 of $J$ in the sense of \citet{curtis1974}: all columns belonging to the
 same channel can share one colour, because no row has two non-zeros in
 such a group. With $\Rdec>0$, row $i$ would have non-zeros at every site
 within $\Rdec$ of its patch, the colouring would need
 $c(2\Rdec+1)^{\dim}$ colours, and the per-site analysis in (b) would have
-to include those sites as well or truncate $h$. Neither the cost of the
+to include those sites as well or truncate $H$. Neither the cost of the
 colouring nor the memory of the per-site filter depends on the domain
 size. Figure~\ref{fig:concept}b shows the measured Jacobian.
 
@@ -161,8 +176,8 @@ back to the unshifted frame, $\bar u_k = \Tr_{o_k}^{-1}\Dec(\bar z_k)$. The
 analysis is the blend
 \begin{equation}
 \begin{gathered}
-  \bar u = \sum_{k=1}^{K} w_k\,\bar u_k,\qquad
-  w_k(x,y) = \frac{\phi(x-o_{k,x})\,\phi(y-o_{k,y})}
+  \bar u = \sum_{k=1}^{K} \omega_k\,\bar u_k,\qquad
+  \omega_k(x,y) = \frac{\phi(x-o_{k,x})\,\phi(y-o_{k,y})}
   {\sum_{l}\phi(x-o_{l,x})\,\phi(y-o_{l,y})},\\
   \phi(\xi) = \sin^2\!\Big(\frac{\pi(\xi \bmod p + \tfrac12)}{p}\Big),
 \end{gathered}
@@ -193,7 +208,7 @@ therefore with $|\Omega|$. With localization, each local analysis only
 needs to span the unstable directions active inside the taper support
 $A_{\mathrm{loc}}$ \citep{patil2001,ott2004}, which suggests
 \begin{equation}
-  \Nens \gtrsim \rho\,|A_{\mathrm{loc}}|,
+  \Nens \gtrsim \rho_{\mathrm{KY}}\,|A_{\mathrm{loc}}|,
   \label{eq:nens_local}
 \end{equation}
 independent of the total domain size. For 1D KS with the taper used in

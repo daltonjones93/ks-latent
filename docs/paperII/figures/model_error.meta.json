@@ -1,7 +1,7 @@
 {
   "figure": "model_error",
-  "git_sha": "b1e81c5bb09cac413b44ba95482494d41e8c62e0",
-  "timestamp_utc": "2026-10-12T11:53:18Z",
+  "git_sha": "27d25ef1a5360c03727b093aa14509cc00c2b287",
+  "timestamp_utc": "2026-10-13T01:44:49Z",
   "inputs": [
     "artifacts/experiments/da2d/i11_I28W_adv1_rtps0.5.json",
     "artifacts/experiments/da2d/i11_I28W_adv1_rtps0.6.json",

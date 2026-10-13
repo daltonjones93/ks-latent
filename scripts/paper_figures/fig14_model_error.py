@@ -24,7 +24,7 @@ LAT = np.mean([0.324, 0.310, 0.302])
 fig, (a, b) = plt.subplots(1, 2, figsize=(COL2, 2.7), gridspec_kw={"wspace": 0.38, "width_ratios": [1.35, 1]})
 SHORT = {"$64^2$ grid": "64²", "$32^2$ grid": "32²", "forcing $0.2$": "forcing 0.2", "forcing $0.4$": "forcing 0.4",
          "$\\nabla^2$ coefficient $1.1$": "a = 1.1", "$\\nabla^2$ coefficient $1.25$": "a = 1.25",
-         "damping order $5$": "p = 5", "damping order $6$": "p = 6", "damping order $8$": "p = 8",
+         "damping order $5$": r"$\gamma = 5$", "damping order $6$": r"$\gamma = 6$", "damping order $8$": r"$\gamma = 8$",
          "advection $1$": "advection 1", "advection $2$": "advection 2"}
 OFF = {"forcing $0.2$": (-4, -8), "forcing $0.4$": (-3, 5), "$\\nabla^2$ coefficient $1.1$": (4, -6),
        "$\\nabla^2$ coefficient $1.25$": (-5, 5), "damping order $8$": (-5, -3), "damping order $5$": (-4, -7),
@@ -78,7 +78,7 @@ a.legend(fontsize=6, loc="lower right", bbox_to_anchor=(1.0, 0.07))
 panel_label(a, "a")
 
 # (b) RTPS sensitivity
-SWEEPS = [("p = 6", ORANGE, "o", {r: f"J17H_p6_c16_rtps{r}_s0" for r in ("0.5", "0.6", "0.7", "0.9", "1.0")}),
+SWEEPS = [(r"$\gamma = 6$", ORANGE, "o", {r: f"J17H_p6_c16_rtps{r}_s0" for r in ("0.5", "0.6", "0.7", "0.9", "1.0")}),
           ("a = 1.25", INK2, "s", {r: f"I28W_lap1.25_rtps{r}" for r in ("0", "0.5", "0.6", "0.7", "0.8", "0.9")}),
           ("advection 1", YELLOW, "^", {r: f"I28W_adv1_rtps{r}" for r in ("0", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0")})]
 for lab, col, mk, tags in SWEEPS:

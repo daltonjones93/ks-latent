@@ -597,7 +597,13 @@ data (R4).
   stick (∇² 1.25 → 1.17; advection 2 → 0.40; advection 1 → 0.07). Rerun the estimation cases with parameter inflation
   (higher floor or parameter RTPS) and RTPS retuned with each remedy on; regenerate Table/Fig. model_error; recheck
   the crossover.
-- **R8 `[ ]` Paper II other points.** State the training source (windows of 264²) and that 440² goes beyond it;
+- **R8 `[~]` Paper II other points** (2026-10-12: done without new runs, `docs/paperII/decisions.md` R8 entry: training
+  source; crossover as a one-configuration result; one-cycle error 0.19; Prop. 1 framing and "exact"; per-patch decoder
+  cost; noisy-training gain vs the rule; aligned network as a limitation; sparse numbers (long runs over cycles 51–300);
+  cubic case reported; notation; float order; Fig. da_2d(a) log axis; Kolmogorov model in App. A; Pathak 2018 ×2 and
+  Penny 2022 verified and cited. **Left:** the one-cycle error on Fig. model_error's axis and the label overlaps there
+  (with R7's regeneration); P7's "ensemble resources" sentence (R6); the title (authors' call)).
+  Original list: State the training source (windows of 264²) and that 440² goes beyond it;
   crossover x-axis (after bias correction, before estimation) and where the hidden-field cases sit; "a sixth of the
   observation error" stated as a one-system result; the learned model's own one-cycle error (0.19) vs the crossover
   (0.10); Prop. 1 framed by what exactness enables (tilings, size invariance), not as deep; the per-patch decoder's

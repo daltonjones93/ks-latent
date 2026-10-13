@@ -6,13 +6,15 @@
 \subsection{The model}
 \label{app:model}
 
-Table~\ref{tab:architecture} lists the configuration of the two models
+Table~\ref{tab:architecture} lists the configuration of the three models
 used here, read from the stored checkpoints and training logs by
-\texttt{scripts/paper\_figures/tabA\_architecture.py}: the 12-channel 2D KS
-model of every 2D experiment and the 1D model of Paper~I used in
-Sec.~\ref{sec:da_1d}. The 2D model's training fields carry one fixed
-realization of Gaussian noise of standard deviation $0.1$ (standardized
-units), against which its validation error is also measured.
+\texttt{scripts/paper\_figures/tabA\_architecture.py}: the 1D model of Paper~I used in
+Sec.~\ref{sec:da_1d}, the 12-channel 2D KS model of every 2D experiment, and the
+12-channel Kolmogorov model ($\alpha=0.05$) of Sec.~\ref{sec:kolmogorov_da}. The training
+fields of the 2D KS and Kolmogorov models carry one fixed realization of Gaussian noise of
+standard deviation $0.1$ (standardized units), against which their validation errors are also
+measured. The 2D KS model is trained on $40\times40$-site windows of a $264^2$ simulation, the
+Kolmogorov model on $48$-site strips (full height) of a $32\pi\times2\pi$ simulation.
 
 \begin{table*}[htbp]
 \caption{Architecture and training configuration. Reaches are radius
@@ -25,21 +27,21 @@ $k_{\max}$ by $70\%$. All runs use AdamW with linear warm-up and cosine decay,
 weight decay $10^{-5}$, gradient clipping at 1, and training seed 0.
 $^a$A signed latent spatial-coherence penalty (weight 0.01).}
 \label{tab:architecture}
-\widetabular{lcc}{\tabinput{tables/architecture_da}}
+\widetabular{lccc}{\tabinput{tables/architecture_da}}
 \end{table*}
 
 \subsection{Analysis schemes}
 \label{app:da_filters}
 
 Let $Z\in\R^{\Nens\times\dlat}$ be the forecast ensemble of one tiling, $\bar z$ its mean,
-$X=Z-\bar z$ the perturbations, $B=X^\top X/(\Nens-1)$, $J$ the Jacobian of $h=\Hobs\circ\Dec$ at
+$X=Z-\bar z$ the perturbations, $B=X^\top X/(\Nens-1)$, $J$ the Jacobian of $H=\Hobs\circ\Dec$ at
 $\bar z$, and $\rho$ the Gaspari--Cohn taper \citep{gaspari1999} of the site distance, of half-width
 $1.5$ sites in 2D (zero at 3 sites and beyond) and 3 sites in 1D.
 
 \para{The 2D filter.} Each tiling runs the per-site filter below (perturbed observations) at every site,
 followed by relaxation to prior spread (RTPS) \citep{whitakerhamill2012}: for every latent coordinate $j$,
 with forecast and analysis spreads $\sigma^f_j$ and $\sigma^a_j$, the analysis perturbations are
-multiplied by $1+\alpha(\sigma^f_j-\sigma^a_j)/\sigma^a_j$, $\alpha=0.7$. The forecast is $\Fp$ applied
+multiplied by $1+\alpha_{\mathrm R}(\sigma^f_j-\sigma^a_j)/\sigma^a_j$, $\alpha_{\mathrm R}=0.7$. The forecast is $\Fp$ applied
 five times, each time adding independent Gaussian noise of standard deviation $0.02$ to every latent
 coordinate. The initial ensemble of a tiling is its encoding of the initial truth plus independent
 noise of standard deviation $0.1$ per coordinate (or, in the robustness test of
@@ -50,9 +52,9 @@ apart).
 (half a 16-point patch): it encodes $\Tr_{o_k}u$, and its observation operator reads the observations
 at their translated positions, so all tilings assimilate the same data. Each member $e$ of tiling $k$
 is decoded and translated back, $u^{(e)}_k=\Tr_{o_k}^{-1}\Dec(z^{(e)}_k)$, and the blended ensemble is
-$u^{(e)}=\sum_k w_k\,u^{(e)}_k$ with the weights of Eq.~\eqref{eq:blend}, pairing member $e$ of every
+$u^{(e)}=\sum_k \omega_k\,u^{(e)}_k$ with the weights of Eq.~\eqref{eq:blend}, pairing member $e$ of every
 tiling; its mean is the blended analysis and its spread the reported spread. With uniform weights,
-$w_k=1/K$. The blended fields are output only: each tiling's next forecast starts from its own
+$\omega_k=1/K$. The blended fields are output only: each tiling's next forecast starts from its own
 analysis ensemble.
 
 \para{Analysis updates.} The 2D experiments use the per-site filter below. The 1D experiments use
@@ -63,11 +65,11 @@ or without sampling error correction.
 $y^{(e)}=y+\varepsilon^{(e)}$, $\varepsilon^{(e)}\sim\mathcal N(0,R)$,
 \begin{equation}
 \begin{aligned}
-  z_a^{(e)} &= z^{(e)} + K\big(y^{(e)}-h(z^{(e)})\big),\\
-  K &= (\rho\circ B)J^\top\big(J(\rho\circ B)J^\top+R\big)^{-1}.
+  z_a^{(e)} &= z^{(e)} + G\big(y^{(e)}-H(z^{(e)})\big),\\
+  G &= (\rho\circ B)J^\top\big(J(\rho\circ B)J^\top+R\big)^{-1}.
 \end{aligned}
 \end{equation}
-The innovation uses the nonlinear $h$; the gain uses $J$.
+The innovation uses the nonlinear $H$; the gain $G$ uses $J$.
 
 \para{Per-site filter.} For each site $s$, let $U_s$ be the observations
 with $\rho(\dist(s,\mathrm{site}(i)))>0$, $N_s$ the sites that own them,
@@ -77,8 +79,8 @@ Proposition~\ref{prop:blockdiag}), $B_{N_s}$ the sample covariance of the
 sites in $N_s$ and $B_{s,N_s}$ that of site $s$ with them,
 \begin{equation}
 \begin{aligned}
-  z_{a,s}^{(e)} &= z_s^{(e)} + K_s\big(y^{(e)}_{U_s}-h_{U_s}(z^{(e)})\big),\\
-  K_s &= B_{s,N_s}J_s^\top\big(J_sB_{N_s}J_s^\top+R_s\big)^{-1}.
+  z_{a,s}^{(e)} &= z_s^{(e)} + G_s\big(y^{(e)}_{U_s}-H_{U_s}(z^{(e)})\big),\\
+  G_s &= B_{s,N_s}J_s^\top\big(J_sB_{N_s}J_s^\top+R_s\big)^{-1}.
 \end{aligned}
 \end{equation}
 The covariance $B_{N_s}$ is not tapered; localization acts only through
@@ -89,7 +91,7 @@ $Y=X_{N_s}J_s^\top\in\R^{\Nens\times|U_s|}$,
 \begin{equation}
 \begin{aligned}
   \tilde P &= \big[(\Nens-1)I+YR_s^{-1}Y^\top\big]^{-1},\\
-  \bar w &= \tilde P\,YR_s^{-1}\big(y-\overline{h(z)}\big)_{U_s},\\
+  \bar w &= \tilde P\,YR_s^{-1}\big(y-\overline{H(z)}\big)_{U_s},\\
   W &= \big[(\Nens-1)\tilde P\big]^{1/2},
 \end{aligned}
 \end{equation}
@@ -97,8 +99,8 @@ and site $s$'s analysis ensemble is $\bar z_s + (\bar w\mathbf 1^\top+W)^\top X_
 \citep{hunt2007}. For a linear $h$ without localization it reproduces
 the Kalman update computed with the ensemble covariance exactly (unit
 test). With an earlier single-tiling filter at $44^2$ it gave the same skill as the per-site
-perturbed-observation filter to within $0.15$ at every ensemble size, in about $40\%$ less CPU time
-(decisions log, D4); every experiment in this paper uses the perturbed-observation update.
+perturbed-observation filter to within $0.15$ at every ensemble size, in about $40\%$ less CPU time;
+every experiment in this paper uses the perturbed-observation update.
 
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
@@ -111,7 +113,7 @@ $[-0.98,0.98]$, 100 bins). In \emph{matrix form} each sample correlation in
 $B$ is replaced by its corrected value; the result need not be positive
 semidefinite. The \emph{projected form} raises its eigenvalues to at
 least $10^{-10}$ times the largest. The \emph{serial form} assimilates the
-observations one at a time on the augmented state $[Z,h(Z)]$ and applies
+observations one at a time on the augmented state $[Z,H(Z)]$ and applies
 the correction to each scalar regression coefficient,
 $\beta_k=\mathrm{SEC}\big(\mathrm{corr}(x_k,\hat y_j)\big)\,\sigma_{x_k}\sigma_{\hat y_j}/(\sigma^2_{\hat y_j}+R_{jj})$.
 
@@ -121,19 +123,19 @@ $\beta_k=\mathrm{SEC}\big(\mathrm{corr}(x_k,\hat y_j)\big)\,\sigma_{x_k}\sigma_{
 \para{Filter.} The state is the field on the PDE grid ($128^2$ at $44^2$), integrated with ETDRK4 at
 $\Delta t=0.02$. The analysis is a local ensemble transform Kalman filter on blocks of $4\times4$ grid
 points: every point of a block receives the transform computed at the block centre from the
-observations whose Gaspari--Cohn weight, now a function of physical distance with half-width $c$, is
+observations whose Gaspari--Cohn weight, now a function of physical distance with half-width $L_{\mathrm{loc}}$, is
 positive, each with its error variance divided by that weight \citep{hunt2007}, followed by RTPS. The
 observations, their errors and their random draws are those of the latent experiments. The
 64-member initial ensemble is the true initial field plus independent smooth perturbations (Gaussian
 correlation over 4 grid points) of standard deviation $0.5$ in standardized units. With the true
-equations and its best setting ($c=24$ length units, no RTPS) it reaches $0.076$.
+equations and its best setting ($L_{\mathrm{loc}}=24$ length units, no RTPS) it reaches $0.076$.
 
 \para{Wrong models.} Every wrong model is a modification of the forecast model only; the truth is the
 2D KS equation $u_t=-\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$ throughout, except in the hidden-field cases.
 \begin{itemize}
 \item \emph{Coefficient:} $u_t=-a\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$, $a=1.1$ or $1.25$; the most unstable
   wavenumber moves from $1/\sqrt2$ to $\sqrt{a/2}$.
-\item \emph{Advection:} the KS right-hand side plus $-c\,\partial_xu$, $c=1$ or $2$, applied exactly as a Fourier
+\item \emph{Advection:} the KS right-hand side plus $-U\,\partial_xu$, $U=1$ or $2$, applied exactly as a Fourier
   phase shift after every step.
 \item \emph{Forcing:} the KS right-hand side plus a fixed field $f(x,y)$: white noise smoothed with a
   Gaussian kernel of correlation length $5$, zero mean, scaled to standard deviation $0.2$ or $0.4$ (one
@@ -141,10 +143,10 @@ equations and its best setting ($c=24$ length units, no RTPS) it reaches $0.076$
 \item \emph{Resolution:} the KS equation on a $64^2$ or $32^2$ grid; the initial ensemble and the analyses
   are spectrally truncated to that grid, the observations are taken at the same physical points, and
   the error is measured after zero-padding back to $128^2$.
-\item \emph{Damping order:} $u_t=-a\nabla^2u-b(-\nabla^2)^{p/2}u-\tfrac g2|\nabla u|^2$ with $p=5$, $6$ or $8$. For each
-  $p$, $(a,b,g)$ start from the values that minimize the one-cycle forecast error on an independent
+\item \emph{Damping order:} $u_t=-a\nabla^2u-b(-\nabla^2)^{\gamma/2}u-\tfrac g2|\nabla u|^2$ with damping order $\gamma=5$, $6$ or $8$. For each
+  $\gamma$, $(a,b,g)$ start from the values that minimize the one-cycle forecast error on an independent
   trajectory (40 starts, Nelder--Mead): $(0.640, 0.634, 0.996)$, $(0.436, 0.426, 0.980)$ and
-  $(0.210, 0.203, 0.938)$; no $(a,b,g)$ gives the KS growth rate $K^2-K^4$ at all wavenumbers. The
+  $(0.210, 0.203, 0.938)$; no $(a,b,g)$ gives the KS growth rate $k^2-k^4$ at all wavenumbers $k$. The
   remaining one-cycle errors, $0.072$, $0.129$ and $0.210$, are the irreducible errors of the three forms.
 \item \emph{Hidden field:} the truth is $u_t=\mathrm{KS}(u)+\varepsilon v$, $v_t=-v/\tau+\kappa\nabla^2u$ with $\tau=2$,
   $\kappa=-1$ and $\varepsilon=0.1$ or $0.2$, integrated with ETDRK4 on the pair; $v$ is never observed and never
@@ -153,10 +155,10 @@ equations and its best setting ($c=24$ length units, no RTPS) it reaches $0.076$
   updated through its ensemble covariance with the observed $u$.
 \end{itemize}
 
-\para{Remedies.} \emph{Tuning:} RTPS $\alpha\in\{0,0.3,0.5,0.6,0.7,0.8,0.9,1.0\}$ and
-$c\in\{8.25,16,24\}$ (and $4$ for advection), and multiplicative inflation $1.1$ and $1.2$ without RTPS.
+\para{Remedies.} \emph{Tuning:} RTPS $\alpha_{\mathrm R}\in\{0,0.3,0.5,0.6,0.7,0.8,0.9,1.0\}$ and
+$L_{\mathrm{loc}}\in\{8.25,16,24\}$ (and $4$ for advection), and multiplicative inflation $1.1$ and $1.2$ without RTPS.
 \emph{Online parameter estimation:} each member carries its own value of the parameter that is wrong
-(the coefficient $a$, the speed $c$, or $(a,b,g)$ jointly), started from the wrong or best-fit value
+(the coefficient $a$, the speed $U$, or $(a,b,g)$ jointly), started from the wrong or best-fit value
 with a spread of $0.05$ ($0.3$ for the speed; $5\%$ of each value for $(a,b,g)$), and is forecast with it.
 The parameters are updated with a global ensemble transform using all observations,
 $\theta_a=\bar\theta+W^\top(\theta-\bar\theta)$ with the transform $W$ of the unlocalized filter computed from

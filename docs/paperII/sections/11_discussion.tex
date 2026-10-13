@@ -4,15 +4,26 @@
 %======================================================================
 
 \para{What locality buys.} The latent field makes localization possible in a
-learned space, and with a per-patch decoder it makes it exact
-(Proposition~\ref{prop:blockdiag}). The ensemble a localized filter needs is
+learned space, and with a per-patch decoder it makes the observation
+operator exactly local (Proposition~\ref{prop:blockdiag}). The ensemble a localized filter needs is
 then set by the local problem, about 32 members per tiling at both sizes
 tested, while an unlocalized filter needs more members than the attractor
 has unstable directions, a number that grows with the domain
 (Secs.~\ref{sec:da_2d} and \ref{sec:da_1d}). The price of exact locality is
 an error tied to the patch lattice, which the decoder does not remove; the
 shifted tilings remove most of it, because the tilings' errors are only
-weakly correlated, and they do so without retraining. The same
+weakly correlated, and they do so without retraining. The per-patch decoder
+has a price of its own: it reconstructs each patch without its neighbours,
+which is what ties the error to the lattice. A decoder that reads the
+neighbouring sites ($\Rdec=1$) would reduce that error at its source, at the
+cost of an observation Jacobian that is banded rather than block-diagonal,
+$c\,3^{2}$ colours instead of $c$, and per-site analyses that include the
+neighbours (Sec.~\ref{sec:da_method}); the locality is kept, the
+block-diagonal form is not. In 1D a per-patch model assimilated about twice
+as badly as one whose decoder mixes neighbouring sites
+(Sec.~\ref{sec:ks1d}). We have not trained the 2D model with such a decoder,
+so we cannot say how much of the tilings' gain repairs an error that the
+per-patch design itself creates. The same
 construction worked in Kolmogorov flow once the tilings were restricted to
 the symmetries the model was trained on. The remaining analysis error is
 mostly the filter's, not the decoder's: the blended decoder floor is less
@@ -26,7 +37,9 @@ built on equations with a small or correctable error is still better. The
 comparison of Sec.~\ref{sec:da_model_error} locates the boundary: what
 matters is the part of the physical model's one-cycle forecast error that
 bias correction cannot remove, and the latent filter wins once it exceeds
-about a sixth of the observation error. The missing anisotropic process,
+about a sixth of the observation error in the configuration we tested
+(one observation network, cycle length, ensemble size and learned model).
+The missing anisotropic process,
 whose strength we could set, places a tie at $0.15$ of the observation
 error and wins at $0.31$ and $0.49$, consistent with that boundary. Two
 features of the comparison carry over to real systems. The errors that
@@ -36,8 +49,9 @@ are the errors of the models of convection and cloud processes that
 motivate this work. And the learned model needs no tuning for the error of
 the model it replaces: one setting served every case, while the
 physics-based filter worked only in a narrow window of its relaxation to
-prior spread. The model learned from noisy fields was slightly better than
-one learned from clean fields, so measurement error, the part of the error
+prior spread. The model learned from noisy fields was at least as good as
+one learned from clean fields ($4$--$5\%$ better, a consistent gain but below
+our $10\%$ threshold), so measurement error, the part of the error
 budget that is usually known, can be handled in training. A process with
 memory that the current field does not reveal limits both filters
 (Sec.~\ref{sec:da_model_error}); propagators with access to past states are
@@ -53,7 +67,13 @@ the obvious remedy on the learned side.
   model and without a physics-based comparator, and 1D KS with a model that
   is not per-patch.
 \item \emph{Observations.} The networks are regular and dense, four
-  observations per site in the main experiments, of the full field. With
+  observations per site in the main experiments, of the full field, and
+  aligned with the patch lattice: observations every 8 grid points, patches
+  of 16 and tiling offsets of 8, so every tiling sees the same observation
+  geometry relative to its patches. Irregular networks and networks not
+  commensurate with the patches are untested, and so are spatially
+  integrated observations, for which Proposition~\ref{prop:blockdiag} does
+  not hold. With
   one observation per site the filter is four times better than
   interpolation and stays bounded over 300 cycles, but on longer runs with
   sparser networks the stability of the learned propagator becomes the
@@ -61,6 +81,9 @@ the obvious remedy on the learned side.
 \item \emph{Model errors.} The errors of the physics-based comparator were
   chosen, not calibrated to a real model, and the crossover is located by
   the cases we chose; its position in other systems remains to be measured.
+  We did not compare with the third option, a physical model corrected by a
+  learned term trained on the same data \citep{pathak2018hybrid}, which
+  targets exactly the state-dependent error on which the crossover rests.
 \item \emph{Training data.} The learned model was trained on complete,
   noisy fields of the true system, which real data rarely provide; training
   from sparse observations, by alternating assimilation and training

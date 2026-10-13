@@ -36,8 +36,8 @@ In spatially extended chaos this requirement grows with the domain. The
 Kaplan--Yorke dimension $\DKY$ \citep{kaplanyorke1979} and the number of
 positive exponents of an extensively chaotic system grow in proportion to
 its volume \citep{ruelle1982,manneville1985,egolfgreenside1994}, with a
-density $\rho$ that does not depend on the domain; for the
-Kuramoto--Sivashinsky (KS) equation in one dimension $\rho\approx0.22$ per
+density $\rho_{\mathrm{KY}}$ that does not depend on the domain; for the
+Kuramoto--Sivashinsky (KS) equation in one dimension $\rho_{\mathrm{KY}}\approx0.22$ per
 unit length \citep{edson2019}. An unlocalized filter must therefore grow
 its ensemble with the domain, while a localized one needs only enough
 members for the unstable directions inside its local region
@@ -62,7 +62,13 @@ filter of \citet{tong2026laeenkf} lists it as future work. The reason is
 structural: a global latent vector has no notion of distance, so there is
 nothing to taper. Latent score-based filters note that encoding the state
 into a latent vector may lose the local structure that LETKF-type methods
-exploit \citep{si2025latentensf}. Learned corrections to the ensemble Kalman
+exploit \citep{si2025latentensf}. Local learned models without a latent space
+are older: parallel reservoir computers, each forecasting one region of a large
+KS domain from a neighbourhood around it, scale to domains of large extent
+\citep{pathak2018prl}, and recurrent surrogates of this kind have been combined
+with ensemble and variational data assimilation, which update their hidden
+states from observations and, on Lorenz-96, scale to higher dimensions with
+domain localization \citep{penny2022}. Learned corrections to the ensemble Kalman
 gain, with a learned distance-based localization, can outperform a tuned
 LETKF on KS at the size they were trained on \citep{bach2025}.
 
@@ -93,7 +99,9 @@ the standard remedies are inflation and relaxation to prior spread
 \citep{whitakerhamill2012}, online estimation of model parameters by state
 augmentation \citep{anderson2001,ruiz2013}, and bias correction with
 additive model error \citep{dee2005}. A fair comparison gives the
-physics-based filter all of them (Sec.~\ref{sec:da_model_error}).
+physics-based filter all of them (Sec.~\ref{sec:da_model_error}). A further
+option keeps the physical model and learns a correction to it from data
+\citep{pathak2018hybrid}; we do not run that comparator here.
 
 Finally, the shifted tilings of Sec.~\ref{sec:tilings_method} are cycle
 spinning \citep{coifmandonoho1995} on the patch lattice: averaging
@@ -106,10 +114,10 @@ to the grid.
 %----------------------------------------------------------------------
 
 That localization makes ensemble filters work with small ensembles is
-established, and so is data assimilation in a learned latent space.
-Table~\ref{tab:prior_work} summarizes the closest work. What we add is
-their combination, made exact: a latent observation operator that is
-exactly local, so that a per-site ensemble filter in latent space needs no
+established, and so is data assimilation in a learned latent space; a
+learned surrogate has also been assimilated with domain localization
+\citep{penny2022}. Table~\ref{tab:prior_work} summarizes the closest work.
+What we add is a latent observation operator that is exactly local, so that a per-site ensemble filter in latent space needs no
 truncation and keeps working at any domain size with one model and one
 setting; shifted tilings that remove the errors tied to the patch lattice;
 and a comparison with physics-based filters whose models are wrong in ways
@@ -121,7 +129,8 @@ learned latent space; ``Localized'': the filter is localized; ``Other
 sizes'': one trained model assimilates data on domains of another size;
 ``Wrong model'': compared with a filter that uses a physical model with
 model error and its standard remedies. $\circ$: compared only with a
-filter that uses the true model.}
+filter that uses the true model. $^a$The analysis updates the hidden
+state of a recurrent network.}
 \label{tab:prior_work}
 \begin{ruledtabular}
 \begin{tabular}{lcccc}
@@ -133,6 +142,7 @@ Work & Latent DA & Localized & Other sizes & Wrong model \\
 \citet{tong2026laeenkf} & \checkmark & --- & --- & $\circ$ \\
 \citet{si2025latentensf} & \checkmark & --- & --- & $\circ$ \\
 \citet{bach2025} & --- & \checkmark & --- & $\circ$ \\
+\citet{penny2022} & \checkmark$^a$ & \checkmark & --- & $\circ$ \\
 \citet{brajard2020,bocquet2020} & --- & --- & --- & $\circ$ \\
 This work & \checkmark & \checkmark & \checkmark & \checkmark \\
 \end{tabular}

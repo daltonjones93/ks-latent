@@ -33,7 +33,7 @@ $51$--$100$.
 
 \para{The filter.} The per-site ensemble filter of
 Sec.~\ref{sec:da_method}, Gaspari--Cohn half-width $1.5$ sites, RTPS
-$\alpha=0.7$, model noise $0.02$ per coordinate and step, $64$ members per
+$\alpha_{\mathrm R}=0.7$, model noise $0.02$ per coordinate and step, $64$ members per
 tiling and four shifted tilings blended by Eq.~\eqref{eq:blend}. These
 values are the same in every 2D experiment of this paper; none was tuned
 per domain size, per seed or per experiment.
@@ -104,6 +104,27 @@ integration and the observation draws are shared (Sec.~\ref{sec:da_cost}).
 
 \begin{figure*}[htbp]
 \centering
+\includegraphics{figures/da_2d.pdf}
+\caption{Data assimilation in the 2D KS latent field with shifted
+tilings (the measured observation Jacobian is in Fig.~\ref{fig:concept}b). (a)
+Steady-state analysis error against domain area (log axes), one tiling and four
+(all seeds as points), with interpolation of the observations, the
+decoder floors, the unlocalized filter with 64 and 128 members per tiling, and the physical-space
+filter run with the true equations at $44^2$ (legend at lower left). (b) Error against members per tiling at $44^2$ and $220^2$. (c)
+Per-cycle analysis error and spread at $440^2$ ($\dlat=76\,800$ per tiling),
+four tilings, and the one-tiling error; shaded: the steady-state window.
+(d) Equal resources at $44^2$, mean and range over three seeds: a fixed total
+of 64 members split over one, two and four tilings, and four ensembles of
+64 on one tiling or on four shifted tilings. (e) Error against the number
+of tilings, 64 members each, with spread over error printed at each point
+and for uniform weights. One model and one setting hold over a hundredfold
+area, and the gain comes from the offsets of the tilings, not from the
+number of members.}
+\label{fig:da_2d}
+\end{figure*}
+
+\begin{figure*}[htbp]
+\centering
 \includegraphics{figures/tilings.pdf}
 \caption{Shifted tilings (the lattices and the blend weights are in Fig.~\ref{fig:concept}c,d).
 (a) Analysis error against position within a patch at $44^2$ (seed
@@ -120,6 +141,23 @@ so averaging them removes most of the lattice-tied error, not only the
 seams.}
 \label{fig:tilings}
 \end{figure*}
+
+\begin{table*}[htbp]
+\caption{2D KS data assimilation across domain sizes, steady-state
+analysis error in field units (cycles 51--100, 100 cycles), 64 members per
+tiling. $\dlat$: latent dimension per tiling. Four tilings: seed 0, then
+further seeds. Calibration: spread over error, four tilings, seed 0.
+Interpolation: cubic spline of the observations. Decoder floor:
+$\|\Dec(\E(u))-u\|$ with one tiling and blended over four. Free run: the
+ensemble mean without assimilation, whose error depends on the truth's
+large-scale variability (seed 0 at $330^2$ has a larger field variance; its
+seed 1 gives $5.3$). ---: not run.}
+\label{tab:da_2d_sizes}
+\widetabular{lcccccccc}{
+Size & $\dlat$ & 1 tiling & 4 tilings & Calibration & Interpolation & Floor, 1 & Floor, 4 & Free run \\
+\hline
+\tabinput{tables/sizes}}
+\end{table*}
 
 \begin{table}[htbp]
 \caption{Members and tilings, 2D KS, steady-state analysis error (field
@@ -148,10 +186,12 @@ optimal interpolation: the learned dynamics carry information between
 observation times and between observation points that the observations
 alone do not. At the observed points the error is $0.31$--$0.33$, half the
 observation error, so the analysis is not simply drawing towards the
-data. The prior, one cycle earlier, has an error of $0.34$--$0.39$; the
-latent model's own error over one cycle, measured on an independent
-truth, is small, so the filter's error is a persistent part that the
-analysis does not remove rather than error the model regrows each cycle.
+data. The prior, one cycle earlier, has an error of $0.34$--$0.39$. The
+learned model's own one-cycle error, a forecast from the encoded true
+state blended over the four tilings, is $0.19$ (Sec.~\ref{sec:da_robust}),
+which includes the blended decoder floor of $0.13$--$0.14$; most of the
+filter's error is therefore a persistent part that the analysis does not
+remove rather than error the model regrows each cycle.
 The ensemble is well calibrated, with spread over error $0.92$--$0.99$.
 RTPS weights of $0.5$, $0.7$ and $0.9$ give $0.322$, $0.324$ and $0.340$ at
 calibrations $0.78$, $0.92$ and $1.16$; we use $0.7$, the calibrated choice
@@ -205,7 +245,7 @@ error is $0.450$, $0.352$, $0.330$, $0.324$ and $0.322$ for $8$, $16$, $32$, $64
 members per tiling at $44^2$, and $0.329$, $0.315$, $0.312$ and $0.311$ for $16$ to $128$ at
 $220^2$ (Fig.~\ref{fig:da_2d}b): accuracy saturates by about 32 members per
 tiling at both sizes. Equation~\eqref{eq:nens_local} with the 2D KS
-density of $0.043$ per unit area and the taper's support (radius $16.5$
+density $\rho_{\mathrm{KY}}=0.043$ per unit area and the taper's support (radius $16.5$
 length units) gives about $37$, consistent with that saturation.
 
 \para{Without localization.} The same filter with the taper set to one
@@ -224,28 +264,7 @@ with 64 members per tiling, gives $0.32$, $0.31$ and $0.30$ at the same three
 sizes.
 
 \para{Long runs.} Over 300 cycles at $220^2$ the error averages $0.31$ in each of cycles 51--100,
-101--200 and 201--300, at a calibration of $0.97$ (Table~\ref{tab:da_robust}): the filter does not drift.
-
-\begin{figure*}[htbp]
-\centering
-\includegraphics{figures/da_2d.pdf}
-\caption{Data assimilation in the 2D KS latent field with shifted
-tilings (the measured observation Jacobian is in Fig.~\ref{fig:concept}b). (a)
-Steady-state analysis error against domain area, one tiling and four
-(all seeds as points), with interpolation of the observations, the
-decoder floors, the unlocalized filter and the physical-space filter run with the true equations
-at $44^2$ (legend at lower left). (b) Error against members per tiling at $44^2$ and $220^2$. (c)
-Per-cycle analysis error and spread at $440^2$ ($\dlat=76\,800$ per tiling),
-four tilings, and the one-tiling error; shaded: the steady-state window.
-(d) Equal resources at $44^2$, mean and range over three seeds: a fixed total
-of 64 members split over one, two and four tilings, and four ensembles of
-64 on one tiling or on four shifted tilings. (e) Error against the number
-of tilings, 64 members each, with spread over error printed at each point
-and for uniform weights. One model and one setting hold over a hundredfold
-area, and the gain comes from the offsets of the tilings, not from the
-number of members.}
-\label{fig:da_2d}
-\end{figure*}
+101--200 and 201--300, at a calibration of $0.97$ (Sec.~\ref{sec:da_robust}): the filter does not drift.
 
 \begin{figure*}[htbp]
 \centering
@@ -261,21 +280,4 @@ edges (i); the blend removes those seams (j). Fields divided by the
 training standard deviation; errors on their own colour scale.}
 \label{fig:da_snapshot}
 \end{figure*}
-
-\begin{table*}[htbp]
-\caption{2D KS data assimilation across domain sizes, steady-state
-analysis error in field units (cycles 51--100, 100 cycles), 64 members per
-tiling. $\dlat$: latent dimension per tiling. Four tilings: seed 0, then
-further seeds. Calibration: spread over error, four tilings, seed 0.
-Interpolation: cubic spline of the observations. Decoder floor:
-$\|\Dec(\E(u))-u\|$ with one tiling and blended over four. Free run: the
-ensemble mean without assimilation, whose error depends on the truth's
-large-scale variability (seed 0 at $330^2$ has a larger field variance; its
-seed 1 gives $5.3$). ---: not run.}
-\label{tab:da_2d_sizes}
-\widetabular{lcccccccc}{
-Size & $\dlat$ & 1 tiling & 4 tilings & Calibration & Interpolation & Floor, 1 & Floor, 4 & Free run \\
-\hline
-\tabinput{tables/sizes}}
-\end{table*}
 

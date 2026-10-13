@@ -4,12 +4,15 @@
 %======================================================================
 
 The model of this paper was trained on fields that carry observation-level
-noise, and it is the better for it. A model with the same architecture and
+noise, and it loses nothing by it. A model with the same architecture and
 recipe trained on clean fields gives $0.338$, $0.321$, $0.326$, $0.340$ and $0.326$ at
 $44^2$ to $440^2$ (four tilings, seed 0), against $0.324$, $0.304$, $0.312$, $0.326$ and $0.311$
 for the noisy-trained model: $4$--$5\%$ lower error at every size, with the
 calibration rising from $0.85$--$0.90$ to $0.92$--$0.98$. At $44^2$ the gain holds on all
-three seeds ($0.338$, $0.322$, $0.320$ against $0.324$, $0.310$, $0.302$). The dynamics are
+three seeds ($0.338$, $0.322$, $0.320$ against $0.324$, $0.310$, $0.302$), but the three-seed means,
+$0.327$ and $0.312$, differ by $4.5\%$, below the $10\%$ of the decision rule of
+Sec.~\ref{sec:da_model_error}: by that rule the two models tie, with a small gain from noisy
+training that is consistent across sizes and seeds. The dynamics are
 preserved: the noisy-trained model's Kaplan--Yorke dimension is within
 $3.6\%$ and $2.1\%$ of the truth's at $44^2$ and $66^2$, against $2.1\%$ and $1.1\%$ for the
 clean-trained one (against one truth run). The clean-trained model is within the

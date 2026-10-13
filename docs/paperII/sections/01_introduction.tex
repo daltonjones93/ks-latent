@@ -43,8 +43,8 @@ what that geometry is worth to an ensemble filter.
 The answer has three parts. First, locality can be made exact: with a
 decoder that reconstructs each patch from its own site, the observations
 of a patch depend on that site alone, the latent observation operator is
-block-diagonal, and a per-site ensemble filter in the latent space is
-exact rather than approximate. Second, the error that exact locality
+block-diagonal, and a per-site ensemble filter in the latent space
+needs no truncation of it. Second, the error that exact locality
 leaves, tied to the patch lattice, is removed by running the filter on
 shifted copies of the lattice and blending the analyses, without
 retraining. Third, the localized filter keeps its accuracy and its
@@ -82,12 +82,13 @@ model error.
   (Sec.~\ref{sec:da_model_error}). The latent filter loses to a
   physics-based filter whose model error is small or correctable and wins
   once the part of that error which bias correction cannot remove exceeds
-  about a sixth of the observation error. A missing process of
+  about a sixth of the observation error, in the configuration tested. A missing process of
   increasing strength, tuned for on both sides, gives a tie just below that
   point and wins of $1.27$ and $1.29$ times above it.
 \item \emph{Training on noisy data} (Sec.~\ref{sec:da_noisy}). The model is
-  trained only on fields that carry observation-level noise, and assimilates
-  $4$--$5\%$ better than the same model trained on clean fields.
+  trained only on complete fields that carry observation-level noise, and
+  assimilates at least as well as the same model trained on clean fields
+  ($4$--$5\%$ lower error at every size, below the $10\%$ of our decision rule).
 \end{itemize}
 
 All experiments are twin experiments. The main system is 2D KS

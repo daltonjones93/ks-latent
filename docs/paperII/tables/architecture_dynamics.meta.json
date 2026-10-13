@@ -1,7 +1,7 @@
 {
   "table": "architecture_dynamics",
-  "git_sha": "9c1160fe8b564f15d16e551d7d7c8810b1906b26",
-  "timestamp_utc": "2026-10-11T19:51:12Z",
+  "git_sha": "27d25ef1a5360c03727b093aa14509cc00c2b287",
+  "timestamp_utc": "2026-10-13T01:36:41Z",
   "inputs": [],
   "main_alpha01_model": "k_xs01_v2"
 }

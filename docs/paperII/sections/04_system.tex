@@ -15,8 +15,8 @@ The 2D experiments use the isotropic Kuramoto--Sivashinsky (KS) equation
   \qquad (x,y)\in[0,L)^2,
   \label{eq:ks2d}
 \end{equation}
-whose linear growth rate $K^2-K^4$ is positive on the ring $|\bm k|<1$ and
-largest at $|\bm k|=1/\sqrt2$, which sets a pattern wavelength of
+whose linear growth rate $k^2-k^4$, with $k=|\bm k|$, is positive for $k<1$ and
+largest at $k=1/\sqrt2$, which sets a pattern wavelength of
 $2\sqrt2\,\pi\approx8.9$. Its nonlinearity drives the spatial mean of
 $u$, which carries no dynamical information (only gradients of $u$ enter
 the right-hand side), so we project the $\bm k=0$ mode out after every
@@ -31,7 +31,9 @@ The training data are four trajectories (plus one for validation) of 25
 time units on a single periodic domain of side $264=6\times44$ ($768^2$
 points), after a spin-up of 200 time units. The model is deployed on
 square periodic domains of side $44$, $66$, $88$, $220$, $330$ and $440$, which
-are all multiples of the site length $h=5.5$.
+are all multiples of the site length $h=5.5$; the two largest exceed the
+training domain, and every domain above $220^2$ exceeds the largest window
+the model saw in training.
 
 \para{Ground truth.} The Lyapunov spectrum of the PDE is computed with
 the Benettin algorithm \citep{benettin1980} and the exact tangent

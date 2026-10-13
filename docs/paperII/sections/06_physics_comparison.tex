@@ -25,8 +25,8 @@ model is wrong in one of four ways (Appendix~\ref{app:da_comparator}):
 \item \emph{a spurious process}: uniform advection at speed $1$ or $2$, or a
   fixed terrain-like forcing of amplitude $0.2$ or $0.4$;
 \item \emph{a coarse grid}, $64^2$ or $32^2$ instead of $128^2$;
-\item \emph{a wrong form of the damping}: $-a\nabla^2u - b(-\nabla^2)^{p/2}u -
-  (g/2)|\nabla u|^2$ with damping order $p=5$, $6$ or $8$ instead of $4$, whose three
+\item \emph{a wrong form of the damping}: $-a\nabla^2u - b(-\nabla^2)^{\gamma/2}u -
+  (g/2)|\nabla u|^2$ with damping order $\gamma=5$, $6$ or $8$ instead of $4$, whose three
   coefficients are all estimated online, so that no coefficient is left
   wrong but no setting of them reproduces the KS growth-rate curve.
 \end{itemize}
@@ -38,7 +38,14 @@ offline from one-cycle residuals on an independent trajectory. Its
 reported value is its best configuration on seed 0, confirmed on seeds
 1--2; the decision rule (a filter wins if its three-seed mean is at least
 $10\%$ lower and it is lower on every seed) was written down before the
-runs.
+runs. One further pre-registered case was stopped before its latent runs: a
+missing cubic saturation, truth $u_t=\mathrm{KS}(u)-\beta u'^3$ with $u'$ the
+mean-removed field. At the pre-registered strength its one-cycle error was
+$0.055$ ($0.050$ state-dependent), and the physics-based filter without
+remedies reached $0.190$ on seed 0, a physics win in line with the crossover
+below; at no strength we tried did the state-dependent part exceed $0.06$
+(the truth stopped being chaotic first), so the process could not test the
+other side, and the anisotropic missing process below replaced it.
 
 \para{Results.} Table~\ref{tab:da_model_error} and Fig.~\ref{fig:model_error} order the cases by the
 physics-based filter's difficulty. It wins clearly when its model error
@@ -50,10 +57,10 @@ with the coefficient $25\%$ off, online estimation brings it from $0.48$ to
 $0.42$, still $1.35$ times the latent filter's error; with spurious
 advection, estimation of the speed leaves $0.44$ and $0.55$, $1.4$ and $1.8$
 times. With the wrong damping order, where no coefficient is left wrong, the tuned
-filter reaches $0.283$, $0.343$ and $0.409$ for $p = 5$, $6$ and $8$. Joint online
+filter reaches $0.283$, $0.343$ and $0.409$ for $\gamma = 5$, $6$ and $8$. Joint online
 estimation of $a$, $b$ and $g$ brings orders 5 and 6 to $0.263$ and $0.322$ and
-does not help order 8: the physics-based filter wins at $p=5$ ($1.19$ times),
-ties at $p=6$, and loses at $p=8$ ($1.31$ times); bias
+does not help order 8: the physics-based filter wins at $\gamma=5$ ($1.19$ times),
+ties at $\gamma=6$, and loses at $\gamma=8$ ($1.31$ times); bias
 correction does nothing for these state-dependent errors ($0.297$, $0.361$
 and $0.440$ on seed 0).
 
@@ -66,10 +73,22 @@ physics-based filter wins. Every case whose state-dependent one-cycle
 error is below $0.08$ (the grids, the forcing, the $10\%$ coefficient, damping
 order 5, $0.000$--$0.077$) is a win or a tie for the physics-based filter; every
 case at about $0.2$ or above (the $25\%$ coefficient, the advection, damping order
-8) is a win for the latent filter; and order 6, at $0.12$, is a tie. The crossover is therefore near $0.1$ in field units, a
-sixth of the observation error: a physical model whose one-cycle error,
-after bias correction, exceeds about a sixth of the observation error is
-worth replacing by a model learned from data, and one below it is not.
+8) is a win for the latent filter; and order 6, at $0.12$, is a tie. In
+this configuration the crossover therefore lies between $0.08$ and $0.2$ in
+field units, near $0.1$, about a sixth of the observation error: a physical
+model whose one-cycle error after bias correction is above it lost to the
+model learned from data, and one below it did not. This is a result for one
+system, one observation network, one cycle length, one ensemble size and one
+learned model, not a general constant. The latent filter's error, which sets
+the other side of the comparison, depends on all of them: it is $0.226$ with
+observations twice as dense and $0.769$ with half as dense
+(Sec.~\ref{sec:da_robust}). Nor does the crossover compare forecast errors
+alone. The learned model's own one-cycle error, from the encoded true state
+and including its decoder floor, is $0.19$ (Sec.~\ref{sec:da_accuracy}), larger
+than that of a physics model it ties with (damping order 6, $0.12$
+state-dependent): the outcome also depends on how each filter handles its
+model's error, through its inflation and its remedies, not only on the size
+of that error.
 A separate question is a truth that is not Markov in the observed field, which
 neither filter's model can represent: an
 unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
@@ -113,7 +132,7 @@ about four times better than either, as for the other cases.
 
 \para{Robustness.} The physics-based filter works only in a narrow window
 of RTPS. With damping order 6 its error is $0.72$, $0.43$, $0.35$, $0.93$ and $1.27$ at
-RTPS $0.5$, $0.6$, $0.7$, $0.9$ and $1.0$ ($c=16$), and multiplicative inflation
+RTPS $0.5$, $0.6$, $0.7$, $0.9$ and $1.0$ ($L_{\mathrm{loc}}=16$), and multiplicative inflation
 without RTPS was far worse in every case with a wrong coefficient, forcing
 or advection, and $4$--$21\%$ worse on the coarse grids. At its best setting
 it is over-dispersed, with spread over error $1.6$--$1.75$ at damping order 6
@@ -166,9 +185,11 @@ parameter estimation or bias correction); squares: the missing process ($\delta$
 field ($\varepsilon$), each against its own latent model; the band marks $\pm10\%$ of the latent filter, the dotted line
 a physics-based filter with the true equations. (b) The physics-based filter's error against its RTPS
 weight for three wrong models (log scale; RTPS 0 diverged or was worse than interpolation), and the
-latent filter's single setting. Below a state-dependent one-cycle error of about a sixth of the
-observation error the physics-based filter wins; above it the latent filter does, and the
-physics-based filter works only in a narrow window of its tuning.}
+latent filter's single setting. In this configuration, below a state-dependent one-cycle error of
+about a sixth of the observation error the physics-based filter wins or ties; above it the latent
+filter wins, except for the hidden field (diamonds), whose error the physics-based filter largely
+removes by estimating the $\nabla^2$ coefficient; and the physics-based filter works only in a narrow
+window of its tuning.}
 \label{fig:model_error}
 \end{figure*}
 
