@@ -1061,9 +1061,14 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
 **Paper II (`docs/paperII`)**
 - [x] P2-1 R6 (2026-10-13, 4a0b165): §6 states the budget (latent 4 × 64 vs physics 64) and gives equal-count results
   (4 × 16: KS 0.335; missing process 0.332/0.355/0.395 → tie, 1.22×, 1.23×). Other rows rechecked in P2-2.
-- [~] P2-2 R7/R7b (table script updated to include R7 runs, preview OK; waiting for R7b seeds): regenerate Table/Fig. model_error (0.19 marker), rewrite §6, recheck abstract/key points/
+- [x] P2-2 (2026-10-13, 4c708a0) §6 reorganized: parametric errors (coefficient, advection, forcing, grids) won by the
+  physics filter once estimation works (exception: advection 2, latent 1.11×, tie at equal count); errors of form
+  (damping order, missing process): crossover 0.12–0.2 field units (a fifth to a third of obs error). Hidden ε 0.1 now
+  physics 1.11×. Table/figure (0.19 marker) regenerated; abstract, key points, PLS, intro, discussion, conclusions,
+  App. A floor text updated. check_numbers 0/0. Was: regenerate Table/Fig. model_error (0.19 marker), rewrite §6, recheck abstract/key points/
   conclusions. Draft now, numbers when R7b lands (~2–3 h).
-- [ ] P2-3 Cross-paper consistency pass (after Paper I's text settles).
+- [x] P2-3 (2026-10-13, 67e045a) Cross-paper consistency pass; open: Paper I tables still use 2 runs at 66² (Paper II
+  uses 3: mean 188.5) → regenerate Paper I tables with P1-8 when the 88² truth lands; Paper II's 88² sentence then too. Was: (after Paper I's text settles).
 - [ ] P2-4 Optional small-box paragraph (p7b 440² control).
 - [ ] P2-5 Final checks: build, `check_numbers.py --paper paperII`, grayscale, internal referee re-read of §6.
 
