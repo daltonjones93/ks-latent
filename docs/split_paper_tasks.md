@@ -474,6 +474,16 @@ data (R4).
   parallel with 2×, rather than after it; the queue skips it when its json exists. (c) c = 12 Kolmogorov 1× eval
   (6.3 h, 150% CPU) paused with SIGSTOP (pid 14910; resume with `kill -CONT 14910`): c = 6 is the model R9a tests
   first; c = 12 is the contingency. No result discarded.
+- **R4 result log, 2026-10-12 19:15.** (1) r4e (D on 144 trajectories): 44² filter 0.393 (RTPS 0.7 and 0.9) vs D 0.408/0.395:
+  data does not close the gap to the Paper II model (0.324). (2) r4f (66² box, reach 5, c = 12): 0.418 (RTPS 0.7),
+  0.405 (0.9): a longer reach does not help either. (3) **D at 440²: 1.104, calibration 0.26, worse than interpolation
+  (0.819)**; C_eq at 440²: 0.813. Small-box models' filters do not hold up at 440² even though their D_KY transfers.
+  (4) **Kolmogorov c = 6 small-box model at 2×: D_KY 25.4 (12 positive) vs truth 46.6 (−45%), λ₁ 0.070** (1× was 22.3,
+  −0.9%). Against R9a the Kolmogorov criterion fails at 2×. Hypothesis (not tested): reach 3 on an 8-site box
+  spans 7 of 8 sites, so the Kolmogorov propagator can use box-scale information that does not exist in a larger
+  domain, whereas 2D KS interactions are local at that range. The c = 12 model (contingency in R9a) is being
+  evaluated at 1× (resumed) and then 2×; the c = 6 3× eval is left running to confirm. Duplicate 3× eval started by
+  the queue (pid 21667) killed.
 - **R10 `[ ]` Paper I rerun and reanalysis inventory (if R4/R4K hold; user 2026-10-12: "complete rewrite").**
   Everything in Paper I that rests on the 2D KS or Kolmogorov models, mapped from the figure/table generators and
   the sections. The 1D results (§5, Figs. 1d_transfer/1d_spectra, Table transfer1d) are unaffected: the 1D model is
