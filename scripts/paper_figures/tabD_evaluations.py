@@ -51,6 +51,29 @@ DESC = {
     "p6_full": "whole $3\\times$ periodic domain$^b$",
     "p8_a0025": "window, full reach, $c=3$, $\\kmax=12$",
     "k_xs0025": "canonical (main text)",
+    # Paper I rewrite (2026-10-13): small periodic box with a forced halo, propagator reach 3 sites
+    # (route a). "C": 24 box trajectories, k_max 32; "C2": 144 (2D KS) / 96 (Kolmogorov) box
+    # trajectories, k_max 48, 12000 propagator steps; "C3": C2 with the whole box supervised.
+    "r13_C2_ks2d_s44big_k48_seed0": "small box, recipe C2 (main text), seed 0",
+    "r13_C2_ks2d_s44big_k48_seed1": "small box, recipe C2, seed 1",
+    "r13_C2_ks2d_s44big_k48_seed2": "small box, recipe C2, seed 2",
+    "r13_C3_ks2d_s44big_k48_seed0": "small box, recipe C3, seed 0",
+    "r13_C3_ks2d_s44big_k48_seed1": "small box, recipe C3, seed 1",
+    "r13_C3_ks2d_s44big_k48_seed2": "small box, recipe C3, seed 2",
+    "r4c_ks2d_s44_r3": "small box, recipe C, seed 0",
+    "r4c_ks2d_s44_r3_seed1": "small box, recipe C, seed 1",
+    "r4c_ks2d_s44_r3_seed2": "small box, recipe C, seed 2",
+    "r4c_ks2d_s44_r3_eq": "small box, recipe C, batches scaled to equal work",
+    "r4w_ks2d_s44_r6_wrap": "small box, reach 6, whole periodic box (wraps)",
+    "r12_c6_a01_s1x_r3": "small box, recipe C (main text), seed 0",
+    "r12_c6_a01_s1x_r3_seed1": "small box, recipe C, seed 1",
+    "r12_c6_a01_s1x_r3_seed2": "small box, recipe C, seed 2",
+    "r14_KC2_a0.1_seed0": "small box, recipe C2",
+    "r14_KC3_a0.1_seed0": "small box, recipe C3",
+    "r4k_c6_a005_s1x_r3": "small box, recipe C (main text)",
+    "r4k_c12d10_a005_s1x_r3": "small box, recipe C, $c=12$, noisy data",
+    "r14_KC2_a0.05_seed0": "small box, recipe C2 (main text)",
+    "r14_KC3_a0.05_seed0": "small box, recipe C3",
 }
 BOX = {  # box-trained baselines (same files as Fig. 5); (system, scale) -> list of files
     ("ks2d", 1.0): [f"icnorm/ks2d_x1_normalized_seed{s}.json" for s in (0, 1, 2)],
@@ -88,7 +111,7 @@ for f in sorted(glob.glob(str(EXP / "crop/*_x*_seed*.json"))):
     sys_key = "ks2d" if d.get("system") == "ks2d" else float(d["alpha"])
     if sys_key != "ks2d":
         scale = int(round(scale))
-    have_truth = not (sys_key == "ks2d" and scale == 2.0)
+    have_truth = bool(runs(TSYS[sys_key], scale))  # 2D KS 88^2: once its truth run exists
     ref, err = score(sys_key, scale, ic, d["model_D_KY"]) if have_truth else (None, None)
     rows_csv.append({"model": tag, "system": sys_key, "scale": scale, "ic_seed": ic,
                      "model_D_KY": d["model_D_KY"], "model_lambda1": d.get("model_lambda1"),
@@ -113,9 +136,14 @@ with open(EXP / "appendix_D_evaluations.csv", "w", newline="") as fh:
     w = csv.DictWriter(fh, fieldnames=list(rows_csv[0]))
     w.writeheader(); w.writerows(rows_csv)
 
-ORDER = {"ks2d": ["box-trained", "p7_ks2d", "p7b_ks2d"],
-         0.1: ["box-trained", "p1_a01", "k_xs01", "k_xs01_v2", "k_xs01_v3", "k_xs01_v4", "k_xs01_v5", "k_xs01_v7"],
-         0.05: ["box-trained", "p2_a005", "c19_e6d0", "c19_e6d6_c6", "c19_e0d0_c6", "c19_e0d0_c6_s1", "c7b_a005",
+ORDER = {"ks2d": ["box-trained", "r4c_ks2d_s44_r3", "r4c_ks2d_s44_r3_seed1", "r4c_ks2d_s44_r3_seed2",
+                  "r4c_ks2d_s44_r3_eq", "r13_C2_ks2d_s44big_k48_seed0", "r13_C2_ks2d_s44big_k48_seed1",
+                  "r13_C2_ks2d_s44big_k48_seed2", "r13_C3_ks2d_s44big_k48_seed0", "r13_C3_ks2d_s44big_k48_seed1",
+                  "r13_C3_ks2d_s44big_k48_seed2", "r4w_ks2d_s44_r6_wrap", "p7_ks2d", "p7b_ks2d"],
+         0.1: ["box-trained", "r12_c6_a01_s1x_r3", "r12_c6_a01_s1x_r3_seed1", "r12_c6_a01_s1x_r3_seed2",
+               "r14_KC2_a0.1_seed0", "r14_KC3_a0.1_seed0", "p1_a01", "k_xs01", "k_xs01_v2", "k_xs01_v3", "k_xs01_v4", "k_xs01_v5", "k_xs01_v7"],
+         0.05: ["box-trained", "r4k_c6_a005_s1x_r3", "r4k_c12d10_a005_s1x_r3", "r14_KC2_a0.05_seed0",
+                "r14_KC3_a0.05_seed0", "p2_a005", "c19_e6d0", "c19_e6d6_c6", "c19_e0d0_c6", "c19_e0d0_c6_s1", "c7b_a005",
                 "c9i_a005", "p9_a005", "p9b_a005", "k_a005", "k_xs005", "k_xs005_noreg", "k_xs005_v2",
                 "p6_i6", "p6_i8", "p6_i12", "p6_full"],
          0.025: ["p8_a0025", "k_xs0025"]}
@@ -136,7 +164,7 @@ for sys_key, tags in ORDER.items():
             cell += f", {np.mean(np.abs(errs)):.1f}\\%" if errs else ", ---"
             cells.append(cell)
         if tag == "box-trained":
-            DESC[tag] = "same architecture as \\texttt{p2}/\\texttt{p7}, $8\\times8$-site periodic box"
+            DESC[tag] = "full reach, $c=3$, whole $8\\times8$-site periodic box"
         label = "box-trained$^a$" if tag == "box-trained" else f"\\texttt{{{tag.replace('_', chr(92) + '_')}}}"
         if tag == MAIN_A01:
             label += "$^\\star$"

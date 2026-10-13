@@ -33,7 +33,7 @@ PF := scripts/paper_figures
 
 PAPERI_TABLES := tab02_tab03 tab04_transfer2d tab08_alpha01_ablation tabA_architecture \
 	tabC_truth tabD_evaluations tabD_spectra
-PAPERI_FIGS := fig01_concept fig02_systems fig03_1d_transfer fig04_1d_spectra fig05_box_vs_window \
+PAPERI_FIGS := fig01_concept fig02_systems fig03_1d_transfer fig04_1d_spectra fig05_routes \
 	fig06_scaling fig07_rollouts_spectra fig10_failure figC1_truth_convergence figC2_appendix_panels
 PAPERII_TABLES := tab07_1d_da tab07_p2_model_error tab07_p2_tables tabE_p2 tabE_p2_robustness tab_da_cost \
 	tabA_architecture tabC_truth tabV_model_validation

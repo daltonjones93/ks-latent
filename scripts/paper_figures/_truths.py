@@ -19,8 +19,11 @@ EXP = ROOT / "artifacts" / "experiments"
 REGISTRY: dict[tuple[str, int | float], list[str]] = {
     ("ks2d", 1.0): ["g1_2dks_transfer_native44_n150.json",
                     "truth_ks2d/truth_ks2d_x1_seed1.json", "truth_ks2d/truth_ks2d_x1_seed2.json"],
-    ("ks2d", 1.5): ["g1_2dks_transfer_full.json", "truth_ks2d/truth_ks2d_x1p5_seed1.json"],
-    ("kolm0.1", 1): ["true_dky_kolmogorov_alpha0.1_trained_size.json"],
+    ("ks2d", 1.5): ["g1_2dks_transfer_full.json", "truth_ks2d/truth_ks2d_x1p5_seed1.json",
+                    "truth_ks2d/truth_ks2d_x1p5_seed2.json"],  # seed 2: Block Z (2026-10-13), enters when done
+    ("ks2d", 2.0): ["truth_ks2d/truth_ks2d_x2_seed0.json"],  # 88^2, K=400 (referee M1); enters when done
+    ("kolm0.1", 1): ["true_dky_kolmogorov_alpha0.1_trained_size.json",
+                     "crop/truth_a0p1_x1_seed1_T120.json", "crop/truth_a0p1_x1_seed2_T120.json"],
     ("kolm0.1", 2): ["true_dky_kolmogorov_alpha0.1_2x_transfer.json",
                      "crop/truth_a0p1_x2_seed1_T120.json", "crop/truth_a0p1_x2_seed2_T120.json"],
     ("kolm0.1", 3): ["true_dky_kolmogorov_alpha0.1_3x_transfer.json",

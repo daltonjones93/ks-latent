@@ -24,6 +24,9 @@ from ks_latent.config import Stage1TrainingConfig, Stage2TrainingConfig
 MODELS_2D = [("2D KS", "p7b_ks2d"), ("2D KS, Part~II", "p7c12d10_ks2d"), ("Kolm., $\\alpha=0.1$", MAIN_A01),
              ("Kolm., $\\alpha=0.05$", "c19_e0d0_c6"), ("Kolm., $\\alpha=0.025$", "k_xs0025"),
              ("Kolm., Part~II", "k_xs005_c12d10")]  # R8: the Kolmogorov DA model of Paper II, Sec. 10
+# Paper I rewrite (2026-10-13): the small-box models (route a). They enter only Paper I's
+# `architecture_dynamics` table, so the tables of paper1 and Paper II are unchanged.
+MODELS_2D_SMALL = [("2D KS, box", "r13_C2_ks2d_s44big_k48_seed0"), ("Kolm., $\alpha=0.1$, box", "r12_c6_a01_s1x_r3")]
 
 
 def load(p):
@@ -101,7 +104,7 @@ def data_noise(tag, ae):
     return 0.0
 
 
-for name, tag in MODELS_2D:
+for name, tag in MODELS_2D + MODELS_2D_SMALL:
     ae, pr = load(f"stage1_ae_kolmogorov_crop_{tag}.pt"), load(f"stage2_prop_kolmogorov_crop_{tag}.pt")
     a, ca, p, cp = as_dict(ae["ae_config"]), ae["crop_ae_config"], as_dict(pr["prop_config"]), pr["crop_prop_config"]
     sh = train_shape(tag)
@@ -119,7 +122,9 @@ for name, tag in MODELS_2D:
         "encoder reach $r_e n_e$": f"{a['site_mix_radius']}$\\times${a['n_site_mix_layers']}",
         "decoder reach $r_d n_d$": f"{a['dec_site_mix_radius']}$\\times${a['dec_n_site_mix_layers']}",
         "propagator $w$, $n_\\ell$, $d_m$": f"{p['attn_window']}, {p['local_mlp2d_n_layers']}, {p['local_mlp2d_token_d_model']}",
-        "training data": "periodic, $264^2$" if ks2d else "periodic, $32\\pi\\times2\\pi$",
+        "training data": (("periodic, $44^2$ box" if "box44" in ae["train_dataset"] else "periodic, $264^2$") if ks2d
+                          else ("periodic, $2\\pi\\times2\\pi$ box" if "wide" not in ae["train_dataset"]
+                                else "periodic, $32\\pi\\times2\\pi$")),
         "trajectories (train+val) $\\times$ length": f"{sh['n_train']}+{sh['n_val']} $\\times$ {round((sh['n_snapshots']-1)*dt_snap)}",
         "window (sites)": crop, "halo (sites)": halo,
         "Stage A length": f"{ca['steps']} steps", "Stage A learning rate": f"{ca['lr']:g}", "Stage A batch": f"{ca['batch']}",
@@ -177,15 +182,19 @@ def render(names, rows, labels=None):
     return lines
 
 
-names = list(cols)
+small = [n for n, _ in MODELS_2D_SMALL]
+names = [n for n in cols if n not in small]
 rows = list(cols[names[1]])
 lines = render(names, rows)
 write_table("tabA_architecture", "\n".join(lines) + "\n", main_alpha01_model=MAIN_A01)
 # Paper I (docs/split_paper_tasks.md S3.10): the dynamics models only, without the data-assimilation
 # model of Paper II; the training-noise row is then 0 everywhere and is dropped.
+# Paper I rewrite (2026-10-13): the small-box models (route a) first, then the window-trained ones (route b).
+_dyn = ["1D KS"] + small + [n for n in names if "Part" not in n and n != "1D KS"]
 write_table("tabA_architecture_dynamics",
-            "\n".join(render([n for n in names if "Part" not in n],
-                             [r for r in rows if r != "training-data noise"])) + "\n",
+            "\n".join(render(_dyn, [r for r in rows if r != "training-data noise"],
+                              labels=["1D KS", "2D KS, box", "Kolm.\\ $0.1$, box", "2D KS, windows",
+                                      "Kolm.\\ $0.1$", "Kolm.\\ $0.05$", "Kolm.\\ $0.025$"])) + "\n",
             main_alpha01_model=MAIN_A01)
 # Paper II (S4.16; R8 2026-10-12 adds the Kolmogorov model): the three models its filters use, the 1D model of
 # Paper I (Sec. 9), the 12-channel noisy-trained 2D KS model (every 2D experiment) and the 12-channel
