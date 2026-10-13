@@ -1116,3 +1116,14 @@ at α 0.05; 0.030 vs 0.038 at α 0.1) and 1× statistics, but **no transfer**: �
 3× 39.2 (−27%, too little large-scale energy: share 0.063 vs truth 0.189). Truth note: at α = 0.1 the |k|<2 share grows
 0.081 (2×) → 0.189 (3×), so α = 0.1 also builds large-scale energy beyond 2×, consistent with every α = 0.1 small-box
 model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of the limits paragraph. R15 resumed.
+
+### Z15. Paper I referee 2 (2026-10-13 afternoon) and the reproduction repo
+
+- Referee 2 (scratchpad paperI_referee_2.md): major revision, narrower. Fixes A1, A3–A7, minors and figures running
+  (agent); A2 (data vs reach confound: window models reach 6, small box reach 3) tested by `scripts/run_a2_reach3.sh`:
+  window-trained α = 0.05 model with reach 3, c19's Stage A, evals 1/2/3× ICs 0–2 (~2–3 h). Title kept (user).
+- Paper II referee 2: M1, M3 (code now applies the registered "≥10% lower" rule: advection 2 and hidden ε 0.1 → ties),
+  M4, M6–M9, minors and grayscale done; M2 (220² reruns with working estimation, ~7 h) and M5 (one-cycle error at the
+  converged parameters) running; Fig. 6a, "What decides" paragraph and abstract/PLS word limits after M5.
+- Reproduction repo: planning agent mapping the minimal code (no datasets) for both papers; plan to the user before
+  building (user: "make a new repo that can be shared with these papers").
