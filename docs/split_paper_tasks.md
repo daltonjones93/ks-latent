@@ -836,3 +836,77 @@ assimilation in a learned latent field"). Do not propose title changes.
   wins. Lower RTPS (0.6) is best once the parameter spread is maintained. Seeds 1–2 follow.
 - **Ramp-up (user: machine recovered):** all paused jobs resumed (`resume_paused.sh`); R13b added (2 evals at 3 threads).
 - To switch in Block Z's queue: the extra-IC evals for "C" (r4c, seed 0) are superseded by C2 seed 0 (in R13b).
+
+### Z8. Kolmogorov flow in Paper I: decision rule, framing, and the fallback (written 2026-10-13 05:50, before R14 results)
+
+**User direction (2026-10-13).** If the C2/C3-recipe Kolmogorov models transfer at α = 0.1 (3× included), test them at
+α = 0.05. If they transfer at α = 0.05, or come fairly close, keep the small-box story for every system, with a note
+that weaker friction lets the cascade build larger-scale dynamics that a small box captures less well. If they do
+not, keep Kolmogorov flow in Paper I using the window-trained models (train once, run on every domain size).
+
+**Runs (R14, `scripts/run_r14.sh`, started 05:39).** 4× larger 1× box data at α = 0.05 and 0.1
+(`gen_kolmogorov_box_large.py`, 96 + 6 trajectories each); C2 and C3 recipes at both drags (seed 0); for each:
+rollout statistics at 1×/2×/3× with the true PDE (early read, about an hour after training), D_KY at 2× (IC 1, T120
+truth) and 3× (IC 1 at α = 0.1; IC 0 at α = 0.05, its only 3× truth). Plus truth-side statistics at 1×/2× for
+α = 0.025 and α = 0.05 (window-trained models `k_xs0025`, `k_xs005`; logs `r14_rollout_k_xs*.log`), so the
+large-scale share of the *true* flow is known at all three drags.
+
+**Thresholds (fixed now).** *Transfer* = R9a (each IC within ±20% of its truth, mean over ICs within 10%).
+*Fairly close* = signed error within ±20% at both 2× and 3×, and a 2× large-scale (|k| < 2) energy share within a
+factor 1.5 of the truth's (the old small-box model: −45% and 0.420 vs 0.146). Anything worse = fail. C2 and C3 are
+both reported; picking the better one uses test-size truths, which the paper will say.
+
+**Why a fallback is not a retreat: the physical reading we already have.** The true flow's own statistics depend on
+the box size at weak drag. Large-scale (|k| < 2) energy share, truth, 1× → 2×: α = 0.1 0.087 → 0.081 (box-size
+independent); α = 0.05 0.096 → 0.146 (+50%). Per-box truth D_KY, 1×/2×/3×: α = 0.1 15.9/15.4/17.8; α = 0.05
+21.5/24.3/25.1; α = 0.025 25.2/25.8/27.6. Weaker linear drag arrests the upscale energy transfer at a larger scale,
+so a larger domain hosts large-scale motion that the 1× box cannot contain, and the 1× box is no longer a
+representative sample of the larger flow's local statistics. This also answers referee M11 (the inverse-cascade and
+extensivity claims need support): the |k| < 2 share and the per-box D_KY are that support.
+
+**Recommended framing in either case: one rule, a pre-training check, two routes.**
+- *Rule (unchanged):* the propagator never reads a site that is not forced from data within its reach.
+- *Pre-training check (new, cheap, truth-side):* a small box is a valid training domain when the true flow's local
+  statistics (field variance, large-scale energy share) are the same in the box and in a box twice as large. It costs
+  two short PDE runs and no Lyapunov spectra. It passes for 1D KS (L = 100), 2D KS (44²; we should run it, see
+  below) and Kolmogorov α = 0.1, and fails for Kolmogorov α = 0.05 (and, we expect, 0.025). It is the practical
+  design rule for CM1 too: if a candidate box's statistics depend on its size (organized convection, cold pools),
+  use windows of a larger simulation.
+- *Route (a), small box,* where the check passes; *route (b), windows,* where it fails.
+
+**Case A — C2/C3 transfers at α = 0.05 (or is fairly close).** One recipe, one route for every system. The α
+dependence becomes a graded result: transfer error grows as drag weakens, in the direction and roughly in proportion
+to the box-size dependence of the true statistics. Write it as "the small box captures the cascade less completely
+as friction weakens", quoting the signed errors next to the truth-side |k| < 2 shares. α = 0.025: report the
+window-trained results, and say the check predicts the small box degrades further there (one small-box run at
+α = 0.025 is cheap and would turn this prediction into a test; add if time allows). Keep the window-trained models in
+an appendix as route (b), showing that the same rule also covers windows.
+
+**Case B — C2/C3 fails at α = 0.05.** Kolmogorov uses route (b) at α = 0.05 and 0.025 (existing window-trained
+results: train once, run at 1×, 2× and 3×), route (a) at α = 0.1 (small box, passes), and reports the small-box
+failure at α = 0.05 *as a test of the pre-training check*, not as an anomaly: the check flags it, the rollout
+diagnosis shows the mechanism (spurious large-scale drift, |k| < 2 share 0.420 vs 0.146), and the window route,
+which sees the large scales in training, transfers.
+- *Benefits.* (1) All three drags stay in the paper, with results and figures that already exist; little new
+  compute. (2) The failure becomes evidence for a stated, checkable precondition. A method that works everywhere
+  says less about when it works than one with a predicted boundary; the referee asked for discriminating tests (M7)
+  and support for the cascade claims (M11), and this provides both. (3) It shows both routes on one system, which is
+  exactly the decision a CM1 user faces (Paper 3), and matches Paper II, whose Kolmogorov filter model is
+  window-trained at α = 0.05.
+- *Costs and how to contain them.* (1) Referee M1 still applies to route (b): the windows (48 sites, 6× the box)
+  are larger than the evaluation domains (≤ 3×), so route (b) shows "one model for every domain size", not
+  upscaling. Say so plainly; the upscaling evidence is route (a) (1D, 2D KS, Kolmogorov α = 0.1), plus Paper II's
+  2D KS assimilation at 440² beyond its 264² parent. (2) Two recipes in one paper invite a cherry-picking
+  objection. Counter it by stating the check before the results, applying it to every system, and reporting the
+  route-(a) failure rather than omitting it. (3) The window-trained Kolmogorov models have one training seed and
+  their own weaknesses (α = 0.025 errors of 8–25%; single-run truths at some sizes). Report them as they are; seeds
+  for them are deferred (Z3). (4) The abstract gets one clause longer ("…where a small domain is representative;
+  otherwise from windows of a larger one").
+
+**Recommendation.** Use the "one rule, a pre-training check, two routes" framing whatever R14 shows; it is honest in
+both cases and costs nothing extra in case A. Decide case A or B on the thresholds above. Two cheap additions make it
+solid: (i) the truth-side check for 2D KS (44² vs 88² statistics, no Lyapunov; add after R14's runs) and for 1D
+(L = 100 vs 200, existing truth data); (ii) if case A, one small-box run at α = 0.025.
+**Unchanged:** C2 is the 2D KS small-box model (Z7); α = 0.1 adopts whichever of the C, C2 and C3 recipes the paper
+uses for 2D KS (C2), so that one recipe serves every system, if K-C2 passes at α = 0.1; otherwise r12 (C recipe),
+with the recipe difference stated.
