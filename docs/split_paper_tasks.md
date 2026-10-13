@@ -1083,7 +1083,7 @@ R_new = Φ_2×(k1/2)/Φ_1×(k1); R_same = Φ_2×(k1)/Φ_1×(k1).
 | 2D KS | 2.66 (2.29–2.89) | 0.95 | 0.417 → 0.475 |
 | Kolmogorov α = 0.1 | 2.75 (2.59–2.86) | 4.42 | 0.359 → 0.162 |
 | Kolmogorov α = 0.05 | 0.61 (0.53–0.69) | 0.83 | 0.372 → 0.280 |
-| Kolmogorov α = 0.025 | pending | | |
+| Kolmogorov α = 0.025 | 0.55 (0.39–0.74) | 0.78 | 0.421 → 0.373 |
 
 **Verdict, by the Z9 rule (fixed before the run):** R_new does not separate {2D KS, α = 0.1} from {α = 0.05, 0.025}
 (KS 2.66 ≈ α = 0.1 2.75). **Drop the "pre-training check" claim.** The premise was also wrong: 2D KS does not have a flat
