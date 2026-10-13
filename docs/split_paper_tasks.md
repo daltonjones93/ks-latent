@@ -1100,3 +1100,12 @@ mechanism *consistent with* the data, no predictive check. (R_same, the same sca
 in absolute terms (≤ 5% of velocity variance), so "consistent with", not proof. At 1×, F(4 sites = half box) ≈ 0.003
 (periodicity). Larger reach: F(6) ≈ 0.006–0.011 and F(8) ≈ 0.001–0.002 at 2×, so a window model would need ~6–8
 sites to see nearly all of the velocity. 3× values pending.
+
+### Z14. Z10a (memory channels, R16) result (2026-10-13 ~11:50, commit bab5513)
+
+Option (i), m = 2, warm-up 8, KC2 recipe, Stage A shared with KC2. Better in-box prediction (val err 0.037 vs 0.055
+at α 0.05; 0.030 vs 0.038 at α 0.1) and 1× statistics, but **no transfer**: α = 0.05 2× D_KY 34.2 (−26%; KC2 −39%),
+|k|<2 share 0.285 vs truth 0.148 (1.9×, fails the 1.5× limit), 3× collapses (D_KY 6.2, −92%); α = 0.1 2× 27.9 (−11%),
+3× 39.2 (−27%, too little large-scale energy: share 0.063 vs truth 0.189). Truth note: at α = 0.1 the |k|<2 share grows
+0.081 (2×) → 0.189 (3×), so α = 0.1 also builds large-scale energy beyond 2×, consistent with every α = 0.1 small-box
+model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of the limits paragraph. R15 resumed.
