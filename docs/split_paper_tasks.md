@@ -1056,7 +1056,7 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
   model's 1× error goes 0.9% → +9.0% and v2 ranks third of six, so "chose the lowest-error variant" is false; DONE: §6
   (06_results_2d.tex ~l.211) already reports it ranks third and reads the rule as one case study; (b) keep the box-check numbers as a footnote (§6.2 fn 1)?
   (c) Fig. 5(e) α = 0.05 window curve uses k_xs005, not c19_e0d0_c6 → rollout stats for c19 started 12:45 (~20 min);
-  (d) unverified citation for extensivity probes (Fishman & Egolf candidate); (e) CRediT, data DOI, date.
+  (d) DONE d0dbe6c: all cited refs verified (Crossref/arXiv), 12 fixes, DOIs added; fishmanegolf2006 + egolfgreenside1994 cited in §8; (e) CRediT, data DOI, date.
 - [ ] P1-9 Final checks: `check_numbers.py --paper paperI`, decisions log, internal referee pass.
 
 **Paper II (`docs/paperII`)**
