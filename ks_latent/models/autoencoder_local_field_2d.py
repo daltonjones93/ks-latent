@@ -37,7 +37,11 @@ class KSAutoencoderLocalField2D(nn.Module):
     convention baked into the shared training loop. Keeping the public
     interface flat, exactly like every other encoder in this codebase,
     means zero changes are needed there; only this class needs to know
-    the flat `NX*NY` vector is secretly a `(NX,NY)` grid."""
+    the flat `NX*NY` vector is secretly a `(NX,NY)` grid.
+
+    R15 (2026-10-13): with `cfg.n_fields > 1` the flat vector is `(B, NX*n_fields*NY)`, packed
+    field-major along y (see `LocalFieldAutoencoderConfig2D.n_fields`); the patchify/unpatchify
+    layers take/return `n_fields` channels and the anchor is the patch mean of field 0."""
 
     def __init__(self, cfg: LocalFieldAutoencoderConfig2D):
         super().__init__()
@@ -46,7 +50,9 @@ class KSAutoencoderLocalField2D(nn.Module):
         px, py = cfg.patch_x, cfg.patch_y
         r, layers = cfg.site_mix_radius, cfg.n_site_mix_layers
 
-        self.enc_patchify = nn.Conv2d(1, H, kernel_size=(px, py), stride=(px, py))
+        nf = getattr(cfg, "n_fields", 1)  # R15: (omega, u, v) input fields; 1 for every older checkpoint
+        self.n_fields = nf
+        self.enc_patchify = nn.Conv2d(nf, H, kernel_size=(px, py), stride=(px, py))
         self.enc_mix = nn.ModuleList(
             [
                 nn.Conv2d(H, H, kernel_size=2 * r + 1, padding=r, padding_mode="circular")
@@ -67,16 +73,19 @@ class KSAutoencoderLocalField2D(nn.Module):
                 for _ in range(dl)
             ]
         )
-        self.dec_unpatchify = nn.ConvTranspose2d(H, 1, kernel_size=(px, py), stride=(px, py))
+        self.dec_unpatchify = nn.ConvTranspose2d(H, nf, kernel_size=(px, py), stride=(px, py))
 
     def encode(self, u_flat: torch.Tensor) -> torch.Tensor:
         """`u_flat`: `(B, NX*NY)` -> `z`: `(B, n_sites_x*n_sites_y*local_channels)`."""
         cfg = self.cfg
         B = u_flat.shape[0]
         Px, Py, c = cfg.n_sites_x, cfg.n_sites_y, cfg.local_channels
-        u = u_flat.reshape(B, cfg.NX, cfg.NY)
+        nf = self.n_fields
+        # (B, NX, nf, NY) -> (B, nf, NX, NY); for nf = 1 exactly the original `u.unsqueeze(1)`
+        fields = u_flat.reshape(B, cfg.NX, nf, cfg.NY).permute(0, 2, 1, 3)
+        u = fields[:, 0]
 
-        h = F.gelu(self.enc_patchify(u.unsqueeze(1)))  # (B, H, Px, Py)
+        h = F.gelu(self.enc_patchify(fields))  # (B, H, Px, Py)
         for conv in self.enc_mix:
             h = F.gelu(conv(h))
 
@@ -100,8 +109,8 @@ class KSAutoencoderLocalField2D(nn.Module):
         h = F.gelu(self.dec_in(z_field))
         for conv in self.dec_mix:
             h = F.gelu(conv(h))
-        u_hat = self.dec_unpatchify(h).squeeze(1)  # (B, NX, NY)
-        return u_hat.reshape(B, cfg.NX * cfg.NY)
+        u_hat = self.dec_unpatchify(h)  # (B, nf, NX, NY)
+        return u_hat.permute(0, 2, 1, 3).reshape(B, cfg.NX * self.n_fields * cfg.NY)
 
     def forward(self, u: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         z = self.encode(u)

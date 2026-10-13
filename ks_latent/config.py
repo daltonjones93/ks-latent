@@ -908,6 +908,13 @@ class LocalFieldAutoencoderConfig2D:
     # None = same as the encoder (all checkpoints before C19).
     dec_site_mix_radius: int | None = None
     dec_n_site_mix_layers: int | None = None
+    # R15 option 1 (2026-10-13): number of physical input/output fields per grid point. 1 = the
+    # original single-field model (every checkpoint before R15; old pickled configs lack this
+    # attribute, so readers use getattr(cfg, "n_fields", 1)). 3 = Kolmogorov (omega, u, v): the
+    # flat field vector is packed field-major along y, `flat.reshape(B, NX, n_fields, NY)`, i.e.
+    # the fields are concatenated along the last (y) axis of an `(NX, n_fields*NY)` array, so
+    # x-crop gathering works unchanged. Channel 0 (the anchor) is the patch mean of field 0.
+    n_fields: int = 1
 
     @property
     def patch_x(self) -> int:
@@ -934,6 +941,8 @@ class LocalFieldAutoencoderConfig2D:
             raise ValueError(f"n_site_mix_layers must be >= 0, got {self.n_site_mix_layers!r}")
         if self.hidden < 1:
             raise ValueError(f"hidden must be >= 1, got {self.hidden!r}")
+        if self.n_fields < 1:
+            raise ValueError(f"n_fields must be >= 1, got {self.n_fields!r}")
 
 
 @dataclass(frozen=True)

@@ -29,6 +29,7 @@ import torch
 
 from ks_latent.config import KolmogorovConfig
 from ks_latent.models import load_autoencoder_checkpoint_resized_2d, load_propagator_checkpoint_resized_2d
+from ks_latent.models.kolmogorov_fields import encode_input, field0
 from ks_latent.solver.kolmogorov import integrate_kolmogorov, spinup_kolmogorov
 
 OUT = Path("artifacts/experiments/rollout_stats")
@@ -99,10 +100,10 @@ def main() -> None:
         prop = load_propagator_checkpoint_resized_2d(str(prop_ckpt), new_n_sites_x=nsx, new_n_sites_y=nsy)[0].eval()
         c = ae.cfg.local_channels
         with torch.no_grad():
-            z = ae.encode(torch.tensor(((u0 - mean) / std).reshape(1, -1), dtype=torch.float32))
+            z = ae.encode(encode_input(ae, (u0 - mean) / std, ck, cfg.Lx, cfg.Ly))  # R15: wuv-aware
             roll = prop.rollout(z, z, k=a.n_steps)[0]  # (k, d)
             dec = torch.cat([ae.decode(roll[i:i + 100]) for i in range(0, a.n_steps, 100)])
-        w_model = dec.numpy().reshape(-1, NX, NY) * std + mean
+        w_model = field0(dec, NX, NY, getattr(ae.cfg, "n_fields", 1)).numpy() * std + mean  # R15: omega channel
         zs = roll.numpy().reshape(a.n_steps, nsx, nsy, c)
         h = a.n_steps // 2
         entry = {"model": field_stats(w_model, cfg.Lx, cfg.Ly),

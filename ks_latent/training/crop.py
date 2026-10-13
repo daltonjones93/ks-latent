@@ -118,8 +118,11 @@ def train_crop_ae(ae, u_train: torch.Tensor, u_val: torch.Tensor, cfg: CropAECon
     Wc = cfg.crop_sites * patch
     crop2d = cfg.crop_sites_y is not None
     Wcy = cfg.crop_sites_y * patch_y if crop2d else u_train.shape[3]
+    nf = getattr(acfg, "n_fields", 1)  # R15: fields packed along y, (NX, nf*NY)
     assert acfg.NX == Wc and acfg.n_sites_x == cfg.crop_sites, "AE must be built at crop size"
-    assert acfg.NY == Wcy, "AE must be built at crop size in y"
+    assert acfg.NY * nf == Wcy, "AE must be built at crop size in y (times n_fields for packed multi-field data)"
+    if nf > 1:
+        assert not crop2d and cfg.w_grad == 0, "multi-field (packed) data: x-crops only, no w_grad (y-diffs cross fields)"
     m = cfg.mask_sites * patch
     my = cfg.mask_sites * patch_y if crop2d else 0
     ey = cfg.enc_sites if crop2d else 0
@@ -259,6 +262,16 @@ class CropPropConfig:
     w_spectral: float = 0.0
     spectral_bands: tuple = ((0.0, 2.0), (3.0, 5.0))  # |k| band edges, physical units
     spectral_every: int = 1  # apply every N steps (cost control; the decode+FFT adds work)
+    # R15 option 2 (2026-10-13): larger-domain statistics regularizer (`LargeDomainStats`). 0 = off; every
+    # existing recipe is unaffected (the branch never runs and draws from no random stream).
+    w_stats: float = 0.0
+    stats_scale: int = 2  # larger domain = stats_scale x the training strip in x
+    stats_every: int = 4  # evaluate every N optimizer steps
+    stats_pool: int = 16  # persistent pool of larger-domain states
+    stats_burn: int = 16  # no-grad steps the pool advances per evaluation
+    stats_k: int = 4  # steps with gradient per evaluation (truncated backprop)
+    stats_reset_every: int = 4  # every N evaluations one pool member (round robin) restarts from a fresh mosaic
+    stats_band: tuple = (3.0, 5.0)  # forcing band, |k| inclusive (as in exp_rollout_stats_kolmogorov)
 
 
 def spectral_band_shares(field: torch.Tensor, Lx: float, Ly: float,
@@ -318,6 +331,7 @@ def _resize_decoder_for_spectral_reg(ae, n_sites_x: int, n_sites_y: int):
         n_site_mix_layers=old.n_site_mix_layers, hidden=old.hidden,
         dec_site_mix_radius=getattr(old, "dec_site_mix_radius", None),
         dec_n_site_mix_layers=getattr(old, "dec_n_site_mix_layers", None),
+        n_fields=getattr(old, "n_fields", 1),
     )
     ref = next(ae.parameters())
     new_ae = type(ae)(new_cfg).to(device=ref.device, dtype=ref.dtype)
@@ -471,6 +485,111 @@ def forced_halo_rollout_history(prop, z_win: torch.Tensor, k: int, halo: int, no
     return torch.stack(preds, dim=1)
 
 
+def _decode_field0(dec, z: torch.Tensor) -> torch.Tensor:
+    """Decode flat latents with a reach-0 decoder; return field 0 (vorticity) `(B, NX, NY)` for any n_fields."""
+    nf = getattr(dec.cfg, "n_fields", 1)
+    return dec.decode(z.reshape(z.shape[0], -1)).reshape(z.shape[0], dec.cfg.NX, nf, dec.cfg.NY)[:, :, 0]
+
+
+class LargeDomainStats:
+    """R15 option 2 (2026-10-13): statistics regularizer on free rollouts in a LARGER domain, using only the
+    training-box data.
+
+    The propagator is size-independent (weight-shared local operators), so the same parameters can be run on a
+    domain `stats_scale` x the training strip in x (here the 1x box: 8 x 8 sites -> 16 x 8 at scale 2) through
+    `torch.func.functional_call` on a resized copy, with gradients reaching the trained propagator's parameters.
+    A persistent pool of `stats_pool` larger-domain states, initialized as x-mosaics of independent encoded
+    training states, is advanced by `stats_burn` no-grad steps per evaluation (pushforward-style), then
+    `stats_k` steps with gradient; the result is decoded (reach-0 decoder, exact per patch) and two statistics of
+    the decoded vorticity are compared with the same statistics of decoded TRUE training states at 1x:
+      (a) the spatial variance of the field (per state, averaged over the pool), and
+      (b) the forcing-band (`stats_band`, |k| inclusive) share of kinetic energy (|w_k|^2 / k^2, k = 0 excluded).
+    Loss = (var / var_1x - 1)^2 + (share / share_1x - 1)^2. The pool persists across evaluations, so the loss sees
+    the model's long-time behaviour in the larger domain (the failure it targets develops over hundreds of
+    steps: large-scale energy builds up and variance falls); one member per `stats_reset_every` evaluations is
+    restarted from a fresh mosaic so the pool keeps tracking the current model, and members that become
+    non-finite or exceed |z| > 1e3 are restarted and COUNTED (logged by the caller), never silently dropped.
+
+    **Disclosure for any write-up.** The choice of these two statistics was informed by truth-side measurements
+    at 2x: at alpha = 0.05 the true vorticity std (1.404 / 1.406 / 1.429 at 1x/2x/3x) and forcing-band share
+    (0.546 / 0.536 / 0.544) are box-size independent, while the |k| < 2 share is not (0.096 / 0.146 / 0.215),
+    so it is deliberately NOT a target. No 2x data enter training, but knowing which statistics are
+    size-independent is mild leakage and must be stated. Requires decoder reach 0, backbone local_mlp_2d, and a
+    training strip that is the whole periodic box width (C2/C3 recipes: crop 8 sites, encoder/decoder reach 0)."""
+
+    def __init__(self, prop, ae, bank: torch.Tensor, cfg: CropPropConfig, site_len: float):
+        import dataclasses
+        from ks_latent.models import build_propagator_from_config
+        self.cfg, self.bank = cfg, bank
+        nC, T, Pu, Pv, c = bank.shape
+        S = cfg.stats_scale
+        self.S, self.Pu, self.Pv, self.c = S, Pu, Pv, c
+        pc = prop.cfg
+        if getattr(pc, "backbone", None) != "local_mlp_2d":
+            raise ValueError(f"LargeDomainStats supports backbone local_mlp_2d only, got {pc.backbone!r}")
+        big_cfg = dataclasses.replace(pc, d_latent=S * Pu * Pv * c, local_mlp2d_n_sites_x=S * Pu)
+        dev = bank.device
+        self.big = build_propagator_from_config(big_cfg).to(dev)
+        for q in self.big.parameters():
+            q.requires_grad_(False)
+        self.dec1 = _resize_decoder_for_spectral_reg(ae, Pu, Pv)
+        self.decS = _resize_decoder_for_spectral_reg(ae, S * Pu, Pv)
+        self.Lx1, self.Ly = Pu * site_len, Pv * site_len
+        self.LxS = S * self.Lx1
+        lo, hi = cfg.stats_band
+        self.bands = ((lo, hi + 1e-6),)
+        self.gen = torch.Generator(device="cpu").manual_seed(cfg.seed + 777)
+        with torch.no_grad():
+            idx = self._draw(256)
+            f = _decode_field0(self.dec1, bank[idx[0], idx[1]])
+            self.var_t = f.var(dim=(-2, -1)).mean()
+            self.share_t = spectral_band_shares(f, self.Lx1, self.Ly, self.bands)[0]
+        self.pool = self._mosaic(cfg.stats_pool)
+        self.n_eval, self.n_reset, self.n_bad = 0, 0, 0
+        self.last = (float("nan"), float("nan"))
+
+    def _draw(self, n):
+        nC, T = self.bank.shape[:2]
+        return (torch.randint(0, nC, (n,), generator=self.gen).to(self.bank.device),
+                torch.randint(0, T, (n,), generator=self.gen).to(self.bank.device))
+
+    def _mosaic(self, n):
+        ci, ti = self._draw(n * self.S)
+        z = self.bank[ci, ti].reshape(n, self.S, self.Pu, self.Pv, self.c)
+        return z.reshape(n, self.S * self.Pu, self.Pv, self.c).clone()
+
+    def _step(self, params, z):
+        from torch.func import functional_call
+        flat = z.reshape(z.shape[0], -1)
+        return functional_call(self.big, params, (flat, flat)).reshape(z.shape)
+
+    def loss(self, prop) -> torch.Tensor:
+        cfg = self.cfg
+        params = dict(prop.named_parameters())
+        with torch.no_grad():
+            z = self.pool
+            for _ in range(cfg.stats_burn):
+                z = self._step(params, z)
+            bad = ~torch.isfinite(z).all(dim=(1, 2, 3)) | (z.abs().amax(dim=(1, 2, 3)) > 1e3)
+            if bad.any():
+                self.n_bad += int(bad.sum())
+                z[bad] = self._mosaic(int(bad.sum()))
+        for _ in range(cfg.stats_k):
+            z = self._step(params, z)
+        f = _decode_field0(self.decS, z)
+        var = f.var(dim=(-2, -1)).mean()
+        share = spectral_band_shares(f, self.LxS, self.Ly, self.bands)[0]
+        self.last = (var.detach(), share.detach())  # tensors: no host sync until logged
+        with torch.no_grad():
+            self.pool = z.detach().clone()
+            self.n_eval += 1
+            if self.n_eval % cfg.stats_reset_every == 0:
+                i = (self.n_eval // cfg.stats_reset_every) % cfg.stats_pool
+                self.pool[i] = self._mosaic(1)[0]
+                self.n_reset += 1
+        return (var / self.var_t - 1) ** 2 + (share / self.share_t - 1) ** 2
+
+
 def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg: CropPropConfig, log=print,
                     bs_train: "tuple | None" = None, bs_val: "tuple | None" = None,
                     ae=None, site_len: float = 1.0) -> dict:
@@ -514,6 +633,7 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
     spec_dec = spec_target = None
     if cfg.w_spectral > 0:
         assert ae is not None, "cfg.w_spectral > 0 needs the frozen autoencoder (train_crop_prop(..., ae=...))"
+        assert getattr(ae.cfg, "n_fields", 1) == 1, "w_spectral is single-field only (use w_stats for multi-field)"
         Pu_full, Pv_full = bank_train.shape[2], bank_train.shape[3]
         spec_dec = _resize_decoder_for_spectral_reg(ae, Pu_full, Pv_full)
         Lx_spec, Ly_spec = Pu_full * site_len, Pv_full * site_len
@@ -526,6 +646,15 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
             spec_target = spectral_band_shares(true_field, Lx_spec, Ly_spec, cfg.spectral_bands)
         log(f"  [cropProp] spectral target shares {cfg.spectral_bands} = "
             f"{[round(v, 4) for v in spec_target.tolist()]}; w_spectral = {cfg.w_spectral}")
+    stats = None
+    if cfg.w_stats > 0:
+        assert ae is not None, "cfg.w_stats > 0 needs the frozen autoencoder (train_crop_prop(..., ae=...))"
+        if H > 1 or bs_train is not None:
+            raise ValueError("w_stats is implemented for markovian propagators without the C9 velocity override")
+        stats = LargeDomainStats(prop, ae, bank_train, cfg, site_len)
+        log(f"  [cropProp] R15 stats regularizer: {cfg.stats_scale}x domain, targets var {stats.var_t.item():.4f}, "
+            f"forcing share {stats.share_t.item():.4f}; w_stats = {cfg.w_stats}, every {cfg.stats_every}, "
+            f"pool {cfg.stats_pool}, burn {cfg.stats_burn}, k {cfg.stats_k}")
     hist, best, best_state = [], float("inf"), None
     t_start = time.time()
     for step in range(cfg.steps):
@@ -555,6 +684,8 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
                 pred_full.shape[0], spec_dec.cfg.NX, spec_dec.cfg.NY)
             shares = spectral_band_shares(field, Lx_spec, Ly_spec, cfg.spectral_bands)
             loss = loss + cfg.w_spectral * F.mse_loss(shares, spec_target)
+        if stats is not None and step % cfg.stats_every == 0:
+            loss = loss + cfg.w_stats * stats.loss(prop)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(prop.parameters(), cfg.grad_clip)
@@ -570,8 +701,14 @@ def train_crop_prop(prop, bank_train: torch.Tensor, bank_val: torch.Tensor, cfg:
                 val = F.mse_loss(vp, val_win[:, H:, h:val_win.shape[2] - h, hy:val_win.shape[3] - hy]).item()
             hist.append({"step": step + 1, "k": k, "train_loss": loss.item(), "val_kmax_mse": val,
                          "wall_s": time.time() - t_start})
+            if stats is not None:
+                hist[-1].update(stats_var=float(stats.last[0]), stats_share=float(stats.last[1]),
+                                stats_resets=stats.n_reset, stats_bad=stats.n_bad)
             log(f"  [cropProp] step {step + 1}/{cfg.steps} k {k} loss {loss.item():.5f} "
-                f"val_kmax {val:.5f} [{time.time() - t_start:.0f}s]")
+                f"val_kmax {val:.5f} [{time.time() - t_start:.0f}s]"
+                + (f" | {cfg.stats_scale}x var {float(stats.last[0]):.4f} (target {stats.var_t.item():.4f}) "
+                   f"share {float(stats.last[1]):.4f} (target {stats.share_t.item():.4f}) bad {stats.n_bad}"
+                   if stats is not None else ""))
             if val < best:
                 best = val
                 best_state = {kk: v.detach().clone() for kk, v in prop.state_dict().items()}

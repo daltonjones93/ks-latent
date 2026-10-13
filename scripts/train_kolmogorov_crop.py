@@ -112,6 +112,19 @@ def main() -> None:
                         "0.1 = the DA observation-noise level) to the training AND validation fields, as real "
                         "data would have. No clean data is used anywhere in training.")
     p.add_argument("--data-noise-seed", type=int, default=12345)
+    # R15 (2026-10-13), both off by default; see ks_latent/models/kolmogorov_fields.py and
+    # ks_latent/training/crop.py:LargeDomainStats.
+    p.add_argument("--input-fields", choices=["w", "wuv"], default="w",
+                   help="R15 option 1: 'wuv' gives the encoder (and decoder target) the velocity (u, v), computed "
+                        "exactly from the whole-domain vorticity, as two extra fields; each normalized by its own "
+                        "training-split std. 'w' = vorticity only (every earlier model).")
+    p.add_argument("--w-stats", type=float, default=0.0,
+                   help="R15 option 2: weight of the larger-domain statistics regularizer (0 = off)")
+    p.add_argument("--stats-scale", type=int, default=2)
+    p.add_argument("--stats-every", type=int, default=4)
+    p.add_argument("--stats-pool", type=int, default=16)
+    p.add_argument("--stats-burn", type=int, default=16)
+    p.add_argument("--stats-k", type=int, default=4)
     args = p.parse_args()
     set_seed(args.seed)
     dev = get_device(args.device)
@@ -126,10 +139,19 @@ def main() -> None:
         for i in range(traj.shape[0]):  # chunked: the full noise array is as large as the dataset
             traj[i] += args.data_noise * torch.randn(traj[i].shape, generator=g)
         print(f"[crop] I33: added fixed Gaussian data noise, std {args.data_noise} (standardized units)", flush=True)
+    velocity_std = None
+    if args.input_fields == "wuv":
+        from ks_latent.models.kolmogorov_fields import pack_wuv_chunked
+        assert args.crop_sites_y is None and args.backbone == "local_mlp_2d", "wuv: x-crops and local_mlp_2d only"
+        traj, velocity_std = pack_wuv_chunked(traj, float(md["normalization_mean"]), float(md["normalization_std"]),
+                                              float(md["Lx"]), float(md["Ly"]), n_std=n_train)
+        print(f"[crop] R15 wuv input: velocity std (u, v) = {velocity_std[0]:.4f}, {velocity_std[1]:.4f} "
+              f"(physical, training split); packed data {tuple(traj.shape)}", flush=True)
     u_train, u_val = traj[:n_train].to(dev), traj[n_train:].to(dev)
     norm = {"normalization_mean": float(md["normalization_mean"]),
             "normalization_std": float(md["normalization_std"]), "train_dataset": args.dataset,
-            "data_noise": float(args.data_noise), "data_noise_seed": int(args.data_noise_seed)}  # provenance (2026-10-10)
+            "data_noise": float(args.data_noise), "data_noise_seed": int(args.data_noise_seed),  # provenance (2026-10-10)
+            "input_fields": args.input_fields, "velocity_std": velocity_std}
     print(f"[crop] {args.dataset}: train {tuple(u_train.shape)} val {tuple(u_val.shape)} alpha={md.get('alpha', 'n/a')}", flush=True)
 
     NYc = args.crop_sites_y * 16 if args.crop_sites_y else NY
@@ -137,7 +159,8 @@ def main() -> None:
                                            local_channels=args.local_channels, site_mix_radius=args.site_mix_radius,
                                            n_site_mix_layers=args.n_site_mix_layers, hidden=32,
                                            dec_site_mix_radius=args.dec_site_mix_radius,
-                                           dec_n_site_mix_layers=args.dec_n_site_mix_layers)
+                                           dec_n_site_mix_layers=args.dec_n_site_mix_layers,
+                                           n_fields=3 if args.input_fields == "wuv" else 1)
     enc_sites = ae_cfg.site_mix_radius * ae_cfg.n_site_mix_layers  # 6 by default
     dr = ae_cfg.site_mix_radius if args.dec_site_mix_radius is None else args.dec_site_mix_radius
     dl = ae_cfg.n_site_mix_layers if args.dec_n_site_mix_layers is None else args.dec_n_site_mix_layers
@@ -188,7 +211,9 @@ def main() -> None:
     pcfg = CropPropConfig(halo_sites=halo, halo_sites_y=halo if args.crop_sites_y else 0, seed=args.seed,
                           steps=args.prop_steps, w_rank=args.w_rank, k_max=args.k_max, k_mid=args.k_mid,
                           noise_in_end=args.noise_end, w_spectral=args.w_spectral,
-                          spectral_bands=spectral_bands, spectral_every=args.spectral_every)
+                          spectral_bands=spectral_bands, spectral_every=args.spectral_every,
+                          w_stats=args.w_stats, stats_scale=args.stats_scale, stats_every=args.stats_every,
+                          stats_pool=args.stats_pool, stats_burn=args.stats_burn, stats_k=args.stats_k)
     if args.noise_start is not None:
         pcfg.noise_in_start = args.noise_start
     if args.prop_lr is not None:

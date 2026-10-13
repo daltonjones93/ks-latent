@@ -212,6 +212,7 @@ def load_autoencoder_checkpoint_resized_2d(
         n_site_mix_layers=old_cfg.n_site_mix_layers, hidden=old_cfg.hidden,
         dec_site_mix_radius=getattr(old_cfg, "dec_site_mix_radius", None),
         dec_n_site_mix_layers=getattr(old_cfg, "dec_n_site_mix_layers", None),
+        n_fields=getattr(old_cfg, "n_fields", 1),
     )
     ae = KSAutoencoderLocalField2D(new_cfg)
     ae.load_state_dict(ckpt["ae_state_dict"], strict=True)

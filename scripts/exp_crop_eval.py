@@ -21,6 +21,7 @@ from ks_latent.models import (
     load_autoencoder_checkpoint_resized_2d, load_propagator_checkpoint_resized_2d,
     load_propagator_checkpoint_resized_2d_biotsavart,
 )
+from ks_latent.models.kolmogorov_fields import encode_input
 from ks_latent.solver.kolmogorov import spinup_kolmogorov
 
 OUT = Path("artifacts/experiments/crop")
@@ -57,7 +58,8 @@ def main() -> None:
     u0 = (spinup_kolmogorov(cfg, np.random.default_rng(args.seed)) - mean) / std
     t0 = time.time()
     with torch.no_grad():
-        z0 = ae.encode(torch.tensor(u0.reshape(1, -1), dtype=torch.float32))[0].numpy().astype(np.float64)
+        # R15: wuv models get the velocity computed on this domain; single-field models are unchanged
+        z0 = ae.encode(encode_input(ae, u0, ck, cfg.Lx, cfg.Ly))[0].numpy().astype(np.float64)
     res = lyapunov_spectrum_latent_propagator(
         prop, np.stack([z0, z0]), mode="single_state", n_directions=prop_cfg.d_latent, n_steps=2000,
         qr_every=10, dt_snap=float(md["dt_snap"]), warmup_steps=200, seed=args.seed, max_abs_state=1e3,
