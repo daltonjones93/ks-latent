@@ -1175,3 +1175,9 @@ model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of 
   "crossover ≈ 1–1.5× the learned model's own one-cycle error" fits both; the fixed fraction does not transfer. This is
   descriptive (two systems, one learned model each, post hoc). Kept as future work; NOT in the papers. If used,
   Paper II should phrase the crossover relative to the learned model's own error.
+
+**Z12 update (2026-10-13 16:40).** Paper II referee 2: M1, M3–M9 done earlier (a0a76b4, 764952e: rule as registered, post-remedy
+axis, tested-range wording). M2 done: 220² reruns with working estimation (param floor 0.02, seed 0): ∇² 1.25 0.165
+(θ 1.001), advection 1 0.231 (θ 0.0001) vs latent 0.312, physics wins 1.9× and 1.35× (44²: 1.95×, 1.42×); text updated.
+M5 residuals: `m5_post_summary.json` (σ after remedy ≈ 0 for lap/adv; damping 5/6 0.090/0.147; missing 0.093/0.189/0.282;
+hidden 0.100/0.256).

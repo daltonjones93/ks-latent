@@ -160,10 +160,11 @@ or advection, and $4$--$21\%$ worse on the coarse grids. At its best setting
 it is over-dispersed, with spread over error $1.6$--$1.75$ at damping order 6
 and up to $6$ with advection. The
 latent filter used one setting throughout and was not retuned for any
-case. The comparison does not depend on the domain size: at $220^2$ (seed 0), with online estimation,
-the physics-based filter reaches $0.421$ with the $\nabla^2$ coefficient $25\%$ off and $0.446$ with
-advection at speed 1, against the latent filter's $0.312$, ratios of $1.35$ and $1.43$ (at $44^2$, $1.35$
-and $1.40$).
+case. The comparison does not depend on the domain size: at $220^2$ (seed 0), with online estimation
+and the parameter spread kept above $0.02$, the physics-based filter reaches $0.165$ with the
+$\nabla^2$ coefficient $25\%$ off and $0.231$ with advection at speed 1, against the latent filter's
+$0.312$, physics wins by $1.9$ and $1.35$ times (at $44^2$, seed 0, $1.95$ and $1.42$); both estimates
+converge to the true values ($1.001$ and $0.0001$).
 
 \para{What this does and does not show.} The comparison is between a
 learned model with complete noisy training fields of the true system and
