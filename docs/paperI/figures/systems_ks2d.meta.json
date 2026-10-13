@@ -1,0 +1,8 @@
+{
+  "figure": "systems_ks2d",
+  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
+  "timestamp_utc": "2026-10-13T18:25:41Z",
+  "inputs": [
+    "artifacts/datasets/ks2d_wide6.h5"
+  ]
+}

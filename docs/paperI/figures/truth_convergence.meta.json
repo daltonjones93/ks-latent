@@ -1,7 +1,7 @@
 {
   "figure": "truth_convergence",
-  "git_sha": "1543fe86c04fdc59e4261cb38052afa625f4734a",
-  "timestamp_utc": "2026-10-13T16:14:10Z",
+  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
+  "timestamp_utc": "2026-10-13T18:25:53Z",
   "inputs": [
     "artifacts/experiments/crop/truth_a0p05_x2_seed0_T120.json",
     "artifacts/experiments/crop/truth_a0p05_x2_seed1_T120.json",
@@ -12,6 +12,7 @@
     "artifacts/experiments/crop/truth_a0p1_x3_seed2_T120.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed1.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed2.json",
-    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json"
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json"
   ]
 }

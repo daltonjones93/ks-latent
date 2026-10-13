@@ -1,7 +1,7 @@
 {
   "table": "eval_kolm0025",
-  "git_sha": "098c81bc68498545197616d71bfad0dff370fe4e",
-  "timestamp_utc": "2026-10-13T16:00:14Z",
+  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
+  "timestamp_utc": "2026-10-13T18:25:37Z",
   "inputs": [],
   "main_alpha01_model": "k_xs01_v2"
 }

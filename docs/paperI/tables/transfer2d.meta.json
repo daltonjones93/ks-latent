@@ -1,7 +1,7 @@
 {
   "table": "transfer2d",
-  "git_sha": "098c81bc68498545197616d71bfad0dff370fe4e",
-  "timestamp_utc": "2026-10-13T15:59:27Z",
+  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
+  "timestamp_utc": "2026-10-13T18:25:31Z",
   "inputs": [
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed0.json",
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed1.json",
@@ -88,7 +88,8 @@
     "artifacts/experiments/true_dky_kolmogorov_alpha0.1_trained_size.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed1.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1_seed2.json",
-    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json"
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json"
   ],
   "main_alpha01_model": "k_xs01_v2"
 }

@@ -26,8 +26,8 @@ seeds reproduce the dimension at the training size and at $66^2$, a size
 none of them saw. At $44^2$ the mean over five evaluations (three seeds,
 three initial conditions for the first) is $81.7$ against the truth's
 $82.0$ ($-0.3\%$, range $-2.4$ to $+1.0\%$); at $66^2$ it is $184.1$ against
-$189.0$ ($-2.6\%$, range $-3.4$ to $-2.0\%$, six evaluations). The $66^2$
-truth runs themselves differ by $3.6\%$ ($185.6$ and $192.5$); scored against
+$188.5$ ($-2.4\%$, range $-3.2$ to $-1.7\%$, six evaluations). The $66^2$
+truth runs themselves span $3.7\%$ ($185.6$, $187.5$ and $192.5$); scored against
 the run from its own initial condition, the models are $0.4$--$1.6\%$ low
 from one initial condition and $3.7$--$5.1\%$ low from the other. At $88^2$, four
 times the training area, the three seeds give $325.5$--$329.6$, a density of
@@ -55,7 +55,7 @@ $66^2$ initial condition. All three recipes and seeds are in
 Appendix~\ref{app:tables}.
 
 The window-trained model (route b) gives $83.3$ ($+1.6\%$), $188.1$
-($-0.5\%$) and $332.7$ at the three sizes. Its training windows,
+($-0.3\%$) and $332.7$ at the three sizes. Its training windows,
 $40\times40$ sites of a $264^2$ domain, are larger than every evaluation
 domain, so its result shows that a rule learned inside a large domain
 also runs on small periodic ones; the small-box models are the test of
@@ -129,16 +129,22 @@ is set by vorticity farther than the model's reach of three sites. From
 $1\times$ to $2\times$ this fraction grows by half at $\alpha=0.1$ (from $0.021$
 to $0.033$), doubles at $\alpha=0.05$ ($0.021$ to $0.042$), and grows $2.7$-fold
 at $\alpha=0.025$ ($0.018$ to $0.049$; two initial conditions
-each).\todo{reach test at $3\times$ (running): add the $3\times$ fractions} The
-ordering by drag matches where the small box fails. The fraction stays
+each); at $3\times$ it is $0.041$, $0.049$ and $0.054$. The
+ordering by drag matches where the small box fails, and so does the size: the small-box models
+transfer where the fraction is at most $0.033$ ($\alpha=0.1$ at $2\times$) and fail where it is
+$0.041$ or more ($\alpha=0.1$ at $3\times$, and both weaker drags), a threshold we read off after
+the fact. The fraction stays
 below $5\%$, however, and we have not shown that this missing velocity is
 what drives the drift, so we offer it as a mechanism consistent with the
 data, not as an explanation, and we have no test that predicts the
 failure before training. A model that carries the large-scale velocity as
 local state, or a reach of six to eight sites, which a window model can
-have but an eight-site box cannot, would be the natural tests.%
-\todo{Z10a (propagator memory channels) and R15 (velocity input,
-statistics loss): report the outcome here if they change the picture}
+have but an eight-site box cannot, would be the natural tests. We tried the first in one form: two memory channels per
+site, written only by the propagator from its neighbours' state and carried forward in time. They
+lowered the in-box forecast error by a quarter to a third and the $2\times$ error at
+$\alpha=0.05$ from $-39\%$ to $-26\%$, but did not make the small box transfer at $3\times$
+at either drag.%
+\todo{R15 (velocity input, statistics loss): add one clause with the outcome}
 
 %----------------------------------------------------------------------
 \subsection{Kolmogorov flow: windows of a large simulation}
@@ -260,9 +266,9 @@ System & Size & Truth & Small box & Windows \\
 Figure~\ref{fig:scaling} shows $\DKY$ as a function of domain size. For 2D
 KS the dimension per $44^2$ box of the small-box models is $81.7$, $81.8$ and
 $82.0$ at the three sizes, and that of the window model $83.2$--$83.6$; the
-truth's is $82.0$ and $84.0$ at the two sizes where it exists. The $2.5\%$
+truth's is $82.0$ and $83.8$ at the two sizes where it exists. The $2.2\%$
 difference between the truth's two values is inside the spread of the
-individual runs ($80.7$--$83.6$ at $44^2$; $82.5$ and $85.6$ per box at $66^2$),
+individual runs ($80.7$--$83.6$ at $44^2$; $82.5$--$85.6$ per box at $66^2$),
 so the truth is consistent with extensive scaling, and so are both models,
 as Remark~\ref{rem:extensive_model} requires. In Kolmogorov flow the truth
 is not extensive (Sec.~\ref{sec:kolmogorov}). The small-box model's

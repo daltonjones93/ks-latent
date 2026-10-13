@@ -1,7 +1,7 @@
 {
   "figure": "1d_spectra",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:43Z",
+  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
+  "timestamp_utc": "2026-10-13T18:25:43Z",
   "inputs": [
     "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_groundtruth_lyapunov_L100_fullspec.json",
     "/Users/daltonjones/Documents/latent_DA/artifacts/experiments/e1_groundtruth_lyapunov_L200_fullspec.json",
