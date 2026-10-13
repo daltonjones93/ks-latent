@@ -1035,3 +1035,34 @@ with its mechanism (spurious large-scale energy; vorticity's nonlocal velocity).
 Z10a (memory channels, now Tier 1) unlikely to change it, but it runs and would be included if it works. Next for
 Paper I: training seeds for the window-trained Kolmogorov models (referee M3), the 88² truth, the reach test and box
 checks for the mechanism paragraph.
+
+### Z12. Writing and finishing tracker (started 2026-10-13 ~11:30; keep updated)
+
+Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
+
+**Paper I (`docs/paperI`, never `docs/paper1`)** — framing per Z11.
+- [~] P1-1 Framing: abstract, intro, key claims (small box for 1D/2D KS; Kolmogorov window-trained at all drags;
+  small-box Kolmogorov failure reported with mechanism). Agent "paperI-writing".
+- [~] P1-2 Method: narrow Lemma 1 and Prop. 2 ("exact equivariance"), selection rule as one case study (M5, M6, M12).
+- [~] P1-3 2D KS small-box results (C2, 3 seeds × 3 ICs at 44², 66²; 88² placeholder until the truth lands).
+- [~] P1-4 Trivial extensive baseline, λ₁ vs truth, interval statements (M7, M4, M3).
+- [~] P1-5 Box-vs-window section (M2), learned-baseline argument (M7).
+- [~] P1-6 Kolmogorov section (window-trained; small-box failure with rollout spectra; mechanism paragraph
+  placeholder until the reach test/box checks land; seed placeholders).
+- [~] P1-7 Figures/tables regenerated (transfer table with small-box rows, scaling figure, α spectra panel).
+- [ ] P1-8 Fill placeholders: 88² truth, window-model seeds, reach test, box checks, α = 0.1 3× IC 1, Z10a outcome.
+- [ ] P1-9 Final checks: `check_numbers.py --paper paperI`, decisions log, internal referee pass.
+
+**Paper II (`docs/paperII`)**
+- [~] P2-1 R6 sentence (matched-budget numbers). Main session.
+- [ ] P2-2 R7/R7b: regenerate Table/Fig. model_error (0.19 marker), rewrite §6, recheck abstract/key points/
+  conclusions. Draft now, numbers when R7b lands (~2–3 h).
+- [ ] P2-3 Cross-paper consistency pass (after Paper I's text settles).
+- [ ] P2-4 Optional small-box paragraph (p7b 440² control).
+- [ ] P2-5 Final checks: build, `check_numbers.py --paper paperII`, grayscale, internal referee re-read of §6.
+
+**Compute feeding the papers**
+- [~] Window-model seeds 1–2 for Kolmogorov `k_xs01_v2` (α 0.1), `c19_e0d0_c6` (α 0.05; seed 1 exists as `_s1`),
+  `k_xs0025` (α 0.025), evals at 1/2/3× (referee M3). Agent "kolm-seeds".
+- [~] 2D KS truths 88² IC 0, 66² IC 2. [~] R7b. [~] Reach test, box checks. [~] α = 0.1 3× IC 1.
+- [~] Z10a memory channels (agent, Tier 1). [ ] R15 (frozen, starts after Z10a's first read).
