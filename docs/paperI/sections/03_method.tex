@@ -163,8 +163,8 @@ new $(N_x,P)$, with every weight copied unchanged. A global latent vector
 admits no such map, because its bottleneck and propagator are tied to
 one value of $\dlat$.
 The parameter count is therefore that of the local rule alone: the 1D
-model has $63{,}812$ parameters and every 2D model about $135{,}000$
-(Appendix~\ref{app:architecture}), whatever the domain, whereas in a global
+model has $63{,}812$ parameters, the 2D small-box models $75{,}975$ and the
+2D window models about $135{,}000$ (Appendix~\ref{app:architecture}), whatever the domain, whereas in a global
 latent model the layers into and out of the bottleneck grow with the size
 of the field.
 
@@ -306,7 +306,16 @@ a prediction of its own periodic image. We keep the propagator's reach
 below half the box for that reason. It is a design choice rather than a
 proven necessity: a control with reach $6$ on the whole periodic $8\times8$
 box, which does read its own image, also transfers in 2D KS
-(Sec.~\ref{sec:ks2d_box}).
+(Sec.~\ref{sec:ks2d_box}), and so does recipe C3, which scores the whole
+box with no halo; the clean 1D result also uses none. The halo is
+therefore necessary on windows, where it is what makes the loss that of a
+limited-area model (Proposition~\ref{prop:halo}), and optional on a periodic
+box, where it made no measurable difference. On the box it also limits
+what each rollout constrains: with a two-site interior, every scored site
+reads mostly forced truth at every step, so a $\kmax$-step rollout trains
+the interior's response to true boundary data rather than a free run;
+whether the model stays on the attractor when nothing is forced is what
+the evaluations test.
 
 For 2D KS, which is isotropic, windows are cut in both directions. For
 Kolmogorov flow, whose forcing depends on $y$, windows are strips in $x$

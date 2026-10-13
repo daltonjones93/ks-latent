@@ -1,7 +1,7 @@
 {
   "figure": "rollouts_spectra",
-  "git_sha": "923a296eff79078e180588f94454bbaab69ad8bf",
-  "timestamp_utc": "2026-10-13T18:25:50Z",
+  "git_sha": "cfef678c9c5c4e1cce8c3b9fc83232f70fb07d04",
+  "timestamp_utc": "2026-10-13T19:03:59Z",
   "inputs": [
     "artifacts/experiments/e1_model/spectra_overlay_1d.json",
     "artifacts/experiments/spectra/fields/kolm_x3.npz",

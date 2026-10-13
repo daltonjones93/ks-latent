@@ -33,22 +33,22 @@ vector whose size is fixed at training time, although in extensive chaos the num
 degrees of freedom grows with the domain. We make the latent a field: a few channels at each site of
 a lattice that tiles the domain, built only from weight-shared operators of finite reach, so that one
 model, of $76{,}000$--$135{,}000$ parameters in 2D, runs on a domain of any size by adding sites.
-One training procedure serves a small periodic box and windows of one large simulation alike: the
-sites bordering the scored region are overwritten with data at every step, so the training loss is
-that of a limited-area model. Judged by its own Lyapunov spectrum, a one-dimensional Kuramoto--Sivashinsky model
+It is trained either on a small periodic box or on windows of one large simulation. Judged by its own Lyapunov spectrum, a one-dimensional Kuramoto--Sivashinsky model
 trained at $L=100$ reproduces the Kaplan--Yorke dimension to within $0.2$--$1.2\%$ up to $L=400$, and
 two-dimensional Kuramoto--Sivashinsky models trained on a $44\times44$ periodic box, from three
 training seeds, are within $3.5\%$ of it at the training size and at $66^2$, and keep the same
 dimension density at four times the training area. % TODO(P1-8): 88^2 truth (running) -> "within x% at 88^2"
 In Kolmogorov flow with linear drag, small-box models reproduce the dimension at twice the channel
-width at the strongest drag, though not for every training seed, and miss it by $21\%$ at three
-times; at a weaker drag they fail already at twice the width, drifting into a state with two to
-three times the true large-scale energy. Models trained on windows of a simulation
-sixteen boxes wide, wider than every evaluation domain, are within $10\%$ at the two stronger drags,
-comparable to the uncertainty of the reference. In two dimensions the leading exponent is
-$12$--$30\%$ too high even where the dimension agrees. We also report which training choices make a
-learned local rule fail: short rollouts admit spurious free-running regimes, and longer
-squared-error rollouts lower the dimension.
+width at the strongest drag for two of five training seeds and recipes, and all miss it by
+$21$--$34\%$ at three times; at a weaker drag they fail already at twice the width, drifting into a
+state with two to three times the true large-scale energy. Models trained on windows of a
+simulation sixteen boxes wide, wider than every evaluation domain, are within $10\%$ at the two
+stronger drags, comparable to the uncertainty of the reference; they also have twice the
+propagator reach. Where the dimension transfers, the leading exponent is $8$--$36\%$ too high at the
+training size and twice it and within $6\%$ at three times the channel width; at the weakest drag
+it is $5$--$18\%$ too low. We also report which training choices make a learned local rule fail:
+short rollouts admit spurious free-running regimes, and in three confounded comparisons longer
+squared-error rollouts lowered the dimension.
 \end{abstract}
 
 \maketitle
@@ -58,12 +58,12 @@ Many chaotic systems, from flame fronts to atmospheric flows, are spatially exte
 the domain, the more independent chaotic degrees of freedom it holds. Machine-learned surrogates
 usually describe the whole state by one list of numbers of fixed length, which cannot grow with
 the domain. We instead learn a field of a few numbers at each point of a lattice, updated by the
-same local rule everywhere, so that a model trained on one domain runs on a larger one simply by
-adding lattice points. We test this transfer with the strictest check available, the model's
-own Lyapunov spectrum against that of the true equations, in three systems. A small training box
-is enough for the Kuramoto--Sivashinsky equation in one and two dimensions. In Kolmogorov flow it
-is not: once the larger domain hosts large-scale motion that the small box cannot contain, the
-transferred model drifts, and training on pieces of one large simulation is needed instead.
+same local rule everywhere, so that a model trained on one domain runs on a larger one by adding
+lattice points. We test this transfer against the Lyapunov spectra of the true equations in
+three systems. A small training box suffices for the Kuramoto--Sivashinsky equation in one and
+two dimensions. In Kolmogorov flow it does not: on larger domains the transferred model drifts
+into too much large-scale motion, while models trained on pieces of one large simulation, with a
+wider reach, transfer.
 \end{quotation}
 
 \input{sections/01_introduction}
@@ -82,6 +82,10 @@ transferred model drifts, and training on pieces of one large simulation is need
 \input{appendix/C_ground_truth}
 \input{appendix/D_tables}
 \input{appendix/E_reproducibility}
+
+\begin{acknowledgments}
+\placeholder{Funding and computing acknowledgments}
+\end{acknowledgments}
 
 \section*{Data availability}
 % TODO(G5): repository and DOI for code, trained models and the result files.

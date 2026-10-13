@@ -37,7 +37,10 @@ def crop(tag, scale, seeds):
 
 # Paper I rewrite (2026-10-13): small-box models (route a) next to the window-trained ones (route b).
 C2 = [f"r13_C2_ks2d_s44big_k48_seed{s}" for s in (0, 1, 2)]
-SMALL_KOLM = {0.1: "r12_c6_a01_s1x_r3", 0.05: "r4k_c6_a005_s1x_r3"}
+# Referee 2 (A4, Fig. 6): every small-box model at each drag, as in Table IV and Fig. 5.
+SMALL_KOLM = {0.1: ["r12_c6_a01_s1x_r3", "r12_c6_a01_s1x_r3_seed1", "r12_c6_a01_s1x_r3_seed2",
+                    "r14_KC2_a0.1_seed0", "r14_KC3_a0.1_seed0"],
+              0.05: ["r4k_c6_a005_s1x_r3", "r14_KC2_a0.05_seed0", "r14_KC3_a0.05_seed0"]}
 
 
 def truths(system, size):
@@ -46,11 +49,13 @@ def truths(system, size):
     return np.array([(r["D_KY"], r["n_positive"]) for r in rs])
 
 
-def mark(ax, x, v, per_box, open_, color, marker, ms=5.5, label=None):
+def mark(ax, x, v, per_box, open_, color, marker, ms=5.5, label=None, half=False):
     v = np.asarray(v, float) / per_box
     m = v.mean()
     yerr = [[m - v.min()], [v.max() - m]] if len(v) > 1 else None
     kw = dict(mfc="white", mec=color, mew=1.1) if open_ else dict(mfc=color, mec=color, mew=0.6)
+    if half:  # referee 2 (grayscale): small-box models half-filled, distinct from filled windows and open truth
+        kw = dict(mfc=color, mec=color, mew=0.9, fillstyle="bottom", markerfacecoloralt="white")
     ax.errorbar(x, m, yerr=yerr, fmt=marker, ms=ms, ecolor=color, elinewidth=0.9, capsize=1.8, zorder=4,
                 label=label, **kw)
     if open_ and len(v) == 1:
@@ -107,7 +112,7 @@ for alpha, tag in MODELS.items():
             mark(ax, sc + DX[alpha] - 0.05, t[:, j], pb, True, INK, DRAG_MARKER[alpha], ms=5)
             mark(ax, sc + DX[alpha] + 0.03, m[:, j], pb, False, DRAG_COLOR[alpha], DRAG_MARKER[alpha], ms=4.3)
             if len(sm):
-                mark(ax, sc + DX[alpha] + 0.09, sm[:, j], pb, False, BLUE, DRAG_MARKER[alpha], ms=3.6)
+                mark(ax, sc + DX[alpha] + 0.09, sm[:, j], pb, False, BLUE, DRAG_MARKER[alpha], ms=4.3, half=True)
 b.set_title("Kolmogorov flow")
 f.set_xlabel(r"channel width / $2\pi$")
 f.set_xticks([1, 2, 3])
@@ -115,10 +120,12 @@ d.set_ylim(8, 33)
 f.set_ylim(5, 17)
 leg_alpha = [Line2D([], [], marker=DRAG_MARKER[a_], ls="", mfc=DRAG_COLOR[a_], mec=DRAG_COLOR[a_], ms=4.3)
              for a_ in MODELS]
-fig.legend(leg_alpha + [Line2D([], [], marker="o", ls="", mfc=BLUE, mec=BLUE, ms=3.6),
+fig.legend(leg_alpha + [Line2D([], [], marker="o", ls="", mfc=BLUE, mec=BLUE, ms=4.3, fillstyle="bottom",
+                                markerfacecoloralt="white", mew=0.9),
                          Line2D([], [], marker="o", ls="", mfc="white", mec=INK, mew=1.1, ms=5),
                          plt.Rectangle((0, 0), 1, 1, fc=BAND_FC, ec="none")],
-           [rf"windows, $\alpha={a_}$" for a_ in MODELS] + ["small box (same shape)", "truth (open, same shape)",
+           [rf"windows, $\alpha={a_}$" for a_ in MODELS] + ["small box (half-filled, same shape)",
+                                                           "truth (open, same shape)",
                                                            r"$\pm15\%$: single-run truth"],
            loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.0), columnspacing=1.0)
 for ax, letter in zip((a, b, c, d, e, f), "abcdef"):

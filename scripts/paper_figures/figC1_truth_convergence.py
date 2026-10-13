@@ -46,6 +46,7 @@ for ax in axes.ravel()[n:]:
     ax.set_visible(False)
 
 from matplotlib.lines import Line2D  # noqa: E402
-fig.legend([Line2D([], [], color=c, marker="o", ms=2.6, lw=1.1) for c in SEED_COL.values()],
+fig.legend([Line2D([], [], color=c, marker={0: "o", 1: "s", 2: "^"}.get(k, "o"), ms=2.8, lw=1.1,
+                   ls=("-", "--", ":")[k % 3]) for k, c in SEED_COL.items()],  # referee 2: match the panels
            [f"IC seed {k}" for k in SEED_COL], loc="upper center", ncol=3, bbox_to_anchor=(0.5, 1.04))
 save(fig, "figC1_truth_convergence", inputs)

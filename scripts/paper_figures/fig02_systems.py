@@ -79,7 +79,7 @@ e2 = np.linspace(0, Lx2, nx2 + 1)
 b.pcolormesh(e2, e2, u2.T, cmap=CMAP, vmin=-VMAX, vmax=VMAX, shading="flat", rasterized=True)
 b.set_aspect("equal")
 window(b, 3 * h2, 4 * h2, 40 * h2, 40 * h2, 6 * h2, 6 * h2)
-b.set_xlabel("$x$"); b.set_ylabel("$y$", labelpad=1)
+b.set_xlabel("$x$"); b.set_ylabel("$y$", labelpad=4)  # referee 2: clear the "132" tick
 b.set_xticks([0, 132, 264]); b.set_yticks([0, 132, 264])
 b.set_title(r"2D KS, $264^2$ training domain", loc="left")
 panel_label(b, "b")

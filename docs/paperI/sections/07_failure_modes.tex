@@ -102,8 +102,8 @@ trajectory, every model we checked ($\kmax$ from 12 to 32, both drags)
 keeps its vorticity variance within $2.3\%$ of the truth's at every lead
 up to 64 steps. The contraction acts on the growth of perturbations,
 which is what $\lambda_1$ and $\DKY$ measure, although the window models we
-report have a leading exponent that is too high, not too low
-(Table~\ref{tab:lambda1}): whatever the rollout length does to the
+report have a leading exponent that is too high, not too low, at the two
+stronger drags (Table~\ref{tab:lambda1}; it is $5$--$18\%$ low at $\alpha=0.025$): whatever the rollout length does to the
 spectrum, it does not simply weaken the leading growth rate.
 
 Table~\ref{tab:alpha01_ablation} and Fig.~\ref{fig:failure}(a) list the
@@ -113,8 +113,8 @@ $2.6\%$ (v1 to v2, with a slightly stronger barrier), and both $\kmax=20$
 variants are $7$--$10\%$ low there. The offset $\epsilon$ of the log-det
 barrier, which sets how hard the barrier pushes on the weakest latent
 directions, is a second lever: at $\kmax=16$, setting $\epsilon=0$ moves the
-$3\times$ error from $2.9\%$ to $4.9\%$ and the $1\times$ error from $8.8\%$ to
-$2.8\%$ (v5 to v6). No variant is best at every size, and the size at which a variant is most
+$3\times$ error from $2.9\%$ to $4.9\%$ and the $1\times$ error from $2.6\%$ to
+$11.4\%$ (v5 to v6). No variant is best at every size, and the size at which a variant is most
 accurate is not predictable from its training loss, which is why the
 main-text model was chosen by the truth-free procedure of
 Sec.~\ref{sec:canonical_results}; with the truths now available its

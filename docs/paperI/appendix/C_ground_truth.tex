@@ -63,7 +63,9 @@ grid; the 2D truths use the same grid as the model.
 \para{Independent realizations.} A chaotic trajectory amplifies any
 difference, including round-off: two otherwise identical 1D runs that
 differ only in the number of threads used by the FFT follow different
-trajectories after a few hundred time units, and give $\DKY=10.90$ and
+trajectories after a few hundred time units (round-off of $10^{-16}$ needs
+about $\ln 10^{16}/\lambda_1\approx400$ time units, some 35 Lyapunov times, to
+grow to the size of the field), and give $\DKY=10.90$ and
 $11.31$ at $L=50$. We use such runs as independent finite-time samples.
 Runs that differ only in the number of tangent directions follow the
 same trajectory and agree to within $0.01$; they count as one. Every
@@ -173,13 +175,13 @@ $46.6$ and $52.6$.
 %----------------------------------------------------------------------
 
 The 2D KS truths average over 40 time units, about 7 Lyapunov times.
-Three runs at $44^2$ give $81.8$, $80.7$ and $83.6$, and two at $66^2$ give
-$192.5$ and $185.6$, a spread of $\pm1.8\%$ at both sizes.
+Three runs at $44^2$ give $81.8$, $80.7$ and $83.6$, and three at $66^2$ give
+$192.5$, $185.6$ and $187.5$, a spread of $-1.6$ to $+1.9\%$ at $44^2$ and $-1.6$ to $+2.1\%$ at $66^2$.
 Table~\ref{tab:running_ks2d} gives the running estimates of the runs that
 recorded them: over the last 20 time units they still move by $3$--$5\%$,
 in both directions. We therefore treat the 2D KS truths as uncertain at
 the level of a few percent, comparable to the model errors of
-Sec.~\ref{sec:ks2d_box} and larger than the $2.5\%$ difference
+Sec.~\ref{sec:ks2d_box} and larger than the $2.2\%$ difference
 between the mean densities at the two sizes.
 
 \begin{table}[htbp]
@@ -255,8 +257,10 @@ truths exist for seeds 0--2 ($22.46$, $20.52$, $21.63$).
 \begin{table}[htbp]
 \caption{All ground-truth runs used in the paper. $n_+$: number of
 positive exponents. 1D runs have no seed column: all use IC seed 0 and are
-independent realizations in the sense of
-Sec.~\ref{app:benettin}.}
+independent realizations only in the sense of
+Sec.~\ref{app:benettin} (they differ in FFT thread count; the two $L=100$
+runs also differ in the number of tangent directions and in the averaging
+window).}
 \label{tab:truth_runs}
 \scriptsize\renewcommand{\arraystretch}{0.85}
 \begin{ruledtabular}

@@ -80,7 +80,7 @@ b.axhline(0, color=MUTED, lw=0.6)
 b.axvline(0.226, color=MUTED, lw=0.6, ls=":")
 b.text(0.232, 0.0045, r"$0.226$", color=MUTED, fontsize=7)
 b.set_xlabel(r"index per unit length, $i/L$")
-b.set_ylabel(r"$\frac{1}{L}\sum_{j\leq i}\lambda_j$", labelpad=2)
+b.set_ylabel(r"$\frac{1}{L}\sum_{j\leq i}\lambda_j$", labelpad=7)  # referee 2: clear the tick labels
 b.set_xlim(0, 0.32)
 b.set_ylim(-0.01, 0.012)
 panel_label(b, "b")

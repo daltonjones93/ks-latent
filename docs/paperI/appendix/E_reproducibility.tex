@@ -33,7 +33,8 @@ precision on the CPU (Appendix~\ref{app:model_spectra}). Initial conditions are
 indexed by seed (0, 1, 2) and spun up for 100--500 time units. PDE
 trajectories from one seed are reproducible only for a fixed number of
 FFT threads; runs that differ in thread count follow different
-trajectories after a few Lyapunov times, and we use them as independent
+trajectories after a few hundred time units (some 35 Lyapunov times in 1D),
+and we use them as independent
 realizations (Appendix~\ref{app:groundtruth}). The software environment
 is Python 3.11.15, PyTorch 2.13.0, NumPy 1.26.4 and SciPy 1.17.1, fixed by
 an exported environment file.

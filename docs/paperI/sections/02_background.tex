@@ -68,10 +68,13 @@ Each validation is at the single domain size the model was trained on.
 forecast KS on large domains with one reservoir per subdomain
 \citep{pathak2018}; the reservoirs can share weights, but a new set is
 trained for each domain size, and the exponents reported are the PDE's,
-not the model's. Patch-decomposed autoencoders with neural ODEs model KS
-and Kolmogorov flow with low-dimensional latents per patch
-\citep{constanteamores2024}, again one model per size, validated by
-short-time tracking and flow statistics; in a minimal flow unit, which is
+not the model's. Next-generation reservoir computers that exploit
+locality and translation symmetry forecast KS with far less training
+data \citep{barbosa2022}. Patch-decomposed autoencoders with neural ODEs
+model KS and Kolmogorov flow with low-dimensional latents per patch whose
+functions are shared across patches \citep{constanteamores2024}; the
+reported tests are at the training domain sizes, by short-time tracking
+and flow statistics; in a minimal flow unit, which is
 non-extensive by construction, a single global latent suffices
 \citep{constanteamores2025}. Translation-equivariant models can be run on
 larger domains than they were trained on: learned discretizations
@@ -118,10 +121,11 @@ learned models can reproduce Lyapunov spectra, and that local models can be
 run on larger domains, are each established. Table~\ref{tab:prior_work}
 summarizes the closest work. What we add is the combination: a learned,
 weight-shared local latent field whose zero-shot extensions are checked
-against the true Lyapunov spectra at several domain sizes in three
-systems; one training procedure, a forced halo, that turns a small
-periodic box or windows of one simulation into the same limited-area
-problem; an observed limit of the small box, in Kolmogorov flow, with its
+against the true Lyapunov dimension (and, in one dimension, the whole
+spectrum) at several domain sizes in three systems; training on windows
+of one simulation with a forced halo, which makes the loss exactly that
+of a limited-area model, next to training on a small periodic box; an
+observed limit of the small box, in Kolmogorov flow, with its
 signature in free rollouts; and an account of the training choices that
 make a learned local rule fail. Showing that a dimension transfers is a
 weaker test than it may seem: a local model is extensive by construction

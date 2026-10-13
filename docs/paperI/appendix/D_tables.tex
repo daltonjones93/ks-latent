@@ -29,7 +29,7 @@ Gaussian noise of standard deviation $0.1$ (standardized units). Its $\DKY$ is $
 $44^2$ and $188.5$ at $66^2$, against the truth runs from the same initial condition, $81.8$ and $192.5$
 ($3.6\%$ and $2.1\%$); a 12-channel model trained on clean fields gives $83.5$ and $190.4$ ($2.1\%$ and
 $1.1\%$), and the 6-channel window model of this paper, scored the same way, $1.7\%$ and $2.4\%$ (its $+1.6\%$ and
-$-0.5\%$ in Table~\ref{tab:transfer2d} are errors of the mean over initial conditions against the mean truths). Doubling the channels and training on noisy data leave the transfer of the dimension
+$-0.3\%$ in Table~\ref{tab:transfer2d} are errors of the mean over initial conditions against the mean truths). Doubling the channels and training on noisy data leave the transfer of the dimension
 within the spread of the truth runs (\texttt{artifacts/experiments/crop/p7c12*\_ks2d\_x*.json}; one
 initial condition each).
 
@@ -39,6 +39,10 @@ rollout's standard deviation to the truth's, and the share of energy in
 the lowest and highest wavenumber bands (1D and 2D KS: $|\bm k|<0.35$ and
 $|\bm k|\ge1.4$; Kolmogorov flow: kinetic energy at $|\bm k|<1$ and
 $|\bm k|\ge16$), from one initial condition and 1000 snapshots per size.
+For 2D KS these single-condition values differ from the three-condition
+means quoted in Sec.~\ref{sec:scaling} (the truth's low-band share at $88^2$
+is $45\%$ here and $0.51$ there), a measure of how much one initial
+condition varies.
 
 \begin{figure*}[htbp]
 \centering
@@ -128,8 +132,10 @@ $^\star$Main-text model.}
 
 \begin{table}[htbp]
 \caption{Reconstruction and decoded-rollout statistics of the main-text
-models. ``Recon.'': autoencoder error as a percentage of the field
-variance; ``Std'': decoded rollout standard deviation over the truth's;
+models. ``Recon.'': autoencoder error as a percentage of the variance of
+the field on that domain (unlike the validation MSE of
+Table~\ref{tab:architecture}, which is in units of the training data's
+standard deviation, $3.8$ on the $44^2$ boxes and $6.2$ on the $264^2$ domain); ``Std'': decoded rollout standard deviation over the truth's;
 the last two columns give the energy share (\%) in the lowest band for
 truth / model rollout and in the highest band for truth /
 reconstruction.}

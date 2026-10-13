@@ -12,10 +12,14 @@ as accurate as the models (Tables~\ref{tab:transfer1d}
 and~\ref{tab:transfer2d}). There, transfer of $\DKY$ shows that the learned
 rule has the right density of chaos and stays chaotic on larger lattices,
 which is necessary but weaker than showing the rule is the right one. The
-test discriminates where the truth is not extensive. In Kolmogorov flow
-the truth's density per box rises with the channel width, and there the
-models separate: the small-box model stays near its native density and
-misses, while the window-trained model follows the rise. Finite-size
+test would discriminate where the truth is not extensive, but in
+Kolmogorov flow the truth's rise in density per box ($16$--$22\%$ from $1\times$
+to $3\times$) is comparable to the uncertainty of single truth runs, and the
+window models, themselves nearly extensive, neither clearly follow nor
+clearly miss it. What separates the models there is the size of the
+small-box failure: $-39$ to $-48\%$ at $\alpha=0.05$ and $2\times$, with a drift
+into large-scale motion, a leading exponent of $0.070$ against $0.111$, and
+$12$ positive exponents against $23$--$26$. Finite-size
 departures from extensivity \citep{fishmanegolf2006}, comoving exponents
 \citep{deisslerkaneko1987} and correlation functions
 \citep{egolfgreenside1994} after transfer would sharpen the test further; we have not
@@ -23,15 +27,17 @@ computed them for the models.
 
 \para{What the training data must contain.} Trained on a small periodic
 box, the local rule transferred in 1D and 2D KS and failed in Kolmogorov
-flow beyond the width at which the truth's large-scale energy starts to
-grow. 2D KS is also not size-independent at its largest scales, so the
+flow at the widths where the truth's large-scale energy grows (at
+$\alpha=0.1$ for three of five models already at twice the width). 2D KS is also not size-independent at its largest scales, so the
 amount of large-scale energy outside the box cannot be the whole story;
 the evidence we have is consistent with the difference lying in how the
 local dynamics depend on those scales, through gradients in KS and through
 the non-local Biot--Savart velocity in vorticity form
 (Sec.~\ref{sec:kolm_box}). We found no truth-side statistic that predicts
-the failure before training. Windows of one large simulation avoid the
-problem at the price of the large simulation; they are the setting of a
+the failure before training. Windows of one large simulation, with a
+propagator of twice the reach, transferred where the small box did not,
+at the price of the large simulation; whether the data or the reach is
+responsible is tested in Sec.~\ref{sec:window_fix}. Windows are the setting of a
 limited-area model nested in a larger one, and the forced halo trains
 exactly that problem (Proposition~\ref{prop:halo}). Rollouts must also
 leave the learned map chaotic at the right rate
@@ -54,14 +60,16 @@ reaches two sites and whose propagator reaches one fail even when trained
 on windows of the very domain they are evaluated on, with errors of
 $66$--$100\%$ in $\DKY$ (Appendix~\ref{app:tables}). The velocity that
 advects the vorticity is a longer-range quantity: in the true flow at
-twice the box width, vorticity farther than six to eight sites sets less
-than one percent of its variance, more than a small box can supply. The
+twice the box width, a model must see vorticity up to six to eight sites
+away before what lies beyond sets less than one percent of the
+velocity's variance, and a small box of eight sites cannot supply that
+reach. The
 reach also sets the smallest domain the model can be used on, which is
 what fails at $L=25$.
 
 \para{Learned baselines.} A global latent model of the same system, such
-as a 44-dimensional one we trained at $L=100$ in 1D ($\DKY=21.4$ against the
-truth's $22.5$), cannot be evaluated at another size at all: its bottleneck and propagator are tied to one
+as a 44-dimensional one trained at $L=100$ in 1D, cannot be evaluated at
+another size at all: its bottleneck and propagator are tied to one
 latent dimension, so the comparison that matters for transfer has no
 global counterpart. Whether a \emph{latent} field buys anything over a
 weight-shared local surrogate in physical space, such as a learned coarse
@@ -76,7 +84,8 @@ filter operates exactly \citep{jones2026da}.
 operator is shared by all sites, the trained parameters encode one local
 rule, and their number is fixed by that rule rather than by the domain.
 A 2D model of about $76{,}000$ parameters, trained on a $44^2$ box,
-reproduces a Kaplan--Yorke dimension of $189$ at $66^2$ to within $3\%$
+reproduces a Kaplan--Yorke dimension of $188.5$ at $66^2$ to within $2.4\%$
+(single evaluations within $3.2\%$)
 (Table~\ref{tab:transfer2d}), and
 a 12-channel version runs a $440^2$ domain, whose attractor dimension we
 estimate at roughly $8{,}000$ from the measured density of $0.043$ per unit area
@@ -93,8 +102,9 @@ economically by learning that process once.
 is extensive by construction, the difference between its dimension
 density and the truth's on a larger domain measures how far the truth is
 from extensive at that size, once the model is accurate at the native
-size. The rise of the Kolmogorov truth's density with channel width, and
-the matching failure of the small-box model, are an example. Deviations
+size. The rise of the Kolmogorov truth's density with channel width is a
+case where the truth departs from extensivity, but our truths are not
+precise enough to resolve it model by model. Deviations
 from extensivity have been studied as a probe of a system's building
 blocks before; a learned local model offers a way to ask the same
 question of systems known only through data, which we leave to future
@@ -108,15 +118,22 @@ work.
   percent (Sec.~\ref{sec:truth_uncertainty}).\todo{88$^2$ truth: drop or
   update the clause on 2D KS at $88^2$} Model and truth average over
   different windows.
-\item \emph{Leading exponents.} In 2D the models' $\lambda_1$ is $12$--$30\%$
-  too high at most sizes even where $\DKY$ agrees
-  (Table~\ref{tab:lambda1}), and in 1D $4$--$9\%$; the spectra match in their
+\item \emph{Leading exponents.} In 2D the models' $\lambda_1$ is $8$--$36\%$
+  too high at the training size and twice it even where $\DKY$ agrees,
+  within $6\%$ at three times the channel width, and $5$--$18\%$ too low at
+  the weakest drag (Table~\ref{tab:lambda1}); in 1D it is $4$--$9\%$ too high; the spectra match in their
   integral, not in every exponent. For data assimilation, where $\lambda_1$
   sets error growth, this matters directly.
 \item \emph{Kolmogorov geometry and route.} The channel is widened in $x$
   only, because the forcing fixes the height; transfer in $y$ is untested.
   The Kolmogorov models that transfer were trained on windows larger than
-  every evaluation domain.
+  every evaluation domain, and with twice the propagator reach of the
+  small-box models.\todo{A2: update with the reach-3 window model}
+  At $\alpha=0.05$ each small-box cell rests on one evaluation, and at
+  $\alpha=0.1$ the further seeds and recipes on one initial condition each;
+  the failures at $\alpha=0.05$ ($-39$ to $-64\%$) are far outside the
+  scatter of single evaluations, the boundary at $\alpha=0.1$ and $2\times$ is
+  not.
 \item \emph{Models and seeds.} The 1D model has three training seeds and
   the 2D KS small-box model three; the Kolmogorov window models have one
   (the $\alpha=0.05$ model two).\todo{window-model seeds 1--2 at all three

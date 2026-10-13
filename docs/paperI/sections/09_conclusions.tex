@@ -6,42 +6,45 @@
 A latent field, built only from operators that are shared by all sites
 and read a bounded neighbourhood, gives a learned surrogate of extensive
 chaos that can be run on domains it was never trained on, and the
-models' own Lyapunov spectra show that it reproduces the density of
+models' own Lyapunov exponents show that it reproduces the density of
 chaos there. In one dimension the transferred Kuramoto--Sivashinsky model
 stays within $0.2$--$1.2\%$ of the true Kaplan--Yorke dimension up to four
 times the training length, and its spectrum, not only its dimension,
 follows the truth's. In two dimensions, Kuramoto--Sivashinsky models
-trained on a small periodic box, with a forced halo, are within $3.5\%$ of
+trained on a small periodic box are within $3.5\%$ of
 the truth at the training size and at $2.25$ times its area, from three
 training seeds, and keep the native density at four times the area.%
 \todo{88$^2$ truth: state the error there}
-Their leading exponents are $12$--$18\%$ too high, so the agreement is in
+Their leading exponents are $8$--$18\%$ too high, so the agreement is in
 the dimension, not in every exponent.
 
-Kolmogorov flow marks the limit of the small box. A model trained on one
-$2\pi\times2\pi$ box reproduces the dimension at twice the channel width at
-the strongest drag but is $21\%$ low at three times, and at a weaker drag
-fails already at twice the width, drifting into a state with two to three
+Kolmogorov flow marks the limit of the small box. Models trained on one
+$2\pi\times2\pi$ box reproduce the dimension at twice the channel width at
+the strongest drag for two of five training seeds and recipes, and all are
+$21$--$34\%$ low at three times; at a weaker drag they fail already at twice
+the width, drifting into a state with two to three
 times the true large-scale energy; more data and longer rollouts do not
 change this. The failure sets in where the truth's own large-scale energy
 grows with the domain, and is consistent with the non-local dependence of
 vorticity dynamics on the velocity, which a finite reach cannot see. Models
-trained on windows of one large simulation, by the same forced-halo
-procedure, are within $10\%$ at the two stronger drags; their windows are
-larger than the domains they are evaluated on, so they show that one set
-of weights serves every size, not that a small domain suffices.
+trained on windows of one large simulation, with a forced halo and twice
+the propagator reach, are within $10\%$ at the two stronger drags; their
+windows are larger than the domains they are evaluated on, so they show
+that one set of weights serves every size, not that a small domain
+suffices.\todo{A2: one clause on data versus reach}
 
 Two further lessons concern training. Rollouts that are too short leave
 the free-running model room to settle into spurious regimes, which
-free-rollout statistics catch without any truth; longer squared-error
-rollouts lower the dimension, consistent with, though not established
+free-rollout statistics catch without any truth; in three confounded
+comparisons longer squared-error rollouts lowered the dimension, consistent with, though not established
 by, the law of total variance applied to rollout targets.
 
-The practice we take from this work is short: train the local rule with
-a forced halo, on a small box if that is all the data there is, check the
-result against the Lyapunov spectrum and the free-rollout statistics of
-the truth at more than one size, and fall back to windows of a larger
-simulation where the small box fails, as it does when the dynamics depend
-on scales the box cannot contain. The latent field also has a
+The practice we take from this work is short: train the local rule on a
+small box if that is all the data there is (with a forced halo when it is
+trained on windows), check the result against the Lyapunov exponents and
+the free-rollout statistics of the truth at more than one size, and fall
+back to windows of a larger simulation where the small box fails, as it
+did in Kolmogorov flow, where the dynamics are consistent with depending on
+scales the box cannot contain. The latent field also has a
 geometry, which a companion paper uses to localize an ensemble filter in
 latent space \citep{jones2026da}.

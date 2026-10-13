@@ -177,3 +177,54 @@ Decisions and changes:
   architecture_dynamics only (paper1/Paper II tables unchanged). `tabD_evaluations.py`: small-box
   rows; truth at 88² once it exists. `tab02_tab03.py`: 88² row once it exists; 1D baseline column.
 - Placeholders: `\todo{...}` (red, defined in macros.tex) — grep `\\todo` for the list.
+
+## 2026-10-13 — Internal referee report 2: fixes
+
+Source: scratchpad paperI_referee_2.md (A1–A7, B1–B16, N0/N8, figures). Title unchanged (user decision).
+
+- **A1 λ₁.** All λ₁ statements regenerated from `tables/lambda1.tex`: abstract ("8–36% too high at the
+  training size and twice it, within 6% at 3×, 5–18% too low at α=0.025"), intro contribution 3, Sec. VI A
+  (0.219 vs 0.203, +8%), Sec. VI C (+16 to +30%), Discussion Limitations, Conclusions (8–18%), Sec. VII
+  (sign qualified for α=0.025).
+- **A2 data vs reach.** Not resolved in text: the main session is training a reach-3 window model at α=0.05
+  (`scripts/run_a2_reach3.sh`, tag `a2_c19_e0d0_c6_r3`). The confound is stated in the abstract ("they also
+  have twice the propagator reach"), lead paragraph, intro, Sec. VI C, Discussion, Limitations and
+  Conclusions; "windows are needed" removed everywhere. Three `\todo{A2: ...}` placeholders.
+- **A3 non-extensivity.** "Window models follow the truth's rising density" removed (Secs. VI C, VI E,
+  VIII, Fig. 6 caption); replaced by the density slopes (models +5–9%, truth +16–22%) and the honest reading;
+  the Discussion now names the size of the α=0.05 small-box failure as the discriminating evidence.
+- **A4 selective reporting.** Table IV and Figs. 5, 6 now report every small-box model the same way at both
+  drags (α=0.1: recipe C seed 0 row + pooled row of seeds 1–2, C2, C3; α=0.05: recipe C row + pooled C2, C3
+  row; figures pool all). Text: "two of five within 4% at 2×", every model misses at 3× (21–34%).
+  The after-the-fact reach-fraction threshold (0.033) is deleted.
+- **A5.** No claim of small-box failure at α=0.025; the drag ordering rests on two drags, stated.
+- **A6 stale numbers.** ε ablation (v5 2.6% → v6 11.4%); extensive baseline "2.25 times … 2.1%"; wrap
+  control −3.0%; Discussion 188.5 within 2.4% (single evaluations 3.2%); App. C three 66² runs, 2.2%,
+  spread −1.6/+1.9% and −1.6/+2.1%; Sec. IV "±2%"; App. D −0.3%; Sec. III parameter counts (75,975 small box,
+  ~135,000 windows).
+- **A7 forced halo.** Necessary on windows, optional on a periodic box (C3, wrap control, 1D) — Sec. III
+  paragraph plus one sentence on what a 2-site-interior rollout trains; removed from the abstract headline;
+  contribution 2 and the novelty paragraph rewritten.
+- **B1** Intro states what is compared in 2D (D_KY, n₊, λ₁; full spectra in 1D); conclusions "exponents".
+- **B3** α=0.025 truth bias noted in Sec. VI C. **B5** Fig. 5(e) now uses the main-text α=0.05 window model
+  (`c19_e0d0_c6` rollout stats, run 2026-10-13); text quotes its shares (0.19/0.25/0.20 vs 0.10/0.15/0.22).
+- **B6** abstract/intro/conclusions: k_max effect "in three confounded comparisons … lowered/tended to".
+- **B7** Fig. 7 caption softened (2D KS window model 19% more energetic at 88²).
+- **B8** KS "gradients small" marked as an assumption (Sec. IV and VI B), with the 2D KS roughening citation
+  (Jayaprakash, Hayot & Pandit 1993, Crossref-verified); 08 reach sentence rewritten.
+- **B9** Table IV caption gives initial conditions per seed. **B10** global-model D_KY 21.4 removed (it was
+  the replication target, not a measured value in this codebase). **B11** Barbosa & Gauthier (Chaos 2022)
+  added (Crossref-verified); Constante-Amores et al. reworded to "reported tests are at the training sizes"
+  (abstract confirms shared patch functions; other-size runs not verifiable from the abstract).
+- **B12** truth-run table caption: 1D runs not independent ICs; the two L=100 runs differ in K and window.
+- **B13** round-off divergence: "a few hundred time units (~35 Lyapunov times)" in App. C and App. E.
+- **B14** reconstruction normalization stated in the Table spectra caption. **N8** single-IC vs three-IC
+  difference stated in App. D.
+- **B4** p7 at 88² (215.9) sentence added in Sec. VI A.
+- **B16** small-box n₊ deficit (fewer but faster unstable directions) in Sec. VI A.
+- **Not done:** B2 (more ICs: compute), B15 (attention
+  counts: provenance not at hand), Fig. 4 0.222 marker, Fig. 7 reference curve, Fig. 2(c) strip, ±15% band
+  asymmetry (caption now says it bounds downward uncertainty only).
+- **Figures:** Fig. 6 small-box markers half-filled (grayscale); Fig. 7(j) line styles; Fig. C1 legend
+  markers/linestyles match panels; Fig. 4(b) and Fig. 2(b) y-label padding; Fig. 5 pooling and ylim.
+- **Lead paragraph** 146 words; abstract 205 words. **Acknowledgments** section added (placeholder).

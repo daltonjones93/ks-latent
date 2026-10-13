@@ -69,13 +69,15 @@ PANELS = [
                                                     "icnorm/ks2d_x1.5_normalized_seed2.json"]}.get(sf, [])),
     }),
     (r"Kolm., $\alpha=0.1$", "kolm0.1", [("1$\\times$", "1", 1), ("2$\\times$", "2", 2), ("3$\\times$", "3", 3)], {
-        "small box": lambda sf: crop(["r12_c6_a01_s1x_r3"], sf),
+        # referee 2 (A4): every small-box model at this drag (recipe C seeds 0-2, C2, C3), as at alpha = 0.05
+        "small box": lambda sf: crop(["r12_c6_a01_s1x_r3", "r12_c6_a01_s1x_r3_seed1", "r12_c6_a01_s1x_r3_seed2",
+                                      "r14_KC2_a0.1_seed0", "r14_KC3_a0.1_seed0"], sf),
         "windows": lambda sf: crop([MAIN_A01], sf),
         "full-reach box": lambda sf: plain({"1": ["c4/s233_a01_x1_m0.json"], "2": ["icnorm/s233_x2_normalized.json"],
                                             "3": ["g3_kolmogorov_alpha_transfer_section233_3x.json"]}[sf]),
     }),
     (r"Kolm., $\alpha=0.05$", "kolm0.05", [("1$\\times$", "1", 1), ("2$\\times$", "2", 2), ("3$\\times$", "3", 3)], {
-        "small box": lambda sf: crop(["r4k_c6_a005_s1x_r3", "r14_KC2_a0.05_seed0"], sf),
+        "small box": lambda sf: crop(["r4k_c6_a005_s1x_r3", "r14_KC2_a0.05_seed0", "r14_KC3_a0.05_seed0"], sf),
         "windows": lambda sf: crop(["c19_e0d0_c6"], sf),
         "full-reach box": lambda sf: plain({"1": ["c4/s231_a005_x1_m0.json"], "2": ["icnorm/s231_x2_normalized.json"],
                                             "3": []}[sf]),
@@ -109,7 +111,7 @@ for col, ((title, tsys, sizes, getters), letter) in enumerate(zip(PANELS, "abc")
     ax.set_xticklabels([s[0] for s in sizes])
     ax.set_title(title)
     ax.grid(axis="x", visible=False)
-    ax.set_ylim(-62, 22)
+    ax.set_ylim(-68, 22)
     panel_label(ax, letter)
 axes[0, 0].set_ylabel(r"signed error in $D_{\mathrm{KY}}$ (%)")
 handles = [plt.Rectangle((0, 0), 1, 1, facecolor=c, hatch=h, edgecolor="white", lw=0) for _, c, h in CATS]
@@ -123,7 +125,7 @@ SERIES = {  # alpha -> [(label, file, color, marker, linestyle)]
     0.1: [("small box", "r12_c6_a01_s1x_r3_seed0_n1000_y1.json", BLUE, "o", "-")],
     0.05: [("small box", "r4k_c6_a005_s1x_r3_seed0_n1000_y1.json", BLUE, "o", "-"),
            ("small box, $4\\times$ data", "r14_KC2_a0.05_seed0_seed0_n1000_y1.json", BLUE, "s", "--"),
-           ("windows", "k_xs005_seed0_n1000_y1.json", ORANGE, "D", "-")],
+           ("windows", "c19_e0d0_c6_seed0_n1000_y1.json", ORANGE, "D", "-")],  # main-text model (B5)
     0.025: [("windows", "k_xs0025_seed0_n1000_y1.json", ORANGE, "D", "-")],
 }
 for col, ((alpha, series), letter) in enumerate(zip(SERIES.items(), "def")):

@@ -34,15 +34,17 @@ times the training area, the three seeds give $325.5$--$329.6$, a density of
 $82.0$ per $44^2$ box, equal to the native truth's.\todo{88$^2$ truth:
 replace "equal to the native truth's" by the error against the $88^2$
 truth} The leading exponent is too high, as for every 2D model we
-trained: $0.216$ against $0.182$ at $44^2$ ($+18\%$) and $0.219$ against
-$0.196$ at $66^2$ ($+12\%$; Table~\ref{tab:lambda1}). Matching $\DKY$ with an
-excess $\lambda_1$ means the model's spectrum differs in shape: growth
-along the most unstable directions is too strong and is compensated
-further down the spectrum. The model has $40$--$42$ positive exponents at
-$44^2$ against $42$--$44$ for the truth.
+trained at the training size: $0.216$ against $0.182$ at $44^2$ ($+18\%$) and
+$0.219$ against $0.203$ at $66^2$ ($+8\%$; Table~\ref{tab:lambda1}). Matching $\DKY$
+with an excess $\lambda_1$ means the model's spectrum differs in shape: it
+has fewer but faster unstable directions, $40$--$42$ positive exponents at
+$44^2$ against $42$--$44$ for the truth, with the excess growth compensated
+further down the spectrum. The Kolmogorov small-box model at $\alpha=0.1$
+shows the same pattern more strongly, $6$--$7$ positive exponents per box
+against $7$--$8$.
 
 Two qualifications apply. First, the trivial extensive baseline does as
-well: four times the $44^2$ truth is within $2.4\%$ of the $66^2$ truth
+well: $2.25$ times the $44^2$ truth is within $2.1\%$ of the $66^2$ truth
 mean. The 2D KS truth is extensive at these sizes, so the transfer of
 $\DKY$ shows that the local rule has the right density, not more
 (Remark~\ref{rem:extensive_model}). Second, the training recipe was chosen
@@ -59,7 +61,10 @@ The window-trained model (route b) gives $83.3$ ($+1.6\%$), $188.1$
 $40\times40$ sites of a $264^2$ domain, are larger than every evaluation
 domain, so its result shows that a rule learned inside a large domain
 also runs on small periodic ones; the small-box models are the test of
-training small and running large.
+training small and running large. Window training alone does not
+guarantee it: an earlier window model with full reach and $\kmax=12$
+gives $215.9$ at $88^2$, about a third below every other model, on a
+domain smaller than its own training windows (Appendix~\ref{app:tables}).
 
 \para{The earlier box-trained models.} Our first 2D models were also
 trained on the whole $8\times8$-site box, but with a different
@@ -69,21 +74,25 @@ at $66^2$ (Fig.~\ref{fig:routes}(a)). We do not know which difference
 causes this. It is not that a propagator of reach six reads its own
 periodic image on an eight-site box: a control with that reach on the
 whole periodic box, in the current architecture, gives $83.3$ at $44^2$ and
-$182.9$ at $66^2$ ($+1.6\%$ and $-3.2\%$, one evaluation each).
+$182.9$ at $66^2$ ($+1.6\%$ and $-3.0\%$, one evaluation each).
 
 %----------------------------------------------------------------------
 \subsection{Kolmogorov flow: where the small box stops}
 \label{sec:kolm_box}
 %----------------------------------------------------------------------
 
-At the strongest drag, $\alpha=0.1$, the small-box model reproduces the
+At the strongest drag, $\alpha=0.1$, we trained five small-box models:
+recipe C with three seeds, and recipes C2 (four times the box data,
+longer rollouts) and C3 (C2 with the whole box scored at every step).
+The first seed, evaluated from three initial conditions, reproduces the
 dimension of its own box and of twice its width: $13.7$ against $14.6$
 ($-6.4\%$) at $1\times$ and $29.7$ against $30.9$ ($-3.7\%$, range $-5.4$ to
-$-1.4\%$) at $2\times$. At three times the width it is $42.4$ against $53.5$,
-$21\%$ low, from all three initial conditions ($-15$ to $-27\%$). Two further
-training seeds give $30.1$ and $23.3$ at $2\times$ from one initial condition
-($-2.4\%$ and $-24.5\%$), and recipe C2, with four times the box data and
-longer rollouts, gives $26.8$ ($-13\%$). At $\alpha=0.05$ the small-box model
+$-1.4\%$) at $2\times$. The other four models, from one initial condition
+each, give $-2.4\%$, $-24.5\%$, $-13.1\%$ and $-11.7\%$ at $2\times$: two of the
+five are within $4\%$ there, so transfer to twice the width depends on the
+seed and the recipe. At three times the width every model misses: the
+first seed by $21\%$ ($42.4$ against $53.5$; $-15$ to $-27\%$ over its three
+initial conditions), C2 and C3 by $34\%$ and $25\%$. At $\alpha=0.05$ the small-box model
 is accurate at $1\times$ ($22.3$ against the matched truth's $22.5$) and
 fails at $2\times$ ($25.4$ against $48.6$, $-48\%$); recipe C2 ($28.3$, $-42\%$
 at $2\times$; $30.3$, $-60\%$ at $3\times$) and a variant that scores the whole
@@ -102,9 +111,10 @@ condition, and its vorticity standard deviation is $1.15$--$1.23$ against
 $1.41$; at $3\times$ the share reaches $61\%$ against $22\%$, and the standard
 deviation $0.92$ against $1.43$. Its leading exponent falls to $0.070$
 against the truth's $0.111$, and it has 12 positive exponents against
-23--26. At $\alpha=0.1$ the drift appears only at $3\times$ ($26\%$ against
+23--26. At $\alpha=0.1$ the first seed drifts only at $3\times$ ($26\%$ against
 $19\%$; standard deviation $1.32$ against $1.57$), while at $1\times$ and $2\times$
-the rollout statistics match the truth's. The failure thus appears where
+its rollout statistics match the truth's; recipe C2, which misses at
+$2\times$, already drifts there ($22\%$ against $8\%$). The failure thus appears where
 the truth's own large-scale energy grows with the channel width
 (Sec.~\ref{sec:kolmogorov}): beyond $2\times$ at $\alpha=0.1$, already at $2\times$
 at $\alpha=0.05$.
@@ -120,7 +130,8 @@ three initial conditions per system; it does not separate the systems
 that transfer from those that do not, so we do not use it as a test.} How
 much energy sits beyond the box therefore does not decide transfer; what
 the local dynamics do with it may. Only gradients of $u$ enter the KS
-equation, and the gradients of the largest scales are small. In
+equation, and the gradients of the largest scales are small; we assume,
+but have not measured, that this keeps their influence local. In
 vorticity form, the velocity that advects $\omega$ at a point is set by
 the vorticity everywhere, through the Biot--Savart law, so a model that
 sees vorticity within a finite reach must infer the rest from what it
@@ -129,11 +140,11 @@ is set by vorticity farther than the model's reach of three sites. From
 $1\times$ to $2\times$ this fraction grows by half at $\alpha=0.1$ (from $0.021$
 to $0.033$), doubles at $\alpha=0.05$ ($0.021$ to $0.042$), and grows $2.7$-fold
 at $\alpha=0.025$ ($0.018$ to $0.049$; two initial conditions
-each); at $3\times$ it is $0.041$, $0.049$ and $0.054$. The
-ordering by drag matches where the small box fails, and so does the size: the small-box models
-transfer where the fraction is at most $0.033$ ($\alpha=0.1$ at $2\times$) and fail where it is
-$0.041$ or more ($\alpha=0.1$ at $3\times$, and both weaker drags), a threshold we read off after
-the fact. The fraction stays
+each); at $3\times$ it is $0.041$, $0.049$ and $0.054$. At the two drags where
+small-box models were trained, the failure is milder and later where the
+fraction is smaller, but the boundary is not sharp: at $\alpha=0.1$ and
+$2\times$, where it is $0.033$, three of five models already miss by
+$12$--$25\%$, and we trained no small-box model at $\alpha=0.025$. The fraction stays
 below $5\%$, however, and we have not shown that this missing velocity is
 what drives the drift, so we offer it as a mechanism consistent with the
 data, not as an explanation, and we have no test that predicts the
@@ -153,21 +164,30 @@ at either drag.%
 
 Trained on windows of one channel sixteen boxes wide, the same
 architecture with reach six transfers at the two stronger drags
-(Table~\ref{tab:transfer2d}): at $\alpha=0.1$ it is $+9.0\%$, $+5.9\%$ and
-$-2.6\%$ at $1\times$, $2\times$ and $3\times$, and at $\alpha=0.05$ $+7.9\%$, $-4.8\%$ and
-$-2.2\%$. Single evaluations range more widely ($-19$ to $+20\%$), as single
-truth runs do (Sec.~\ref{sec:truth_uncertainty}). The window-trained
-model also follows the truth's rise in density per box at $3\times$
-($17.4$ per box against $17.8$ at $\alpha=0.1$), which the small-box model and
-the extensive baseline cannot. At $\alpha=0.025$ it is $19\%$, $8\%$ and
+(Table~\ref{tab:transfer2d}): the error is $+9.0\%$, $+5.9\%$ and $-2.6\%$ at
+$1\times$, $2\times$ and $3\times$ at $\alpha=0.1$, and $+7.9\%$, $-4.8\%$ and $-2.2\%$ at
+$\alpha=0.05$. These models differ from the small-box ones in two ways at
+once, the training data and the propagator's reach (six sites against
+three), and models of reach one fail even on windows of the evaluation
+domain (Appendix~\ref{app:tables}). A window model with reach three,
+trained on the same data, separates the two.\todo{A2: reach-3 window model
+running; state whether the data or the reach makes the difference} Single evaluations range more widely ($-19$ to $+20\%$), as single
+truth runs do (Sec.~\ref{sec:truth_uncertainty}). The window models are
+themselves nearly extensive: their density per box rises by $9\%$ from
+$1\times$ to $3\times$ at $\alpha=0.1$ ($16.0$ to $17.4$) and $5\%$ at $\alpha=0.05$
+($23.3$ to $24.5$), against the truth's $22\%$ and $16\%$, and they match the
+truth at $3\times$ partly because they are $8$--$9\%$ high at $1\times$. Within the
+uncertainty of single truth runs they neither clearly follow nor clearly
+miss the truth's rise. At $\alpha=0.025$ it is $19\%$, $8\%$ and
 $14\%$ low, with the native size scattering from $13$ to $27$ across initial
-conditions; the weakest drag remains the hardest. Its free rollouts keep
-the large-scale share within a factor $1.4$ of the truth's at $2\times$
-($0.17$ against $0.15$ at $\alpha=0.05$; $0.38$ against $0.28$ at $\alpha=0.025$;
-Fig.~\ref{fig:routes}(e,f)).\footnote{The rollout statistics at
-$\alpha=0.05$ are of a window-trained model with $\kmax=32$ and a spectral
-regularizer; the main-text model's rollout statistics at this drag were not
-recorded.}
+conditions; the weakest drag remains the hardest, and its truths, single
+40-unit runs that we found biased high by about $9\%$ on average
+(Appendix~\ref{app:groundtruth}), may account for part of this. The window
+models' free rollouts drift less than the failing small-box models' but
+are not free of drift: at $\alpha=0.05$ the large-scale share is $0.19$, $0.25$
+and $0.20$ at $1\times$, $2\times$ and $3\times$ against the truth's $0.10$, $0.15$
+and $0.22$, with the vorticity's standard deviation within $2\%$; at
+$\alpha=0.025$ it is $0.38$ against $0.28$ at $2\times$ (Fig.~\ref{fig:routes}(e,f)).
 
 The caveat that applies to the 2D KS window model applies here with more
 force: the training windows are 48 sites wide, six boxes, larger than
@@ -176,7 +196,7 @@ wide. These models show that one set of weights serves every channel
 width, not that a model trained small runs large; that test, in
 Kolmogorov flow, is the one the small box fails beyond twice its width.
 The leading exponent is again too high at the two stronger drags
-($+18$ to $+30\%$ at $1\times$ and $2\times$, within $6\%$ at $3\times$), and too low at
+($+16$ to $+30\%$ at $1\times$ and $2\times$, within $6\%$ at $3\times$), and too low at
 $\alpha=0.025$ ($-5$ to $-18\%$; Table~\ref{tab:lambda1}).
 
 The window recipe was reached in steps that we report because they
@@ -234,8 +254,10 @@ Table~\ref{tab:truth} (Kolmogorov $\alpha=0.05$, $1\times$: mean of per-IC
 errors against matched runs), and the range of per-evaluation errors in
 brackets. ``Extensive baseline'': the native-size truth times the area
 (2D KS) or width (Kolmogorov) ratio. Small box: $8\times8$ sites ($44^2$ in 2D
-KS; $2\pi\times2\pi$ in Kolmogorov flow), propagator reach 3; at $\alpha=0.05$
-recipes C and C2 (four times the data). Windows: $40\times40$ sites of
+KS; $2\pi\times2\pi$ in Kolmogorov flow), propagator reach 3; in 2D KS recipe
+C2, three seeds (initial conditions per seed: 3+1+1 at $44^2$, 2 at $66^2$, 1 at $88^2$); in Kolmogorov flow the recipe-C model in one row and every other
+small-box model (further seeds; C2, four times the data and longer
+rollouts; C3, C2 with the whole box scored) pooled in the next. Windows: $40\times40$ sites of
 $264^2$ (2D KS) or $48$ sites of a $16\times2\pi$ channel (Kolmogorov flow),
 propagator reach 6. Without a truth (2D KS, $88^2$) the entry gives $\DKY$
 per $44^2$ box. Kolmogorov sizes are channel widths in units of $2\pi$.}
@@ -271,12 +293,12 @@ difference between the truth's two values is inside the spread of the
 individual runs ($80.7$--$83.6$ at $44^2$; $82.5$--$85.6$ per box at $66^2$),
 so the truth is consistent with extensive scaling, and so are both models,
 as Remark~\ref{rem:extensive_model} requires. In Kolmogorov flow the truth
-is not extensive (Sec.~\ref{sec:kolmogorov}). The small-box model's
-density per box is nearly flat ($13.7$, $14.9$, $14.1$ at $\alpha=0.1$) and
-falls behind the truth's rise at $3\times$; the window-trained models
-follow the truth at $\alpha=0.1$ and $0.05$ within the spread of the truths,
-and fall below the rising truth at $\alpha=0.025$ ($23.7$ per box against
-$27.6$ at $3\times$).
+is not extensive (Sec.~\ref{sec:kolmogorov}). The density per box of the
+first small-box model is nearly flat ($13.7$, $14.9$, $14.1$ at $\alpha=0.1$)
+and falls behind the truth's rise at $3\times$; the window-trained models
+rise less than the truth ($5$--$9\%$ against $16$--$22\%$) but stay within the
+spread of the truth runs at $\alpha=0.1$ and $0.05$, and fall below the
+rising truth at $\alpha=0.025$ ($23.7$ per box against $27.6$ at $3\times$).
 
 \para{Beyond the dimension.} The decoded free rollouts of the 2D KS models
 keep the field amplitude close to the truth's but do not follow the
@@ -312,17 +334,19 @@ Appendix~\ref{app:tables}.
 \includegraphics{figures/routes.pdf}
 \caption{Two training routes, and where the small box fails. (a--c)
 Signed error in $\DKY$ against domain size for models trained on a small
-periodic box with a forced halo and reach 3 (small box; at $\alpha=0.05$,
-recipes C and C2 pooled), on windows of one large simulation (windows),
+periodic box with reach 3 (small box; every small-box model pooled: in 2D
+KS recipe C2, three seeds; at $\alpha=0.1$ recipe C, three seeds, and
+recipes C2 and C3; at $\alpha=0.05$ recipes C, C2 and C3), on windows of one large simulation (windows),
 and the earlier full-reach models trained on the whole $8\times8$-site box
 (full-reach box). Bars: error of the mean over evaluations; dots: single
 evaluations; hollow bars: a single evaluation. The shaded band is $\pm20\%$.
 2D KS at $88^2$ enters once its truth exists. (d--f) Share of kinetic
 energy at $|\bm k|<2$ in the late half of 1000-step free rollouts, against
 channel width, for the PDE and the models run from the same initial
-condition; at $\alpha=0.05$ the window-trained curve is a $\kmax=32$ model
-with a spectral regularizer. Where the small-box model fails, large scales
-take two to three times their true share of the energy.}
+condition (small box: recipe C, first seed, and at $\alpha=0.05$ also C2;
+windows: the models of Table~\ref{tab:transfer2d}). Where the small-box
+model fails, large scales take $1.4$ ($\alpha=0.1$, $3\times$) to three times
+($\alpha=0.05$) their true share of the energy.}
 \label{fig:routes}
 \end{figure*}
 
@@ -334,15 +358,19 @@ directions with domain size. Rows: $\DKY$; $\DKY$ per base box ($44^2$
 for 2D KS, $2\pi\times2\pi$ for Kolmogorov flow); number of positive
 exponents $n_+$ per base box. Open markers: ground truth, with bars
 spanning the runs where several exist and a shaded $\pm15\%$ band where a
-size rests on one run (the run-to-run spread of Appendix~\ref{app:groundtruth});
-filled markers: models, with bars spanning evaluations; blue: small-box
-models (2D KS: three seeds; Kolmogorov: $\alpha=0.1$ and $0.05$). (a,c,e) 2D
+size rests on one run (the run-to-run spread of Appendix~\ref{app:groundtruth};
+single 40-unit runs are biased high on average, so the band is a lower
+bound on the downward uncertainty only); filled markers: window-trained
+models, with bars spanning evaluations; blue: small-box models (2D KS:
+three seeds, diamonds; Kolmogorov: half-filled, every small-box model at
+$\alpha=0.1$ and $0.05$). (a,c,e) 2D
 KS, where both sides of the box grow; the dashed line is extensive scaling
 from the native truth. (b,d,f) Kolmogorov flow, where the channel widens at
 fixed height; marker shape and lightness give the drag. Both densities stay
 flat in 2D KS; in Kolmogorov flow the truth's density rises with width,
-the window-trained models follow it at $\alpha=0.1$ and $0.05$, and the
-small-box models do not.}
+the window-trained models rise less but stay within the spread of the
+truths at $\alpha=0.1$ and $0.05$, and the small-box models fall well below
+it.}
 \label{fig:scaling}
 \end{figure*}
 
@@ -361,11 +389,14 @@ $3\times$ (window-trained model), vorticity 40 time units after the initial
 condition; kinetic-energy spectra at $1\times$, $2\times$, $3\times$.
 Spectra: steps $100$--$999$ of a 1000-step rollout. (j) Spatial
 correlation between model and PDE fields against time in Lyapunov times
-$t\lambda_1$ (truth $\lambda_1$ at the largest size with a truth); for
+$t\lambda_1$ (truth $\lambda_1$ at the largest size with a truth; solid: 1D
+KS, dashed: 2D KS, dotted: Kolmogorov flow); for
 Kolmogorov flow the PDE's mean vorticity profile in $y$, which is locked
 to the forcing, is removed first. In all three systems the correlation
 falls below $0.5$ after $2.3$--$2.9$ Lyapunov times while the spectra
-stay on the PDE's: the models lose the trajectory, not the statistics.
+stay close to the PDE's: the models lose the trajectory long before the
+statistics, although the 2D KS window model's field is $19\%$ more energetic
+than the PDE's at $88^2$ (visible in (e)).
 In 2D it settles at $0.15$--$0.2$, a slowly varying large-scale component
 shared over this window. The per-patch decoder leaves seams in 2D KS,
 seen as excess energy beyond $2\pi/h$.}

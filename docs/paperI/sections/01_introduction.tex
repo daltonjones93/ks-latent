@@ -35,22 +35,26 @@ trained on.
 Two things turn out to matter, and they organize the paper. First, the
 data the local rule is learned from. A rule of finite reach can be
 learned from a small periodic box, or from windows of one large
-simulation, by the same procedure: in both, the sites that border the
-scored region are overwritten with data at every step, so the training
-loss is that of a limited-area model. Trained on a small box, the rule
+simulation; on windows, the sites that border the scored region are
+overwritten with data at every step, so the training loss is that of a
+limited-area model. Trained on a small box, the rule
 transfers in the Kuramoto--Sivashinsky (KS) equation, in
-one and in two dimensions. In Kolmogorov flow it transfers only while
-the larger domain's large-scale motion stays like the box's; beyond
-that, the transferred model drifts into a state with far too much
-large-scale energy, and windows of a large simulation are needed.
+one and in two dimensions. In Kolmogorov flow it transfers to twice the
+box width at the strongest drag for some training seeds and recipes and
+not for others, and fails beyond that: the transferred model drifts into
+a state with far too much large-scale energy. Models trained on windows
+of a large simulation, which also have twice the propagator reach,
+transfer (Sec.~\ref{sec:window_fix} separates the two differences).
 Second, the propagator must stay chaotic when it runs freely: rollouts
 that are too short admit spurious regimes, and longer squared-error
-rollouts lower the dimension.
+rollouts tended to lower the dimension.
 
-We hold the models to a demanding standard: their own Lyapunov spectra,
-computed from the learned maps, compared with spectra of the true PDE at
-every domain size, with the uncertainty of the reference measured rather
-than assumed. We do this for the one-dimensional KS equation, its two-dimensional
+We hold the models to a demanding standard: their own Lyapunov
+exponents, computed from the learned maps, compared with those of the true
+PDE at every domain size, with the uncertainty of the reference measured
+rather than assumed. In one dimension we compare whole spectra; in two,
+where the true spectra are costlier, the Kaplan--Yorke dimension, the
+number of positive exponents and the leading exponent. We do this for the one-dimensional KS equation, its two-dimensional
 isotropic form, and two-dimensional Kolmogorov flow with linear drag at
 three drag coefficients.
 
@@ -80,25 +84,28 @@ from one large simulation, as drawn, or be a small periodic box itself
   parameter count independent of the domain size: $76{,}000$--$135{,}000$
   parameters describe the local law once, and the same parameters run
   domains of any size.
-\item \emph{One training procedure, two routes}
-  (Sec.~\ref{sec:crop_training}): a forced halo, overwritten with data at
-  every step of a training rollout, makes the training loss that of a
-  limited-area model, whether the window is a small periodic box or a
-  piece of one large simulation.
+\item \emph{Two training routes}
+  (Sec.~\ref{sec:crop_training}): a small periodic box, or windows of one
+  large simulation. On windows a forced halo, overwritten with data at
+  every step of a training rollout, makes the training loss exactly that
+  of a limited-area model; on a periodic box it made no measurable
+  difference.
 \item \emph{Zero-shot transfer validated by Lyapunov spectra}
   (Secs.~\ref{sec:results1d} and~\ref{sec:results2d}). Trained at $L=100$,
   a 1D KS model reproduces the true $\DKY$ to within $0.2$--$1.2\%$ from
   $L=50$ to $L=400$, and its whole positive spectrum collapses onto the
   truth's. Trained on a $44^2$ periodic box, three 2D KS models are within
   $3.5\%$ of the truth at $44^2$ and $66^2$, a size never seen in training.
-  In 2D the leading exponent is $12$--$30\%$ too high, which we report
-  alongside $\DKY$.
+  In 2D the leading exponent is $8$--$36\%$ too high at the training size
+  and twice it, which we report alongside $\DKY$.
 \item \emph{Where a small box stops being enough}
-  (Sec.~\ref{sec:kolm_box}): in Kolmogorov flow the small-box model fails
-  where the truth's large-scale energy grows beyond what the box contains,
-  at three times the box width at the strongest drag and at twice it at a
-  weaker one. Trained on windows of a simulation sixteen boxes wide, the
-  same architecture is within $10\%$ at the two stronger drags.
+  (Sec.~\ref{sec:kolm_box}): in Kolmogorov flow the small-box models fail
+  at three times the box width at the strongest drag (three of five miss
+  it by $12$--$25\%$ already at twice it) and at twice it at a weaker drag, consistent with
+  the growth of the truth's large-scale energy beyond what the box
+  contains. Trained on windows of a simulation sixteen boxes wide, the
+  same architecture with twice the propagator reach is within $10\%$ at the
+  two stronger drags.
 \item \emph{What fails, and why} (Sec.~\ref{sec:failure}): softmax
   attention, short rollouts and the damping of $\DKY$ by long
   squared-error rollouts, which we connect, as a hypothesis, to the law of

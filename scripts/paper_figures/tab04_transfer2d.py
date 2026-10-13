@@ -32,10 +32,15 @@ C2 = [f"r13_C2_ks2d_s44big_k48_seed{s}" for s in (0, 1, 2)]
 ROWS = [
     ("2D KS", "small box ($44^2$), 3 seeds", C2, "ks2d", KS_SIZES),
     ("", "windows of $264^2$", ["p7b_ks2d"], "ks2d", KS_SIZES),
-    ("Kolm., $\\alpha=0.1$", "small box ($1\\times$)", ["r12_c6_a01_s1x_r3"], "kolm0.1", K_SIZES),
+    # Referee 2 (A4, 2026-10-13): every small-box model is reported, the same way at both drags -- the
+    # recipe-C model with three initial conditions, and the other seeds and recipes (C2: four times the box
+    # data and longer rollouts; C3: C2 with the whole box scored) pooled in a second row.
+    ("Kolm., $\\alpha=0.1$", "small box, recipe C, seed 0", ["r12_c6_a01_s1x_r3"], "kolm0.1", K_SIZES),
+    ("", "small box, seeds 1--2, C2, C3", ["r12_c6_a01_s1x_r3_seed1", "r12_c6_a01_s1x_r3_seed2",
+                                         "r14_KC2_a0.1_seed0", "r14_KC3_a0.1_seed0"], "kolm0.1", K_SIZES),
     ("", "windows of $16\\times$", [MAIN_A01], "kolm0.1", K_SIZES),
-    ("Kolm., $\\alpha=0.05$", "small box ($1\\times$)", ["r4k_c6_a005_s1x_r3"], "kolm0.05", K_SIZES),
-    ("", "small box, $4\\times$ data", ["r14_KC2_a0.05_seed0"], "kolm0.05", K_SIZES),
+    ("Kolm., $\\alpha=0.05$", "small box, recipe C", ["r4k_c6_a005_s1x_r3"], "kolm0.05", K_SIZES),
+    ("", "small box, C2, C3", ["r14_KC2_a0.05_seed0", "r14_KC3_a0.05_seed0"], "kolm0.05", K_SIZES),
     ("", "windows of $16\\times$", ["c19_e0d0_c6"], "kolm0.05", K_SIZES),
     ("Kolm., $\\alpha=0.025$", "windows of $16\\times$", ["k_xs0025"], "kolm0.025", K_SIZES),
 ]

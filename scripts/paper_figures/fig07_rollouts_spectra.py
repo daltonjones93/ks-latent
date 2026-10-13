@@ -159,13 +159,14 @@ inputs.append("artifacts/experiments/e1_model/spectra_overlay_1d.json")
 lam_2d = float(np.mean([r["lambda1"] for r in runs("ks2d", 1.5)]))
 lam_k = float(np.mean([r["lambda1"] for r in runs("kolm0.1", 3)]))
 corr_summary = {}
-for F, lam, col, lab, key, prof in ((F1, lam_1d, HUE["ks1d"], r"1D KS, $L=400$", "ks1d_L400", False),
-                                    (F2, lam_2d, HUE["ks2d"], r"2D KS, $88^2$", "ks2d_88", False),
-                                    (F3, lam_k, HUE["kolm"], r"Kolmogorov, $3\times$ (anomaly)", "kolm_a0.1_x3",
-                                     True)):
+# referee 2 (grayscale): the three systems also differ by line style
+for F, lam, col, lab, key, prof, ls in ((F1, lam_1d, HUE["ks1d"], r"1D KS, $L=400$", "ks1d_L400", False, "-"),
+                                        (F2, lam_2d, HUE["ks2d"], r"2D KS, $88^2$", "ks2d_88", False, "--"),
+                                        (F3, lam_k, HUE["kolm"], r"Kolmogorov, $3\times$ (anomaly)", "kolm_a0.1_x3",
+                                         True, ":")):
     r = corr(F, prof)
     tt = np.arange(len(r)) * float(F["dt_snap"]) * lam
-    j.plot(tt, r, "-", color=col, lw=1.3, label=lab)
+    j.plot(tt, r, ls=ls, color=col, lw=1.5, label=lab)
     below = np.nonzero(r < 0.5)[0]
     corr_summary[key] = {"lambda1": lam, "dt_snap": float(F["dt_snap"]),
                          "lyap_times_to_corr_0.5": float(tt[below[0]]) if len(below) else None,
