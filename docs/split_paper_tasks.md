@@ -788,4 +788,7 @@ The model, the 44²/440² results, the tilings, the Kolmogorov section and the 1
 | Day 3–4 | figures, checks, internal referee → coauthor | — |
 
 Both papers go to the coauthor together or Paper II first; Paper II cites Paper I as "submitted".
-User items outstanding: CRediT and funding statements, DOI/archive (S6.4), arXiv IDs, Paper II title.
+User items outstanding: CRediT and funding statements, DOI/archive (S6.4), arXiv IDs.
+**Titles (user, 2026-10-12): keep both current titles unchanged** (Paper I: "Local latent fields for extensive
+spatiotemporal chaos: zero-shot domain transfer validated by Lyapunov spectra"; Paper II: "Exactly local ensemble data
+assimilation in a learned latent field"). Do not propose title changes.
