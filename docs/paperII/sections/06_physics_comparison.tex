@@ -19,7 +19,8 @@ model was trained on, and its error, $0.312$ averaged over seeds 0--2
 ($0.302$--$0.324$), is fixed: it was not tuned for this section. The
 comparator is the physical-space local ensemble transform filter of
 Sec.~\ref{sec:comparator}, with the same observations and 64 members, whose forecast
-model is wrong in one of four ways (Appendix~\ref{app:da_comparator}):
+model is wrong in one of the following ways (Appendix~\ref{app:da_comparator}; a hidden field and a
+missing process follow below):
 \begin{itemize}
 \item \emph{a wrong coefficient}, $a\nabla^2u$ with $a=1.1$ or $1.25$;
 \item \emph{a spurious process}: uniform advection at speed $1$ or $2$, or a
@@ -41,52 +42,59 @@ with the state RTPS retuned with the floor on; without the floor the
 parameter spread collapsed within 30--40 cycles and the estimates stopped
 short of the truth (Appendix~\ref{app:da_comparator}). Its
 reported value is its best configuration on seed 0, confirmed on seeds
-1--2; the decision rule (a filter wins if its three-seed mean is at least
-$10\%$ lower and it is lower on every seed) was written down before the
-runs. One further pre-registered case was stopped before its latent runs: a
+1--2. The decision rule (a filter wins if its three-seed mean is at least
+$10\%$ lower and it is lower on every seed), the first four kinds of error
+and the cubic case below were written down before the runs; the wider tuning
+grid, the spread floor, the anisotropic missing process and the grouping of
+the results by kind of error came after results were in, and each of them
+favoured the physics-based filter or left it unchanged. One further pre-registered case was stopped before its latent runs: a
 missing cubic saturation, truth $u_t=\mathrm{KS}(u)-\beta u'^3$ with $u'$ the
 mean-removed field. At the pre-registered strength its one-cycle error was
 $0.055$ ($0.050$ state-dependent), and the physics-based filter without
-remedies reached $0.190$ on seed 0, a physics win in line with the crossover
-below; at no strength we tried did the state-dependent part exceed $0.06$
+remedies reached $0.190$ on seed 0, well below the latent filter's error on
+the unperturbed system ($0.31$; no latent model was trained for this truth); at no strength we tried did the state-dependent part exceed $0.06$
 (the truth stopped being chaotic first), so the process could not test the
 other side, and the anisotropic missing process below replaced it.
 
-\para{Results.} Table~\ref{tab:da_model_error} and Fig.~\ref{fig:model_error} order the cases by the
-physics-based filter's difficulty. Where the error lies in a parameter it can estimate, or in a bias it
-can remove, the physics-based filter wins, however large the error. Online estimation brings the
+\para{Results.} Table~\ref{tab:da_model_error} and Fig.~\ref{fig:model_error} give every case. Where the
+error lies in a parameter the physics-based filter can estimate, or in a bias it can remove, it wins or
+ties at every magnitude we tested (the $\nabla^2$ coefficient up to $25\%$ off, advection up to speed $2$). Online estimation brings the
 $\nabla^2$ coefficient back to $1.00$ ($0.999$--$1.003$ on every seed) from $1.1$ and from $1.25$, and the
 filter reaches $0.136$ and $0.164$, $2.3$ and $1.9$ times better than the latent filter; it brings the
 spurious advection speed back to zero ($|\hat c|<0.01$) and reaches $0.225$ at speed $1$ ($1.39$ times
 better), although that model's one-cycle error, $0.78$, is the largest of any case won. Bias correction
-removes the fixed forcing ($0.225$ at both amplitudes), and the coarse grids lose little ($0.083$ and
-$0.181$). Correcting the parameter does not close the whole gap to the true equations ($0.076$): at
+removes the fixed forcing ($0.225$ at both amplitudes). The coarse grids, whose truncation error is
+neither a parameter nor a bias, lose little ($0.083$ and $0.181$) because that error is small
+($0.000$ and $0.036$ state-dependent). Correcting the parameter does not close the whole gap to the true equations ($0.076$): at
 advection speed $2$ the estimate converges within 20 cycles, but the error stays at $0.345$, $1.11$ times
-the latent filter's, the one case of this kind the latent filter wins; we have not isolated what keeps
-it there (the inflation needed while the parameter is uncertain is one candidate).
+the latent filter's: the latent filter is $9.6\%$ lower, just short of the $10\%$ threshold, so the
+case is a tie. We have not isolated what keeps the error there (the inflation needed while the
+parameter is uncertain is one candidate).
 
 Where the error is in the form of the equations, no parameter can remove it. With the wrong damping
 order the three coefficients $a$, $b$ and $g$ are all estimated, and the filter reaches $0.226$, $0.308$
 and $0.409$ for $\gamma=5$, $6$ and $8$: the physics-based filter wins at $\gamma=5$ ($1.38$ times), ties at
-$\gamma=6$, and loses at $\gamma=8$ ($1.31$ times, where estimation does not help); bias correction does
-nothing for these state-dependent errors ($0.297$, $0.361$ and $0.440$ on seed 0).
+$\gamma=6$, and loses at $\gamma=8$ ($1.31$ times, where estimation does not help); bias correction did not help
+these state-dependent errors (seed 0: $0.297$, $0.361$ and $0.440$, slightly worse than tuning alone).
 
-\para{What decides the comparison.} The kind of error first, then its size. Every error that online
-estimation or bias correction can represent was won by the physics-based filter, except advection at
-speed 2, a narrow latent win that is a tie at equal ensemble count (below). Among errors of form, the
+\para{What decides the comparison.} The kind of error first, then its size. No error that online
+estimation or bias correction can represent was won by the latent filter: five were physics wins and
+advection at speed 2 a tie. Among errors of form, the
 \emph{state-dependent} part of the one-cycle forecast error (the residual left after subtracting the
 mean one-cycle error, which bias correction removes) orders the outcome: damping order 5, at $0.069$,
 is a physics win; order 6, at $0.123$, a tie; order 8, at $0.201$, a latent win. For errors of form, in
 this configuration, the crossover therefore lies between about $0.12$ and $0.2$ in field units, a fifth to
-a third of the observation error; the missing process below was designed to test it. This is a result for one system, one observation network, one cycle
+a third of the observation error. The missing process below was added before this band was located,
+with strengths chosen around an earlier, cruder estimate of the crossover; only its strongest level lies
+clearly above the band, so it confirms that side but does not narrow the band. This is a result for one system, one observation network, one cycle
 length, one ensemble size and one learned model, not a general constant. The latent filter's error,
 which sets the other side of the comparison, depends on all of them: it is $0.226$ with observations
-twice as dense and $0.769$ with half as dense (Sec.~\ref{sec:da_robust}). Nor is it a comparison of
-forecast errors alone: the learned model's own one-cycle error, from the encoded true state and including
-its decoder floor, is $0.19$ (Sec.~\ref{sec:da_accuracy}; dashed line in Fig.~\ref{fig:model_error}a),
+twice as many in each direction and $0.769$ with half as many (Sec.~\ref{sec:da_robust}). Nor is it a comparison of
+forecast errors alone: the learned model's own total one-cycle error (not only its state-dependent
+part), from the encoded true state and including its decoder floor, is $0.19$ (Sec.~\ref{sec:da_accuracy}; dashed line in Fig.~\ref{fig:model_error}a),
 larger than that of a physics model it ties with (damping order 6), so the outcome also depends on how
 each filter handles its model's error.
-A separate question is a truth that is not Markov in the observed field, which
+\para{A hidden field.} A separate question is a truth that is not Markov in the observed field, which
 neither filter's model can represent: an
 unobserved field $v$ with its own slow dynamics, $u_t=\mathrm{KS}(u)+\varepsilon v$,
 $v_t=-v/\tau+\kappa\nabla^2u$, $\tau=2$, whose memory (4--4.5 time units, eight to nine cycles) makes $v$ a
@@ -99,12 +107,13 @@ which the physics-based filter, given every remedy (Appendix~\ref{app:da_compara
 online (it settles at $1.12$--$1.14$ at $\varepsilon=0.1$). The physics model's
 error is therefore largely parametric, while the latent model's is structural. At $\varepsilon=0.1$
 the latent filter's error is $0.476$ ($0.465$--$0.483$) and the physics-based filter's best, with
-the $\nabla^2$ coefficient estimated online, $0.430$ ($0.423$--$0.440$), a physics win by $1.11$ times; at
+the $\nabla^2$ coefficient estimated online, $0.430$ ($0.423$--$0.440$), $9.8\%$ lower, just short of the threshold, so a tie; at
 $\varepsilon=0.2$ they are $0.628$ ($0.620$--$0.641$) and $0.599$ ($0.596$--$0.604$), a tie. Both
 filters lose ground against what the true equations achieve with $v$ unobserved ($0.405$ and
 $0.493$, the same filter carrying its own $v$); both stay well below interpolation. Memory of this
 kind limits a Markov latent model as much as a misspecified physical one, and the remedy on the
 learned side, a propagator given past states, is outside this study.
+
 \para{A missing process.} The hidden field does not test the crossover between errors of form; a missing
 process that is Markov in $u$ does. The truth adds an anisotropic gradient nonlinearity,
 $u_t=\mathrm{KS}(u)-\tfrac{\delta}{2}(u_x^2-u_y^2)$ with $\delta=0.1$, $0.2$ and $0.3$, and the
@@ -115,8 +124,8 @@ with the same recipe, and the latent filter keeps its single setting; the errors
 units. The physics-based filter was tuned over the full grid of Appendix~\ref{app:da_comparator} on seed
 0, with every remedy at its best setting, and so was a filter with the true equations, which reaches
 $0.087$, $0.087$ and $0.096$. The state-dependent one-cycle errors are $0.094$, $0.194$ and $0.323$, that is
-$0.15$, $0.31$ and $0.49$ of the observation error, so the three levels straddle the crossover found above.
-The outcome is consistent with it (Table~\ref{tab:da_model_error}, squares in
+$0.15$, $0.31$ and $0.49$ of the observation error, so the first lies below the band found above, the second inside it and
+the third above it. The outcome is consistent with the band (Table~\ref{tab:da_model_error}, squares in
 Fig.~\ref{fig:model_error}a). At $\delta=0.1$ the latent filter's error is $0.310$ ($0.300$--$0.323$) and
 the physics-based filter's $0.328$ ($0.323$--$0.334$): lower on every seed, but by $5.5\%$, a tie. At
 $\delta=0.2$ they are $0.341$ ($0.337$--$0.345$) and $0.432$ ($0.421$--$0.439$), and at $\delta=0.3$
@@ -155,7 +164,7 @@ filter's error is about four times that of a filter with the correct
 equations, so where a trustworthy model exists it should be used. The
 result is a division by the kind of error. Errors that a parameter or a
 bias can represent are best handled by the physical model with online
-estimation or bias correction, however large they are; errors in the form
+estimation or bias correction, at every magnitude we tested; errors in the form
 of the equations are not, and above a state-dependent one-cycle error of
 about a fifth to a third of the observation error the learned model was the
 better choice. That is the part of the model error that parameter
@@ -171,7 +180,9 @@ localization (mean only). Best: best configuration including online parameter
 estimation (est.) or bias correction (bc), selected on seed 0. The latent
 filter is the same in every row, $0.312$ ($0.302$--$0.324$), except for the hidden-field (hidden) and
 missing-process (missing) cases, where the latent model was trained on that system, the comparison is in
-its field units, and the latent filter's error follows the outcome. $^\ast$Seed 0 only (the tuning grid runs on seed 0; the best configuration on seeds 0--2). Outcome: a filter
+its field units, and the latent filter's error follows the outcome. The true-equations row is one
+seed (seed 0). For the hidden field the tuning-only configurations were run on seed 0 only, so no three-seed
+mean is given (Tuned: ---). $^\ast$Seed 0 only (the tuning grid runs on seed 0; the best configuration on seeds 0--2). Outcome: a filter
 wins if its three-seed mean is at least $10\%$ lower and it is lower on every seed; the factor is the
 ratio of the means.}
 \label{tab:da_model_error}

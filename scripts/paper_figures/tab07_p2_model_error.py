@@ -102,10 +102,13 @@ def pick(cfgs):
 
 
 def outcome(phys, lat):
+    # The registered rule: a filter wins if its three-seed mean is at least 10% LOWER than the other's and it is
+    # lower on every seed, i.e. winner <= 0.9 x loser. (Until 2026-10-13 this tested loser >= 1.1 x winner,
+    # a 9.1% threshold; referee report 2, M3. Advection 2 and hidden eps = 0.1 sit between the two.)
     mp, ml = np.mean(phys), np.mean(lat)
-    if mp >= 1.1 * ml and all(p > l for p, l in zip(phys, lat)):
+    if ml <= 0.9 * mp and all(p > l for p, l in zip(phys, lat)):
         return f"latent ${mp / ml:.2f}\\times$"
-    if ml >= 1.1 * mp and all(l > p for p, l in zip(phys, lat)):
+    if mp <= 0.9 * ml and all(l > p for p, l in zip(phys, lat)):
         return f"physics ${ml / mp:.2f}\\times$"
     return f"tie (${mp / ml:.2f}$)"
 
