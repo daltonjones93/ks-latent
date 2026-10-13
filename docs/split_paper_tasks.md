@@ -792,3 +792,17 @@ User items outstanding: CRediT and funding statements, DOI/archive (S6.4), arXiv
 **Titles (user, 2026-10-12): keep both current titles unchanged** (Paper I: "Local latent fields for extensive
 spatiotemporal chaos: zero-shot domain transfer validated by Lyapunov spectra"; Paper II: "Exactly local ensemble data
 assimilation in a learned latent field"). Do not propose title changes.
+
+### Z6. Load reduction and new results (2026-10-12 21:20)
+
+- **Heat (user: "It's been hot all day").** Stopped for good: D/r4e/r4f D_KY evals, α = 0.05 small-box Kolmogorov
+  evals (c = 6 3× and IC 1, c = 12 2×), C_eq 88² IC 1, the r4e and reach (r4g) queues, the R4K Kolmogorov filter.
+  **Paused (SIGSTOP; `scripts/resume_paused.sh` resumes all):** the Block Z queue (`run_z.py` and its truths, α = 0.1
+  training seed 2 and evals), α = 0.1 1× IC 0 eval, C seeds 1–2 and wrap-control 88² evals. Still running: α = 0.1 2×
+  IC 1 eval (background QoS, efficiency cores), R7 (3 × 2 threads), p7b 440² filter. Load 175 → ~40.
+- **66² results (IC 0, truth 192.50; truth mean 189.05):** C seed 1 183.6 (−4.6%); **C seed 2 169.5 (−12.0%; −10.3%
+  against the mean): fails R9a's 5% rule**; wrap control (reach 6, full periodic box) 182.9 (−5.0%), i.e. the
+  wrap-around does not break transfer at 66² either, so it is **not** the cause of the old box failure (Z3.9: no
+  causal language). With seed 0 at 183.5/187.1, the small-box 2D KS model transfers on 2 of 3 training seeds within
+  5%; seed 2 needs its 88² eval and IC 1 before the R9a call. R9a as written requires every seed; report the spread
+  honestly (one seed −12%) rather than relax the rule after the fact.
