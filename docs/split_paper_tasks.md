@@ -806,3 +806,12 @@ assimilation in a learned latent field"). Do not propose title changes.
   causal language). With seed 0 at 183.5/187.1, the small-box 2D KS model transfers on 2 of 3 training seeds within
   5%; seed 2 needs its 88² eval and IC 1 before the R9a call. R9a as written requires every seed; report the spread
   honestly (one seed −12%) rather than relax the rule after the fact.
+- **R13 `[~]` C seed-2 fix (user, 2026-10-12 21:20: "a slightly longer rollout and more training data").**
+  `scripts/run_c2.sh`, applied to **all three seeds** (not just seed 2), two recipes:
+  C2 = 144 trajectories (4× C's data) + k_max 48 (k_mid 24) + 12000 propagator steps;
+  C3 = C2 + `--periodic-full` (whole 8 × 8 box supervised: reach 3 < half the box, no self-wrap; C's forced-halo
+  windows supervise only a 2 × 2 free interior per sample, so C3 gets 16× more supervised sites per sample).
+  Read-out written before the runs: 66² IC 0 for all six models; then 44² IC 0 and 66² IC 1 for the better recipe;
+  R9a decides. Caveat for the paper: choosing a recipe on 66² uses a test-size truth; the held-out checks are 66²
+  IC 1–2 and 88² (truth pending), and C, C2 and C3 are all reported. Load-capped: serial MPS training, ≤ 2 evals at
+  3 threads. Trainings ≈ 20–30 min each (~3 h for six), each 66² eval a few hours.
