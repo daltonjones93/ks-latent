@@ -1127,3 +1127,21 @@ model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of 
   converged parameters) running; Fig. 6a, "What decides" paragraph and abstract/PLS word limits after M5.
 - Reproduction repo: planning agent mapping the minimal code (no datasets) for both papers; plan to the user before
   building (user: "make a new repo that can be shared with these papers").
+
+### Z16. Lorenz-96 positive control (user request 2026-10-13 ~16:00; design and rule fixed BEFORE results)
+
+- Why: every transfer success has strictly local physics; every small-box failure had a (suspected) nonlocal velocity
+  coupling. L96 is exactly local (4-site stencil), translation-invariant, extensive, no inverse cascade: the
+  nonlocality hypothesis predicts a pass. A pass supports it; a fail would be informative.
+- Data check: existing `lorenz96_trajectories_n256.h5` (F = 8, RK4 dt 0.01, dt_snap 0.1 = 0.17 Lyapunov times/step,
+  50+10 trajectories of 100 time units, scalar standardization 2.339/3.639) is correct. Truth Lyapunov code
+  (`scripts/eval_l96_transfer.py::true_lyapunov`, exact sparse tangent) gives at N = 40: λ1 1.70, 14 positive,
+  D_KY 27.1, Σλ = −40.000 (literature 1.67 / 13–14 / 27.1).
+- Design (`scripts/train_l96_crop.py`, the c19 recipe of the 1D KS crop script with patch = 1 site):
+  per-site (pointwise) encoder/decoder, reach 0; c = 3 channels, channel 0 = x_j (anchor), channels 1–2 learned
+  pointwise features (cheap nonlinear features for the propagator); `local_mlp` propagator, radius 3, 2 blocks
+  (reach 6 sites, covers the RK4 map to O(dt^3)), width 64; forced-halo windows of 48 sites of the N = 256 ring,
+  halo 6; k ramp 2 → 8 → 12 (2 Lyapunov times), input noise 0.10 → 0.02, 9000 steps; Stage A 4000 steps.
+  Ablation: c = 1 (identity encoder, pure local propagator on x).
+- Registered rule (as Z8/R9a): at N = 48 (1×), 96, 192, 384 model D_KY within ±10% of the truth at the same N,
+  and λ1 within ±15%; reported also: valid time (threshold 0.5 σ) in Lyapunov times, energy spectrum, std.
