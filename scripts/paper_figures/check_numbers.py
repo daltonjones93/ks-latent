@@ -52,7 +52,7 @@ EXPLAINED_BY_PAPER = {"paper1": {
     ("sections/05_results_1d.tex", "0.2325"): "axis range of Fig. 3(b), quoted in the caption",
 }, "paperII": {
     ("sections/04_system.tex", "0.0424"): "mean 2D KS truth D_KY per unit area at 44^2 (82.01/44^2; truth runs of _truths.py, Paper I Table 2)",
-    ("sections/04_system.tex", "0.0434"): "mean 2D KS truth D_KY per unit area at 66^2 (189.05/66^2; truth runs of _truths.py, Paper I Table 2)",
+    ("sections/04_system.tex", "0.0433"): "mean 2D KS truth D_KY per unit area at 66^2 (188.54/66^2, three runs incl. IC 2 = 187.51; truth runs of _truths.py)",
 }}
 EXPLAINED = EXPLAINED_BY_PAPER[PAPER]
 

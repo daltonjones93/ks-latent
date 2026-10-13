@@ -25,106 +25,107 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 
 | file | line | number | files |
 |---|---|---|---|
-| appendix/C_ground_truth.tex | 41 | 0.344 | 156 |
-| appendix/C_ground_truth.tex | 53 | 0.84 | 48 |
-| appendix/C_ground_truth.tex | 86 | 3.5 | 68 |
-| appendix/C_ground_truth.tex | 88 | 22.5 | 30 |
-| appendix/C_ground_truth.tex | 96 | 3.5 | 68 |
+| appendix/C_ground_truth.tex | 41 | 0.344 | 157 |
+| appendix/C_ground_truth.tex | 53 | 0.84 | 51 |
+| appendix/C_ground_truth.tex | 86 | 3.5 | 70 |
+| appendix/C_ground_truth.tex | 88 | 22.5 | 32 |
+| appendix/C_ground_truth.tex | 96 | 3.5 | 70 |
 | appendix/C_ground_truth.tex | 119 | 56.84 | 37 |
 | appendix/C_ground_truth.tex | 123 | 11.3 | 36 |
-| appendix/C_ground_truth.tex | 123 | 12.4 | 34 |
-| appendix/C_ground_truth.tex | 163 | 15.2 | 37 |
-| appendix/C_ground_truth.tex | 176 | 81.8 | 50 |
+| appendix/C_ground_truth.tex | 123 | 12.4 | 35 |
+| appendix/C_ground_truth.tex | 163 | 15.2 | 39 |
+| appendix/C_ground_truth.tex | 176 | 81.8 | 51 |
 | appendix/C_ground_truth.tex | 177 | 192.5 | 25 |
 | appendix/C_ground_truth.tex | 222 | 23.26 | 40 |
-| appendix/C_ground_truth.tex | 230 | 26.0 | 29 |
-| appendix/C_ground_truth.tex | 261 | 0.85 | 54 |
-| appendix/D_tables.tex | 28 | 84.7 | 34 |
+| appendix/C_ground_truth.tex | 230 | 26.0 | 30 |
+| appendix/C_ground_truth.tex | 261 | 0.85 | 59 |
+| appendix/D_tables.tex | 28 | 84.7 | 36 |
 | appendix/D_tables.tex | 29 | 188.5 | 18 |
-| appendix/D_tables.tex | 29 | 81.8 | 50 |
+| appendix/D_tables.tex | 29 | 81.8 | 51 |
 | appendix/D_tables.tex | 29 | 192.5 | 25 |
-| appendix/D_tables.tex | 30 | 83.5 | 19 |
-| appendix/D_tables.tex | 31 | 1.7 | 111 |
+| appendix/D_tables.tex | 30 | 83.5 | 20 |
+| appendix/D_tables.tex | 31 | 1.7 | 119 |
 | appendix/D_tables.tex | 39 | 0.35 | 127 |
-| appendix/D_tables.tex | 78 | 9.1 | 47 |
-| appendix/D_tables.tex | 79 | 10.0 | 1182 |
-| main.tex | 41 | 3.5 | 68 |
-| sections/01_introduction.tex | 93 | 3.5 | 68 |
-| sections/02_background.tex | 20 | 0.16 | 109 |
+| appendix/D_tables.tex | 78 | 9.1 | 48 |
+| appendix/D_tables.tex | 79 | 10.0 | 1210 |
+| main.tex | 41 | 3.5 | 70 |
+| sections/01_introduction.tex | 93 | 3.5 | 70 |
+| sections/02_background.tex | 20 | 0.16 | 111 |
 | sections/03_method.tex | 226 | 37.5 | 15 |
-| sections/03_method.tex | 236 | 16.5 | 20 |
+| sections/03_method.tex | 236 | 16.5 | 21 |
 | sections/03_method.tex | 242 | 1.26 | 34 |
-| sections/03_method.tex | 368 | 0.10 | 1231 |
-| sections/04_systems.tex | 55 | 0.39 | 125 |
-| sections/04_systems.tex | 63 | 22.5 | 30 |
-| sections/04_systems.tex | 66 | 0.16 | 109 |
-| sections/04_systems.tex | 66 | 22.4 | 29 |
-| sections/04_systems.tex | 92 | 0.344 | 156 |
+| sections/03_method.tex | 368 | 0.10 | 1263 |
+| sections/04_systems.tex | 55 | 0.39 | 126 |
+| sections/04_systems.tex | 63 | 22.5 | 32 |
+| sections/04_systems.tex | 66 | 0.16 | 111 |
+| sections/04_systems.tex | 66 | 22.4 | 31 |
+| sections/04_systems.tex | 92 | 0.344 | 157 |
 | sections/04_systems.tex | 102 | 192.5 | 25 |
 | sections/04_systems.tex | 111 | 3.8 | 69 |
 | sections/04_systems.tex | 113 | 0.35 | 127 |
-| sections/04_systems.tex | 113 | 0.38 | 114 |
-| sections/04_systems.tex | 114 | 0.51 | 109 |
-| sections/04_systems.tex | 159 | 0.096 | 26 |
-| sections/04_systems.tex | 159 | 0.146 | 17 |
-| sections/04_systems.tex | 159 | 0.215 | 11 |
+| sections/04_systems.tex | 113 | 0.38 | 117 |
+| sections/04_systems.tex | 114 | 0.51 | 113 |
+| sections/04_systems.tex | 159 | 0.096 | 28 |
+| sections/04_systems.tex | 159 | 0.146 | 18 |
+| sections/04_systems.tex | 159 | 0.215 | 12 |
 | sections/04_systems.tex | 160 | 0.277 | 10 |
-| sections/04_systems.tex | 232 | 0.39 | 125 |
-| sections/04_systems.tex | 233 | 0.344 | 156 |
+| sections/04_systems.tex | 232 | 0.39 | 126 |
+| sections/04_systems.tex | 233 | 0.344 | 157 |
 | sections/05_results_1d.tex | 36 | 0.222 | 18 |
 | sections/05_results_1d.tex | 36 | 0.223 | 27 |
-| sections/05_results_1d.tex | 108 | 1.10 | 108 |
+| sections/05_results_1d.tex | 108 | 1.10 | 110 |
 | sections/05_results_1d.tex | 115 | 0.002 | 24 |
 | sections/05_results_1d.tex | 115 | 0.003 | 20 |
-| sections/05_results_1d.tex | 117 | 0.20 | 237 |
-| sections/05_results_1d.tex | 121 | 3.5 | 68 |
+| sections/05_results_1d.tex | 117 | 0.20 | 242 |
+| sections/05_results_1d.tex | 121 | 3.5 | 70 |
 | sections/06_results_2d.tex | 30 | 192.5 | 25 |
 | sections/06_results_2d.tex | 81 | 30.9 | 46 |
 | sections/06_results_2d.tex | 82 | 53.5 | 21 |
-| sections/06_results_2d.tex | 87 | 22.5 | 30 |
-| sections/06_results_2d.tex | 88 | 48.6 | 21 |
-| sections/06_results_2d.tex | 101 | 1.15 | 47 |
-| sections/06_results_2d.tex | 102 | 1.41 | 26 |
+| sections/06_results_2d.tex | 87 | 22.5 | 32 |
+| sections/06_results_2d.tex | 88 | 48.6 | 22 |
+| sections/06_results_2d.tex | 101 | 1.15 | 48 |
+| sections/06_results_2d.tex | 102 | 1.41 | 28 |
 | sections/06_results_2d.tex | 103 | 0.92 | 43 |
-| sections/06_results_2d.tex | 103 | 1.43 | 20 |
-| sections/06_results_2d.tex | 106 | 1.32 | 55 |
-| sections/06_results_2d.tex | 106 | 1.57 | 24 |
+| sections/06_results_2d.tex | 103 | 1.43 | 22 |
+| sections/06_results_2d.tex | 106 | 1.32 | 56 |
+| sections/06_results_2d.tex | 106 | 1.57 | 26 |
 | sections/06_results_2d.tex | 114 | 0.35 | 127 |
-| sections/06_results_2d.tex | 114 | 0.38 | 114 |
-| sections/06_results_2d.tex | 114 | 0.51 | 109 |
+| sections/06_results_2d.tex | 114 | 0.38 | 117 |
+| sections/06_results_2d.tex | 114 | 0.51 | 113 |
+| sections/06_results_2d.tex | 118 | 2.75 | 10 |
 | sections/06_results_2d.tex | 129 | 0.021 | 18 |
 | sections/06_results_2d.tex | 130 | 0.033 | 16 |
 | sections/06_results_2d.tex | 130 | 0.021 | 18 |
-| sections/06_results_2d.tex | 155 | 17.4 | 24 |
-| sections/06_results_2d.tex | 160 | 0.17 | 52 |
-| sections/06_results_2d.tex | 160 | 0.15 | 138 |
-| sections/06_results_2d.tex | 160 | 0.38 | 114 |
-| sections/06_results_2d.tex | 160 | 0.28 | 106 |
-| sections/06_results_2d.tex | 261 | 81.8 | 50 |
-| sections/06_results_2d.tex | 263 | 84.0 | 14 |
+| sections/06_results_2d.tex | 155 | 17.4 | 25 |
+| sections/06_results_2d.tex | 160 | 0.17 | 57 |
+| sections/06_results_2d.tex | 160 | 0.15 | 142 |
+| sections/06_results_2d.tex | 160 | 0.38 | 117 |
+| sections/06_results_2d.tex | 160 | 0.28 | 108 |
+| sections/06_results_2d.tex | 261 | 81.8 | 51 |
+| sections/06_results_2d.tex | 263 | 84.0 | 15 |
 | sections/06_results_2d.tex | 265 | 85.6 | 19 |
-| sections/06_results_2d.tex | 269 | 14.9 | 17 |
+| sections/06_results_2d.tex | 269 | 14.9 | 19 |
 | sections/06_results_2d.tex | 272 | 23.7 | 23 |
 | sections/06_results_2d.tex | 279 | 0.35 | 127 |
-| sections/06_results_2d.tex | 280 | 0.38 | 114 |
-| sections/06_results_2d.tex | 280 | 0.46 | 108 |
-| sections/06_results_2d.tex | 280 | 0.51 | 109 |
-| sections/06_results_2d.tex | 281 | 1.12 | 32 |
-| sections/06_results_2d.tex | 281 | 0.95 | 242 |
-| sections/06_results_2d.tex | 282 | 0.87 | 53 |
+| sections/06_results_2d.tex | 280 | 0.38 | 117 |
+| sections/06_results_2d.tex | 280 | 0.46 | 110 |
+| sections/06_results_2d.tex | 280 | 0.51 | 113 |
+| sections/06_results_2d.tex | 281 | 1.12 | 33 |
+| sections/06_results_2d.tex | 281 | 0.95 | 246 |
+| sections/06_results_2d.tex | 282 | 0.87 | 59 |
 | sections/06_results_2d.tex | 282 | 0.92 | 43 |
-| sections/06_results_2d.tex | 283 | 0.49 | 93 |
-| sections/06_results_2d.tex | 283 | 0.45 | 94 |
-| sections/06_results_2d.tex | 283 | 0.42 | 140 |
+| sections/06_results_2d.tex | 283 | 0.49 | 96 |
+| sections/06_results_2d.tex | 283 | 0.45 | 96 |
+| sections/06_results_2d.tex | 283 | 0.42 | 145 |
 | sections/06_results_2d.tex | 288 | 3.8 | 69 |
-| sections/06_results_2d.tex | 296 | 1.7 | 111 |
-| sections/06_results_2d.tex | 363 | 0.15 | 138 |
-| sections/07_failure_modes.tex | 68 | 1.40 | 37 |
-| sections/07_failure_modes.tex | 116 | 8.8 | 28 |
-| sections/08_discussion.tex | 62 | 21.4 | 23 |
-| sections/08_discussion.tex | 63 | 22.5 | 30 |
-| sections/09_conclusions.tex | 14 | 3.5 | 68 |
-| sections/09_conclusions.tex | 15 | 2.25 | 23 |
+| sections/06_results_2d.tex | 296 | 1.7 | 119 |
+| sections/06_results_2d.tex | 363 | 0.15 | 142 |
+| sections/07_failure_modes.tex | 68 | 1.40 | 39 |
+| sections/07_failure_modes.tex | 116 | 8.8 | 29 |
+| sections/08_discussion.tex | 62 | 21.4 | 25 |
+| sections/08_discussion.tex | 63 | 22.5 | 32 |
+| sections/09_conclusions.tex | 14 | 3.5 | 70 |
+| sections/09_conclusions.tex | 15 | 2.25 | 27 |
 
 ## Matched (SOURCE, n < 10 files)
 
@@ -132,20 +133,20 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 |---|---|---|---|---|
 | appendix/A_architecture.tex | 45 | 1.528 | 4 | artifacts/experiments/a10_selection/decision.json, artifacts/experiments/a10_selection/training_reference.json |
 | appendix/A_architecture.tex | 45 | 0.599 | 4 | artifacts/experiments/a10_selection/decision.json, artifacts/experiments/a10_selection/training_reference.json |
-| appendix/C_ground_truth.tex | 88 | 5.26 | 2 | artifacts/experiments/da2d/h9_R4_r4d_ks2d_s44_r3_c12d10_L440_T4.json, artifacts/experiments/spectra/ks2d_x1.5.json |
+| appendix/C_ground_truth.tex | 88 | 5.26 | 3 | artifacts/experiments/da2d/h9_R4_r4d_ks2d_s44_r3_c12d10_L440_T4.json, artifacts/experiments/rollout_stats/r16_KM_a0.1_seed0_seed0_n1000_y1.json |
 | appendix/C_ground_truth.tex | 119 | 38.68 | 4 | artifacts/experiments/crop/truth_a005_x2_seed1.json, artifacts/experiments/crop/truth_a0p05_x2_seed1_T120.json |
-| appendix/C_ground_truth.tex | 120 | 53.89 | 6 | artifacts/experiments/crop/truth_a005_x2_seed2.json, artifacts/experiments/crop/truth_a0p05_x2_seed2_T120.json |
+| appendix/C_ground_truth.tex | 120 | 53.89 | 7 | artifacts/experiments/crop/truth_a005_x2_seed2.json, artifacts/experiments/crop/truth_a0p05_x2_seed2_T120.json |
 | appendix/C_ground_truth.tex | 220 | 44.62 | 4 | artifacts/experiments/da2d/h9_K1u_L44_T1_N128.json, artifacts/experiments/da2d/i11_J17G_d0.2_pde_c8.25_rtps0.8_bc_q0_s0.json |
 | appendix/C_ground_truth.tex | 221 | 83.51 | 2 | artifacts/experiments/lyap_dtype_control.json, artifacts/experiments/rollout_stats/r13_C2_ks2d_s44big_k48_seed0_ks2d_n1000.json |
 | appendix/C_ground_truth.tex | 221 | 83.76 | 4 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r4c_ks2d_s44_r3_seed2_x1.0_seed0.json |
 | appendix/C_ground_truth.tex | 222 | 22.75 | 6 | artifacts/da_pff_ltransfer_d2_pff_L200_gc_N64_sp6.25.json, artifacts/experiments/da2d/da2d_C_L220_local_N64_s0.json |
 | appendix/D_tables.tex | 30 | 190.4 | 5 | artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens256.json, artifacts/experiments/appendix_D_evaluations.csv |
-| sections/04_systems.tex | 67 | 5.26 | 2 | artifacts/experiments/da2d/h9_R4_r4d_ks2d_s44_r3_c12d10_L440_T4.json, artifacts/experiments/spectra/ks2d_x1.5.json |
+| sections/04_systems.tex | 67 | 5.26 | 3 | artifacts/experiments/da2d/h9_R4_r4d_ks2d_s44_r3_c12d10_L440_T4.json, artifacts/experiments/rollout_stats/r16_KM_a0.1_seed0_seed0_n1000_y1.json |
 | sections/04_systems.tex | 67 | 0.049 | 4 | artifacts/experiments/da2d/h9_L220_I89_T4.json, artifacts/experiments/da2d/i11_I28W_adv2_rtps0.9.json |
 | sections/04_systems.tex | 67 | 5.20 | 8 | artifacts/experiments/a2_1x_rescoring_full.json, artifacts/experiments/da2d/cost_summary.json |
-| sections/04_systems.tex | 67 | 0.043 | 6 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
+| sections/04_systems.tex | 67 | 0.043 | 7 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
 | sections/04_systems.tex | 68 | 0.048 | 5 | artifacts/experiments/da2d/h9_L44_I89_T4_st16.json, artifacts/experiments/da2d/i11_I28W_frc0.2_rtps0.json |
-| sections/04_systems.tex | 102 | 189.0 | 4 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r12_c6_a01_s1x_r3_x1_seed2.json |
+| sections/04_systems.tex | 102 | 189.0 | 5 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r12_c6_a01_s1x_r3_x1_seed2.json |
 | sections/04_systems.tex | 160 | 0.144 | 9 | artifacts/da_pff_ltransfer_d1_pff_L200_none_nens8.json, artifacts/experiments/appendix_D_evaluations.csv |
 | sections/05_results_1d.tex | 75 | 0.2125 | 1 | artifacts/experiments/da2d/i11_J17H_p5_c16_rtps0.5_s0.json |
 | sections/05_results_1d.tex | 75 | 0.2325 | 2 | artifacts/experiments/da2d/i11_J17G_d0.1_pde_c8.25_rtps0.3_s0.json, artifacts/experiments/da2d/i11_J17G_d0.1_true_c16_rtps0.7_s0.json |
@@ -153,7 +154,6 @@ Caveat: a decimal such as 2.3 matches something somewhere by chance, so TABLE/SO
 | sections/05_results_1d.tex | 95 | 0.2218 | 3 | artifacts/experiments/da2d/j16_model_error_mcub_scan_0.0044.json, artifacts/experiments/e1_model/e4_seed1_L200_ic0_normalized.json |
 | sections/05_results_1d.tex | 95 | 0.2206 | 5 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r4c_ks2d_s44_r3_x1.5_seed1.json |
 | sections/05_results_1d.tex | 102 | 0.0013 | 7 | artifacts/experiments/da2d/jacobian_timing_F4.json, artifacts/experiments/e1_groundtruth_lyapunov_L25.json |
-| sections/06_results_2d.tex | 29 | 189.0 | 4 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r12_c6_a01_s1x_r3_x1_seed2.json |
-| sections/06_results_2d.tex | 118 | 2.75 | 9 | artifacts/da_pff_ltransfer_d1_letkf_L400_gaspari_cohn_nens128.json, artifacts/e3_sec_vs_gc_ltransfer_d3_L200_pff_sec_N256.json |
+| sections/06_results_2d.tex | 29 | 189.0 | 5 | artifacts/experiments/appendix_D_evaluations.csv, artifacts/experiments/crop/r12_c6_a01_s1x_r3_x1_seed2.json |
 | sections/06_results_2d.tex | 131 | 0.049 | 4 | artifacts/experiments/da2d/h9_L220_I89_T4.json, artifacts/experiments/da2d/i11_I28W_adv2_rtps0.9.json |
-| sections/08_discussion.tex | 81 | 0.043 | 6 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |
+| sections/08_discussion.tex | 81 | 0.043 | 7 | artifacts/experiments/a10_selection/k_xs01.json, artifacts/experiments/da2d/h9_L44_I89_T4_st16.json |

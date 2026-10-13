@@ -60,9 +60,9 @@ domain whose sides are multiples of $h$, with $\dlat$ growing in
 proportion to the area; this is how one model is deployed below on
 domains from $44^2$ to $440^2$.
 
-\para{Training on windows.} The model is trained on random windows of one
-large periodic simulation, not on a small periodic box, so that no
-training sample contains a whole periodic direction. For the 2D KS model
+\para{Training on windows.} Paper~I trains either on a small periodic box or on
+random windows of one large periodic simulation; the models of this paper use
+windows, the route that also serves Kolmogorov flow (Paper~I, Sec.~VI\,C). For the 2D KS model
 of this paper the windows are $40\times40$ sites ($220^2$) of one
 $264^2$ simulation (Sec.~\ref{sec:ks2d}); the assimilation experiments
 run up to $440^2$, larger than the training simulation itself. The autoencoder is

@@ -223,3 +223,25 @@ and the P7 sentence "same observations and ensemble resources" is left for R6.
    learned correction, not run here), §2.4 and §11 (limitation). Table 1 gains a Penny et al. row (latent DA:
    hidden state of a recurrent network; localized; no other sizes; compared with the true model only).
 Also: App. A "(decisions log, D4)" removed (minor 22). Abstract kept at 250 words (math counted as one word).
+
+## P2-3 cross-paper consistency pass (2026-10-13)
+
+Aligned Paper II with Paper I's rewritten text (Z11–Z14 framing):
+- Intro (01): Paper I's 2D KS transfer now "small periodic box or windows … within 3.5% at 44² and 66², and
+  Kolmogorov flow needs the window route" (was "trained on windows … 0.6–2%").
+- Background (02): Kolmogorov transfer qualified "when trained on windows of a larger simulation".
+- Method (03): "Training on windows" no longer says windows are used "not on a small periodic box, so that no training
+  sample contains a whole periodic direction" (Paper I now shows the small box works for 2D KS); says Paper I trains on
+  either and this paper uses windows, the route that also serves Kolmogorov flow (Paper I, Sec. VI C).
+- Kolmogorov (10): Paper I section reference Sec. 4 → Sec. IV C (Paper I numbers sections in Roman).
+- System (04) and App. C: third 66² truth run (IC 2, 187.5) added: three runs 185.6/187.5/192.5, mean 188.5 (was two,
+  189.0); density 0.0433 (was 0.0434), 44²–66² difference 2.2% (was 2.5%); spread "about ±2%"; the model's 188.5 is
+  "inside the range of the three". λ1 truth range at 66² becomes 0.189–0.217, so the model's 0.217 is at the top of
+  it (text no longer says it exceeds the truth at both sizes). Paper I's window model numbers updated to its current
+  table (+1.6%, −0.5%).
+- Regenerated tables via tabC_truth.py and tabV_model_validation.py (PAPER_OUT/PAPER_TABLES → docs/paperII):
+  truth_runs (+66² IC 2, +α = 0.1 1× ICs 1–2 at T120), running_ks2d (+66² IC 2), model_validation (λ1 range).
+- check_numbers.py: EXPLAINED entry for the 66² density moved from 0.0434 to 0.0433.
+- Checked unchanged: companion citations and titles in both refs.bib, shared macros, Prop. 1/2 numbering, Table III
+  (truth) reference, Paper I's statements about Paper II.
+- Not touched: §6, model_error table/figure (main session).

@@ -41,9 +41,9 @@ dynamics of the time-stepper, over 40-unit windows (about 7 Lyapunov
 times) after a spin-up of 200 time units (protocol in
 Appendix~\ref{app:groundtruth} and Paper~I). At $44^2$ three independent
 runs give $\DKY=80.7$, $81.8$ and $83.6$ (mean $82.0$), with $42$--$44$ positive
-exponents and $\lambda_1=0.165$--$0.194$; at $66^2$ two runs give $185.6$ and
-$192.5$ (mean $189.0$), with $93$--$101$ positive exponents. The densities,
-$0.0424$ and $0.0434$ per unit area, differ by $2.5\%$, inside the spread of
+exponents and $\lambda_1=0.165$--$0.194$; at $66^2$ three runs give $185.6$, $187.5$ and
+$192.5$ (mean $188.5$), with $93$--$101$ positive exponents. The densities,
+$0.0424$ and $0.0433$ per unit area, differ by $2.2\%$, inside the spread of
 the individual runs, and the running estimates still move by $3$--$5\%$ over
 the last 20 time units, so we treat the truths as uncertain at the level
 of a few percent. Larger domains are beyond a full Lyapunov computation
@@ -83,16 +83,16 @@ Table~\ref{tab:model_validation} compares the model with the truth.
 Its Kaplan--Yorke dimension is $84.7$ at $44^2$ and $188.5$ at $66^2$, $3.6\%$ above
 and $2.1\%$ below the truth run from the same initial condition; at $44^2$ it
 lies just above the range of the three truth runs, at $66^2$ inside the
-range of the two. Its number of positive exponents, $43$ and $94$, is inside
-the truth's range at both sizes. Its leading exponent, $0.221$ and $0.217$, is
-larger than the truth's ($0.165$--$0.194$ and $0.189$--$0.204$): errors grow
-somewhat faster in the model than in the PDE. In free rollouts of 1000 steps
+range of the three. Its number of positive exponents, $43$ and $94$, is inside
+the truth's range at both sizes. Its leading exponent, $0.221$ at $44^2$, is
+larger than the truth's ($0.165$--$0.194$), and $0.217$ at $66^2$ is at the top of the
+truth's range ($0.189$--$0.217$): errors grow somewhat faster in the model than in the PDE. In free rollouts of 1000 steps
 its field standard deviation is $5$--$7\%$ above the truth's from the same
 initial conditions, and it carries slightly too much energy at the
 smallest scales. A clean-trained model with the same recipe is as close to
 the truth; Sec.~\ref{sec:da_noisy} compares the two as filters. Scored the
 same way, the 6-channel model of Paper~I is within $1.7\%$ and $2.4\%$ at the
-same two sizes (Paper~I reports $2.0\%$ and $0.6\%$ as means over initial
+same two sizes (Paper~I reports $+1.6\%$ and $-0.5\%$ as means over initial
 conditions against the mean truths).
 
 \begin{table*}[htbp]
