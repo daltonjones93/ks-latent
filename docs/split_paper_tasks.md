@@ -1152,7 +1152,7 @@ model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of 
   | c1 | 48 / 96 / 192 | 31.1 (−3.3%) / 62.8 (−3.9%) / 125.0 (−4.3%) | 1.55 (−7.5%) / 1.70 (−3.0%) / 1.70 (−7.6%) | 3.0 / 2.8 / 3.0 |
   | p4c3 | 48 / 96 / 192 | 5.4 / 11.7 / 27.5 (truth 32.2 / 65.3 / 130.6) | — | 0.9 |
   | p3c2 | 48 / 96 / 192 | 0.0 / 5.6 / 12.9 | — | 0.3–0.4 |
-  Reading: the registered rule is met by c1 at N = 48, 96, 192 and by c3 at 48, 96 (c3 at 192 pending). Genuine
+  Reading: the registered rule is met by c1 at N = 48, 96, 192 and by c3 at 48, 96 (c3 at 192: D_KY 131.0 vs 130.6, +0.3%; λ1 1.88 vs 1.84, +2.4%; 64 positive exponents both; valid 3.2 LT). Genuine
   compression fails: per-patch reconstruction RMSE 0.29σ (4 sites → 3 channels) and 0.40σ (3 → 2), dynamics collapse.
   L96 needs ~0.68 degrees of freedom per site (D_KY/N), so it is nearly incompressible, as RESULTS.md's L96 section
   found for global latents. Z16 is a positive control for LOCALITY AND TRANSFER, not for reduction (user, 16:00: latent
