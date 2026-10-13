@@ -1157,3 +1157,21 @@ model failing at 3×. Paper I unchanged (Z11): memory can go in one sentence of 
   L96 needs ~0.68 degrees of freedom per site (D_KY/N), so it is nearly incompressible, as RESULTS.md's L96 section
   found for global latents. Z16 is a positive control for LOCALITY AND TRANSFER, not for reduction (user, 16:00: latent
   as large as the state "defeats the purpose" for compression; agreed).
+
+### Z17. L96 physics-vs-learned filter under model error (user: "try 3 but keep it for future work", 2026-10-13 ~17:00)
+
+- `scripts/exp_l96_da.py` (rule fixed in its docstring before the run; ~3 min, `artifacts/experiments/l96/da_main.json`,
+  log `artifacts/logs/l96_da.log`). N = 40, F = 8, all sites observed, σ_obs = 1.0 (0.27 std), 20 members, local ETKF;
+  tuned (inflation × radius) on seed 0, scored on seeds 1–3 (300 cycles). Learned filter = Z16 `l96_crop_c1`.
+- Perfect-model LETKF 0.308; learned 0.373 (one-cycle error 0.098 σ_obs).
+- Parametric errors (F 8.5/9/10, advection a 1.1/1.25): fixed physics 0.38–0.64; with online estimation 0.299–0.303
+  (θ recovered, post-remedy error ≤ 0.009 σ_obs) → physics wins by 19–20% in all five (as Paper II §6).
+- Structural error (extra g x_i x_{i+2} term, F and a estimated, cannot be absorbed): post-remedy one-cycle error /
+  physics RMSE / outcome: g 0.02: 0.030 / 0.330 / physics; 0.05: 0.067 / 0.393 / tie (5% worse); 0.1: 0.137 / 0.483 /
+  learned (−23%); 0.2: 0.278 / 0.634 / learned; 0.4: 0.704 / 0.926 / learned. Estimation does not help here and at
+  g = 0.4 hurts (parameters drift).
+- Reading: ordering reproduces; crossover at 0.07–0.14 σ_obs, i.e. about the learned model's OWN one-cycle error
+  (0.098), not at a fixed ¼–⅓ of σ_obs. Paper II's learned model had 0.19 and its crossover sat at 0.26–0.30, so
+  "crossover ≈ 1–1.5× the learned model's own one-cycle error" fits both; the fixed fraction does not transfer. This is
+  descriptive (two systems, one learned model each, post hoc). Kept as future work; NOT in the papers. If used,
+  Paper II should phrase the crossover relative to the learned model's own error.
