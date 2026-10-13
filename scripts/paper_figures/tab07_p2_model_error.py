@@ -44,7 +44,8 @@ def seeds(tags):
 
 def j17(prefix, sub):  # J17H/J17B configs: {name: [s0, s1, s2]} from the file names
     out = {}
-    for f in glob.glob(str(D / f"i11_{prefix}_*_s0.json")):
+    # R7/R7b (2026-10-13): the same configurations rerun with parameter inflation, files i11_R7_<base>_pf.._r.._s<k>
+    for f in glob.glob(str(D / f"i11_{prefix}_*_s0.json")) + glob.glob(str(D / f"i11_R7_{prefix}_*_s0.json")):
         base = f.split("i11_")[1][:-8]
         if not re.search(sub, base):
             continue
@@ -124,6 +125,10 @@ for lab, oc, tuned, rem in CASES:
         allc = j17(tuned, ".")
         tuned = {k: v for k, v in allc.items() if not re.search("abg|bc", k)}
         rem = {k: v for k, v in allc.items() if re.search("abg|bc", k)}
+    elif any(k.startswith("est") for k in rem):  # J16a estimation rows: add the R7/R7b parameter-inflation reruns
+        for f in glob.glob(str(D / f"i11_R7_J16a_{oc}_*_s0.json")):
+            base = f.split("i11_")[1][:-8]
+            rem[f"est. {base}"] = [f"{base}_s{k}" for k in range(3)]
     one = "---"
     stdp = None
     if oc:
@@ -135,7 +140,8 @@ for lab, oc, tuned, rem in CASES:
         one = "$0$ / $0$"; stdp = 0.0
     t, tf = pick(tuned)
     b, bf = pick({**tuned, **rem})
-    rname = "---" if b is None or b[0] in tuned else remedy_name(b[0]) if b[0].startswith("J17") else b[0].strip()
+    rname = ("---" if b is None or b[0] in tuned else remedy_name(b[0]) if b[0].startswith(("J17", "R7_J17"))
+             else "est." if b[0].startswith("est") else b[0].strip())
     out = outcome(b[1], LAT) if b else "---"
     if lab == "true equations":
         out = "floor"
