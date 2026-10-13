@@ -1025,3 +1025,13 @@ propagator writes, does the small-box model stop piling energy into large scales
   channels in and out, zero memory at encode), the warm-up in training and in `exp_rollout_stats_kolmogorov.py`, and
   tests (m = 0 reproduces KC2 exactly; locality/equivariance of the extended map; option (i) exactness on windows).
   About 4–6 h of code and tests, 25 min training, 1 h rollout statistics. Low priority, after the R15 runs.
+
+### Z11. Paper I direction (user, 2026-10-13 ~11:00)
+
+α = 0.1 small box fails at 3× (r12: IC 0 −30%, IC 2 −16%; training seed 2 at 2× −26%; KC2 at 2× −15%), so it does
+not pass R9a. Paper I: small-box training transfers for 1D and 2D KS (C2); Kolmogorov uses the window-trained models
+(`k_xs01`, `k_xs005`, `k_xs0025`) at all three drags, train once, run at every size; the small-box failure is reported
+with its mechanism (spurious large-scale energy; vorticity's nonlocal velocity). User view: Paper I largely settled;
+Z10a (memory channels, now Tier 1) unlikely to change it, but it runs and would be included if it works. Next for
+Paper I: training seeds for the window-trained Kolmogorov models (referee M3), the 88² truth, the reach test and box
+checks for the mechanism paragraph.
