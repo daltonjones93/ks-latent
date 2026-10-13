@@ -656,3 +656,120 @@ data (R4).
 
 Phases 2 and 3 are independent and can be interleaved; Paper I can be finished and posted (S0.4)
 while J17G runs.
+
+---
+
+## Block Z — Where we are and the minimum viable path to both papers (written 2026-10-12 20:45)
+
+This block supersedes the planning parts of R4–R12 where they conflict. Numbers are D_KY (Lyapunov dimension)
+unless marked as filter error (analysis RMSE in units of the field std, 3 decimals).
+
+### Z1. What we learned on 2026-10-12
+
+1. **2D KS, small box works for dynamics.** Model C (c = 6, reach 3, trained on 44² boxes) gives D_KY 81.4–83.8 at
+   44² over 3 training seeds (truth 81.8), 183.1–187.1 at 66² (truth mean 189.0; −4 to −5% against the one 66² IC
+   truth 192.5) and 323.8–329.0 at 88² (extensive prediction ≈ 333; no truth). Paper I's window-trained model:
+   83.6 / 187.9 / 333.3. This is the real upscaling test Paper I's referee asked for (Paper I M1).
+2. **Wrap control.** Reach 6 on the full periodic 44² box (wraps onto itself) still gives 83.3 at 44²; its 66²
+   eval is pending. The old box failure is therefore *not yet* explained by the wrap-around; treat it as a
+   recipe difference with no isolated cause unless the 66² eval fails.
+3. **Small-box models do not filter well, and do not transfer as filters.** At 44²: C 0.599, D (c = 12, noisy)
+   0.395–0.408, D on 4× more data 0.393, D with reach 5 on a 66² box 0.405–0.418; Paper II model 0.324. At 440²:
+   C 0.813, D 1.104 (interpolation 0.819). Data and reach are ruled out as causes of the 44² gap. **Paper II keeps
+   its model.** (p7b 440² control in the same setup is running; needed only for an optional paragraph.)
+4. **Kolmogorov, small box.** α = 0.05: D_KY 22.3 at 1× (−0.9%) but 25.4 at 2× (truth 46.6, −45%). Diagnosis:
+   at 2× the model drifts into a spurious large-scale state (|k| < 2 energy share 0.420 vs truth 0.146, lower
+   forcing-scale activity and λ₁), not a lack of large scales. α = 0.1: the 2× rollout matches the truth
+   (|k| < 2 share 0.093 vs 0.081; std 1.534 vs 1.518; forcing-scale share 0.628 vs 0.584); D_KY pending. If α = 0.1
+   transfers, Paper I gets a small-box story in all three systems plus a *diagnosed* failure at weak drag.
+   c = 12 noisy α = 0.05 model at 1×: 24.8 (+10.5%), worse than c = 6.
+5. **Paper II ensemble budget (R6, done).** Latent filter at 4 tilings × 16 members (64 states, = physics filter's
+   64), J17G, 3 seeds: δ = 0.1 0.332 (physics 0.328: tie); δ = 0.2 0.355 (0.433: latent 1.22×); δ = 0.3 0.395
+   (0.485: 1.23×). At 4 × 64 the ratios were 1.27× / 1.29×. The latent advantage survives equal budget.
+6. **Paper II parameter estimation (R7, partial).** A spread floor of 0.02 un-sticks the estimate (∇² case:
+   1.25 → ≈ 1.0, previously stuck at 1.17) and, with state RTPS 0.6, the physics filter error falls from 0.423 to
+   ≈ 0.16–0.17 at cycle 70. Expect: with working estimation, the physics filter *wins* the parameter-error cases; the
+   latent filter's advantage is confined to missing-process (structural) error, where no parameter can fix the
+   physics model. Paper II's model-error narrative must be rewritten around that split.
+7. **Machine load.** Load average ≈ 177 on 18 cores: the D_KY evals each start one thread per core. Everything
+   launched from now on sets `OMP_NUM_THREADS` (2–4).
+
+### Z2. Running now, and why
+
+| Job | Why | Expected |
+|---|---|---|
+| α = 0.1 small-box D_KY at 2× (IC 1, truth 31.5), 1×; then 3× (IC 1) | decides Paper I's Kolmogorov small-box story | 2×: overnight; 3×: tomorrow |
+| α = 0.1 rollout statistics at 3× | early read on 3× before D_KY | tonight |
+| C seeds 1–2 and wrap control at 66², then 88² | Paper I: ≥3 training seeds at every size; wrap control's meaning (Z1.2) | tonight–tomorrow |
+| R7 parameter-inflation reruns (24 seed-0, then 12 more) | Paper II referee: estimation stall | tomorrow morning |
+| p7b at 440² (R4 DA lane) | optional Paper II paragraph (Z4, optional) | tonight |
+| r4f D_KY, then r4g (77², reach 6) | closes the reach question for Paper II | low priority; can be stopped |
+| c = 12 α = 0.05 Kolmogorov evals; α = 0.05 c = 6 3× (paused, pid 20213); c = 6 IC-1 1× | R9a contingency / confirmation | low priority; stop if cores are needed |
+
+### Z3. Minimum viable path — Paper I (*Chaos*)
+
+**Framing (R11, "two routes, one rule").** A weight-shared local latent model transfers to larger domains when the
+propagator never reads a site that is not forced from data. Route (a), a small periodic box (1D L = 100; 2D KS 44²;
+Kolmogorov 1× at α = 0.1 if it passes); route (b), windows of a larger simulation (the existing canonical 2D models).
+State plainly that the window-trained models are evaluated on domains *smaller* than their windows (referee M1(a)),
+and that route (a) is the genuine upscaling test (M1(b)). The window-trained models stay as they are; **no full
+retraining (R10 is replaced by the list below).**
+
+*Must do — compute* (in this order; each eval with `OMP_NUM_THREADS=4`):
+1. Finish C seeds 1–2 at 66² and 88² (running). 3 training seeds × the existing ICs.
+2. More ICs for C seed 0 (M3: ≥ 3 ICs per cell; 5 if time allows) at 44² and 66², where truths exist.
+3. α = 0.1 small-box: D_KY at 1×, 2×, 3× (running); if it passes R9a, train 2 more seeds (≈ 15 min each) and
+   evaluate at 2× (and 3× if affordable).
+4. 2D KS truth at 88² (M1, ~1 day CPU). Start as soon as the load drops. If not done in time, report 88² against
+   the extensive prediction, labelled as such, next to the trivial extensive baseline (M7).
+5. Rollout statistics for the α = 0.05 failure (done) and for C at 88² (2D drift statement, M8; existing script).
+
+*Must do — analysis and writing (no new runs):*
+6. Trivial extensive baseline next to the transfer table (M7); λ₁ against truth for every 2D model (M4, from
+   existing JSONs); interval statements instead of "0.6–2%" (M3).
+7. Narrow Lemma 1 (motivating identity), Proposition 2 ("exact equivariance"), and the selection rule (one case
+   study, honest chronology) (M5, M6, M12).
+8. Kolmogorov extensivity statements made consistent (M11), using the R12 rollout spectra as the support the
+   referee asked for: weak drag → large-scale drift in the model; the truth's per-box D_KY rises with width.
+9. Box-vs-window section (M2) rewritten: the old box-trained models (different recipe) failed; the small box with
+   the canonical local recipe works; the cause of the old failure is not isolated unless the wrap control fails at
+   66². Remove causal language otherwise.
+10. Figures: concept (Fig. 1) panel for the two routes; scaling figure with the small-box points and seeds;
+    one new panel for the α = 0.05 vs α = 0.1 rollout spectra at 2×. Tables: transfer table gains the small-box rows.
+11. Learned baseline (M7): argue explicitly — the global latent model (Phase 3, D_KY 21.4 at L = 100) cannot be run
+    at another size at all, which is the comparison that matters; a physical-space local CNN is listed as future
+    work. (Optional if time: none.)
+12. Cross-checks: `check_numbers.py --paper paperI`, decisions log, fresh internal referee pass.
+
+*Deferred (not needed for submission):* α = 0.025 small box; reach sweep; k_max ablation; retraining the window
+models with seeds; Kolmogorov truths beyond what α = 0.1 needs; larger-source-box test at α = 0.05 (R12.3).
+
+**Decision point (tomorrow, when α = 0.1 2× lands):** pass R9a → Kolmogorov small-box story in Paper I (items 3, 8,
+10). Fail → small-box story for 1D and 2D KS only; Kolmogorov stays window-trained and the α = 0.05/0.1 results
+go to the discussion as a limitation.
+
+### Z4. Minimum viable path — Paper II (JAMES)
+
+The model, the 44²/440² results, the tilings, the Kolmogorov section and the 1D section stay. R8 is done.
+1. R6 text: replace "same observations and ensemble resources" with the matched-budget numbers (Z1.5). ~30 min.
+2. R7: when the reruns finish, regenerate Table/Fig. model_error (with the learned model's 0.19 marked), rewrite
+   §6's narrative: physics filter with working estimation wins parameter errors; latent filter wins structural
+   (missing-process) errors; recheck the crossover and every abstract/key-point/conclusion sentence that depends
+   on it. ~half a day.
+3. Cross-paper consistency with Paper I's new framing (R10 item 43: "windows of 264²", "D_KY within …"). ~1 h,
+   after Paper I's text settles.
+4. Optional: one paragraph on small-box models (D_KY transfers, filter does not: 0.813 / 1.104 at 440²) once the
+   p7b 440² control is in. Decide when the number is in.
+5. Final checks: build, `check_numbers.py --paper paperII`, grayscale, internal referee re-read of §6.
+
+### Z5. Order and estimate
+
+| When | Paper I | Paper II |
+|---|---|---|
+| Tonight | evals running (Z2) | R7 running; R6 text (Z4.1) |
+| Tomorrow | α = 0.1 decision; ICs + seeds evals; start 88² truth | R7 → §6 rewrite, table/figure (Z4.2) |
+| Day 2–3 | writing items 6–11 | cross-paper pass; final checks → coauthor |
+| Day 3–4 | figures, checks, internal referee → coauthor | — |
+
+Both papers go to the coauthor together or Paper II first; Paper II cites Paper I as "submitted".
+User items outstanding: CRediT and funding statements, DOI/archive (S6.4), arXiv IDs, Paper II title.
