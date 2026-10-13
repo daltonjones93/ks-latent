@@ -977,6 +977,9 @@ only), which would explain why it transfers although its large-scale share also 
 - Larger reach does not help route (a): reach must stay below half the training box (≤ 3 sites in the 1× box), and
   the box contains no scales larger than itself. It can help route (b).
 
+**R15 implemented (commit 3cd4368, `scripts/run_r15.sh`, queued 08:50, one job at a time on efficiency cores, ~2–3 h each).** `r15_KV` (`--input-fields wuv`: encoder sees ω, u, v, velocity computed once from the whole field, decoder reconstructs all three), `r15_KS` (`--w-stats 1.0`, `LargeDomainStats`: same weights run on 2× mosaics of 1× states, persistent pool, 16 no-grad + 4 grad steps, penalty on vorticity variance and forcing-band share vs 1× decoded truth; reuses KC2's Stage A, so KS vs KC2 differs only in the propagator loss; weight set from loss magnitudes, not tuned), `r15_KVS` (both; last, easy to drop). Evals: rollout statistics 1/2/3×, D_KY 2× IC 1 and 3× IC 0. Tests: `tests/unit/test_r15_kolmogorov_options.py` (7) plus 147 related tests pass; old checkpoints bitwise unchanged.
+**Prior attempts to cite (found by the R15 agent).** C9(ii) gave a box-trained propagator the exact global Biot–Savart velocity and collapsed under transfer (D_KY ≈ 3 at 2×); option 4 would have repeated it (backbone `local_mlp_2d_biotsavart`). The old `w_spectral` regularizer matched band shares at training size and was worse at 3×. Option 1 differs (velocity encoded once, then carried locally); option 2 differs (free 2× rollouts, size-independent statistics only).
+
 **Ideas for later (speculative, not queued).**
 - *Pretrain on the small box, then fine-tune on a larger domain with extra latent channels that carry large-scale
   (nonlocal) quantities, still updated only from neighbouring sites.* Stays local (finite reach), so transfer and
