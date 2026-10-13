@@ -484,6 +484,29 @@ data (R4).
   domain, whereas 2D KS interactions are local at that range. The c = 12 model (contingency in R9a) is being
   evaluated at 1× (resumed) and then 2×; the c = 6 3× eval is left running to confirm. Duplicate 3× eval started by
   the queue (pid 21667) killed.
+- **R12 `[ ]` Making the small-box paradigm work for Kolmogorov flow (user, 2026-10-12).** The α = 0.05 small-box
+  model (`r4k_c6_a005_s1x_r3`: 1× box 2π × 2π, 128², 8 × 8 sites, reach 3, c = 6, forced-halo windows in x, full
+  periodic y) gives D_KY 22.3 at 1× (−0.9%) but 25.4 at 2× (truth 46.6, −45%; 12 positive exponents vs ~22; λ₁ 0.070
+  vs 0.124 at 1×). Training does not use the wrap-around (windows with a forced halo), so the R4 wrap hypothesis does not
+  apply. **Hypothesis:** at weak drag energy reaches the largest scale the domain allows; a 2× domain has active scales
+  (wavelength 4π) that a 2π box never contains, so a model learned there cannot produce them. Supporting: the truth's
+  D_KY per box width rises with width (22.5 / 23.3 / ~25 at 1× / 2× / 3×), i.e. α = 0.05 is not fully extensive at
+  the box size. Tasks, in order:
+  1. `[ ]` **Diagnosis** (cheap): free-rollout statistics of the model and the true PDE at 1× and 2×
+     (`exp_rollout_stats_kolmogorov.py`: energy share beyond the native box, |k| < 2 share, field std; new
+     `box_period_corr_late`, the correlation of the field with itself shifted by 2π, ≈ 1 if the 2× rollout has locked
+     into copies of the box). Confirms or rules out the large-scale hypothesis.
+  2. `[ ]` **Same recipe at α = 0.1** (stronger drag, shorter largest active scale; box data and 1×/2×/3× truths
+     exist): train `r12_c6_a01_s1x_r3`, rollout statistics at 1×/2×/3×, D_KY at 2× (IC seed 1, T120 truth 31.5),
+     1×, 3×. Pass: R9a's Kolmogorov criterion. If α = 0.1 transfers and α = 0.05 does not, Paper I gains a physical
+     rule (the box must contain the largest dynamically active scale) and α = 0.05 becomes a predicted failure.
+  3. `[ ]` (decide later) **Larger source box at α = 0.05**: train on a 2× box, test at 3× (needs 2× box data; check
+     whether `kolmogorov_wide3_alpha0.05.h5` is a periodic 3× box). Tests the rule in item 2 directly.
+  4. `[~]` c = 12 noisy model (R9a contingency), already being evaluated; not expected to supply missing scales.
+  5. Low priority: more 1× data (cannot add scales larger than the box; more data did not help 2D KS DA);
+     a multiscale architecture (a coarse global field alongside the local one): out of scope for Papers I/II.
+  Script: `scripts/run_r12.sh` (items 1–2). To free cores, the c = 6 α = 0.05 3× eval (pid 20213), which cannot
+  change the R9a outcome after the 2× failure, is paused (`kill -CONT 20213` to resume).
 - **R10 `[ ]` Paper I rerun and reanalysis inventory (if R4/R4K hold; user 2026-10-12: "complete rewrite").**
   Everything in Paper I that rests on the 2D KS or Kolmogorov models, mapped from the figure/table generators and
   the sections. The 1D results (§5, Figs. 1d_transfer/1d_spectra, Table transfer1d) are unaffected: the 1D model is

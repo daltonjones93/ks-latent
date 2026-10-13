@@ -47,12 +47,18 @@ def field_stats(w: np.ndarray, Lx: float, Ly: float) -> dict:
     tot = P.sum(axis=(1, 2))
     m = np.minimum(np.arange(NX), NX - np.arange(NX))
     S = int(round(Lx / (2 * np.pi)))
+    h = T // 2
     beyond = P[:, (m >= 1) & (m < S), :].sum(axis=(1, 2)) / tot if S > 1 else np.zeros(T)
     large = (P * (K < 2)[None]).sum(axis=(1, 2)) / tot
     forc = (P * ((K >= 3) & (K <= 5))[None]).sum(axis=(1, 2)) / tot
-    h = T // 2
     ts = large[::max(1, T // 100)]
+    # R12: correlation between the field and itself shifted by one native box (2pi) in x; ~1 if the
+    # rollout has locked into a 2pi-periodic state (the larger domain behaves like copies of the box)
+    wl = w[h:] - w[h:].mean(axis=(1, 2), keepdims=True)
+    sh = np.roll(wl, NX // S, axis=1) if S > 1 else wl
+    box_corr = float((wl * sh).sum() / np.sqrt((wl ** 2).sum() * (sh ** 2).sum()))
     return {
+        "box_period_corr_late": box_corr,
         "ts_share_k_lt_2": [round(float(v), 4) for v in ts],
         "std_early": float(w[:h].std()), "std_late": float(w[h:].std()),
         "kinetic_energy_early": float(tot[:h].mean() / (NX * NY) ** 2),
