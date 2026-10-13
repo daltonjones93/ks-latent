@@ -6,17 +6,19 @@
 #       site is supervised (64 per sample) instead of the 2x2 free interior of a forced-halo window.
 # Seeds 0-2 each. Pre-registered read-out: 66^2 D_KY at IC 0 (truth 192.50) for all six models, then 44^2 IC 0 and
 # 66^2 IC 1 (185.60) for the better recipe; R9a (every seed within 5%) decides. Both recipes and all seeds are
-# reported whatever the outcome. Load-capped (machine runs hot): trainings serial on MPS, at most 2 evals at 3 threads.
+# reported whatever the outcome. Load-capped (machine runs hot): trainings serial on MPS, one eval at a time, 2 threads.
 cd "$(dirname "$0")/.."
 PY=/opt/homebrew/Caskroom/miniforge/base/envs/da_env/bin/python
 A=artifacts; L=$A/logs; CR=$A/experiments/crop
-export OMP_NUM_THREADS=3 MKL_NUM_THREADS=3 OPENBLAS_NUM_THREADS=3 VECLIB_MAXIMUM_THREADS=3
+export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2
 log() { echo "$(date '+%F %T') [R13] $*" >> $L/r4.log; }
 ev() { tag=$1; sc=$2; s=$3; t=$4; out=$CR/${tag}_x${sc}_seed$s.json; [ -f $out ] && return
   $PY scripts/exp_crop_eval_ks2d.py --ae-ckpt $A/stage1_ae_kolmogorov_crop_$tag.pt --prop-ckpt $A/stage2_prop_kolmogorov_crop_$tag.pt \
     --scale $sc --seed $s --tag ${tag}_x${sc}_seed$s --true-dky $t >> $L/crop_eval_$tag.log 2>&1
   log "eval $tag x$sc seed$s rc=$? $($PY scripts/r4_summary.py dky $out)"; }
-waitslot() { while [ $(jobs -rp | wc -l) -ge 2 ]; do sleep 30; done; }
+waitslot() { while [ $(jobs -rp | wc -l) -ge 1 ]; do sleep 30; done; }  # 21:26: one eval at a time (heat)
+# a training left running by the previous instance of this script finishes first
+while pgrep -f "train_kolmogorov_crop.py --tag r13_" > /dev/null; do sleep 60; done
 for s in 0 1 2; do for v in C2 C3; do
   tag=r13_${v}_ks2d_s44big_k48_seed$s; extra=""; [ $v = C3 ] && extra="--periodic-full"
   if [ ! -f $A/stage2_prop_kolmogorov_crop_$tag.pt ]; then log "train $tag start"

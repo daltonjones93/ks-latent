@@ -815,3 +815,6 @@ assimilation in a learned latent field"). Do not propose title changes.
   R9a decides. Caveat for the paper: choosing a recipe on 66² uses a test-size truth; the held-out checks are 66²
   IC 1–2 and 88² (truth pending), and C, C2 and C3 are all reported. Load-capped: serial MPS training, ≤ 2 evals at
   3 threads. Trainings ≈ 20–30 min each (~3 h for six), each 66² eval a few hours.
+- **Load, 21:26 (user: fan still on).** Further paused: two of R7's three lanes (R7 now runs one case at a time) and
+  the p7b 440² filter (`scripts/resume_paused.sh` resumes them too). R13 re-launched with one eval at a time at 2
+  threads. Running: α = 0.1 2× IC 1 eval (efficiency cores), one R7 run, one R13 training (GPU), later one R13 eval.
