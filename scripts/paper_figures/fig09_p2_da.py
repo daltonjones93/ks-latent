@@ -133,7 +133,7 @@ d_.plot(cyc, s4["_pc"]["blend"], color=AQUA, lw=1.0, label="error, 4 tilings")
 d_.plot(cyc, s4["_pc"]["spread_blend"], color=AQUA, lw=0.9, ls="--", label="spread, 4 tilings")
 d_.plot(cyc, s1["_pc"]["blend"], color=INK2, lw=0.9, label="error, 1 tiling")
 d_.set_xlabel("cycle"); d_.set_ylabel("RMSE / spread"); d_.set_ylim(0, 0.8)
-d_.set_title(r"$440^2$, $d = 76\,800$", fontsize=7.5, pad=8)
+d_.set_title(r"$440^2$, $d_{\mathrm{lat}} = 76\,800$", fontsize=7.5, pad=8)
 d_.legend(fontsize=6, loc="upper right"); panel_label(d_, LET["d"])
 
 # (e) equal resources

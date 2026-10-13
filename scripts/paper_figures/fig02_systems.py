@@ -112,7 +112,9 @@ b, cax = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
 b.grid(False)
 for sp in ("top", "right"):
     b.spines[sp].set_visible(True)
-im = b.pcolormesh(e2, e2, u2.T, cmap=CMAP, vmin=-VMAX, vmax=VMAX, shading="flat", rasterized=True)
+# Paper II referee report 2, M10: a diverging map loses the sign in grayscale (both ends print dark);
+# cividis has monotone lightness. Paper I's fig02_systems above keeps RdBu_r.
+im = b.pcolormesh(e2, e2, u2.T, cmap="cividis", vmin=-VMAX, vmax=VMAX, shading="flat", rasterized=True)
 b.set_aspect("equal")
 window(b, 3 * h2, 4 * h2, 40 * h2, 40 * h2, 6 * h2, 6 * h2)
 b.set_xlabel("$x$"); b.set_ylabel("$y$", labelpad=1)

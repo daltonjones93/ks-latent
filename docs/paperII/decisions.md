@@ -245,3 +245,26 @@ Aligned Paper II with Paper I's rewritten text (Z11–Z14 framing):
 - Checked unchanged: companion citations and titles in both refs.bib, shared macros, Prop. 1/2 numbering, Table III
   (truth) reference, Paper I's statements about Paper II.
 - Not touched: §6, model_error table/figure (main session).
+
+## 2026-10-13 — Internal referee report 2: minor items and grayscale (fork)
+
+- Item 17: App. A wrong-model list gains the missing process (−(δ/2)(u_x²−u_y²), (a,b,g) estimated from (1,1,1))
+  and the stopped cubic case; the R7 floor settings were already added to App. A by the main session. App. E
+  lists `run_j17g*.sh`, `run_r7.py`, `run_r7b.py`.
+- Item 20: Table 2 caption "two at 66²" → three. Item 21: free-run skill sentence now says the table gives the
+  free-run error and skill follows from it. Item 22: Eq. 7 counts D_KY; added that counting n₊ (0.022 per unit
+  area) halves the estimate to ~19, saturation (~32) lies between, so the estimate holds to a factor of two.
+- Item 23: intro now says the 3.5% is Paper I's models and gives this paper's model (+3.6%, −2.1%).
+- Item 24: Sec. 7 lists the five sizes explicitly (66² not run) and "4–5%" → "4–5.3%".
+- Item 25: Sec. 10 points to the per-site filter (Sec. da_method) on the tilings (Sec. tilings_method).
+- Item 26: forecast caption says λ₁ = 0.165 is the smallest of the three truths and that the mean would make
+  every lead in Lyapunov times ~9% larger.
+- Item 27: prior-work caption notes the wrong-model comparison is 2D KS only.
+- Items 28–29: Fig. da_2d (d) caption explains bar shading; panel (c) title uses d_lat.
+- Item 32: `[draft]` kept — it is the AGU submission mode of the class (line numbers, spacing), not a stray
+  flag. Placeholders left for the user: Open Research (repository + DOI), Acknowledgments (funding, CRediT).
+- Item 33: skipped. 975 overfull boxes appear identically with and without `[draft]`, spread over every
+  paragraph (largest 109 pt): a property of the class/line numbering, not the text; AGU typesets the final.
+- M10: systems_ks2d and da_snapshot use cividis (monotone lightness, sign readable in gray); Paper I's
+  `systems` figure (same script) keeps RdBu_r. 1d_da panel (a): "global + SEC" is now a filled
+  down-triangle with a dashed line ("global, none" stays an open up-triangle, solid).

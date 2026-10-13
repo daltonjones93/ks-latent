@@ -36,7 +36,7 @@ fig, axes = plt.subplots(2, 5, figsize=(COL2, 2.75), gridspec_kw={"hspace": 0.3,
 for j, (name, fld) in enumerate(F.items()):
     err = name.startswith("error")
     for r, ax in enumerate(axes[:, j]):
-        im = ax.pcolormesh(e, e, fld.T, cmap="RdBu_r", vmin=-(EMAX if err else VMAX), vmax=EMAX if err else VMAX,
+        im = ax.pcolormesh(e, e, fld.T, cmap="cividis", vmin=-(EMAX if err else VMAX), vmax=EMAX if err else VMAX,
                            shading="flat", rasterized=True)
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         if r == 0:

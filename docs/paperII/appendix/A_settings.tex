@@ -131,7 +131,8 @@ correlation over 4 grid points) of standard deviation $0.5$ in standardized unit
 equations and its best setting ($L_{\mathrm{loc}}=24$ length units, no RTPS) it reaches $0.076$.
 
 \para{Wrong models.} Every wrong model is a modification of the forecast model only; the truth is the
-2D KS equation $u_t=-\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$ throughout, except in the hidden-field cases.
+2D KS equation $u_t=-\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$ throughout, except in the hidden-field,
+missing-process and cubic cases.
 \begin{itemize}
 \item \emph{Coefficient:} $u_t=-a\nabla^2u-\nabla^4u-\tfrac12|\nabla u|^2$, $a=1.1$ or $1.25$; the most unstable
   wavenumber moves from $1/\sqrt2$ to $\sqrt{a/2}$.
@@ -153,6 +154,13 @@ equations and its best setting ($L_{\mathrm{loc}}=24$ length units, no RTPS) it 
   seen by the learned model, which is trained on $u$ alone. The physics-based filter's model is KS
   without $v$. The reference filter with the true equations carries its own $v$, started at zero and
   updated through its ensemble covariance with the observed $u$.
+\item \emph{Missing process:} the truth is $u_t=\mathrm{KS}(u)-\tfrac{\delta}{2}(u_x^2-u_y^2)$ with $\delta=0.1$, $0.2$
+  or $0.3$; the physics-based filter's model is $u_t=-a\nabla^2u-b\nabla^4u-\tfrac g2|\nabla u|^2$ with $(a,b,g)$
+  started at $(1,1,1)$ and, with the remedy, estimated online. A latent model is trained on noisy fields
+  of each truth with the recipe of Sec.~\ref{sec:method}, and errors are in that system's field units.
+\item \emph{Cubic saturation (stopped):} the truth is $u_t=\mathrm{KS}(u)-\beta u'^3$ with $u'$ the mean-removed
+  field and the model KS; only the physics-based filter without remedies was run, on seed 0
+  (Sec.~\ref{sec:da_model_error}).
 \end{itemize}
 
 \para{Remedies.} \emph{Tuning:} RTPS $\alpha_{\mathrm R}\in\{0,0.3,0.5,0.6,0.7,0.8,0.9,1.0\}$ and

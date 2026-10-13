@@ -1,7 +1,7 @@
 {
   "figure": "da_2d",
-  "git_sha": "27d25ef1a5360c03727b093aa14509cc00c2b287",
-  "timestamp_utc": "2026-10-13T01:41:25Z",
+  "git_sha": "317866de63e1bde2dfda965c125072dd8a55f1de",
+  "timestamp_utc": "2026-10-13T18:40:43Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_D10_L220_I1_T1.json",
     "artifacts/experiments/da2d/h9_D10_L220_I1_T4.json",

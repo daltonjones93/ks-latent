@@ -64,7 +64,7 @@ fig, axes = plt.subplots(1, 3, figsize=(COL2, 2.75), sharey=True, gridspec_kw={"
 a, b, c = axes
 
 a.plot(*csv_series(ART / "da_sweep_phaseC2_global.csv", "none"), "^-", color=MUTED, mfc="white", label="global, none")
-a.plot(*csv_series(ART / "da_sweep_phaseC2_global.csv", "sec"), "^-", color=AQUA, mfc="white", label="global + SEC")
+a.plot(*csv_series(ART / "da_sweep_phaseC2_global.csv", "sec"), "v--", color=AQUA, label="global + SEC")  # M10: shape+fill+dash, not hue alone
 a.plot(*csv_series(ART / "da_sweep_phaseD3_local224.csv", "none"), "v-", color=ORANGE, label="local, none")
 a.plot(*csv_series(ART / "da_sweep_phaseD3_local224.csv", "gaspari_cohn"), "o-", color=BLUE, label="local + GC")
 a.set_title(r"$L=100$ (trained)", fontsize=8)

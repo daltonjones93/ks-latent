@@ -50,9 +50,8 @@ local ensemble transform filter of Sec.~\ref{sec:comparator} run with the
 true PDE ($0.076$ at its best localization). The run without assimilation
 has errors of $4.2$--$5.3$ ($10.1$ for one truth at $330^2$, Table~\ref{tab:da_2d_sizes}). \emph{Calibration} is the ratio of ensemble
 spread to error, $1$ for an ensemble that represents its own
-uncertainty. Free-run skill, the ratio of the free-run error to the
-analysis error, is reported in Table~\ref{tab:da_2d_sizes} for comparison
-with earlier latent filters.
+uncertainty. Table~\ref{tab:da_2d_sizes} gives the free-run error; its ratio to the analysis error,
+the free-run skill quoted for earlier latent filters, follows from the table.
 
 %----------------------------------------------------------------------
 \subsection{Shifted tilings}
@@ -115,7 +114,7 @@ Per-cycle analysis error and spread at $440^2$ ($\dlat=76\,800$ per tiling),
 four tilings, and the one-tiling error; shaded: the steady-state window.
 (d) Equal resources at $44^2$, mean and range over three seeds: a fixed total
 of 64 members split over one, two and four tilings, and four ensembles of
-64 on one tiling or on four shifted tilings. (e) Error against the number
+64 on one tiling or on four shifted tilings (aqua: shifted tilings; dark gray: a single tiling). (e) Error against the number
 of tilings, 64 members each, with spread over error printed at each point
 and for uniform weights. One model and one setting hold over a hundredfold
 area, and the gain comes from the offsets of the tilings, not from the
@@ -246,7 +245,10 @@ members per tiling at $44^2$, and $0.329$, $0.315$, $0.312$ and $0.311$ for $16$
 $220^2$ (Fig.~\ref{fig:da_2d}b): accuracy saturates by about 32 members per
 tiling at both sizes. Equation~\eqref{eq:nens_local} with the 2D KS
 density $\rho_{\mathrm{KY}}=0.043$ per unit area and the taper's support (radius $16.5$
-length units) gives about $37$, consistent with that saturation.
+length units) gives about $37$. Equation~\eqref{eq:nens_local} counts the Kaplan--Yorke dimension;
+counting only the unstable directions, $n_+\approx43$ per $44^2$ box ($0.022$ per unit area), halves it to
+about $19$. Saturation at about 32 members lies between the two, so the estimate holds to within a
+factor of two, which is all it claims.
 
 \para{Without localization.} The same filter with the taper set to one
 everywhere is a global ensemble Kalman filter in the latent space. Its error grows with
