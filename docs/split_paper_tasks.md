@@ -492,10 +492,20 @@ data (R4).
   (wavelength 4π) that a 2π box never contains, so a model learned there cannot produce them. Supporting: the truth's
   D_KY per box width rises with width (22.5 / 23.3 / ~25 at 1× / 2× / 3×), i.e. α = 0.05 is not fully extensive at
   the box size. Tasks, in order:
-  1. `[ ]` **Diagnosis** (cheap): free-rollout statistics of the model and the true PDE at 1× and 2×
+  1. (plan) **Diagnosis** (cheap): free-rollout statistics of the model and the true PDE at 1× and 2×
      (`exp_rollout_stats_kolmogorov.py`: energy share beyond the native box, |k| < 2 share, field std; new
      `box_period_corr_late`, the correlation of the field with itself shifted by 2π, ≈ 1 if the 2× rollout has locked
      into copies of the box). Confirms or rules out the large-scale hypothesis.
+  1. `[x]` **Diagnosis result (2026-10-12 19:46; 1000 model steps, same IC as the true PDE; late half):**
+     1×: model ≈ truth (vorticity std 1.456 vs 1.404; |k| < 2 energy share 0.116 vs 0.096; forcing-scale share
+     0.537 vs 0.546). 2×: the model is **not** locked into copies of the box (shift-by-2π correlation 0.07; truth
+     0.41) and does **not** lack the new large scales much (energy at wavelength 4π: 0.046 vs truth 0.065). Instead it
+     drifts into a state with **3× too much large-scale energy** (|k| < 2 share 0.420 vs 0.146), less forcing-scale
+     activity (0.449 vs 0.536) and lower std (1.226 vs 1.406): a spurious large-scale (condensate-like) state that
+     damps the small-scale chaos, consistent with the low λ₁ (0.070) and n₊ = 12. **The "missing scales" hypothesis
+     is not supported; the failure is a large-scale drift of the model in the larger domain.** Implication for item 2:
+     stronger drag damps large scales, so α = 0.1 still tests the right thing (whether the drift is drag-limited);
+     item 3 (larger box) would expose the model to these large-scale modes in training.
   2. `[ ]` **Same recipe at α = 0.1** (stronger drag, shorter largest active scale; box data and 1×/2×/3× truths
      exist): train `r12_c6_a01_s1x_r3`, rollout statistics at 1×/2×/3×, D_KY at 2× (IC seed 1, T120 truth 31.5),
      1×, 3×. Pass: R9a's Kolmogorov criterion. If α = 0.1 transfers and α = 0.05 does not, Paper I gains a physical
