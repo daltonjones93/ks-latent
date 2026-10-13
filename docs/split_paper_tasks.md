@@ -1067,3 +1067,31 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
   `k_xs0025` (α 0.025), evals at 1/2/3× (referee M3). Agent "kolm-seeds".
 - [~] 2D KS truths 88² IC 0, 66² IC 2. [~] R7b. [~] Reach test, box checks. [~] α = 0.1 3× IC 1.
 - [~] Z10a memory channels (agent, Tier 1). [ ] R15 (frozen, starts after Z10a's first read).
+
+### Z13. Mechanism tests: verdicts (2026-10-13 ~12:30)
+
+**Box check (per-mode spectral density, truth only, 3 ICs; `artifacts/experiments/box_check/`).**
+R_new = Φ_2×(k1/2)/Φ_1×(k1); R_same = Φ_2×(k1)/Φ_1×(k1).
+
+| system | R_new (per IC) | R_same | large-scale share 1× → 2× |
+|---|---|---|---|
+| 2D KS | 2.66 (2.29–2.89) | 0.95 | 0.417 → 0.475 |
+| Kolmogorov α = 0.1 | 2.75 (2.59–2.86) | 4.42 | 0.359 → 0.162 |
+| Kolmogorov α = 0.05 | 0.61 (0.53–0.69) | 0.83 | 0.372 → 0.280 |
+| Kolmogorov α = 0.025 | pending | | |
+
+**Verdict, by the Z9 rule (fixed before the run):** R_new does not separate {2D KS, α = 0.1} from {α = 0.05, 0.025}
+(KS 2.66 ≈ α = 0.1 2.75). **Drop the "pre-training check" claim.** The premise was also wrong: 2D KS does not have a flat
+low-k spectrum; the bigger box's new scale holds 2.7× the density. KS still transfers. So *how much* energy sits at
+scales beyond the box is not what decides transfer; *whether the local dynamics depend on it* is. In KS, large scales
+enter only through gradients (local); in vorticity form, through the Biot–Savart velocity (nonlocal). Paper I:
+present the Kolmogorov small-box failure as an observed limit, with the rollout diagnosis and the reach test as a
+mechanism *consistent with* the data, no predictive check. (R_same, the same scale in both boxes, is ≈ 1 for KS and
+4.4 at α = 0.1, 0.83 at α = 0.05: no clean ordering either; not used.)
+
+**Reach test (unexplained velocity fraction F at R = 3 sites, the model reach; 2 ICs).** 1× → 2×: α = 0.1
+0.020/0.023 → 0.034/0.031 (+50%); α = 0.05 0.019/0.022 → 0.040/0.043 (×2); α = 0.025 0.019/0.017 → 0.050/0.048
+(×2.7). Ordered by drag, as the hypothesis predicts, and rising (less) at α = 0.1 too, which also fails at 3×. Small
+in absolute terms (≤ 5% of velocity variance), so "consistent with", not proof. At 1×, F(4 sites = half box) ≈ 0.003
+(periodicity). Larger reach: F(6) ≈ 0.006–0.011 and F(8) ≈ 0.001–0.002 at 2×, so a window model would need ~6–8
+sites to see nearly all of the velocity. 3× values pending.
