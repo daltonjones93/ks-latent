@@ -60,6 +60,18 @@ memory that the current field does not reveal limits both filters
 (Sec.~\ref{sec:da_model_error}); propagators with access to past states are
 the obvious remedy on the learned side.
 
+\para{Which training route.} Paper~I shows that for 2D KS a model trained on a small periodic box of
+side $44$ reproduces the Kaplan--Yorke dimension on larger domains as well as one trained on windows
+of a large simulation. Reproducing the dimension does not make a model a good filter model. With this
+paper's filter (four tilings, RTPS $0.7$, observations every $2.75$), a 6-channel small-box model reaches
+$0.599$ at $44^2$ and $0.813$ at $440^2$, no better than interpolating the observations ($0.819$), and a
+12-channel small-box model trained on noisy fields, as ours is, reaches $0.408$ at $44^2$ but $1.104$ at
+$440^2$, worse than interpolation; a 6-channel window-trained model gives $0.579$ and $0.563$ (one seed
+each). The window-trained models hold their error from $44^2$ to $440^2$ and the small-box models do not,
+which is why this paper's model is trained on windows. More training data or a longer reach did not close
+the small-box models' gap at $44^2$ either ($0.393$ with six times the data, $0.405$ with reach $5$ on a
+$66^2$ box, both 12-channel and at their best RTPS). We have not identified what the filter needs that the dimension does not measure.
+
 \para{Limitations.} We state them plainly.
 \begin{itemize}
 \item \emph{Twin experiments.} The truth is the system the model was trained

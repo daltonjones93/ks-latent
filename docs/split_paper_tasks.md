@@ -1050,7 +1050,8 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
 - [x] P1-6 (2026-10-13, 2ad84d3) Kolmogorov section (window-trained; small-box failure with rollout spectra; mechanism paragraph
   placeholder until the reach test/box checks land; seed placeholders).
 - [x] P1-7 (2026-10-13, 2ad84d3) Figures/tables regenerated (transfer table with small-box rows, scaling figure, α spectra panel).
-- [ ] P1-8 Fill placeholders (9 left, grep `TODO(P1-8)`/`\todo`; 3× IC 1 already filled: 45.7, −14.5%, 3× mean −20.7%): 88² truth, window-model seeds, reach test, box checks, α = 0.1 3× IC 1, Z10a outcome.
+- [~] P1-8 Fill placeholders (done 2026-10-13: 66² third truth + tables regenerated, reach 3×, memory channels; left: 88² ×5,
+  window seeds, R15 clause; was 9 left, grep `TODO(P1-8)`/`\todo`; 3× IC 1 already filled: 45.7, −14.5%, 3× mean −20.7%): 88² truth, window-model seeds, reach test, box checks, α = 0.1 3× IC 1, Z10a outcome.
 - [ ] P1-10 User decisions (agent report 2026-10-13): (a) α = 0.1 1× truth now 3 ICs (mean 14.6): the selected window
   model's 1× error goes 0.9% → +9.0% and v2 ranks third of six, so "chose the lowest-error variant" is false; DONE: §6
   (06_results_2d.tex ~l.211) already reports it ranks third and reads the rule as one case study; (b) keep the box-check numbers as a footnote (§6.2 fn 1)?
@@ -1069,7 +1070,8 @@ Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
   conclusions. Draft now, numbers when R7b lands (~2–3 h).
 - [x] P2-3 (2026-10-13, 67e045a) Cross-paper consistency pass; open: Paper I tables still use 2 runs at 66² (Paper II
   uses 3: mean 188.5) → regenerate Paper I tables with P1-8 when the 88² truth lands; Paper II's 88² sentence then too. Was: (after Paper I's text settles).
-- [ ] P2-4 Optional small-box paragraph (p7b 440² control).
+- [x] P2-4 (2026-10-13) Discussion paragraph "Which training route": small-box filters 0.599→0.813 (c6), 0.408→1.104
+  (c12 noisy) from 44² to 440² vs window c6 (p7b) 0.579→0.563; D_KY transfer does not make a good filter model.
 - [ ] P2-5 Final checks: build, `check_numbers.py --paper paperII`, grayscale, internal referee re-read of §6.
 
 **Compute feeding the papers**
