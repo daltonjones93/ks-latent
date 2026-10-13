@@ -135,9 +135,13 @@ work.
   scatter of single evaluations, the boundary at $\alpha=0.1$ and $2\times$ is
   not.
 \item \emph{Models and seeds.} The 1D model has three training seeds and
-  the 2D KS small-box model three; the Kolmogorov window models have one
-  (the $\alpha=0.05$ model two).\todo{window-model seeds 1--2 at all three
-  drags are running: update this item and Table~\ref{tab:transfer2d}} The
+  the 2D KS small-box model three; the Kolmogorov window models have three each.
+  At $\alpha=0.1$ all three seeds pass the decision rule at $2\times$ and $3\times$
+  (initial-condition means within $+6\%$ and $-6\%$). At $\alpha=0.05$ every seed
+  misses on one initial condition at $2\times$ ($-20$ to $-25\%$, the high truth, 52.6)
+  while the three-initial-condition means are within $-5$ to $-8\%$. At $\alpha=0.025$
+  the single truth at $3\times$ is underestimated on every seed ($-14$ to $-24\%$) and the
+  $1\times$ value is erratic across seeds. The
   1D and 2D architectures differ (full reach and a latent coherence
   penalty in 1D, per-patch in 2D), and the 2D KS small-box recipe was
   chosen with a test-size truth (Sec.~\ref{sec:canonical_recipe}).
