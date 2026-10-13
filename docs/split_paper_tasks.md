@@ -954,3 +954,38 @@ hidden ε 0.1/0.2) so every "est." row uses one remedy; §6 and the table are re
 **Load.** 2D KS truths (88² IC 0, 66² IC 2) had been starved at nice 20 (75 s CPU in 11 h); restarted 08:14 at normal
 priority. Three 88² evals of superseded models (C seeds 1–2, wrap control) paused (PIDs in
 `artifacts/logs/paused_r4c_r4w_88.txt`).
+
+### Z10. Non-critical-path work on the Kolmogorov small-box failure (2026-10-13, user discussion)
+
+**Diagnosis so far.** MSE damping is not the mechanism: at 1× the KC2 model holds the truth's energy and variance for
+1000 steps (≈ 20× its training horizon), and longer rollouts did not hurt (−45% → −39% at 2×). The loss of small-scale
+activity happens only in larger domains, together with energy piling up at |k| < 2 over the rollout. Working
+hypothesis: vorticity dynamics are nonlocal through Biot–Savart (the advecting velocity depends on vorticity
+beyond the model's reach); weak drag puts energy at scales larger than the 1× box. 2D KS is local in u (gradients
+only), which would explain why it transfers although its large-scale share also grows with box size.
+
+**Queued (side runs, low priority, one at a time, `scripts/run_r15.sh`, tag [R15]).**
+- Reach test (`scripts/exp_reach_velocity.py`, truth only, α = 0.1/0.05/0.025, 1×/2×/3×): unexplained velocity
+  fraction F(R) from vorticity within R = 1–12 sites. Prediction: at the model reach, F grows with box size at
+  α = 0.05/0.025 and not at α = 0.1. It also says how far a model would need to see.
+- Option 1: velocity (u, v) as encoder input channels, decoder reconstructs all three (`r15_KV`).
+- Option 2: statistics regularizer on 2× rollouts using only 1× data (vorticity variance and forcing-band share,
+  which are box-size independent in the truth; choice informed by 2× truth, to be stated) (`r15_KS`).
+- Not tried, user decision: loss reweighting / probabilistic objectives (option 3); a parameter-free Biot–Savart
+  term on the anchor channel (option 4: exact at any size, but not local, so it gives up the locality that makes the
+  method scale; cancelled).
+- Larger reach does not help route (a): reach must stay below half the training box (≤ 3 sites in the 1× box), and
+  the box contains no scales larger than itself. It can help route (b).
+
+**Ideas for later (speculative, not queued).**
+- *Pretrain on the small box, then fine-tune on a larger domain with extra latent channels that carry large-scale
+  (nonlocal) quantities, still updated only from neighbouring sites.* Stays local (finite reach), so transfer and
+  local DA are kept; remote influence travels as state at up to reach/Δt per step. Rough timescale check at
+  α = 0.05: reach ≈ 2.4 length units per 0.2 time units ≈ 12 units per time unit, so crossing a 3× box (≈ 19 units)
+  takes ≈ 1.6 time units, against a large-scale drag time 1/α = 20. So signals can keep up. Measures how much
+  large-domain data is needed once the small box has done most of the work, which is the CM1 question (large runs
+  are expensive). Watch for channel collapse when fine-tuning (resolved before with `--w-logdet`).
+- *History in the latent state (delay embedding).* Mori–Zwanzig: the effect of unseen variables (remote or
+  sub-site) shows up as memory, so past states can stand in for them. Costs: the phase space grows (Lyapunov needs the
+  two-step tangent mode, which exists for the global model), and DA must update lagged states consistently. Free
+  learned channels (above) can store the same information without those costs; history is the natural ablation.
