@@ -706,6 +706,19 @@ unless marked as filter error (analysis RMSE in units of the field std, 3 decima
 | r4f D_KY, then r4g (77², reach 6) | closes the reach question for Paper II | low priority; can be stopped |
 | c = 12 α = 0.05 Kolmogorov evals; α = 0.05 c = 6 3× (paused, pid 20213); c = 6 IC-1 1× | R9a contingency / confirmation | low priority; stop if cores are needed |
 
+**All remaining runs queued (`scripts/run_z.py`, started 2026-10-12 20:48, log `artifacts/logs/z.log`; pool of 3 at
+3 threads, MPS trainings serial):**
+- truths: 2D KS 88² IC 0 (K = 400; ~1 day; M1); 2D KS 66² IC 2 (K = 300; third 66² IC, M3); Kolmogorov α = 0.1 1×
+  ICs 1, 2 (T120; the 1× truth was one 40-unit run).
+- α = 0.1 small box (`r12_c6_a01_s1x_r3`): D_KY 2× ICs 0, 2; 3× ICs 0, 2; 1× ICs 1, 2 (after their truths); training
+  seeds 1, 2 (+ 2× IC 1 and 1× IC 0 each). With run_r12.sh (2× IC 1, 1× IC 0, 3× IC 1): 3 ICs × 3 sizes for seed 0,
+  3 training seeds at 2×.
+- 2D KS IC 2 at 44², 66², 88² for the small-box C (seed 0) and the window-trained p7b (M3: 3 ICs per cell).
+- rollout statistics of C at 44²/66²/88² with truth (M8 drift statement).
+Not queued, on purpose: α = 0.1 seeds 1–2 at 3× (add if seed 0 passes and time allows); C seeds 1–2 at IC 2.
+Note: the R4 queue's 66² evals compare both ICs to 192.5 (IC 0's truth); use the per-IC truths (192.50, 185.60, and
+IC 2 when its truth lands) in the tables.
+
 ### Z3. Minimum viable path — Paper I (*Chaos*)
 
 **Framing (R11, "two routes, one rule").** A weight-shared local latent model transfers to larger domains when the
@@ -743,6 +756,9 @@ retraining (R10 is replaced by the list below).**
 
 *Deferred (not needed for submission):* α = 0.025 small box; reach sweep; k_max ablation; retraining the window
 models with seeds; Kolmogorov truths beyond what α = 0.1 needs; larger-source-box test at α = 0.05 (R12.3).
+
+**User decision (2026-10-12 20:45): if α = 0.1 passes R9a, Paper I keeps the small-box story** (all three systems on
+route (a), with the window-trained models as route (b)).
 
 **Decision point (tomorrow, when α = 0.1 2× lands):** pass R9a → Kolmogorov small-box story in Paper I (items 3, 8,
 10). Fail → small-box story for 1D and 2D KS only; Kolmogorov stays window-trained and the α = 0.05/0.1 results
