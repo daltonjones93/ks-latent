@@ -818,3 +818,21 @@ assimilation in a learned latent field"). Do not propose title changes.
 - **Load, 21:26 (user: fan still on).** Further paused: two of R7's three lanes (R7 now runs one case at a time) and
   the p7b 440² filter (`scripts/resume_paused.sh` resumes them too). R13 re-launched with one eval at a time at 2
   threads. Running: α = 0.1 2× IC 1 eval (efficiency cores), one R7 run, one R13 training (GPU), later one R13 eval.
+
+### Z7. Overnight results (2026-10-13 05:30) and ramp-up
+
+- **Kolmogorov α = 0.1 small box, D_KY at 2×:** IC 0 29.5 (truth 30.34, −2.8%), IC 1 30.4 (truth 31.47, −3.3%).
+  Within R9a so far (per-IC ±20%, mean within 10%); 3× and the extra seeds/ICs pending. **On track for the small-box
+  story in Paper I (user decision, Z3).**
+- **R13, 66² IC 0 (truth 192.50; truth mean 189.05):** C2 seeds 0–2: 185.1 / 182.6 / 185.3 (−3.9 / −5.2 / −3.8%;
+  vs mean −2.1 / −3.4 / −2.0%). C3: 179.9 / 185.4 / 186.6 (−6.5 / −3.7 / −3.0%). C (old): 183.5 / 183.6 / 169.5.
+  **C2 (more data, k_max 48, 12000 steps) is the better recipe and fixes seed 2**; per the pre-registered read-out,
+  C2 is the 2D KS small-box model; its 44² IC 0, 66² IC 1 and 88² evals are running (`scripts/run_c2b.sh`). All
+  models sit 2–5% low at 66² IC 0; report as a signed bias.
+- **R7, seed 0 (best per case; original in parentheses):** ∇² 1.25: 0.166 (0.423); advection 1: 0.228 (0.438);
+  advection 2: 0.348 (0.604; two cells still running); J17G δ = 0.1/0.2/0.3: 0.323/0.421/0.471 (0.328/0.427/0.470).
+  Parameter inflation fixes the parameter-error cases (physics + estimation now clearly better) and changes nothing for
+  the missing-process cases, where the latent filter (0.310/0.341/0.376; 4×16: 0.332/0.355/0.395) still ties or
+  wins. Lower RTPS (0.6) is best once the parameter spread is maintained. Seeds 1–2 follow.
+- **Ramp-up (user: machine recovered):** all paused jobs resumed (`resume_paused.sh`); R13b added (2 evals at 3 threads).
+- To switch in Block Z's queue: the extra-IC evals for "C" (r4c, seed 0) are superseded by C2 seed 0 (in R13b).
