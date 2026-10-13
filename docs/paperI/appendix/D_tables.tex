@@ -7,9 +7,13 @@ Tables~\ref{tab:evals_ks2d}--\ref{tab:evals_kolm0025} list every 2D model
 evaluated in this work, including those that appear only in
 Secs.~\ref{sec:results2d} and \ref{sec:failure}. Each entry gives the mean
 $\DKY$ over initial conditions $\pm$ half the range, the number of
-initial conditions, and the mean of the per-IC relative errors against
-Table~\ref{tab:truth} (at Kolmogorov $\alpha=0.05$, $1\times$, each initial
-condition against its matched-IC truth). Every individual evaluation,
+initial conditions, and the mean of the absolute per-IC relative errors
+against Table~\ref{tab:truth} (at Kolmogorov $\alpha=0.05$, $1\times$, each
+initial condition against its matched-IC truth); signed errors are in the
+main text and in the CSV file below. Models are listed by the identifiers
+of their stored checkpoints, with a description; ``recipe C'', ``C2'' and
+``C3'' are the small-box recipes of Sec.~\ref{sec:canonical_recipe} (C3:
+C2 with the whole box scored at every step, no halo). Every individual evaluation,
 with $\lambda_1$ and the number of positive exponents, is in
 \texttt{artifacts/\allowbreak experiments/\allowbreak appendix\_D\_evaluations.csv}, generated with
 these tables by \texttt{scripts/paper\_figures/tabD\_evaluations.py}. The
@@ -24,8 +28,8 @@ in Table~\ref{tab:transfer1d}.
 Gaussian noise of standard deviation $0.1$ (standardized units). Its $\DKY$ is $84.7$ at
 $44^2$ and $188.5$ at $66^2$, against the truth runs from the same initial condition, $81.8$ and $192.5$
 ($3.6\%$ and $2.1\%$); a 12-channel model trained on clean fields gives $83.5$ and $190.4$ ($2.1\%$ and
-$1.1\%$), and the 6-channel model of this paper, scored the same way, $1.7\%$ and $2.4\%$ (its $2.0\%$ and
-$0.6\%$ in Table~\ref{tab:transfer2d} are means over initial conditions against the mean truths). Doubling the channels and training on noisy data leave the transfer of the dimension
+$1.1\%$), and the 6-channel window model of this paper, scored the same way, $1.7\%$ and $2.4\%$ (its $+1.6\%$ and
+$-0.5\%$ in Table~\ref{tab:transfer2d} are errors of the mean over initial conditions against the mean truths). Doubling the channels and training on noisy data leave the transfer of the dimension
 within the spread of the truth runs (\texttt{artifacts/experiments/crop/p7c12*\_ks2d\_x*.json}; one
 initial condition each).
 
@@ -78,8 +82,9 @@ around the forcing wavenumber $k=4$, and essentially none below $|\bm k|=1$.
 The chaos lives at the forcing scale, which spans a few sites, and that is
 the scale a model with a reach of a few sites resolves best. The same
 analysis shows no deficit of large-scale unstable directions in the
-model, so we have no evidence that the remaining errors come from missing
-long-range coupling.
+model, so for this window-trained model we have no evidence that the
+remaining errors come from missing long-range coupling; the small-box
+models of Sec.~\ref{sec:kolm_box} are a different case.
 
 \newcommand{\evalhead}[1]{Model & Description & #1 \\ \hline}
 \newcommand{\evalnotes}{\par\footnotesize $^a$Trained on an $8\times8$-site
@@ -91,7 +96,7 @@ of a $3\times$ periodic domain and evaluated on that domain.
 $^\star$Main-text model.}
 
 \begin{table*}[htbp]
-\caption{2D KS: all evaluations. Columns: $44^2$, $66^2$, $88^2$ (no truth at $88^2$).}
+\caption{2D KS: all evaluations. Columns: $44^2$, $66^2$, $88^2$ (errors at $88^2$ once its truth exists).}
 \label{tab:evals_ks2d}
 \widetabular{llccc}{\evalhead{$44^2$ & $66^2$ & $88^2$}
 \tabinput{tables/eval_ks2d}}

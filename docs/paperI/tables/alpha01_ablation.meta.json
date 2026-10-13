@@ -1,7 +1,7 @@
 {
   "table": "alpha01_ablation",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:34Z",
+  "git_sha": "098c81bc68498545197616d71bfad0dff370fe4e",
+  "timestamp_utc": "2026-10-13T15:59:35Z",
   "inputs": [],
   "main_alpha01_model": "k_xs01_v2"
 }

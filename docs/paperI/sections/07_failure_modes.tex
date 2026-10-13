@@ -3,11 +3,11 @@
 \label{sec:failure}
 %======================================================================
 
-The recipe of Sec.~\ref{sec:canonical_recipe} is the end point of many
+The recipes of Sec.~\ref{sec:canonical_recipe} are the end point of many
 attempts. We report the four failures that bear on the claims above.
-Errors are means of per-IC relative errors over three initial conditions
-against the truths of Table~\ref{tab:truth} unless stated; every number
-is in Appendix~\ref{app:tables}.
+Errors are means of the absolute per-IC relative errors over three
+initial conditions against the truths of Table~\ref{tab:truth} unless
+stated; every number is in Appendix~\ref{app:tables}.
 
 %----------------------------------------------------------------------
 \subsection{Softmax attention}
@@ -27,30 +27,44 @@ $1\times$ and $2\times$, against $20\%$ and $3\%$ for the convolutional
 model.\footnote{Both from unstandardized initial conditions, the only
 evaluation available for these two models.} A more flexible mixer fits
 the training domain more closely and transfers worse, and short-horizon
-losses predicted neither failure.
+validation losses predicted neither failure. The 2D evidence is one
+model from one initial condition, so we state it as an observation, not
+a rule.
 
 %----------------------------------------------------------------------
 \subsection{Coupling and context do not replace the right data}
 \label{sec:fail_coupling}
 %----------------------------------------------------------------------
 
-Non-local inputs make a box-trained model transfer worse
-(Sec.~\ref{sec:box_vs_window}); with window training they are merely
-unhelpful. At $\alpha=0.05$ a learned consensus mechanism that exchanges
-messages between sites, or the exact Biot--Savart velocity as an extra
-input, leaves the errors at $6.7$--$11.4\%$, against $6.3$--$7.4\%$ without
-them, and twice as many training trajectories move the canonical-recipe
-errors by less than three percentage points (Appendix~\ref{app:tables}),
-so the amount of data does not limit accuracy either.
+Giving a box-trained model more non-local information made its transfer
+worse. We tried three versions on the earlier full-reach box model at
+$\alpha=0.05$: the exact Biot--Savart velocity as an additional input, a
+learned coarse ``regional'' scale with its own mixer, and the exact
+velocity input in a model trained on the box from the start. All three
+train to low loss at the box size, and all three collapse under transfer:
+$\DKY$ falls to between 0 and 5 at $2\times$ and $3\times$, errors of
+$93$--$100\%$. Each new coupling path is trained only on inputs from one
+small periodic domain and meets wavenumbers, amplitudes and aggregation
+patterns at deployment that it never saw. With window training such
+inputs are merely unhelpful: at $\alpha=0.05$ a learned consensus mechanism
+that exchanges messages between sites, or the exact velocity input,
+leaves the errors at $6.7$--$11.4\%$, against $6.3$--$7.4\%$ without them, and
+twice as many training trajectories move the window model's errors by less
+than three percentage points (Appendix~\ref{app:tables}). More data did
+matter for the small-box 2D KS model, where six times the box data and
+longer rollouts brought the third training seed within $3\%$ at $66^2$
+(Sec.~\ref{sec:ks2d_box}), and did not help the small-box Kolmogorov
+model (Sec.~\ref{sec:kolm_box}).
 
 %----------------------------------------------------------------------
 \subsection{Short rollouts allow spurious regimes}
 \label{sec:fail_regimes}
 %----------------------------------------------------------------------
 
-A Kolmogorov model trained on $40\times40$-site crops with rollouts of at
-most 12 steps has low validation losses, but its free rollouts leave the
-attractor. On the native box its vorticity standard deviation is $0.98$
+A Kolmogorov model trained on $40\times40$-site windows of a separate
+periodic domain six boxes on a side, $(6\times2\pi)^2$ (Appendix~\ref{app:tables}),
+with rollouts of at most 12 steps, has low validation losses, but its free
+rollouts leave the attractor. On the native box its vorticity standard deviation is $0.98$
 against the truth's $1.40$, and half of its kinetic energy sits at
 $|\bm k|<2$ against $10\%$ in the truth; at $3\times$ it settles into a
 different, more energetic state, and its $\DKY$ there ranges from $65$ to
@@ -71,9 +85,15 @@ any Lyapunov computation, which is why they screen every model
 \label{sec:fail_mse}
 %----------------------------------------------------------------------
 
-Lemma~\ref{lem:mse} predicts that longer squared-error rollouts bias
-$\DKY$ down, and where models differ in $\kmax$ and little else this is
-what happens (Fig.~\ref{fig:failure}(b)). Raising $\kmax$ from 12 to 32
+The hypothesis of Sec.~\ref{sec:objective} predicts that longer
+squared-error rollouts bias $\DKY$ down. In the three pairs of models
+that differ most nearly only in $\kmax$ this is what happens
+(Fig.~\ref{fig:failure}(b)), but each pair also differs in a second
+setting (the length of training, the terminal input noise, or the
+barrier weight), and the cleanest pair changes $\DKY$ by amounts comparable
+to the scatter between initial conditions. The evidence is consistent
+with the hypothesis; a controlled sweep of $\kmax$ with everything else
+fixed would be needed to establish it. Raising $\kmax$ from 12 to 32
 lowers $\DKY$ at every size, by $0.4$--$6$ points of relative error for the
 per-patch model at $\alpha=0.05$ and by $17$--$25$ points for the 2D-crop
 model above; raising it from 16 to 32 at $\alpha=0.1$ lowers it by $3$--$10$
@@ -81,7 +101,10 @@ points. The bias is not a loss of amplitude: started from the validation
 trajectory, every model we checked ($\kmax$ from 12 to 32, both drags)
 keeps its vorticity variance within $2.3\%$ of the truth's at every lead
 up to 64 steps. The contraction acts on the growth of perturbations,
-which is what $\lambda_1$ and $\DKY$ measure.
+which is what $\lambda_1$ and $\DKY$ measure, although the window models we
+report have a leading exponent that is too high, not too low
+(Table~\ref{tab:lambda1}): whatever the rollout length does to the
+spectrum, it does not simply weaken the leading growth rate.
 
 Table~\ref{tab:alpha01_ablation} and Fig.~\ref{fig:failure}(a) list the
 six variants trained at $\alpha=0.1$. Shortening the rollout from
@@ -91,14 +114,11 @@ variants are $7$--$10\%$ low there. The offset $\epsilon$ of the log-det
 barrier, which sets how hard the barrier pushes on the weakest latent
 directions, is a second lever: at $\kmax=16$, setting $\epsilon=0$ moves the
 $3\times$ error from $2.9\%$ to $4.9\%$ and the $1\times$ error from $8.8\%$ to
-$2.8\%$ (v5 to v6). No variant is best at every size, and the size at
-which a variant is most accurate is not predictable from its training
-loss; that is why the main-text model was chosen by the truth-free rule
-of Sec.~\ref{sec:canonical_results}. The rule also proved robust where
-a truth-based choice would not have been: against the earlier single
-40-unit truth at $3\times$, v5 was the most accurate variant and v2 the
-second; against the three-run mean, v2 is the most accurate
-(Appendix~\ref{app:groundtruth}). A spectral regularizer that matches the
+$2.8\%$ (v5 to v6). No variant is best at every size, and the size at which a variant is most
+accurate is not predictable from its training loss, which is why the
+main-text model was chosen by the truth-free procedure of
+Sec.~\ref{sec:canonical_results}; with the truths now available its
+ranking among the six is not resolved. A spectral regularizer that matches the
 rollout's energy shares to the training data's tightens the native-size
 scatter at $\alpha=0.05$ ($5\%$ instead of $22\%$) but worsens the $3\times$
 error ($9.9\%$ instead of $7.2\%$): it constrains the energy distribution,
@@ -137,10 +157,14 @@ the length of their training rollouts, short (open) to long (filled):
 per-patch models at $\alpha=0.05$ ($\kmax$ 12 to 32, otherwise identical
 except for training length), 2D-crop models at $\alpha=0.05$ (12 to 32,
 with terminal input noise 0.05), and v2 to v1 at $\alpha=0.1$ (16 to 32).
-Longer rollouts lower $\DKY$ at every size (Lemma~\ref{lem:mse}). (c)
+Longer rollouts lower $\DKY$ at every size, consistent with the
+hypothesis of Sec.~\ref{sec:objective}; each pair also differs in a second
+setting. (c)
 Share of kinetic energy at $|\bm k|<2$ during free rollouts at $2\times$
 from one initial condition: the PDE, the 2D-crop model trained with
-$\kmax=12$, which settles into a spurious large-scale regime, and its
-$\kmax=32$ retrain (rollout of 200 time units).}
+$\kmax=12$, which settles into a spurious large-scale regime (the text
+quotes its $\DKY$ at $3\times$, where the regime is the same), and its
+$\kmax=32$ retrain, whose trace covers 200 time units against 400 for the
+others.}
 \label{fig:failure}
 \end{figure*}

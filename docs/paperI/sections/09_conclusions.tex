@@ -10,29 +10,38 @@ models' own Lyapunov spectra show that it reproduces the density of
 chaos there. In one dimension the transferred Kuramoto--Sivashinsky model
 stays within $0.2$--$1.2\%$ of the true Kaplan--Yorke dimension up to four
 times the training length, and its spectrum, not only its dimension,
-follows the truth's. In two dimensions the architecture alone is not
-enough: what makes the learned rule transfer is the data it is trained
-on. Trained on a small periodic box it misses the dimension of larger
-domains by up to $38\%$; trained on windows of one large simulation, with
-the boundary of each window driven by the simulation, it is within
-$0.6$--$2\%$ in 2D Kuramoto--Sivashinsky and $1$--$9\%$ in Kolmogorov flow at
-the two stronger drags; of six training variants at the strongest drag,
-the one chosen without any reference to the truth has the lowest mean
-error. The weakest drag remains harder.
+follows the truth's. In two dimensions, Kuramoto--Sivashinsky models
+trained on a small periodic box, with a forced halo, are within $3.5\%$ of
+the truth at the training size and at $2.25$ times its area, from three
+training seeds, and keep the native density at four times the area.%
+\todo{88$^2$ truth: state the error there}
+Their leading exponents are $12$--$18\%$ too high, so the agreement is in
+the dimension, not in every exponent.
 
-The failures are as instructive as the successes. Rollouts that are too
-short leave the free-running model room to settle into spurious regimes,
-and squared-error rollouts that are too long damp its growth rates, a
-bias that follows from the structure of the loss; free-rollout
-statistics, compared with the training data, catch the first problem
-without any truth, and the dimension comparison exposes the second.
+Kolmogorov flow marks the limit of the small box. A model trained on one
+$2\pi\times2\pi$ box reproduces the dimension at twice the channel width at
+the strongest drag but is $21\%$ low at three times, and at a weaker drag
+fails already at twice the width, drifting into a state with two to three
+times the true large-scale energy; more data and longer rollouts do not
+change this. The failure sets in where the truth's own large-scale energy
+grows with the domain, and is consistent with the non-local dependence of
+vorticity dynamics on the velocity, which a finite reach cannot see. Models
+trained on windows of one large simulation, by the same forced-halo
+procedure, are within $10\%$ at the two stronger drags; their windows are
+larger than the domains they are evaluated on, so they show that one set
+of weights serves every size, not that a small domain suffices.
 
-The latent field also has a geometry, which a companion paper uses to
-localize an ensemble filter in latent space \citep{jones2026da}.
+Two further lessons concern training. Rollouts that are too short leave
+the free-running model room to settle into spurious regimes, which
+free-rollout statistics catch without any truth; longer squared-error
+rollouts lower the dimension, consistent with, though not established
+by, the law of total variance applied to rollout targets.
 
-The rule we take from this work is short: measure the interaction range
-of the dynamics, give the model a reach that covers it, train on windows
-of a domain large enough to contain the local statistics of the target,
-and check the result against the Lyapunov spectrum of the truth at more
-than one size. Where those conditions hold, a model trained once is a
-model for every domain size.
+The practice we take from this work is short: train the local rule with
+a forced halo, on a small box if that is all the data there is, check the
+result against the Lyapunov spectrum and the free-rollout statistics of
+the truth at more than one size, and fall back to windows of a larger
+simulation where the small box fails, as it does when the dynamics depend
+on scales the box cannot contain. The latent field also has a
+geometry, which a companion paper uses to localize an ensemble filter in
+latent space \citep{jones2026da}.

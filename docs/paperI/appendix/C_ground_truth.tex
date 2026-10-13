@@ -153,13 +153,16 @@ Run & 20 & 40 & 60 & 80 & 100 & 120 & Dev.\ at 40 \\
 
 Two observations bear on how the main results are read. First, five of
 the seven 40-unit estimates are high, by $9\%$ on average, so the
-remaining single-run 40-unit truths ($\alpha=0.1$, $1\times$;
-$\alpha=0.05$, $3\times$; all sizes at $\alpha=0.025$) may be biased
-upward; a model that matched the converged dimension exactly would then
-appear to under-estimate it. This happened at $\alpha=0.1$, $3\times$:
-the earlier 40-unit run gave $56.35$, the mean over it and the two
-120-unit runs is $53.47$, and the selected model's error there fell from
-$7.6\%$ to $2.6\%$. Second, the spread between initial
+remaining single-run 40-unit truths ($\alpha=0.05$, $3\times$; all sizes
+at $\alpha=0.025$) may be biased upward; a model that matched the
+converged dimension exactly would then appear to under-estimate it. This
+happened at $\alpha=0.1$, $3\times$: the earlier 40-unit run gave $56.35$,
+the mean over it and the two 120-unit runs is $53.47$, and the selected
+window model's error there fell from $7.6\%$ to $2.6\%$. It also happened
+in the other direction at $\alpha=0.1$, $1\times$: two 120-unit runs from
+new initial conditions gave $12.9$ and $15.2$ against the earlier 40-unit
+$15.9$, and the selected model's error there rose from $0.9\%$ to $+9.0\%$
+(Sec.~\ref{sec:canonical_results}). Second, the spread between initial
 conditions does not shrink to zero with a longer window at the sizes we
 use: at $\alpha=0.05$, $2\times$, the three converged values are $46.6$,
 $46.6$ and $52.6$.
@@ -176,7 +179,7 @@ Table~\ref{tab:running_ks2d} gives the running estimates of the runs that
 recorded them: over the last 20 time units they still move by $3$--$5\%$,
 in both directions. We therefore treat the 2D KS truths as uncertain at
 the level of a few percent, comparable to the model errors of
-Sec.~\ref{sec:canonical_results} and larger than the $2.5\%$ difference
+Sec.~\ref{sec:ks2d_box} and larger than the $2.5\%$ difference
 between the mean densities at the two sizes.
 
 \begin{table}[htbp]

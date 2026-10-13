@@ -119,10 +119,17 @@ run on larger domains, are each established. Table~\ref{tab:prior_work}
 summarizes the closest work. What we add is the combination: a learned,
 weight-shared local latent field whose zero-shot extensions are checked
 against the true Lyapunov spectra at several domain sizes in three
-systems; a training procedure on windows of one simulation, with a proof
-that it trains the limited-area problem exactly; and an account of the
-training choices that make a learned local rule fail, with a
-model-selection rule that needs no ground truth.
+systems; one training procedure, a forced halo, that turns a small
+periodic box or windows of one simulation into the same limited-area
+problem; an observed limit of the small box, in Kolmogorov flow, with its
+signature in free rollouts; and an account of the training choices that
+make a learned local rule fail. Showing that a dimension transfers is a
+weaker test than it may seem: a local model is extensive by construction
+(Remark~\ref{rem:extensive_model}), so wherever the truth is extensive,
+scaling the native-size truth by the domain size does as well
+(Tables~\ref{tab:transfer1d} and~\ref{tab:transfer2d}). The test has
+force where the truth departs from extensivity, and we report it there
+too.
 
 \begin{table*}[htbp]
 \caption{Closest prior work. ``Local'': weight-shared operators of finite

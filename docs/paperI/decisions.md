@@ -112,3 +112,68 @@ and Chaos has no hard limit. Every cut is reversible from git (commit after afa4
   k_max = 32 curve of `failure`(c) dashed. Regenerated into docs/paperI only.
 - The outlook's TODO(G-pass) removed: its examples (convection cells, nested limited-area models)
   make no factual claim that needs a citation.
+
+## 2026-10-13 — Rewrite per Block Z11/Z3 (paperI-writing agent)
+
+Framing (Z11, user): small-box training (route a) transfers for 1D and 2D KS (2D KS: recipe C2,
+`r13_C2_ks2d_s44big_k48_seed{0,1,2}`); Kolmogorov uses the window-trained models (route b:
+`k_xs01_v2` [A10 selection], `c19_e0d0_c6`, `k_xs0025`) at all three drags; the small-box Kolmogorov
+failure is reported as an observed limit with its rollout signature. Title unchanged.
+
+Decisions and changes:
+- **"One rule" stated as a procedure, not a necessity.** The 1D model (whole periodic box, no halo)
+  and the reach-6 wrap control (`r4w`, transfers at 66²: 182.9) do not obey "never read an unforced
+  site", so the paper says: one forced-halo procedure turns a small box or windows into the same
+  limited-area problem (Prop. 2), and keeping reach < half box is a design choice, not a proven
+  necessity.
+- **No pre-training check** (coordinator, Z13): the box check failed its pre-registered rule (2D KS
+  R_new 2.66 ≈ α=0.1 2.75). The Kolmogorov failure is an observed limit; the Biot–Savart reading is
+  "consistent with" (reach test: unexplained velocity fraction beyond 3 sites grows 1×→2× by +50% /
+  ×2 / ×2.7 at α=0.1/0.05/0.025, but stays ≤5%). 3× reach values: TODO.
+- **Truth registry** (`scripts/paper_figures/_truths.py`): added the α=0.1 1× T120 runs (seeds 1, 2:
+  12.89, 15.18) and placeholders for 2D KS 66² IC 2 and 88² IC 0 (enter automatically when the JSONs
+  exist). Consequence: the α=0.1 1× reference fell 15.88 → 14.65, the selected window model's 1×
+  error rose 0.9% → +9.0%, and in Table alpha01_ablation the selected variant v2 now ranks third of
+  six by mean |error| (v4 4.7%, v5 5.1%, v2 5.8%). The selection rule is therefore presented as a
+  case study with an honest chronology (M6), not as "chose the lowest-error variant"; removed from
+  the abstract.
+- **Signed errors + ranges in the main text** (M3, minor 4): new Table IV (`tab04_transfer2d.py`
+  rewritten, Paper I only; refuses to write into docs/paper1) with both routes, the trivial extensive
+  baseline (M7) and per-evaluation ranges; appendix tables state "mean of absolute errors".
+- **λ1 vs truth** (M4): new Table `lambda1` (same script). 2D KS +12–18% (small box), +17–20%
+  (windows); Kolmogorov windows +16–30% at 1×/2×; 1D +4–9% now stated. KS entropy density not
+  computed (needs full spectra; not in the JSONs).
+- **Trivial extensive baseline** (M7): column in Table transfer1d (+0.5/−0.4/+0.4%) and rows in
+  Table IV; text says transfer of D_KY tests the density where the truth is extensive and
+  discriminates only where it is not (Kolmogorov).
+- **Lemma 1** (M5): retitled "Law of total variance for rollout targets", stated as a motivating
+  identity; the damping is a hypothesis "consistent with" three confounded pairs; Remark (noise)
+  "dominated by"; abstract/conclusions softened. New label `rem:mse_limits` in App. B.
+- **Prop. 2 / equivariance** (M12): "elementary consequence of locality", certifies the training loss,
+  not deployment accuracy; "equivariant under shifts by whole patches" in the contributions.
+- **M8 drift**: "no drift" claim replaced. New rollout statistics for C2 seed 0 (3 ICs × 44²/66²/88²;
+  `artifacts/experiments/rollout_stats/r13_C2_ks2d_s44big_k48_seed0_ks2d_n1000.json`, run 2026-10-13,
+  ~10 min CPU): truth std 3.7→4.0→4.3 and |k|<0.35 share 0.38→0.46→0.51; the small-box model stays
+  flat (std ratio 0.87–1.12; share 0.49/0.45/0.42), the window model drifts up (1.03/1.11/1.19).
+  Neutral (mean) mode in the model spectrum discussed.
+- **M9**: interaction-range caveats (encoder reach 6; linear-stencil R² unexplained); 2D reaches not
+  chosen this way (window 6, small box 3 = largest below half the 8-site box).
+- **M10**: the 1D coherence penalty described (App. A); sensitivity not measured (stated).
+- **M11**: one consistent statement: the Kolmogorov truth is not extensive at these sizes (per-box
+  D_KY rises 9–22% from 1× to 3×; |k|<2 share rises); "condenses into a mean state" removed.
+- **M1a**: both window models' windows are stated to be larger than every evaluation domain; the
+  small-box 2D KS models are the train-small-run-large test.
+- **M2.5**: old full-reach box failure: cause not isolated; wrap-around ruled out as sole cause by the
+  reach-6 wrap control. Coupling experiments (D2/D3/C9) moved to §7.2 with descriptive labels.
+- **Learned baselines** (M7): argued in §8 (global latent cannot run at another size; local
+  physical-space surrogate left open).
+- **Recipe selection disclosure**: C2 chosen over C/C3 on the 66² IC-0 truth (test size); held-out
+  evaluations named; all recipes in App. D.
+- Minor: ρ≈0.226 everywhere; spin-up 100–500; 7.3 "40×40 windows of a (6×2π)² domain"; Fig. 8(c)
+  2× vs 3× and trace length; attention claim scoped to 1D; App. A seeds; App. C new α=0.1 1× runs.
+- **Figures**: new `fig05_routes.py` (Paper I only; replaces box_vs_window in PAPERI_FIGS): signed
+  errors by route (hollow bars for n=1) and the |k|<2 rollout share vs width. `fig06_scaling.py`:
+  small-box markers (blue). `tabA_architecture.py`: small-box columns in Paper I's
+  architecture_dynamics only (paper1/Paper II tables unchanged). `tabD_evaluations.py`: small-box
+  rows; truth at 88² once it exists. `tab02_tab03.py`: 88² row once it exists; 1D baseline column.
+- Placeholders: `\todo{...}` (red, defined in macros.tex) — grep `\\todo` for the list.

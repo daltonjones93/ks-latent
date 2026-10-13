@@ -1,7 +1,7 @@
 {
   "table": "truth_dky",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:32Z",
+  "git_sha": "098c81bc68498545197616d71bfad0dff370fe4e",
+  "timestamp_utc": "2026-10-13T15:59:49Z",
   "inputs": [
     "artifacts/experiments/crop/truth_a005_x3_seed0.json",
     "artifacts/experiments/crop/truth_a0p025_x1_seed0.json",
@@ -13,6 +13,8 @@
     "artifacts/experiments/crop/truth_a0p05_x2_seed0_T120.json",
     "artifacts/experiments/crop/truth_a0p05_x2_seed1_T120.json",
     "artifacts/experiments/crop/truth_a0p05_x2_seed2_T120.json",
+    "artifacts/experiments/crop/truth_a0p1_x1_seed1_T120.json",
+    "artifacts/experiments/crop/truth_a0p1_x1_seed2_T120.json",
     "artifacts/experiments/crop/truth_a0p1_x2_seed1_T120.json",
     "artifacts/experiments/crop/truth_a0p1_x2_seed2_T120.json",
     "artifacts/experiments/crop/truth_a0p1_x3_seed1_T120.json",

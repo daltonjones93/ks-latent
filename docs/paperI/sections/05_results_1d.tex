@@ -17,7 +17,9 @@ or unused entries, and nothing is retrained.
 At $L=100$ the model has $\lambda_1=0.094$--$0.098$ and 12 positive
 exponents out of 48 from each of three initial conditions, against
 $\lambda_1=0.090$ and 12 positive exponents for the PDE, and
-$\DKY=22.24\pm0.11$ against $22.49$, $1.1\%$ low. A sibling model with
+$\DKY=22.24\pm0.11$ against $22.49$, $1.1\%$ low. The leading exponent is
+thus $4$--$9\%$ too high, against a truth precise to about one percent,
+while the dimension is slightly low. A sibling model with
 twice the latent dimension ($P=32$, $\dlat=96$) has 13 positive exponents
 out of 96: doubling the coordinates barely changes the number of unstable
 directions, so the 48-dimensional latent is not short of capacity.
@@ -36,7 +38,12 @@ $0.224$--$0.226$ for the PDE: the model is extensive, as a local model
 must be (Remark~\ref{rem:extensive_model}), with a density about $1\%$
 below the true one. Each truth is the mean of two or three independent
 finite-time runs; their spread ($0.1$--$2\%$) is comparable to the
-model's offset at $L=50$ and $L=200$ (Table~\ref{tab:transfer1d}).
+model's offset at $L=50$ and $L=200$ (Table~\ref{tab:transfer1d}). The
+truth is extensive here, so the trivial baseline that scales the $L=100$
+truth by $L/100$ is at least as accurate ($+0.5\%$, $-0.4\%$ and $+0.4\%$ at
+$L=50$, $200$ and $400$): what the transfer shows is that the learned
+rule has the right density and stays chaotic on lattices of every size,
+not that it predicts departures from extensivity (Sec.~\ref{sec:discussion}).
 
 \begin{table*}[htbp]
 \caption{Zero-shot transfer of the 1D model trained at $L=100$.
@@ -44,11 +51,11 @@ $P$: sites; truth from Table~\ref{tab:truth}, mean $\pm$ half-range over
 its independent runs. Model: mean $\pm$ half-range over three initial
 conditions standardized with the training statistics; $n_+$: number of
 positive exponents (range over initial conditions); error: model mean
-relative to truth mean.}
+relative to truth mean; baseline: error of $\DKY^{\mathrm{truth}}(100)\,L/100$.}
 \label{tab:transfer1d}
 \begin{ruledtabular}
-\begin{tabular}{rrrcccrr}
-$L$ & $P$ & $\dlat$ & True $\DKY$ & Model $\DKY$ & $n_+$ & Error & Model $\DKY/L$ \\
+\begin{tabular}{rrrcccrrr}
+$L$ & $P$ & $\dlat$ & True $\DKY$ & Model $\DKY$ & $n_+$ & Error & Baseline & Model $\DKY/L$ \\
 \hline
 \tabinput{tables/transfer1d}
 \end{tabular}
@@ -106,9 +113,10 @@ we do not score it.
 the whole positive and near-neutral part of the Lyapunov spectrum,
 plotted against $i/L$, collapses onto the truth's at all three sizes,
 with a mean difference of $0.002$--$0.003$ per exponent
-(Fig.~\ref{fig:spectra1d}). The model departs from the truth only in the
-strongly contracting directions beyond $i/L\approx0.22$, where its
-exponents are more negative; these do not enter $\DKY$. Free rollouts of
+(Fig.~\ref{fig:spectra1d}). The model's exponents become more negative
+than the truth's from $i/L\approx0.18$--$0.20$ on, just inside the range that
+sets $\DKY$, which is why its dimension is about one percent low; beyond
+$i/L\approx0.22$ the departure grows. Free rollouts of
 the transferred model stay bounded at every size, and the largest $|u|$
 over a rollout is $3.3$--$3.7$ against $3.3$--$3.5$ for the PDE
 at $L=100$--$400$. Over 900 time units of free rollout, the decoded
@@ -120,7 +128,10 @@ autoencoder alone reconstructs the field to $0.01\%$ of its variance
 \para{What this does and does not show.} The 1D result is the cleanest
 in the paper: the truths are converged to about one percent, the
 evaluation covers a factor of 8 in domain size, and the result is
-reproduced by three training seeds. The model is the earlier full-reach
-design trained on whole periodic domains (Sec.~\ref{sec:canonical_recipe}),
-not the 2D recipe. A companion paper assimilates data on 1D domains of $L=200$ and
+reproduced by three training seeds. It is also a small-box result in the
+sense of Sec.~\ref{sec:crop_training}: the model is trained on the
+whole periodic $L=100$ domain, with a reach of six sites, below half of
+its 16-site ring, and no forced halo. It is the earlier full-reach design
+with a latent coherence penalty (Sec.~\ref{sec:canonical_recipe}), not
+the 2D recipe. A companion paper assimilates data on 1D domains of $L=200$ and
 $400$ with a model transferred in the same way \citep{jones2026da}.

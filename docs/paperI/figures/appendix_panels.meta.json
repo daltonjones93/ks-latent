@@ -1,7 +1,7 @@
 {
   "figure": "appendix_panels",
-  "git_sha": "afa4310636f3cab122a07cc36cad34aca73106fd",
-  "timestamp_utc": "2026-10-11T19:27:41Z",
+  "git_sha": "1543fe86c04fdc59e4261cb38052afa625f4734a",
+  "timestamp_utc": "2026-10-13T16:14:12Z",
   "inputs": [
     "artifacts/experiments/crop/c19_e0d0_c6_s1_x1_seed0.json",
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed0.json",
@@ -32,6 +32,7 @@
     "artifacts/experiments/crop/c9i_a005_x1_seed2.json",
     "artifacts/experiments/crop/k_a005_x1_seed0.json",
     "artifacts/experiments/crop/k_a005_x1_seed1.json",
+    "artifacts/experiments/crop/k_xs005_c12d10_x1_seed0.json",
     "artifacts/experiments/crop/k_xs005_noreg_x1_seed0.json",
     "artifacts/experiments/crop/k_xs005_noreg_x1_seed1.json",
     "artifacts/experiments/crop/k_xs005_noreg_x1_seed2.json",
@@ -57,6 +58,8 @@
     "artifacts/experiments/crop/p9b_a005_x1_seed0.json",
     "artifacts/experiments/crop/p9b_a005_x1_seed1.json",
     "artifacts/experiments/crop/p9b_a005_x1_seed2.json",
+    "artifacts/experiments/crop/r4k_c12d10_a005_s1x_r3_x1_seed0.json",
+    "artifacts/experiments/crop/r4k_c6_a005_s1x_r3_x1_seed0.json",
     "artifacts/experiments/crop/truth_a005_x3_seed0.json",
     "artifacts/experiments/crop/truth_a0p05_x1_seed0_T120.json",
     "artifacts/experiments/crop/truth_a0p05_x1_seed1_T120.json",

@@ -13,24 +13,31 @@ also writes the full resolved configurations to
 \texttt{artifacts/experiments/model\_configs.json}.
 
 \begin{table*}[htbp]
-\caption{Architecture and training configuration of the main-text models.
-Reaches are radius $\times$ layers in sites; the propagator mixes over a
-radius $w$ in each of $n_\ell$ blocks of width $d_m$ (MLP ratio 4, output
-projection initialized to zero). Stage~A trains the autoencoder, Stage~B
-the propagator with forced-halo rollouts (2D) or on whole periodic
-domains (1D); the rollout length is ramped $2\to k_{\mathrm{mid}}$ over
-the first $58\%$ of Stage~B and to $k_{\max}$ by $70\%$. All runs use
-AdamW with linear warm-up and cosine decay, weight decay $10^{-5}$,
-gradient clipping at 1, and training seed 0. The 12-channel model used for
-data assimilation in the companion paper \citep{jones2026da} is listed there.
-$^a$A signed latent spatial-coherence penalty (weight 0.01).}
+\caption{Architecture and training configuration of the main-text models:
+the 1D model, the small-box models (``box''; route a; for 2D KS recipe C2,
+for Kolmogorov flow recipe C at $\alpha=0.1$) and the window-trained models
+(route b). Reaches are radius $\times$ layers in sites; the propagator mixes
+over a radius $w$ in each of $n_\ell$ blocks of width $d_m$ (MLP ratio 4,
+output projection initialized to zero). Stage~A trains the autoencoder,
+Stage~B the propagator with forced-halo rollouts (2D) or on whole periodic
+domains (1D); the rollout length is ramped $2\to k_{\mathrm{mid}}$ over the
+first $58\%$ of Stage~B and to $k_{\max}$ by $70\%$. All runs use AdamW
+with linear warm-up and cosine decay, weight decay $10^{-5}$ and gradient
+clipping at 1. The listed models use training seed 0; the further seeds
+cited in the text (1D: two; 2D KS small box: two; Kolmogorov $\alpha=0.1$
+small box: two; $\alpha=0.05$ window: one) differ only in the seed. The
+12-channel model used for data assimilation in the companion paper
+\citep{jones2026da} is listed there. $^a$A latent coherence penalty, see
+text.}
 \label{tab:architecture}
-\widetabular{lccccc}{\tabinput{tables/architecture_dynamics}}
+\widetabular{lccccccc}{\tabinput{tables/architecture_dynamics}}
 \end{table*}
 
 \para{Selection of the $\alpha=0.1$ model.} Six variants were trained at
 $\alpha=0.1$ (Sec.~\ref{sec:fail_mse}). The main-text model was chosen by a
-rule written before it was evaluated and using no Lyapunov truth. (i)
+rule that uses no Lyapunov truth; the rule was written after the variants
+had been scored against the truths then available, but before its own
+metric was computed (Sec.~\ref{sec:canonical_results}). (i)
 Eligibility: free rollouts of 1000 steps from two initial conditions on
 the $1\times$, $2\times$ and $3\times$ boxes, statistics over steps
 100--1000; the vorticity standard deviation and the kinetic-energy share
@@ -43,3 +50,17 @@ on the held-out validation trajectory, with the model deployed on the
 full $32\pi\times2\pi$ domain and started from 19 snapshots. Variants
 within $2\%$ would be separated by the smaller deviation in (i). Results
 for all six variants are in \texttt{artifacts/experiments/a10\_selection/}.
+
+\para{The latent coherence penalty of the 1D model.} The 1D model was
+trained with an additional Stage~A term of weight $0.01$ that rewards
+positive correlation between latent coordinates that are close in the
+site-major latent index, that is, mostly the channels of the same and
+neighbouring sites. Over a batch it computes the matrix $C$ of signed Pearson
+correlations between the $\dlat$ latent coordinates and returns
+$-\big(\sum_{i\neq j} W_{ij}C_{ij}/\sum_{i\neq j}W_{ij} - \overline{C}_{\rm off}\big)$,
+where $W_{ij}=\exp(-d_{ij}^2/18)$ is a Gaussian weight in the circular
+distance $d_{ij}$ between indices and $\overline{C}_{\rm off}$ the plain mean of the
+off-diagonal correlations; ``signed'' means that anti-correlated
+neighbours are penalized rather than rewarded. The 2D models do not use
+it, and we have not measured the 1D model's sensitivity to it.
+

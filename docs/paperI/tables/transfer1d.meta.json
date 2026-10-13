@@ -1,7 +1,7 @@
 {
   "table": "transfer1d",
-  "git_sha": "f33f55e7e5b08c5a48dfdfd943a7c3d1d4da4a05",
-  "timestamp_utc": "2026-10-11T13:59:32Z",
+  "git_sha": "098c81bc68498545197616d71bfad0dff370fe4e",
+  "timestamp_utc": "2026-10-13T15:59:49Z",
   "inputs": [
     "artifacts/experiments/e1_model/summary_1d_transfer.json"
   ]

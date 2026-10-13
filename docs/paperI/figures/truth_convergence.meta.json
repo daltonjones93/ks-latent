@@ -1,7 +1,7 @@
 {
   "figure": "truth_convergence",
-  "git_sha": "afa4310636f3cab122a07cc36cad34aca73106fd",
-  "timestamp_utc": "2026-10-11T19:27:23Z",
+  "git_sha": "1543fe86c04fdc59e4261cb38052afa625f4734a",
+  "timestamp_utc": "2026-10-13T16:14:10Z",
   "inputs": [
     "artifacts/experiments/crop/truth_a0p05_x2_seed0_T120.json",
     "artifacts/experiments/crop/truth_a0p05_x2_seed1_T120.json",
