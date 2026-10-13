@@ -97,12 +97,27 @@ def main() -> None:
         u0 = spinup_kolmogorov(cfg, np.random.default_rng(a.seed))
         ae = load_autoencoder_checkpoint_resized_2d(str(ae_ckpt), new_n_sites_x=nsx, new_n_sites_y=nsy,
                                                     new_NX=NX, new_NY=NY)[0].eval()
-        prop = load_propagator_checkpoint_resized_2d(str(prop_ckpt), new_n_sites_x=nsx, new_n_sites_y=nsy)[0].eval()
+        from ks_latent.models.memory_prop import is_memory_checkpoint, load_memory_prop_resized
+        memory = is_memory_checkpoint(prop_ckpt)
         c = ae.cfg.local_channels
-        with torch.no_grad():
-            z = ae.encode(encode_input(ae, (u0 - mean) / std, ck, cfg.Lx, cfg.Ly))  # R15: wuv-aware
-            roll = prop.rollout(z, z, k=a.n_steps)[0]  # (k, d)
-            dec = torch.cat([ae.decode(roll[i:i + 100]) for i in range(0, a.n_steps, 100)])
+        if memory:  # Z10a: warm up the memory on W truth snapshots (z forced), roll out from the last one
+            prop, _, pck = load_memory_prop_resized(str(prop_ckpt), nsx, nsy)
+            prop.eval()
+            Wm = int(pck.get("memory_warmup", 8))
+            ev = int(round(float(md["dt_snap"]) / cfg.dt))
+            hist = integrate_kolmogorov(u0, cfg, n_steps=Wm * ev, snapshot_every=ev)  # (Wm+1, NX, NY)
+            u0 = hist[-1]  # the truth comparison starts from the same state as the free rollout
+            with torch.no_grad():
+                zh = torch.cat([ae.encode(encode_input(ae, (hh - mean) / std, ck, cfg.Lx, cfg.Ly)) for hh in hist])
+                x = prop.warmup(zh.unsqueeze(0))
+                roll = prop.encoder_part(prop.rollout(x, x, k=a.n_steps)[0])
+                dec = torch.cat([ae.decode(roll[i:i + 100]) for i in range(0, a.n_steps, 100)])
+        else:
+            prop = load_propagator_checkpoint_resized_2d(str(prop_ckpt), new_n_sites_x=nsx, new_n_sites_y=nsy)[0].eval()
+            with torch.no_grad():
+                z = ae.encode(encode_input(ae, (u0 - mean) / std, ck, cfg.Lx, cfg.Ly))  # R15: wuv-aware
+                roll = prop.rollout(z, z, k=a.n_steps)[0]  # (k, d)
+                dec = torch.cat([ae.decode(roll[i:i + 100]) for i in range(0, a.n_steps, 100)])
         w_model = field0(dec, NX, NY, getattr(ae.cfg, "n_fields", 1)).numpy() * std + mean  # R15: omega channel
         zs = roll.numpy().reshape(a.n_steps, nsx, nsy, c)
         h = a.n_steps // 2

@@ -125,6 +125,12 @@ def main() -> None:
     p.add_argument("--stats-pool", type=int, default=16)
     p.add_argument("--stats-burn", type=int, default=16)
     p.add_argument("--stats-k", type=int, default=4)
+    # Z10a (2026-10-13): memory channels written only by the propagator (ks_latent/models/memory_prop.py). 0 = off.
+    p.add_argument("--memory-channels", type=int, default=0,
+                   help="Z10a: m memory channels per site (encoder never produces them; 0 at encode)")
+    p.add_argument("--memory-warmup", type=int, default=8, help="Z10a: warm-up steps (z forced, memory from 0)")
+    p.add_argument("--memory-relay", action="store_true",
+                   help="Z10a option (ii): memory update also reads neighbours' memory (window training inexact)")
     args = p.parse_args()
     set_seed(args.seed)
     dev = get_device(args.device)
@@ -263,6 +269,27 @@ def main() -> None:
           f"(y: {pcfg.halo_sites_y}), free interior {Pu - 2 * halo} x {bank_tr.shape[3] - 2 * pcfg.halo_sites_y}",
           flush=True)
     c = ae_cfg.local_channels
+    if args.memory_channels > 0:
+        from ks_latent.models.memory_prop import MemoryLocalProp2D, MemoryPropConfig
+        from ks_latent.training.memory import train_crop_prop_memory
+        assert args.backbone == "local_mlp_2d" and args.n_history == 1 and args.w_stats == 0 and args.w_spectral == 0
+        mcfg = MemoryPropConfig(n_sites_x=Pu, n_sites_y=bank_tr.shape[3], local_channels=c,
+                                memory_channels=args.memory_channels, token_d_model=32, n_layers=args.prop_layers,
+                                window=args.window, relay=args.memory_relay)
+        prop = MemoryLocalProp2D(mcfg).to(dev)
+        print(f"[crop] Z10a memory propagator: m = {args.memory_channels}, warm-up {args.memory_warmup}, "
+              f"relay {args.memory_relay}", flush=True)
+        t0 = time.time()
+        resB = train_crop_prop_memory(prop, bank_tr, bank_va, pcfg, args.memory_warmup,
+                                      log=lambda s: print(s, flush=True))
+        torch.save({"prop_state_dict": prop.state_dict(), "memory_prop_config": mcfg,
+                    "prop_config": mcfg, "memory_warmup": args.memory_warmup,
+                    "best_val_kmax_mse": resB["best_val_kmax_mse"], "crop_prop_config": pcfg.__dict__, **norm},
+                   prop_path)
+        write_provenance(prop_path, config=mcfg, seed=args.seed, device=dev.type, wall_time_s=time.time() - t0)
+        (A / f"crop_stageB_history_{args.tag}.json").write_text(json.dumps(resB, indent=2))
+        print("[crop] done", flush=True)
+        return
     prop_cfg = AuxPropagatorConfig(
         d_latent=Pu * bank_tr.shape[3] * c, mode="history" if args.n_history > 1 else "markovian",
         n_history=max(args.n_history, 2) if args.n_history > 1 else 3,

@@ -50,6 +50,10 @@ def main() -> None:
     backbone = getattr(torch.load(args.prop_ckpt, map_location="cpu", weights_only=False)["prop_config"], "backbone", None)
     loader = (load_propagator_checkpoint_resized_2d_biotsavart if backbone == "local_mlp_2d_biotsavart"
               else load_propagator_checkpoint_resized_2d)
+    from ks_latent.models.memory_prop import is_memory_checkpoint, load_memory_prop_resized
+    memory = is_memory_checkpoint(args.prop_ckpt)  # Z10a: Markovian map on the extended state (z, memory)
+    if memory:
+        loader = load_memory_prop_resized
     prop, prop_cfg, _ = loader(args.prop_ckpt, new_n_sites_x=nsx, new_n_sites_y=nsy)
     prop.eval()
     cfg = KolmogorovConfig(Lx=2 * math.pi * args.scale, Ly=2 * math.pi, NX=NX, NY=NY, nu=float(md["nu"]),
@@ -59,7 +63,10 @@ def main() -> None:
     t0 = time.time()
     with torch.no_grad():
         # R15: wuv models get the velocity computed on this domain; single-field models are unchanged
-        z0 = ae.encode(encode_input(ae, u0, ck, cfg.Lx, cfg.Ly))[0].numpy().astype(np.float64)
+        z0 = ae.encode(encode_input(ae, u0, ck, cfg.Lx, cfg.Ly))
+        if memory:  # memory starts at 0 and fills during the Benettin warm-up (200 steps)
+            z0 = prop.extend(z0)
+        z0 = z0[0].numpy().astype(np.float64)
     res = lyapunov_spectrum_latent_propagator(
         prop, np.stack([z0, z0]), mode="single_state", n_directions=prop_cfg.d_latent, n_steps=2000,
         qr_every=10, dt_snap=float(md["dt_snap"]), warmup_steps=200, seed=args.seed, max_abs_state=1e3,
@@ -69,7 +76,7 @@ def main() -> None:
         truth = json.loads(Path(args.truth_json).read_text()).get("D_KY", truth)
     out = {"alpha": alpha, "scale": args.scale, "seed": args.seed, "d_latent": prop_cfg.d_latent,
            "model_D_KY": res.kaplan_yorke_dimension, "model_lambda1": float(res.exponents[0]),
-           "model_n_positive": int(res.n_positive), "true_D_KY": truth,
+           "model_n_positive": int(res.n_positive), "true_D_KY": truth, "memory": memory,
            "rel_err_pct": abs(res.kaplan_yorke_dimension - truth) / truth * 100.0 if truth else None,
            "ae_ckpt": args.ae_ckpt, "prop_ckpt": args.prop_ckpt, "ic": "normalized (wide-set stats)",
            "wall_s": time.time() - t0}
