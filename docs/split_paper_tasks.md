@@ -1041,16 +1041,21 @@ checks for the mechanism paragraph.
 Legend: [ ] to do, [~] in progress, [x] done (with date/commit).
 
 **Paper I (`docs/paperI`, never `docs/paper1`)** — framing per Z11.
-- [~] P1-1 Framing: abstract, intro, key claims (small box for 1D/2D KS; Kolmogorov window-trained at all drags;
+- [x] P1-1 (2026-10-13, 2ad84d3) Framing: abstract, intro, key claims (small box for 1D/2D KS; Kolmogorov window-trained at all drags;
   small-box Kolmogorov failure reported with mechanism). Agent "paperI-writing".
-- [~] P1-2 Method: narrow Lemma 1 and Prop. 2 ("exact equivariance"), selection rule as one case study (M5, M6, M12).
-- [~] P1-3 2D KS small-box results (C2, 3 seeds × 3 ICs at 44², 66²; 88² placeholder until the truth lands).
-- [~] P1-4 Trivial extensive baseline, λ₁ vs truth, interval statements (M7, M4, M3).
-- [~] P1-5 Box-vs-window section (M2), learned-baseline argument (M7).
-- [~] P1-6 Kolmogorov section (window-trained; small-box failure with rollout spectra; mechanism paragraph
+- [x] P1-2 (2026-10-13, 2ad84d3) Method: narrow Lemma 1 and Prop. 2 ("exact equivariance"), selection rule as one case study (M5, M6, M12).
+- [x] P1-3 (2026-10-13, 2ad84d3) 2D KS small-box results (C2, 3 seeds × 3 ICs at 44², 66²; 88² placeholder until the truth lands).
+- [x] P1-4 (2026-10-13, 2ad84d3) Trivial extensive baseline, λ₁ vs truth, interval statements (M7, M4, M3).
+- [x] P1-5 (2026-10-13, 2ad84d3) Box-vs-window section (M2), learned-baseline argument (M7).
+- [x] P1-6 (2026-10-13, 2ad84d3) Kolmogorov section (window-trained; small-box failure with rollout spectra; mechanism paragraph
   placeholder until the reach test/box checks land; seed placeholders).
-- [~] P1-7 Figures/tables regenerated (transfer table with small-box rows, scaling figure, α spectra panel).
-- [ ] P1-8 Fill placeholders: 88² truth, window-model seeds, reach test, box checks, α = 0.1 3× IC 1, Z10a outcome.
+- [x] P1-7 (2026-10-13, 2ad84d3) Figures/tables regenerated (transfer table with small-box rows, scaling figure, α spectra panel).
+- [ ] P1-8 Fill placeholders (9 left, grep `TODO(P1-8)`/`\todo`; 3× IC 1 already filled: 45.7, −14.5%, 3× mean −20.7%): 88² truth, window-model seeds, reach test, box checks, α = 0.1 3× IC 1, Z10a outcome.
+- [ ] P1-10 User decisions (agent report 2026-10-13): (a) α = 0.1 1× truth now 3 ICs (mean 14.6): the selected window
+  model's 1× error goes 0.9% → +9.0% and v2 ranks third of six, so "chose the lowest-error variant" is false; text
+  must say so (selection was truth-free by design, A10); (b) keep the box-check numbers as a footnote (§6.2 fn 1)?
+  (c) Fig. 5(e) α = 0.05 window curve uses k_xs005, not c19_e0d0_c6 → rollout stats for c19 started 12:45 (~20 min);
+  (d) unverified citation for extensivity probes (Fishman & Egolf candidate); (e) CRediT, data DOI, date.
 - [ ] P1-9 Final checks: `check_numbers.py --paper paperI`, decisions log, internal referee pass.
 
 **Paper II (`docs/paperII`)**
