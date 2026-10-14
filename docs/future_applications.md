@@ -27,7 +27,8 @@ transfer cleanly. Every application below is therefore a question of *how local 
 scales the box resolves*.
 
 The first three candidates are ordered by how directly they map onto what we already have; §4 (coupled
-phase oscillators) was added later and is the cleanest control experiment for the nonlocality question.
+phase oscillators) was added later and is the cleanest control experiment for the nonlocality question,
+and §5 is the CM1 roadmap (transient dynamics, no CM1 data needed).
 
 ---
 
@@ -409,7 +410,133 @@ model can and cannot do on a non-lattice network before we meet real heterogenei
 
 ---
 
-## 5. Suggested order and shared infrastructure
+## 5. A roadmap toward CM1 squall lines without CM1 data (transient dynamics)
+
+Added 2026-10-14 at the user's request. Context: the end goal (Paper III) is latent DA on CM1 squall-line
+data. We have no CM1 data and the user cannot generate it on the laptop. This section builds a **model
+hierarchy**, the standard atmospheric-science device: each rung adds one CM1 ingredient, every rung is
+cheap, and a failure localises to the ingredient just added. Literature citations are from memory and
+marked *(verify)*.
+
+### 5.1 The methodological problem that none of the earlier sections solves
+A squall line is a **transient**, not a statistically stationary attractor: it spins up, propagates, and
+decays over hours. Papers I and II validate with Benettin Lyapunov spectra and D_KY per unit size, which
+require a stationary, ergodic attractor. None of KS, L96, Kolmogorov flow, or the oscillator lattices in §4
+forces us to change the protocol; this is the first place where it must change. The hierarchy below is
+therefore chosen so that **every rung is a transient we can generate in bulk** (hundreds of events per
+rung), and so that the new validation protocol is developed and debugged on cheap cases first.
+
+### 5.2 Proposed validation protocol for transients (to be pre-registered before T1 runs)
+1. **Event ensembles.** Randomise the initial condition and environment (bubble amplitude and size,
+   background stratification, shear, rotation rate) over a stated range; hold out whole parameter regions.
+2. **Event diagnostics instead of attractor statistics:** front (gust-front) position and speed, cold-pool
+   strength, rain total and accumulated-rain histogram, kinetic-energy spectrum at fixed times, and
+   conservation errors (mass, energy where conserved).
+3. **Finite-time Lyapunov exponents (FTLE).** Keep our gauge-invariant dynamics check by computing the
+   FTLE distribution over the event window, for the truth and for the model, from an ensemble of
+   initial conditions. Compare distributions (mean and quantiles) instead of a spectrum. Short windows are
+   noisy, so a distribution is the object, not a single value.
+4. **Skill relative to the truth's own spread.** Forecast error versus lead time, normalised by the
+   spread among truth runs from perturbed ICs (the predictability floor). A model that is "within the
+   predictability floor" is as good as a perfect model can be.
+5. **Time-shift and event-count transfer** (the transient analogue of domain transfer, see 5.4).
+Decision rules (R-style): fix tolerances before looking; e.g. front position within one grid cell or 5% of
+the travelled distance at 2×, FTLE mean within 15%, error below the truth-spread floor at the lead time
+that matters. Both verdicts are publishable.
+
+### 5.3 The ladder
+| Rung | System | New ingredient vs. the rung below | Transient? | Cost on a laptop |
+|---|---|---|---|---|
+| T0 | Rotating shallow water (RSW) | Fast gravity waves, geostrophic balance, hidden velocity (observe h) | Adjustment, dam break, forced-dissipative turbulence | hours |
+| **T1** | **Modified RSW with convection and rain** (Würsch & Craig 2014; Kent, Bokhove & Tobias 2017 *(verify)*) | A convective trigger when h exceeds a threshold, and rain as a hidden variable; designed as a toy for convective-scale DA | Triggered, decaying events | 1–2 days for a validated solver |
+| **T2** | **2D density current / cold pool** (Straka et al. 1993 benchmark *(verify)*) | Buoyancy, pressure (elliptic or acoustic), vertical structure, Kelvin–Helmholtz rotors, a cold pool | One event over about 900 s | a few days |
+| T3 | 2D moist bubble with warm-rain microphysics (Bryan & Fritsch 2002 *(verify)*) | Latent heating, microphysical thresholds, positivity | Yes | about a week |
+| T4 | Cold pool in vertical shear (Rotunno, Klemp & Weisman 1988 *(verify)*) | Gust-front lifting, line propagation, RKW balance | Yes, with a long-lived line | extension of T2/T3 |
+| T5 | 2D idealised squall line (WRF `em_squall2d_x`-style, or a 2D CM1 case if a build ever becomes possible) | Full combination, domain large enough for line organisation | Yes | needs external code |
+
+The lower rungs can be solved with small purpose-written solvers (finite volume or pseudo-spectral); the
+upper rungs need validation against published benchmark numbers (front position and temperature extrema
+at fixed times for T2) before any learning is attempted.
+
+### 5.4 What carries over from Papers I–II, and the transient version of each
+| Existing element | Transient version |
+|---|---|
+| Reach rule, "small box suffices" | Train on one event in a small box; run **several independent events in a large box** with no retraining; far-apart events must evolve independently (locality), and the **collision of two gust fronts** is the physically interacting case (new convection is triggered) |
+| Forced halo (Prop. 2) | Lateral boundary conditions of a limited-area model (CM1's inflow/outflow) are exactly an externally supplied halo |
+| Hidden-variable latent filter | Observe rain or reflectivity-like fields, infer θ, pressure and velocity |
+| Z17 crossover (physics + parameter estimation vs. learned) | Physics model with wrong microphysics or trigger threshold vs. learned filter; parametric vs. structural error |
+| Box check | Truth-only test of whether a larger domain holds scales or events the small box does not |
+| D_KY per unit size | Replaced by FTLE distributions (5.2); extensivity is tested through event counts, not D_KY |
+
+### 5.5 Rung-by-rung plan
+
+**T0, rotating shallow water.** Doubly periodic, forced-dissipative (a drive at intermediate wavenumbers
+and a large-scale drag) for a stationary turbulent state, plus transients: Rossby adjustment and a
+Gaussian-hump dam break. Checks: gravity-wave speed √(gH) against the snapshot interval (the Phase 2
+rule: reach ≥ c·Δt/h); conservation of mass and potential vorticity along Lagrangian paths (to
+tolerance); divergence-free balanced part after adjustment. DA: observe h only, infer (u, v). Expected:
+transfer in domain size works as for KS because the system is hyperbolic, with no elliptic solve.
+Main new risk: **two time scales** (slow balanced flow and fast waves), which can force a very small
+snapshot interval or a latent split into balanced and wave parts.
+
+**T1, modified RSW with convection and rain.** The reason for choosing it: the modelling community
+built it for convective-scale DA experiments *(verify)*, so there are published baselines for the DA
+side (ensemble filter behaviour under model error, observation of rain). Questions: can a weight-shared
+local latent learn a threshold trigger (a discontinuous source) and non-negative rain? Does the learned
+filter beat a physics filter with a misspecified threshold? Failure mode to watch: a smooth MLP
+propagator rounding the threshold, giving early or late triggering. A direct measurement of this
+(trigger time and place versus truth) is part of the validation set.
+
+**T2, 2D density current.** Dry, no moisture, x–z, periodic or open in x, rigid plates in z. Truth solver
+must reproduce the benchmark's front position and extrema at fixed times at the benchmark resolution
+(with its prescribed eddy viscosity; the problem is not converged without it, which is a feature: it
+removes the sub-grid question). Training set: randomised bubble amplitude, radius, depth and
+background stability, many events. Tests: (i) held-out amplitude and size; (ii) domain transfer with
+several pools; (iii) FTLE distribution over the event; (iv) front position bias, which is the
+first thing a smoothing MLP will damage. Vertical structure enters as **columns-as-channels** (the same
+design as the minimal-flow-unit plan, §2): the encoder sees a full column at each x-site, so reach is
+purely horizontal.
+
+**T3, 2D moist bubble.** Add moisture variables with simple warm-rain (Kessler-type) microphysics. New
+requirements: positivity of the moisture and rain mixing ratios (a constrained decoder, e.g.
+softplus), threshold physics at saturation, and **log-like observation operators** (reflectivity is a
+log of hydrometeors, bounded below by "no echo", so the innovation distribution is non-Gaussian near
+zero). DA: reflectivity and radial-velocity-like observations of a subset of columns.
+
+**T4, cold pool in shear.** Add background shear and test RKW's prediction that a line is long-lived when
+the cold pool's circulation balances the shear's. Here the model must hold a propagating coherent
+structure for many advective times, so error in propagation speed accumulates linearly with time: the
+first rung where *phase drift* is the dominant failure and needs its own metric.
+
+**T5.** A 2D idealised squall line. Needs external code (WRF idealised 2D case, or CM1 in 2D, which is
+small compared to 3D but still needs a Fortran/NetCDF build); keep it as the target, not a prerequisite.
+If it ever becomes possible, the first step is a truth-only box check and the event protocol of 5.2.
+
+### 5.6 Risks
+- **Sharp fronts and shocks.** An MLP propagator trained with MSE will smooth them; phase and amplitude
+  errors of the front may dominate everything else. Consider a front-aware loss or a conservative
+  (flux-form) latent update; measure front error first.
+- **Positivity and conservation.** Rain, moisture and mass must remain non-negative / conserved; a
+  decoder constraint is cheap, a conservative propagator is harder.
+- **Stiffness from fast waves** sets the snapshot interval and so the number of rollout steps per event.
+- **Short trajectories and distribution shift.** Training on many short events means a model can be good
+  at the typical event and wrong on rare triggers; hold out whole regimes, not random snapshots.
+- **Benchmarks as a trap.** Matching a published benchmark at one resolution is not evidence of
+  generality; test at a second resolution and a second parameter region.
+- **No CM1 until much later.** Every rung is a proxy; the roadmap claims only that ingredients are
+  tested in isolation, not that results transfer to CM1.
+
+### 5.7 What would change the plan
+- If T0 fails on balance (the model drifts off the slow manifold), the latent probably needs an explicit
+  balanced/wave split before any convective rung.
+- If T1 shows the trigger cannot be learned without a hand-built indicator channel, state that and
+  supply the indicator as a physical input, as ω_i is supplied in §4.
+- If T2's front error is large but FTLE statistics are fine, the dynamics are right and the
+  regression is wrong: change the loss, not the architecture.
+
+---
+
+## 6. Suggested order and shared infrastructure
 
 | Step | System | New code | Cost | Depends on |
 |---|---|---|---|---|
@@ -420,6 +547,9 @@ model can and cannot do on a non-lattice network before we meet real heterogenei
 | 1b | Kuramoto lattice/ring: K0 regime scan, K1 compression, K2 transfer | RK4 + exact sparse tangent, circular encoding | ~1 day | Z16 code path |
 | 1c | Rewiring sweep K3, mean-field K4, DA K5 | graph-aware propagator, wrapped innovations | ~1 week | K2 |
 | 5 | Power-grid DA on synthetic grids | GNN with edge features | weeks | K3, K5 |
+| C0 | Rotating SWE: waves, balance, h-only DA (CM1 roadmap T0) | periodic RSW solver | days | existing 2D pipeline |
+| C1 | Modified RSW with convection and rain (T1) | trigger and rain variables, positivity | 1–2 weeks | C0 |
+| C2 | 2D density current (T2), then moist bubble (T3), cold pool in shear (T4) | x–z solver, benchmark validation, FTLE protocol | weeks | C1 |
 
 Shared requirements across all candidates: (i) a truth-only box check *before* any training, (ii) a
 Lyapunov-spectrum validator at 1×, 2×, 3× or more, with several initial conditions to expose truth
@@ -427,7 +557,7 @@ spread, (iii) the decision rules written down before running (R9a, the 10% winne
 statement of the crossover relative to the learned model's own one-cycle error), (iv) one section on
 what failed.
 
-## 6. What would change our minds
+## 7. What would change our minds
 
 - If the cardiac proxy transfers and the DA ordering follows Paper II, the methodology has a natural
   application and a hidden-field story that is stronger than anything in KS.
@@ -443,3 +573,6 @@ what failed.
   gains a controlled test it has not had (§4.3, K3).
 - If a Kuramoto regime has D_KY/N well below 1 and the latent can be compressed there (K1), the L96 result
   ("latent as large as the state") is a property of L96's incompressibility and not a limit of the method.
+- If the transient-validation protocol of §5.2 cannot separate a good model from a smoothed one (front
+  position and FTLE both pass for a model that visibly smears the front), the protocol is the problem and
+  needs a front-sensitive diagnostic before any CM1-facing claim is made.
