@@ -134,7 +134,7 @@ conditions within a panel. Kolmogorov runs (120 time units): the dotted
 line marks the value a 40-unit run returns, which differs from the
 120-unit value by $-17\%$ to $+23\%$ and in five of seven runs lies
 above it (mean $+9\%$). 2D KS runs (40 time units): the running value still moves by
-$3$--$5\%$, in both directions, over the last 20 time units
+$0.3$--$5\%$, in both directions, over the last 20 time units
 (Appendix~\ref{app:truth_ks2d}).}
 \label{fig:truth_convergence}
 \end{figure*}
@@ -176,13 +176,15 @@ $46.6$ and $52.6$.
 
 The 2D KS truths average over 40 time units, about 7 Lyapunov times.
 Three runs at $44^2$ give $81.8$, $80.7$ and $83.6$, and three at $66^2$ give
-$192.5$, $185.6$ and $187.5$, a spread of $-1.6$ to $+1.9\%$ at $44^2$ and $-1.6$ to $+2.1\%$ at $66^2$.
+$192.5$, $185.6$ and $187.5$, a spread of $-1.6$ to $+1.9\%$ at $44^2$ and $-1.6$ to $+2.1\%$ at $66^2$;
+one run at $88^2$, with 400 tangent directions, gives $338.3$.
 Table~\ref{tab:running_ks2d} gives the running estimates of the runs that
-recorded them: over the last 20 time units they still move by $3$--$5\%$,
-in both directions. We therefore treat the 2D KS truths as uncertain at
+recorded them: over the last 20 time units the $44^2$ and $66^2$ runs still move by $0.3$--$5\%$,
+in both directions, and the $88^2$ run by $0.5\%$. We therefore treat the 2D KS truths as uncertain at
 the level of a few percent, comparable to the model errors of
 Sec.~\ref{sec:ks2d_box} and larger than the $2.2\%$ difference
-between the mean densities at the two sizes.
+between the mean densities at $44^2$ and $66^2$; the $88^2$ density is a
+further $0.9\%$ above the $66^2$ mean, from one run.
 
 \begin{table}[htbp]
 \caption{Running $\DKY$ of the 2D KS truth runs that recorded it, at the

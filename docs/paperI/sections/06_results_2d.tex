@@ -30,22 +30,29 @@ $188.5$ ($-2.4\%$, range $-3.2$ to $-1.7\%$, six evaluations). The $66^2$
 truth runs themselves span $3.7\%$ ($185.6$, $187.5$ and $192.5$); scored against
 the run from its own initial condition, the models are $0.4$--$1.6\%$ low
 from one initial condition and $3.7$--$5.1\%$ low from the other. At $88^2$, four
-times the training area, the three seeds give $325.5$--$329.6$, a density of
-$82.0$ per $44^2$ box, equal to the native truth's.\todo{88$^2$ truth:
-replace "equal to the native truth's" by the error against the $88^2$
-truth} The leading exponent is too high, as for every 2D model we
+times the training area, the three seeds give $325.5$--$329.6$ against
+$338.3$ for the single truth run ($-2.6$ to $-3.8\%$, mean $-3.1\%$). The models
+keep the density of the $44^2$ truth, $82.0$ per $44^2$ box; the $88^2$
+truth's is $84.6$, so the error here is that of the extensive baseline
+($-3.0\%$), and it is of the order of the $3.7\%$ spread among the three $66^2$
+truth runs, which a single run cannot resolve. The leading exponent is too high, as for every 2D model we
 trained at the training size: $0.216$ against $0.182$ at $44^2$ ($+18\%$) and
-$0.219$ against $0.203$ at $66^2$ ($+8\%$; Table~\ref{tab:lambda1}). Matching $\DKY$
+$0.219$ against $0.203$ at $66^2$ ($+8\%$; Table~\ref{tab:lambda1}). At $88^2$
+it is $0.226$ against $0.255$ ($-11\%$); the single $88^2$ truth run has a higher
+$\lambda_1$ than the smaller boxes, which we cannot attribute to the box
+or to the run, and the models' stays at $0.22$--$0.24$. Matching $\DKY$
 with an excess $\lambda_1$ means the model's spectrum differs in shape: it
 has fewer but faster unstable directions, $40$--$42$ positive exponents at
-$44^2$ against $42$--$44$ for the truth, with the excess growth compensated
+$44^2$ against $42$--$44$ for the truth and $161$--$165$ at $88^2$ against
+$174$, with the excess growth compensated
 further down the spectrum. The Kolmogorov small-box model at $\alpha=0.1$
 shows the same pattern more strongly, $6$--$7$ positive exponents per box
 against $7$--$8$.
 
 Two qualifications apply. First, the trivial extensive baseline does as
 well: $2.25$ times the $44^2$ truth is within $2.1\%$ of the $66^2$ truth
-mean. The 2D KS truth is extensive at these sizes, so the transfer of
+mean, and four times it is $3.0\%$ below the $88^2$ truth, as far as the
+small-box models. The 2D KS truth is extensive at these sizes, so the transfer of
 $\DKY$ shows that the local rule has the right density, not more
 (Remark~\ref{rem:extensive_model}). Second, the training recipe was chosen
 with a test-size truth (Sec.~\ref{sec:canonical_recipe}): the first
@@ -57,13 +64,13 @@ $66^2$ initial condition. All three recipes and seeds are in
 Appendix~\ref{app:tables}.
 
 The window-trained model (route b) gives $83.3$ ($+1.6\%$), $188.1$
-($-0.3\%$) and $332.7$ at the three sizes. Its training windows,
+($-0.3\%$) and $332.7$ ($-1.6\%$) at the three sizes. Its training windows,
 $40\times40$ sites of a $264^2$ domain, are larger than every evaluation
 domain, so its result shows that a rule learned inside a large domain
 also runs on small periodic ones; the small-box models are the test of
 training small and running large. Window training alone does not
 guarantee it: an earlier window model with full reach and $\kmax=12$
-gives $215.9$ at $88^2$, about a third below every other model, on a
+gives $215.9$ at $88^2$, $36\%$ below the truth and about a third below every other model, on a
 domain smaller than its own training windows (Appendix~\ref{app:tables}).
 
 \para{The earlier box-trained models.} Our first 2D models were also

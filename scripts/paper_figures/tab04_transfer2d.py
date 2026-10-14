@@ -115,6 +115,7 @@ print("\n".join(lines))
 L1 = [  # system label, size label, truth system, size key, small-box tags, window tags
     ("2D KS", "$44^2$", "ks2d", ("1.0", 1.0), C2, ["p7b_ks2d"]),
     ("", "$66^2$", "ks2d", ("1.5", 1.5), C2, ["p7b_ks2d"]),
+    ("", "$88^2$", "ks2d", ("2.0", 2.0), C2, ["p7b_ks2d"]),
     ("Kolm., $\\alpha=0.1$", "$1\\times$", "kolm0.1", ("1", 1), ["r12_c6_a01_s1x_r3"], [MAIN_A01]),
     ("", "$2\\times$", "kolm0.1", ("2", 2), ["r12_c6_a01_s1x_r3"], [MAIN_A01]),
     ("", "$3\\times$", "kolm0.1", ("3", 3), ["r12_c6_a01_s1x_r3"], [MAIN_A01]),
