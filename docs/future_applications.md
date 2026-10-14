@@ -26,7 +26,8 @@ data, longer rollouts, memory channels and velocity inputs did not fix it; stric
 transfer cleanly. Every application below is therefore a question of *how local the physics is at the
 scales the box resolves*.
 
-The three candidates are ordered by how directly they map onto what we already have.
+The first three candidates are ordered by how directly they map onto what we already have; §4 (coupled
+phase oscillators) was added later and is the cleanest control experiment for the nonlocality question.
 
 ---
 
@@ -194,7 +195,221 @@ as a Paper III follow-on once the cheaper two exist.
 
 ---
 
-## 4. Suggested order and shared infrastructure
+## 4. Networks of coupled phase oscillators (Kuramoto and relatives)
+
+Added 2026-10-14 at the user's request, with the user's reservation that the power-grid application may not
+fit because grids are "more tightly connected". That reservation is largely right and is worked through in
+§4.8; the lattice and small-world versions of the problem are the interesting part.
+
+### 4.1 The problem
+N phase oscillators θ_i(t) ∈ S¹ coupled through a graph:
+
+    dθ_i/dt = ω_i + Σ_j K_ij · h(θ_j − θ_i − α),     h(φ) = sin φ  (Kuramoto–Sakaguchi)
+
+Variants that matter here: heterogeneous natural frequencies ω_i; phase lag α; a coupling function with
+higher harmonics (Daido: h = sin φ + a sin 2φ); and inertia (second order: m θ̈_i + θ̇_i = …), which adds a
+hidden velocity per oscillator. The regimes that interest us are *spatiotemporally chaotic*, not
+synchronised:
+
+- **Phase turbulence in oscillator lattices** (Sakaguchi, Shinomoto & Kuramoto 1987 *(verify)*): the
+  continuum limit of locally coupled oscillators with phase lag is the **Kuramoto–Sivashinsky equation**
+  itself (Kuramoto's own derivation of KS was a phase reduction of a reaction–diffusion system near a Hopf
+  bifurcation; Kuramoto 1984 *(verify)*). So this system is *microscopically below* Paper I's testbed.
+- **Chimera states and chimera chaos on rings with nonlocal coupling** (Kuramoto & Battogtokh 2002;
+  Abrams & Strogatz 2004; Wolfrum & Omel'chenko 2011, who also computed Lyapunov spectra, found them
+  extensive in N, and showed chimeras at finite N are chaotic and can be transient *(all verify)*).
+- **Inertial (second-order) Kuramoto** on lattices: robust chaos and hidden velocities
+  (Tanaka, Lichtenberg & Oishi 1997 *(verify)*).
+
+Caution on what is *not* chaotic: with **identical** frequencies, α = 0, symmetric K and first-order sine
+coupling the flow is a **gradient system** and cannot be chaotic. With heterogeneous ω "phase chaos" does
+exist even in the plain all-to-all model for N ≥ 4 (Popovych, Maistrenko & Tass 2005 *(verify)*), but
+that is low-dimensional chaos at small N. Extensive, N-scaling chaos on a lattice is usually obtained with
+a phase lag α ≠ 0, a second harmonic, or inertia, and any experiment here should say which it is using.
+
+### 4.2 Why our methodology fits (and where it needs more)
+| Our ingredient | What it maps to |
+|---|---|
+| Per-patch weight-shared encoder, reach 0 | One oscillator (or a block of s sites) per latent site; encode (cos θ, sin θ), not θ |
+| `local_mlp` propagator, reach = layers × window | Interaction range R (sites) of the coupling kernel; reach ≥ R is the design rule |
+| Forced halo, window training | Windows of one long ring; transfer N → 2N → 4N with the same K(r) |
+| Lyapunov spectrum / D_KY density | Gauge-invariant check; extensive in N in the regimes above |
+| Exactly local analysis | Observation of a subset of oscillators' phases → block-diagonal latent H |
+
+New ingredients that Paper I and II did not need:
+1. **A circular state.** Encode (cos θ, sin θ) as two channels; the decoder returns (c, s) and θ = atan2.
+   Observation noise should be von Mises or wrapped Gaussian, and DA innovations are wrapped differences.
+2. **A global rotation gauge** (θ → θ + c). Compare phases only through differences and the order parameter's
+   modulus, never absolute angles, exactly as D_KY is gauge-invariant in the latent.
+3. **Quenched disorder as an input channel.** If ω_i varies, ω_i is a fixed per-site field that must be
+   supplied, the same role forcing plays in Kolmogorov flow. Transfer to larger N then means a larger draw
+   from the same ω distribution.
+4. **A conserved topological quantity on a ring** (winding number of twisted states, the analog of ∫u).
+   (cos, sin) loses it; carry it as a global scalar if the regime has twisted states.
+
+### 4.3 The key design question: what does "local" mean on a graph?
+The Kuramoto coupling is **pairwise**, so on the *graph* it is exactly one hop. The failure we saw in
+Kolmogorov flow is a different animal (an elliptic solve, not a sum). Four cases, in increasing
+difficulty, with predictions and the reason for each:
+
+| Coupling | Index-local model (our current architecture) | Graph-aware model (message passing) |
+|---|---|---|
+| Ring, finite range R sites | **Works if reach ≥ R** | Works, equivalent |
+| Ring, kernel with exponential tail | Works with a truncated reach; error set by the tail beyond reach (testable) | Same |
+| Watts–Strogatz, rewiring p | **Fails gradually with p**: shortcut partners are outside any index window | Works at reach 1 hop, but see below |
+| All-to-all (mean field) | Fails | **Works** with a normalised mean aggregator: f(θ_i, mean_j g(θ_j)) |
+
+Two consequences worth stating before running anything:
+
+- The index-local failure under rewiring is a **controlled mechanism test of nonlocality** with a single
+  knob p and an unchanged local rule. In Kolmogorov we could only say the failure is "consistent with"
+  Biot–Savart; here the cause is built in, so the *shape* of the failure curve versus p is the result
+  (smooth, or a threshold near p·k·N ~ 1 shortcut per window).
+- The Paper I rule "reach < half the box" has a **graph analog that gets harsher**: reach in hops < ½ the
+  graph diameter. A small-world graph has diameter ~ log N, so a handful of hops already spans the whole
+  graph. For pairwise Kuramoto coupling this is harmless (1 hop is exact), but a multi-layer propagator
+  with reach 3 hops *is* the whole network, so the "small box represents large domain" idea loses its
+  meaning. This is a real limit on what "zero-shot transfer in N" can claim on small-world graphs.
+
+*(Conjecture, not checked against the Kolmogorov data: a mean aggregator handles the mean-field case because
+the interaction is a position-independent sum. A 1/r kernel would also be a pairwise sum but needs the
+distance as an input, so the aggregator would have to be kernel-aware. R15 supplied velocity to a
+local model and did not fix Kolmogorov, so this is a hypothesis and the mean-field test is where it is
+checked, not assumed.)*
+
+### 4.4 Plan (cheap first; same code path as the L96 control, Z16)
+
+**K0. Regime scan, truth only (hours).** Choose (α or Daido a or inertia m, R/N, ω distribution) so that
+the dynamics are chaotic and *stay* chaotic. Report for N ∈ {64, 128, 256}: λ₁, number of positive
+exponents, D_KY and D_KY/N, and the **lifetime of the chaotic state** (chimera collapse to synchrony at
+small N is a documented risk). Gate: D_KY/N is constant to ±10% across N and no collapse within 50× the
+run length. If the plain ring fails the gate, switch to the inertial lattice or phase turbulence with
+heterogeneous ω.
+- Integrator: RK4 at dt ≈ 0.05/ω_max-scale, float64; exact tangent from the sparse Jacobian
+  K_ij · h′(θ_j − θ_i − α) (cost O(N·R) per step, like `tangent_rhs` for L96). Chimera exponents are small
+  (≈ 10⁻² or lower), so runs of 10⁴–10⁵ time units are needed for converged spectra; report running D_KY.
+
+**K1. Compression measurement (an hour).** D_KY/N decides whether a compressed latent is possible. L96 was
+near-incompressible (0.68 N) so the latent had to be as large as the state. If a Kuramoto regime has
+D_KY/N ≈ 0.1–0.3, then c channels per patch of s oscillators with c/s < 1 is a real test of whether the
+latent can be smaller than the state, which L96 could not answer. Rule: the smallest c/s at which D_KY is
+within ±10% and λ₁ within ±15% at 2× and 4× N, 3 seeds.
+
+**K2. Ring transfer (about a day).** Train on windows of one N=512 ring (or a periodic N=64 ring), evaluate
+at N = 64/128/256/512 with no retraining. Registered rule (inherited from L96 so it is not tuned): D_KY
+within ±10% of the truth mean (each IC within ±20% given chimera variability) and λ₁ within ±15%, plus
+rollout statistics (order-parameter distribution, structure function) and valid time in Lyapunov times.
+Controls: the trivial extensive baseline (D_KY/N × N), and the box check (a spectral test of the truth
+for scales the training box does not hold).
+
+**K3. Rewiring sweep (about a day).** Watts–Strogatz with k neighbours per side, p ∈ {0, 0.01, 0.03, 0.1,
+0.3, 1}, shortcut *density* held fixed as N grows. Two models per p: index-local and graph-aware. Report
+D_KY error versus p at 2× and 4× N for each. Pre-register the prediction that the index-local error is
+monotone in p and the graph-aware error is flat; a non-monotone curve, or a graph-aware failure, would
+be the interesting outcome.
+
+**K4. Mean-field hybrid (a day).** Global Kuramoto, or global + local, with the order parameter
+R e^{iψ} as a two-channel global input (the "few global scalars + local field" option in the original
+brief, §12.2.1). Test transfer in N and whether the model's order parameter has the correct finite-size
+fluctuations (variance ∝ 1/N, a good independent check). Note for DA: the *forecast* now has a dense
+dependence through R, but the exactness argument of Paper II concerns the **observation operator**, which
+stays block-diagonal; only the *sampling error* of the global scalar needs a separate look.
+
+**K5. DA, the Z17 analog (a few days).**
+- Observations: noisy phases (von Mises) of a fraction f ∈ {0.25, 0.5, 1} of oscillators; and the
+  harder "voltage-like" case, only cos θ_i, which loses the sign of sin θ and is the hidden-field case
+  (second-order variant: phases observed, velocities hidden).
+- Physics filter: local ETKF with the *wrong* model, with K (and α) estimated online; a learned filter in
+  the latent field. Same winner rule as Paper II: ≥10% lower 3-seed mean and lower on every seed.
+- Error axes: **parametric** (K or α off by 10–30%, which estimation should absorb), **structural**
+  (a missing second harmonic a, or a coupling delay, which estimation cannot absorb), and in-between
+  (heterogeneous ω unknown). Prediction from Z17: physics wins the parametric axis, learned wins the
+  structural one once structural error exceeds about 1–1.5× the learned model's own one-cycle error.
+- Technical points: circular means and wrapped innovations in the ETKF; localization distance on the
+  graph, not the index, for small-world graphs; spread floors as in Paper II.
+
+**K6. (Optional, later) Cross-scale check.** Train on the oscillator lattice, then compare the latent
+model's large-scale statistics with KS on the matched continuum scale. This would be the first time our
+two papers' systems are tested against one another, but it needs a clean map from (α, K, R) to the KS
+coefficients and is a research question in itself.
+
+### 4.5 Risks
+- **Weak or transient chaos.** Chimera chaos is slow (small λ₁), sensitive to N and initial conditions,
+  and can collapse. Truth runs may be expensive to converge. Mitigation: K0 gate and an inertial or
+  heterogeneous fallback.
+- **Phase slips and the circle.** A latent in R² per oscillator is fine; a phase *difference* near ±π is
+  a discontinuity in θ-space, so train on (cos, sin) and score in phase differences wrapped to (−π, π].
+- **Finite-size and N-dependence of the truth** itself: the order-parameter fluctuations scale as 1/√N,
+  so a model trained on small N sees a noisier mean field than it will at large N (an in-distribution
+  check for K4, and a place where "equal D_KY density" might be too forgiving).
+- **Heterogeneity.** Frozen ω_i makes the system non-translation-invariant, so "the same weights at
+  every site" is only valid conditional on the ω field; at transfer the ω draw changes and truth spread
+  increases (budget more initial conditions and ω draws, as for the Kolmogorov truth spread of ±20%).
+- **Conflating tests.** Index-local and graph-aware models differ in more than the graph input (parameter
+  count, aggregation). Keep their channel and layer counts matched, or the K3 comparison is not clean.
+
+### 4.6 What a paper would claim
+"For locally and mean-field coupled phase oscillators in chaotic regimes, a weight-shared latent field
+trained on a small network reproduces the Lyapunov spectrum density on larger ones; transfer degrades
+smoothly with the fraction of non-local links for an index-local model and not for a graph-aware one,
+giving a controlled test of the locality requirement." The rewiring sweep is the most distinctive
+element, because it isolates the locality assumption that Kolmogorov flow could only suggest.
+
+### 4.7 Where it sits relative to the other candidates
+Cheapest after the cardiac proxy and a close cousin of Z16/Z17 (ODE lattice, exact tangent, no PDE
+solver), so a first K0–K2 pass is about a day of work. Scientifically it is the cleanest nonlocality
+control we could run, and the only candidate with a built-in link to Paper I's own system.
+
+### 4.8 The power-grid application: an honest assessment
+Power systems are the obvious engineering motivation (the swing equation is a second-order Kuramoto
+model: m_i θ̈_i + d_i θ̇_i = P_i − Σ_j |V_i V_j B_ij| sin(θ_i − θ_j)). The user's reservation is correct,
+and it is worth being specific about why, because some of it is fixable and some is not.
+
+What does not fit:
+1. **Normal operation is not chaotic.** A grid is designed to sit at a stable synchronous state with small
+   perturbations. There is no extensive chaos, so the Lyapunov-spectrum validation that carries Papers I
+   and II has nothing to validate (D_KY would be 0 and the spectrum is stable). Lyapunov-validated
+   transfer is therefore not available; one would need a fault or oscillation regime (inter-area
+   oscillations, cascading failure transients), which is a transient, not an attractor.
+2. **No translation invariance.** Buses differ in inertia, damping, line impedance and degree. Weight
+   sharing across sites is only meaningful with these as input features, which makes the model a graph
+   neural network, not our patch encoder.
+3. **Small diameter.** Transmission grids have low mean degree (about 2.5–3) but the graph diameter is
+   modest and electrical coupling spreads quickly, so a few hops cover a large fraction of the network.
+   The "small box represents a large domain" argument is weak (see §4.3: reach in hops against the
+   diameter).
+4. **Established competition.** Dynamic state estimation with EKF/UKF/ensemble filters and PMU data is a
+   mature field; the bar for a learned filter is a model-based estimator with online parameter
+   estimation, which is exactly Paper II's comparison but in a field with decades of tuned baselines.
+
+What could still fit:
+- **DA with unmodelled dynamics, not Lyapunov transfer.** Grid models omit load dynamics, inverter-based
+  resources, and control loops; a learned latent residual in a *local* neighborhood of buses is a structural
+  error that parameter estimation cannot absorb. That is the Z17 situation. The measurable claim is
+  "learned filter beats the physics filter once structural error exceeds its own one-cycle error",
+  on synthetic large grids with hidden dynamics.
+- **Ensemble size.** Grids with 10³–10⁴ buses make the ensemble-size argument of Paper II relevant:
+  local analysis needs ensemble size set by neighborhood dimension, not network size. Whether
+  a graph-local analysis with a k-hop radius is accurate is a concrete, checkable claim.
+- **Large synthetic test cases** (e.g. the ACTIVSg synthetic grids at 500–10,000 buses *(verify)*) give
+  realistic topologies without proprietary data.
+
+Verdict: a weak fit for the Lyapunov-transfer story and a moderate fit for the DA story. If pursued, treat
+it as the K5 experiment on a graph with grid-like statistics (low degree, long thin loops, heterogeneous
+parameters) and **not** as a transfer paper; and do it *after* K3, because K3 tells us what a graph-aware
+model can and cannot do on a non-lattice network before we meet real heterogeneity.
+
+### 4.9 What a failure here would tell us
+- If K2 fails on a plain ring with R below reach, the problem is the circular encoding or the chaos
+  regime, not locality, so fix the setup before reading anything into it.
+- If K2 passes and K3's index-local error does **not** rise with p, locality of the *index window* is not
+  what matters, which would weaken the explanation we gave for Kolmogorov.
+- If K4 passes with the order parameter as a global input, a finite set of global moments is a tractable
+  kind of nonlocality, which would delimit exactly what R15's failure did and did not rule out.
+
+---
+
+## 5. Suggested order and shared infrastructure
 
 | Step | System | New code | Cost | Depends on |
 |---|---|---|---|---|
@@ -202,14 +417,17 @@ as a Paper III follow-on once the cheaper two exist.
 | 2 | Plane Couette or channel wall-parallel planes, y⁺ map | data loader/solver, multi-height channels | 2–4 weeks | step 1 not required |
 | 3 | 2D shearing sheet | shear-periodic halo | ~1 week | 2D pipeline |
 | 4 | 3D MRI shearing box | HPC data, 3D patches | months | step 3 |
+| 1b | Kuramoto lattice/ring: K0 regime scan, K1 compression, K2 transfer | RK4 + exact sparse tangent, circular encoding | ~1 day | Z16 code path |
+| 1c | Rewiring sweep K3, mean-field K4, DA K5 | graph-aware propagator, wrapped innovations | ~1 week | K2 |
+| 5 | Power-grid DA on synthetic grids | GNN with edge features | weeks | K3, K5 |
 
-Shared requirements across all three: (i) a truth-only box check *before* any training, (ii) a
+Shared requirements across all candidates: (i) a truth-only box check *before* any training, (ii) a
 Lyapunov-spectrum validator at 1×, 2×, 3× or more, with several initial conditions to expose truth
 spread, (iii) the decision rules written down before running (R9a, the 10% winner rule, and the Z17
 statement of the crossover relative to the learned model's own one-cycle error), (iv) one section on
 what failed.
 
-## 5. What would change our minds
+## 6. What would change our minds
 
 - If the cardiac proxy transfers and the DA ordering follows Paper II, the methodology has a natural
   application and a hidden-field story that is stronger than anything in KS.
@@ -219,3 +437,9 @@ what failed.
 - If the 2D shearing sheet needs more than the shear-periodic fix (e.g. the epicyclic/density-wave
   coupling is effectively nonlocal), the rule "reach < half the box" would need a modification for
   long-range wave propagation, which would also be worth saying.
+- If the Kuramoto rewiring sweep shows no dependence on p for the index-local model, locality of the index
+  window is not the controlling factor, and our explanation of the Kolmogorov failure (nonlocal coupling)
+  needs rethinking. If it rises smoothly with p while the graph-aware model stays flat, that explanation
+  gains a controlled test it has not had (§4.3, K3).
+- If a Kuramoto regime has D_KY/N well below 1 and the latent can be compressed there (K1), the L96 result
+  ("latent as large as the state") is a property of L96's incompressibility and not a limit of the method.
