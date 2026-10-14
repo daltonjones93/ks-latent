@@ -1181,3 +1181,13 @@ axis, tested-range wording). M2 done: 220² reruns with working estimation (para
 (θ 1.001), advection 1 0.231 (θ 0.0001) vs latent 0.312, physics wins 1.9× and 1.35× (44²: 1.95×, 1.42×); text updated.
 M5 residuals: `m5_post_summary.json` (σ after remedy ≈ 0 for lap/adv; damping 5/6 0.090/0.147; missing 0.093/0.189/0.282;
 hidden 0.100/0.256).
+
+## Z18 — 88^2 KS truth enters Paper I (2026-10-14)
+
+- Result: `truth_ks2d_x2_seed0` (K=400, T=40, one run) D_KY = 338.3, 174 positive exponents (brackets), lambda1 0.255; running value moved -0.5% over the last 20 time units.
+- Models at 88^2: small box 325.5-329.6 (-2.6 to -3.8%, mean -3.1%), windows 332.7 (-1.6%). Trivial extensive baseline: -3.0%.
+- Decision: replaced "equal to the native truth's" (false against this truth: density per 44^2 box is 84.6 vs 82.0). Abstract/intro/conclusions "within 3.5%" -> "within 4%" and now cover 88^2. Error is stated against ONE truth run; the 66^2 truth runs span 3.7%, so -3% is not resolved.
+- lambda1: model 0.226/0.228 vs truth 0.255 (-11%/-10.5%). The truth's lambda1 rises with box size (0.182, 0.203, 0.255), which should be intensive; not attributed to box or run. Reported with that caveat, not interpreted.
+- Added the 88^2 row to `tab:lambda1` (generator `tab04_transfer2d.py`). Build clean, number check 0 unmatched/0 suspect. 6 "float stuck" warnings are the same at HEAD (pre-existing).
+- Still open in Paper I: R15 clause (06_results_2d:165), A2 reach-3 (three todos; model returns D_KY=0, undiagnosed).
+- Pending: r4c seed1/seed2 and r4w wrap r6 evals were resumed 2026-10-14 after a pause; they feed tab:transfer2d once finished.
