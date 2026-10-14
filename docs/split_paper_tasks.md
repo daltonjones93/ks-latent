@@ -1191,3 +1191,20 @@ hidden 0.100/0.256).
 - Added the 88^2 row to `tab:lambda1` (generator `tab04_transfer2d.py`). Build clean, number check 0 unmatched/0 suspect. 6 "float stuck" warnings are the same at HEAD (pre-existing).
 - Still open in Paper I: R15 clause (06_results_2d:165), A2 reach-3 (three todos; model returns D_KY=0, undiagnosed).
 - Pending: r4c seed1/seed2 and r4w wrap r6 evals were resumed 2026-10-14 after a pause; they feed tab:transfer2d once finished.
+
+## Z19 — A2 resolved: reach, not window data (2026-10-14)
+
+Question: does the window models' transfer come from the training data (windows of a large
+simulation) or from the propagator reach (six sites against three)?
+
+Test: reach-3 window model (`a2*`, `scripts/run_a2_diag.sh`), same Stage A encoder, same data.
+- Default rollouts (k-max 12): free run settles into a large-amplitude non-chaotic state
+  (field std 3.41 / 2.41 vs truth 1.40; D_KY 0 on both seeds). Not an eval bug, not a bad draw.
+- Long rollouts (k-max 32, k-mid 16, 9000 steps; `a2c_r3_k32`): field statistics match
+  (std 1.45 / 1.39; forcing share 0.55 vs 0.58) but D_KY is low at every size:
+  1x 16.1 / 6.7 / 9.3 (-31 to -71%), 2x 34.9 / 27.0 / 34.2 (-39 to -52%),
+  3x 45.4 / 46.6 / 27.7 (-38 to -63%; vs seed-0 truth 75.2).
+- Decision: Paper I states that window data alone does not give transfer at reach three; the
+  reach is needed on windows. Untested: reach six on a small box without window data.
+  Three A2 `\todo`s replaced (06_results_2d, 08_discussion, 09_conclusions); R15 clause also
+  written. No further experiments (user: wrap up the papers).

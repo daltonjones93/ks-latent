@@ -130,7 +130,10 @@ work.
   only, because the forcing fixes the height; transfer in $y$ is untested.
   The Kolmogorov models that transfer were trained on windows larger than
   every evaluation domain, and with twice the propagator reach of the
-  small-box models.\todo{A2: update with the reach-3 window model}
+  small-box models. A window model of reach three, with the same data
+and long rollouts, was $31$--$71\%$ low at $1\times$ and $38$--$63\%$ low at
+$3\times$, so on windows the extra reach, not the data, carries the transfer;
+reach six on a small box was not tested.
   At $\alpha=0.05$ each small-box cell rests on one evaluation, and at
   $\alpha=0.1$ the further seeds and recipes on one initial condition each;
   the failures at $\alpha=0.05$ ($-39$ to $-64\%$) are far outside the

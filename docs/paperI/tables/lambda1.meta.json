@@ -1,7 +1,7 @@
 {
   "table": "lambda1",
-  "git_sha": "a7d4d10a73fa54141a934cf4f228cedcbe092f5d",
-  "timestamp_utc": "2026-10-14T12:18:58Z",
+  "git_sha": "b3daf2aeb4bf871033633a8a74eecbf518a2ef83",
+  "timestamp_utc": "2026-10-14T14:08:08Z",
   "inputs": [
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed0.json",
     "artifacts/experiments/crop/c19_e0d0_c6_x1_seed1.json",

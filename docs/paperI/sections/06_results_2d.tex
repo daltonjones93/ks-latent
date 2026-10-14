@@ -58,7 +58,7 @@ $\DKY$ shows that the local rule has the right density, not more
 with a test-size truth (Sec.~\ref{sec:canonical_recipe}): the first
 small-box recipe, C, gives the same numbers for two of three seeds
 ($82.5$, $184.3$ and $327.7$ for the first seed, each from three initial
-conditions) but $10\%$ low at $66^2$ for the third, and C2, with six times
+conditions) but $7\%$ low at $66^2$ for the third (two initial conditions, $10$ and $4\%$), and C2, with six times
 the box data and longer rollouts, was adopted after comparing both on one
 $66^2$ initial condition. All three recipes and seeds are in
 Appendix~\ref{app:tables}.
@@ -161,8 +161,10 @@ have but an eight-site box cannot, would be the natural tests. We tried the firs
 site, written only by the propagator from its neighbours' state and carried forward in time. They
 lowered the in-box forecast error by a quarter to a third and the $2\times$ error at
 $\alpha=0.05$ from $-39\%$ to $-26\%$, but did not make the small box transfer at $3\times$
-at either drag.%
-\todo{R15 (velocity input, statistics loss): add one clause with the outcome}
+at either drag. Two further attempts at $\alpha=0.05$ did worse: an encoder given the velocity
+computed from the whole field, a loss on the large-scale energy share, and both together left the
+dimension at $6$--$16$ against $47$ at $2\times$ and $75$ at $3\times$ ($-66$ to $-89\%$, one
+evaluation each).
 
 %----------------------------------------------------------------------
 \subsection{Kolmogorov flow: windows of a large simulation}
@@ -177,8 +179,16 @@ $\alpha=0.05$. These models differ from the small-box ones in two ways at
 once, the training data and the propagator's reach (six sites against
 three), and models of reach one fail even on windows of the evaluation
 domain (Appendix~\ref{app:tables}). A window model with reach three,
-trained on the same data, separates the two.\todo{A2: reach-3 window model
-running; state whether the data or the reach makes the difference} Single evaluations range more widely ($-19$ to $+20\%$), as single
+trained on the same data, separates the two: with rollouts of up to $32$
+steps it reproduces the field statistics (standard deviation $1.45$ and $1.39$
+on two initial conditions against $1.40$) but is $31$--$71\%$ low in
+dimension at $1\times$, $39$--$52\%$ at $2\times$ and $38$--$63\%$ at
+$3\times$ (three initial conditions each; the $3\times$ errors are against the
+truth of the first). With the default rollouts of up to $12$ steps it did not
+settle on a chaotic state at all (dimension $0$ on two seeds). Window data
+alone therefore does not give transfer at reach three; the larger reach is
+needed on windows. We did not train a small-box Kolmogorov model of reach
+six, so whether that reach suffices without window data is untested. Single evaluations range more widely ($-19$ to $+20\%$), as single
 truth runs do (Sec.~\ref{sec:truth_uncertainty}). The window models are
 themselves nearly extensive: their density per box rises by $9\%$ from
 $1\times$ to $3\times$ at $\alpha=0.1$ ($16.0$ to $17.4$) and $5\%$ at $\alpha=0.05$

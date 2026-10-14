@@ -1,7 +1,7 @@
 {
   "figure": "routes",
-  "git_sha": "cfef678c9c5c4e1cce8c3b9fc83232f70fb07d04",
-  "timestamp_utc": "2026-10-13T19:03:53Z",
+  "git_sha": "b3daf2aeb4bf871033633a8a74eecbf518a2ef83",
+  "timestamp_utc": "2026-10-14T14:08:14Z",
   "inputs": [
     "artifacts/experiments/c4/s231_a005_x1_m0.json",
     "artifacts/experiments/c4/s233_a01_x1_m0.json",
@@ -29,6 +29,9 @@
     "artifacts/experiments/crop/p7b_ks2d_x1.5_seed0.json",
     "artifacts/experiments/crop/p7b_ks2d_x1.5_seed1.json",
     "artifacts/experiments/crop/p7b_ks2d_x1.5_seed2.json",
+    "artifacts/experiments/crop/p7b_ks2d_x2.0_seed0.json",
+    "artifacts/experiments/crop/p7b_ks2d_x2.0_seed1.json",
+    "artifacts/experiments/crop/p7b_ks2d_x2.0_seed2.json",
     "artifacts/experiments/crop/r12_c6_a01_s1x_r3_seed1_x1_seed0.json",
     "artifacts/experiments/crop/r12_c6_a01_s1x_r3_seed1_x2_seed1.json",
     "artifacts/experiments/crop/r12_c6_a01_s1x_r3_seed2_x1_seed0.json",
@@ -47,12 +50,15 @@
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed0_x1.0_seed2.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed0_x1.5_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed0_x1.5_seed1.json",
+    "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed0_x2.0_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed1_x1.0_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed1_x1.5_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed1_x1.5_seed1.json",
+    "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed1_x2.0_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed2_x1.0_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed2_x1.5_seed0.json",
     "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed2_x1.5_seed1.json",
+    "artifacts/experiments/crop/r13_C2_ks2d_s44big_k48_seed2_x2.0_seed0.json",
     "artifacts/experiments/crop/r14_KC2_a0.05_seed0_x2_seed1.json",
     "artifacts/experiments/crop/r14_KC2_a0.05_seed0_x3_seed0.json",
     "artifacts/experiments/crop/r14_KC2_a0.1_seed0_x2_seed1.json",
@@ -141,6 +147,8 @@
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed1.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json",
     "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json",
-    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json"
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x1p5_seed2.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x2_seed0.json",
+    "artifacts/experiments/truth_ks2d/truth_ks2d_x2_seed0.json"
   ]
 }

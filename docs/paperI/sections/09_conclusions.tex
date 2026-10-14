@@ -32,7 +32,10 @@ trained on windows of one large simulation, with a forced halo and twice
 the propagator reach, are within $10\%$ at the two stronger drags; their
 windows are larger than the domains they are evaluated on, so they show
 that one set of weights serves every size, not that a small domain
-suffices.\todo{A2: one clause on data versus reach}
+suffices. Window data with the small-box reach of three did not transfer
+(dimension $31$--$71\%$ low at $1\times$, $38$--$63\%$ at $3\times$), so the
+reach was necessary on windows; reach six without window data was not
+tested.
 
 Two further lessons concern training. Rollouts that are too short leave
 the free-running model room to settle into spurious regimes, which
