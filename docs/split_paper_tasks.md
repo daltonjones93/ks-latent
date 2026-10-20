@@ -1434,6 +1434,15 @@ already in refs.bib (QJRMS 147:2352, doi 10.1002/qj.4028), kernel details checke
 W1 stub subsection `sec:da_nonlinear` added in `05_tilings_and_sizes.tex` (placeholder) so the cross-references build;
 the old one-line Gaussianity pointer there was removed (W4 rewrites App. D.5).
 
+**Trimmed (user 2026-10-20 13:25, "get results ASAP, trim both"; queue `scripts/run_z20b.sh` replaces the rest of
+`run_z20.sh`).** Oracle runs take ~44 min each (not ~12 as first estimated from a 4-cycle smoke test). Dropped:
+E4 projected-variant RTPS tuning (RTPS 0.7 only), the 16-member oracle runs, the relinearized oracle runs (E3 showed
+iterations change nothing; the oracle's η_o is smaller still, 0.012); E5 oracle runs at cycles of 10 and 20 snapshots
+(kept: 5 snapshots, all four σ_o). Two lanes at 2 threads each: oracle runs | physics LETKF, E2, E5 standard /
+relinearized / physics (E5 now runs the 5-snapshot cells first so the oracle lane can follow). First E4 result
+(seed 0, incremental, RTPS 0.5): 0.174, against 0.324 learned-model latent, 0.076 perfect-model physics (64, earlier
+tuning run), 0.137 reconstruction floor; η_o 0.012; prior spread at obs 0.35 σ_o.
+
 **Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
 can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the
 experiments, W9 last.
