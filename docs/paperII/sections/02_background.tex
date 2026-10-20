@@ -60,7 +60,13 @@ reduced-order autodifferentiable ensemble Kalman filter of
 does not pursue covariance localization, and the latent autoencoder
 filter of \citet{tong2026laeenkf} lists it as future work. The reason is
 structural: a global latent vector has no notion of distance, so there is
-nothing to taper. Latent score-based filters note that encoding the state
+nothing to taper. In every such filter the observation operator passes
+through the decoder, so it is nonlinear in the latent state even when the
+observations are linear in the physical one, and an ensemble Kalman update
+in latent space linearizes it; iterative ensemble methods relinearize
+\citep{guoliver2007,sakov2012}, and particle flow filters use each member's
+own gradient \citep{huvanleeuwen2021}. Section~\ref{sec:da_nonlinear}
+measures what this costs here. Latent score-based filters note that encoding the state
 into a latent vector may lose the local structure that LETKF-type methods
 exploit \citep{si2025latentensf}. Local learned models without a latent space
 are older: parallel reservoir computers, each forecasting one region of a large

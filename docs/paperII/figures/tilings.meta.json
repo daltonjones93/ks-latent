@@ -1,7 +1,7 @@
 {
   "figure": "tilings",
-  "git_sha": "3c43c7bb979c3770a73defd6e9b24f5950a4d316",
-  "timestamp_utc": "2026-10-12T12:09:32Z",
+  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
+  "timestamp_utc": "2026-10-20T18:23:13Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_D10_L220_diag_T4.json",
     "artifacts/experiments/da2d/h9_D10_L44_diag_T4.json",

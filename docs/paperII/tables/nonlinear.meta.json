@@ -1,0 +1,113 @@
+{
+  "table": "nonlinear",
+  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
+  "timestamp_utc": "2026-10-20T18:23:04Z",
+  "inputs": [
+    "artifacts/experiments/da2d/h9_z20_e1_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e1_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e1_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it2_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it2_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it2_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it3_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it3_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e3_it3_s2.json"
+  ],
+  "summary": {
+    "Per-site filter (this paper)": {
+      "err": [
+        0.3239509002191644,
+        0.31024480170348673,
+        0.3024254446831831
+      ],
+      "calib": 0.9578958028979052,
+      "eta_o": 0.03657944775232633,
+      "chi2_blend": 0.8811635489993037
+    },
+    "\\quad relinearized, 2 iterations": {
+      "err": [
+        0.3245767778146633,
+        0.30992582967607285,
+        0.3021596414963702
+      ],
+      "calib": 0.955970528878499,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "\\quad relinearized, 3 iterations": {
+      "err": [
+        0.3246353290733797,
+        0.3099888426283981,
+        0.30220721278938767
+      ],
+      "calib": 0.9555084411554517,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Kernel particle flow, $4\\times32$": {
+      "err": [
+        null,
+        null,
+        null
+      ],
+      "calib": null,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Oracle forecast, incremental": {
+      "err": [
+        null,
+        null,
+        null
+      ],
+      "calib": null,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Oracle forecast, projected": {
+      "err": [
+        null,
+        null,
+        null
+      ],
+      "calib": null,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Physical-space LETKF, perfect model, 64": {
+      "err": [
+        null,
+        null,
+        null
+      ],
+      "calib": null,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Physical-space LETKF, perfect model, 256": {
+      "err": [
+        null,
+        null,
+        null
+      ],
+      "calib": null,
+      "eta_o": null,
+      "chi2_blend": null
+    },
+    "Reconstruction floor, 4 tilings": {
+      "err": [
+        0.13741938542289428,
+        0.12832677565649547,
+        0.12768242907077965
+      ],
+      "calib": 0.9578958028979052,
+      "eta_o": 0.03657944775232633,
+      "chi2_blend": 0.8811635489993037
+    }
+  },
+  "chosen": {
+    "e4_increment": null,
+    "e4_project": null,
+    "e6": null
+  }
+}

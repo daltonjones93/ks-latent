@@ -1259,7 +1259,7 @@ Legend: [ ] to do, [~] in progress, [x] done (date/commit).
   KS forecast errors are not Gaussian in u either; the coordinate choice acts like a learned anamorphosis that may
   help or hurt; which is closer to Gaussian is measured in E2. Cite Bertino, Evensen & Wackernagel (2003) and
   Simon & Bertino (2009) — verify both against primary sources before citing.
-- [~] T5 (drafted 2026-10-20 in §3.3; §11 bullet still to extend (W7)) Model-noise paragraph (same subsection, or `appendix/A_settings.tex` §A.2 where model noise is defined ~l.45):
+- [x] T5 (2026-10-20: §3.3 paragraph and the §11 "Model noise" bullet) Model-noise paragraph (same subsection, or `appendix/A_settings.tex` §A.2 where model noise is defined ~l.45):
   latent noise q²I induces physical covariance J q² Jᵀ + O(q⁴) curvature terms, state dependent and per-patch;
   extend the §11 "Model noise" limitation bullet (`11_discussion.tex` ~l.109) to say so.
 - [~] T6 (drafted 2026-10-20 in §3.3 "Which mean"; placeholder for the E1 number. Found: §3.4 defines the blend from D(z̄_k), but every reported number is the mean of the blended decoded members (`blend` in exp_h9); difference < 0.001 at 44² (E1 s0/s1), say so) Estimator paragraph (same subsection; App. A states which is reported): Jensen gap
@@ -1342,10 +1342,10 @@ Every new numerical function gets a unit test against a known answer (ground rul
   `sections/05_tilings_and_sizes.tex`, after "Accuracy and calibration at the native size" (~l.221), replacing the
   one-sentence pointer to App. D.5 (~l.219–220): E1 numbers, E3 verdict, E4 decomposition, E6 one line; verdict
   against the pre-registered rule.
-- [ ] W2 New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
+- [~] W2 (2026-10-20: generator written and registered in `make paperII-assets`; table float placed in §5.4; fills as runs land) New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
   `make paperII-assets` and the number check): rows standard / iterative 2 / iterative 3 / PFF / oracle latent /
   perfect-model physics / reconstruction floor; columns error (3 seeds), calibration, η_o, χ²/m.
-- [ ] W3 New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
+- [~] W3 (2026-10-20: generator written and registered; panel (c) from E1 done; (a)/(b) fill from E5) New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
   check): (a) η_o vs spread/σ_o from E5; (b) error vs σ_o for the four filters; (c) rank histograms (E1c).
 - [ ] W4 Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
   power-adequate test and the E1 Jensen-gap / χ² details; rename to "Gaussianity and linearity in latent space".
@@ -1360,9 +1360,9 @@ Every new numerical function gets a unit test against a known answer (ground rul
   nonlinear latent observation operator is measured and separated from model error.
 - [ ] W9 Abstract, key points (≤140 chars, max 3 — replace or merge, do not add a fourth), Plain Language Summary
   (`main.tex`), conclusions (`12_conclusions.tex`): one clause each, only after W1 has its verdict.
-- [ ] W10 Background (`02_background.tex` ~l.33, where particle filters are mentioned): one sentence on nonlinear
+- [x] W10 (2026-10-20, `02_background.tex` §2.3) Background (`02_background.tex` ~l.33, where particle filters are mentioned): one sentence on nonlinear
   observation operators in latent DA and iterative ensemble methods (verify citations).
-- [ ] W11 App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
+- [~] W11 (2026-10-20: scripts, flags and modules listed; add result-file names at the end) App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
 - [ ] W12 Final: `make paperII`, `check_numbers.py --paper paperII` (0 unmatched/suspect), grayscale check, internal
   referee re-read of §3.4 (new), §5 new subsection and App. D; share the section with the co-author.
 

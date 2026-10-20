@@ -24,11 +24,19 @@ models, parameter estimation, bias correction and the hidden-field truth),
 physical-space filter), \texttt{scripts/exp\_j16\_estimate\_pde\_model\_error.py}
 (offline one-cycle residuals), \texttt{scripts/exp\_j17h\_fit.py} (best fits of
 the wrong-damping models) and \texttt{scripts/exp\_j18b\_roundtrip.py} (the
-round-trip test). The noisy-data model is trained by
+round-trip test); the nonlinearity diagnostics, the relinearized and kernel
+particle flow filters and the oracle forecast of Sec.~\ref{sec:da_nonlinear} are
+options of \texttt{exp\_h9\_tiled\_da.py} (\texttt{--nl-diag}, \texttt{--n-iter},
+\texttt{--filter kpff}, \texttt{--oracle-forecast}), the Gaussianity tests are
+\texttt{scripts/exp\_z20\_gaussianity.py}, and the 1D kernel particle flow runs
+use \texttt{scripts/run\_da\_pff\_ltransfer.py --method kpff}. The noisy-data model is trained by
 \texttt{scripts/train\_kolmogorov\_crop.py --data-noise 0.1}. The library
 modules are \texttt{ks\_latent/da/letkf\_local.py} (per-site filter with
 RTPS), \texttt{letkf\_phys.py} (physical-space filter, multi-field states),
-\texttt{param\_est.py} (parameter estimation), \texttt{model\_error.py}, and in
+\texttt{param\_est.py} (parameter estimation), \texttt{model\_error.py},
+\texttt{nonlinearity.py} (linearization residual, consistency ratio, rank
+histograms), \texttt{pff\_kernel.py} (kernel particle flow filter), with
+\texttt{ks\_latent/analysis/gaussianity.py} (Mardia tests), and in
 \texttt{ks\_latent/solver/} the wrong-model operators of \texttt{ks2d.py}, the
 cached imperfect-model truths of \texttt{twin.py} and the hidden-field system
 of \texttt{ks2d\_memory.py}. The queues that ran every experiment are kept as

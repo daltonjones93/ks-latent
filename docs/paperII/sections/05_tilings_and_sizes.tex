@@ -221,6 +221,18 @@ produced, and the latent analysis does not.
 \label{sec:da_nonlinear}
 %----------------------------------------------------------------------
 
+\begin{table*}[htbp]
+\caption{The cost of the nonlinear decoder, 2D KS at $44^2$, steady state. Analysis error (field units) on seeds
+0/1/2, mean spread/error, nonlinearity index $\eta_o$ of the forecast ensemble (Eq.~\eqref{eq:nl_index}) and the
+observation-space consistency ratio of the blended prior (1 for a consistent ensemble). Upper block: latent filters
+with the learned model, $4\times64$ members unless stated. Lower block: perfect forecasts.}
+\label{tab:nonlinear}
+\widetabular{lcccc}{
+Filter & Error (seeds 0/1/2) & Spread/error & $\eta_o$ & Consistency \\
+\hline
+\tabinput{tables/nonlinear}}
+\end{table*}
+
 \placeholder{Z20 W1: E1 nonlinearity index and calibration, E3 relinearized update, E4 oracle-forecast
 decomposition, E6 kernel particle flow filter; verdict against the pre-registered rule (docs/split\_paper\_tasks.md Z20).}
 

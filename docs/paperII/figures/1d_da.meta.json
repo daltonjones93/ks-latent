@@ -1,7 +1,7 @@
 {
   "figure": "1d_da",
-  "git_sha": "317866de63e1bde2dfda965c125072dd8a55f1de",
-  "timestamp_utc": "2026-10-13T18:39:43Z",
+  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
+  "timestamp_utc": "2026-10-20T18:23:07Z",
   "inputs": [
     "artifacts/da_pff_ltransfer_d1_letkf_L200_gaspari_cohn_nens128.json",
     "artifacts/da_pff_ltransfer_d1_letkf_L200_gaspari_cohn_nens16.json",

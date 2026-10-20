@@ -1,7 +1,7 @@
 {
   "figure": "systems_ks2d",
-  "git_sha": "317866de63e1bde2dfda965c125072dd8a55f1de",
-  "timestamp_utc": "2026-10-13T18:39:32Z",
+  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
+  "timestamp_utc": "2026-10-20T18:23:06Z",
   "inputs": [
     "artifacts/datasets/ks2d_wide6.h5"
   ]

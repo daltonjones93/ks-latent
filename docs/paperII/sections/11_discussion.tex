@@ -108,7 +108,9 @@ $66^2$ box, both 12-channel and at their best RTPS). We have not identified what
   inflation was not retuned for it.
 \item \emph{Model noise.} Model error in the latent forecast is represented
   by isotropic Gaussian noise of fixed size, not by the statistics of the
-  learned propagator's own error.
+  learned propagator's own error. Isotropic in latent coordinates, it is
+  state dependent, confined to each patch and non-Gaussian at second order
+  in physical ones (Sec.~\ref{sec:nonlinear}).
 \end{itemize}
 
 \para{Outlook.} The target is the assimilation of convection-permitting

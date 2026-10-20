@@ -1,7 +1,7 @@
 {
   "table": "robustness",
-  "git_sha": "27d25ef1a5360c03727b093aa14509cc00c2b287",
-  "timestamp_utc": "2026-10-13T01:35:58Z",
+  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
+  "timestamp_utc": "2026-10-20T18:23:02Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_D10_L44_rtps0.5.json",
     "artifacts/experiments/da2d/h9_D10_L44_rtps0.9.json",
