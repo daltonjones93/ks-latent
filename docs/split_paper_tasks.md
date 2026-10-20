@@ -1442,6 +1442,10 @@ iterations change nothing; the oracle's η_o is smaller still, 0.012); E5 oracle
 relinearized / physics (E5 now runs the 5-snapshot cells first so the oracle lane can follow). First E4 result
 (seed 0, incremental, RTPS 0.5): 0.174, against 0.324 learned-model latent, 0.076 perfect-model physics (64, earlier
 tuning run), 0.137 reconstruction floor; η_o 0.012; prior spread at obs 0.35 σ_o.
+2026-10-20 14:28: oracle incremental RTPS 0.7 gave 0.246 (worse than 0.5: 0.174), so the optimum is at or below the
+grid edge; queue `scripts/run_z20c.sh` replaces run_z20b.sh: oracle RTPS grid {0, 0.3, 0.5, 0.7} (0.9 dropped), the
+projected variant and seeds 1–2 at the best oracle RTPS, and the E5 oracle cells at that RTPS too (the oracle has no
+model noise, so the standard filter's RTPS does not transfer). Physics LETKF perfect model, 64: 0.076 (s0), 0.085 (s1).
 
 **Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
 can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the
