@@ -33,8 +33,9 @@ from scipy.interpolate import RectBivariateSpline
 from ks_latent.config import KSConfig2D
 from ks_latent.da.forecast import forecast_ensemble, forecast_ensemble_history
 from ks_latent.da.geometry2d import deployment_grid_2d, training_dx
-from ks_latent.da.jacobian_coloring import obs_site_map_2d
-from ks_latent.da.letkf_local import LETKFLocal2D
+from ks_latent.da.jacobian_coloring import coloured_obs_jacobian_2d_compact, obs_site_map_2d
+from ks_latent.da.letkf_local import LETKFLocal2D, LETKFLocal2DIterative
+from ks_latent.da.nonlinearity import innovation_chi2_diag, jdelta_compact, linearization_stats, rank_histogram
 from ks_latent.models import load_autoencoder_checkpoint_resized_2d, load_propagator_checkpoint_resized_2d
 from ks_latent.solver.ks2d import integrate2d, spinup2d
 from ks_latent.utils.seeding import set_seed
@@ -122,6 +123,26 @@ def main() -> None:
                     help="Task I9: save truth / tiling-0 analysis / blended analysis / floors at this many "
                          "steady-state cycles (npz next to the json).")
     ap.add_argument("--feedback", action="store_true")
+    ap.add_argument("--nl-diag", action="store_true",
+                    help="Z20 E1: per cycle and tiling, on the forecast ensemble: linearization residual of H = H_obs o D "
+                         "(eta, eta_o, per-site eta_o), Jensen gap in obs space, innovation consistency ratio; "
+                         "observation rank histograms (tiling 0 and the blended prior), steady cycles only")
+    ap.add_argument("--n-iter", type=int, default=1,
+                    help="Z20 E3: Gauss-Newton relinearizations of the per-site update (1 = the standard update)")
+    ap.add_argument("--iter-tol", type=float, default=1e-4)
+    ap.add_argument("--filter", choices=["enkf", "kpff"], default="enkf",
+                    help="Z20 E6: kpff = kernel particle flow filter (Hu & van Leeuwen 2021; ks_latent/da/pff_kernel.py) "
+                         "per tiling, Schur-localized prior covariance with the same GC taper, per-particle gradients "
+                         "through the nonlinear decoder")
+    ap.add_argument("--kpff-alpha", type=float, default=None, help="kernel width factor (default 1/N)")
+    ap.add_argument("--kpff-steps", type=int, default=200)
+    ap.add_argument("--kpff-max-move", type=float, default=0.05)
+    ap.add_argument("--oracle-forecast", choices=["none", "project", "increment"], default="none",
+                    help="Z20 E4: forecast every member with the TRUE PDE in physical space, encode it on each tiling, "
+                         "analyse in latent space. project: next physical member = D(z_a); increment: u_f + D(z_a) - D(z_f) "
+                         "(keeps the off-manifold part of the forecast). No model noise (perfect model).")
+    ap.add_argument("--save-priors", type=int, default=0,
+                    help="Z20 E2: save tiling 0's forecast ensemble (latent, and decoded fields) at this many steady cycles")
     ap.add_argument("--same-tiling-control", action="store_true",
                     help="Control: K independent ensembles all on the unshifted tiling, equal weights (separates "
                          "the effect of shifting the seams from that of K times more members).")
@@ -221,6 +242,10 @@ def main() -> None:
                 .reshape(NX, NX)[ix][:, iy].reshape(-1).double()
         return lambda z: ae.decode(z.to(torch.float32).unsqueeze(0)).squeeze(0).reshape(NX, NX)[ix][:, iy].reshape(-1).double()
 
+    def make_hb(o):  # batched, differentiable observation operator (kernel PFF)
+        ix, iy = FO[o][0], FO[o][1]
+        return lambda Z: ae.decode(Z.to(torch.float32)).reshape(len(Z), NX, NX)[:, ix][:, :, iy].reshape(len(Z), -1).double()
+
     def to_aug(Zh):  # (N, H, P*c) -> (N, P*H*c), site-major
         return Zh.reshape(len(Zh), H, ns * ns, -1).permute(0, 2, 1, 3).reshape(len(Zh), -1)
 
@@ -232,6 +257,13 @@ def main() -> None:
     c = d // (ns * ns)
     r_assumed = a.obs_noise_std if a.assumed_obs_noise_std is None else a.assumed_obs_noise_std
     R_diag = torch.full((site_of_obs.shape[0],), r_assumed ** 2, dtype=torch.float64)
+    kpff_taper = None
+    if a.filter == "kpff":
+        if H > 1 or a.n_iter > 1:
+            raise ValueError("--filter kpff: plain state, no --n-iter")
+        from ks_latent.da.localization import build_latent_taper_matrix_2d
+        from ks_latent.da.pff_kernel import KernelPFF
+        kpff_taper = build_latent_taper_matrix_2d(ns, ns, channels=c, c=a.gc_c).to(torch.float64)
 
     gen = torch.Generator().manual_seed(a.seed)
     Zc = []
@@ -255,7 +287,37 @@ def main() -> None:
 
     rec = {k: [] for k in ("tiling0", "blend", "blend_of_means", "floor1", "floorK", "interp", "spread0",
                            "spread_blend", "blend_obs", "free", "prior_tiling0", "prior_blend",
-                           "z_err0", "z_offman0", "z_offman_member0", "z_offman_truth", "gate_mean", "n_reset")}
+                           "z_err0", "z_offman0", "z_offman_member0", "z_offman_truth", "gate_mean", "n_reset",
+                           "tiling0_of_mean", "n_iter_used", "iter_last_change",
+                           "nl_eta", "nl_eta_o", "nl_eta_o_site_median", "nl_eta_o_site_p90", "nl_eta_o_site_max",
+                           "nl_jensen_obs", "nl_spread_obs", "nl_chi2", "nl_chi2_blend", "nl_eta_a", "nl_eta_o_a")}
+    rank_hist = {"tiling0": None, "blend": None}
+    rng_rank = np.random.default_rng(a.seed + 77)
+    saved_priors = {"Z": [], "U": [], "truth": [], "cycle": []}
+    oracle = a.oracle_forecast != "none"
+    if oracle:
+        if H > 1 or a.gate or a.project_members or a.feedback or a.tiling_reset or a.forecast_every:
+            raise ValueError("--oracle-forecast is implemented for the plain tiled filter only")
+        if a.truth_memory or a.truth_cubic or a.truth_ganiso or a.truth_lap_coef != 1.0 or a.truth_advect_x or a.truth_forcing_amp:
+            raise ValueError("--oracle-forecast uses the standard KS solver as the forecast: perfect-model truth only")
+        import importlib.util
+        import scipy.fft as sfft
+        from ks_latent.solver.ks2d import get_operator2d
+        _sp = importlib.util.spec_from_file_location("exp_i11", Path(__file__).with_name("exp_i11_pde_letkf.py"))
+        _i11 = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_i11)
+        op_pde = get_operator2d(kcfg)
+        n_steps_cycle = a.n_prop_steps * kcfg.snapshot_every
+
+        def pde_forecast(U):  # standardized (N, NX, NX) -> standardized, true PDE over one cycle
+            X = U * std + mean
+            X = X - X.mean(axis=(1, 2), keepdims=True)
+            with sfft.set_workers(2):
+                V = sfft.fft2(X)
+                for _ in range(n_steps_cycle):
+                    V = _i11.step_batch(V, op_pde)
+                X = sfft.ifft2(V).real
+            return (X - mean) / std
+        Uphys = [dec(Zc[k], o) for k, o in enumerate(offs)]  # physical members start from the decoded latent ensemble
     resets = []  # (cycle, tiling, disagreement, median disagreement)
     Zfree_p, Zfree_c = Zp[0].clone(), Zc[0].clone()
     Zfree_h = Zh[0].clone() if H > 1 else None
@@ -265,6 +327,7 @@ def main() -> None:
     diag = {"C": [], "tiling0": [], "blend": [], "uniform": [], "reencode_err": [], "reencode_dist": []}
     late0 = a.n_cycles // 2
     diverged_at = None
+    prior_at = set(np.linspace(late0, a.n_cycles - 1, a.save_priors).round().astype(int).tolist()) if a.save_priors else set()
     save_at = set(np.linspace(late0, a.n_cycles - 1, a.save_fields).round().astype(int).tolist()) if a.save_fields else set()
     saved = {k: [] for k in ("truth", "tiling0", "blend", "floor1", "floorK", "cycle")}
     fcst = []  # I7 forecast rows
@@ -272,6 +335,10 @@ def main() -> None:
     for cyc in range(a.n_cycles):
         Zf = []
         for k in range(len(offs)):
+            if oracle:
+                Uphys[k] = pde_forecast(Uphys[k])
+                Zf.append(enc(Uphys[k], offs[k]))
+                continue
             if H > 1:
                 Zh[k] = forecast_ensemble_history(prop, Zh[k], a.n_prop_steps, a.model_noise_std).z_hist_final
                 Zf_k = Zh[k][:, -1]
@@ -294,17 +361,72 @@ def main() -> None:
         yg = u[::s, ::s] + a.obs_noise_std * rng.standard_normal((NX // s, NX // s))
         yv = torch.tensor(yg.reshape(-1))
         Uf = [dec(Zf[k], o).mean(0) for k, o in enumerate(offs)]  # forecast (prior) means, original frame
+        if oracle:
+            Uf = [U.mean(0) for U in Uphys]  # the physical forecast, not its re-encoding
+        if a.nl_diag:  # Z20 E1, on each tiling's forecast ensemble (tiling-averaged)
+            acc = []
+            for k, o in enumerate(offs):
+                hk = make_h(o)
+                Zk = Zf[k].double()
+                zb = Zk.mean(0)
+                Jk = coloured_obs_jacobian_2d_compact(hk, zb, FO[o][2], c).detach()
+                with torch.no_grad():
+                    Hz = torch.stack([hk(Zk[e]) for e in range(N)])
+                    st_k = linearization_stats(Hz, hk(zb), jdelta_compact(Zk - zb, Jk, FO[o][2], c), a.obs_noise_std,
+                                               FO[o][2], ns * ns)
+                st_k["chi2"] = innovation_chi2_diag(yv, Hz, a.obs_noise_std)
+                acc.append(st_k)
+                if k == 0 and cyc >= late0:
+                    hcount = rank_histogram(yv.numpy(), Hz.numpy(), a.obs_noise_std, rng_rank)
+                    rank_hist["tiling0"] = hcount if rank_hist["tiling0"] is None else rank_hist["tiling0"] + hcount
+            for key in ("eta", "eta_o", "eta_o_site_median", "eta_o_site_p90", "eta_o_site_max"):
+                rec["nl_" + key].append(float(np.mean([x[key] for x in acc])))
+            rec["nl_jensen_obs"].append(float(np.mean([x["jensen_obs_over_sigma"] for x in acc])))
+            rec["nl_spread_obs"].append(float(np.mean([x["spread_obs_over_sigma"] for x in acc])))
+            rec["nl_chi2"].append(float(np.mean([x["chi2"] for x in acc])))
+            # blended prior members at the observed points (what the blended analysis is scored like)
+            Ubp = sum(w[None] * (Uphys[k] if oracle else dec(Zf[k], o)) for k, (w, o) in enumerate(zip(W, offs)))
+            Hb = torch.tensor(Ubp[:, ::s, ::s].reshape(N, -1))
+            rec["nl_chi2_blend"].append(innovation_chi2_diag(yv, Hb, a.obs_noise_std))
+            if cyc >= late0:
+                hb = rank_histogram(yv.numpy(), Hb.numpy(), a.obs_noise_std, rng_rank)
+                rank_hist["blend"] = hb if rank_hist["blend"] is None else rank_hist["blend"] + hb
+        if a.save_priors and cyc in prior_at:
+            saved_priors["Z"].append(Zf[0].numpy().astype(np.float32))
+            saved_priors["U"].append((Uphys[0] if oracle else dec(Zf[0], offs[0])).astype(np.float32))
+            saved_priors["truth"].append(u.astype(np.float32)); saved_priors["cycle"].append(cyc)
         Ua = []
+        it_used, it_change = [], []
         for k, o in enumerate(offs):
-            filt = LETKFLocal2D(make_h(o), R_diag, FO[o][2], ns, ns, c * H, a.gc_c, inflation=a.inflation,
-                                rtps=a.rtps, seed=a.seed * 1000 + cyc * 20 + k)
+            if a.filter == "kpff":
+                filt = KernelPFF(make_hb(o), R_diag, taper=kpff_taper, alpha=a.kpff_alpha, n_steps=a.kpff_steps,
+                                 max_move=a.kpff_max_move, rtps=a.rtps)
+            elif a.n_iter > 1:
+                filt = LETKFLocal2DIterative(make_h(o), R_diag, FO[o][2], ns, ns, c * H, a.gc_c, inflation=a.inflation,
+                                             rtps=a.rtps, seed=a.seed * 1000 + cyc * 20 + k, n_iter=a.n_iter,
+                                             tol=a.iter_tol)
+            else:
+                filt = LETKFLocal2D(make_h(o), R_diag, FO[o][2], ns, ns, c * H, a.gc_c, inflation=a.inflation,
+                                    rtps=a.rtps, seed=a.seed * 1000 + cyc * 20 + k)
             if H > 1:
                 Zh[k] = from_aug(filt.analyze(to_aug(Zh[k]).double(), yv).Z_analysis.float())
                 Za = Zh[k][:, -1]
             else:
-                Za = filt.analyze(Zf[k].double(), yv).Z_analysis.float()
+                res_k = filt.analyze(Zf[k].double(), yv)
+                Za = res_k.Z_analysis.float()
+                if a.filter == "kpff":
+                    it_used.append(res_k.n_steps); it_change.append(0.0 if res_k.converged else 1.0)
+            if a.n_iter > 1:
+                it_used.append(filt.iterations_used); it_change.append(filt.mean_changes[-1])
             Zc[k] = Za
-            Ua.append(dec(Za, o))  # (N, NX, NX)
+            if oracle:
+                Uz = dec(Za, o)
+                Uphys[k] = Uz if a.oracle_forecast == "project" else Uphys[k] + Uz - dec(Zf[k], o)
+                Ua.append(Uphys[k])
+            else:
+                Ua.append(dec(Za, o))  # (N, NX, NX)
+        if it_used:
+            rec["n_iter_used"].append(float(np.mean(it_used))); rec["iter_last_change"].append(float(np.max(it_change)))
         Ub = sum(w[None] * U for w, U in zip(W, Ua))  # member-wise blend
         if a.tiling_reset and len(offs) > 2:
             means = np.stack([U.mean(0) for U in Ua])  # (K, NX, NX), standardized units
@@ -327,6 +449,15 @@ def main() -> None:
         f = lambda v: float(np.sqrt(np.mean((v - u) ** 2)) * std)  # noqa: E731  field units
         rec["tiling0"].append(f(Ua[0].mean(0)))  # tiling 0 alone: the current filter
         rec["blend"].append(f(Ub.mean(0)))
+        rec["tiling0_of_mean"].append(f(dec(Zc[0].mean(0, keepdim=True), offs[0])[0]))  # D(z_bar), tiling 0
+        if a.nl_diag:  # linearization residual on tiling 0's ANALYSIS ensemble (after RTPS)
+            h0 = make_h(offs[0]); Z0a = Zc[0].double(); zb0 = Z0a.mean(0)
+            J0 = coloured_obs_jacobian_2d_compact(h0, zb0, FO[offs[0]][2], c).detach()
+            with torch.no_grad():
+                Hza = torch.stack([h0(Z0a[e]) for e in range(N)])
+                sa = linearization_stats(Hza, h0(zb0), jdelta_compact(Z0a - zb0, J0, FO[offs[0]][2], c),
+                                         a.obs_noise_std, FO[offs[0]][2], ns * ns)
+            rec["nl_eta_a"].append(sa["eta"]); rec["nl_eta_o_a"].append(sa["eta_o"])
         if a.gate:
             rec["gate_mean"].append(prop.last_mean_gate)
         if a.manifold_diag:
@@ -437,6 +568,13 @@ def main() -> None:
                             offsets=np.array(offs), L=g.L)
     if a.tiling_reset:
         steady["n_resets_total"] = len(resets)
+    if a.nl_diag:
+        steady["rank_hist_tiling0"] = rank_hist["tiling0"].tolist() if rank_hist["tiling0"] is not None else None
+        steady["rank_hist_blend"] = rank_hist["blend"].tolist() if rank_hist["blend"] is not None else None
+    if a.save_priors:
+        np.savez_compressed(f"artifacts/experiments/da2d/h9_{a.out}_priors.npz",
+                            **{k: np.stack(v) for k, v in saved_priors.items()}, NX=NX, n_sites=ns, patch=patch,
+                            channels=c, obs_stride=s, mean=mean, std=std, L=g.L)
     out = {"args": vars(a), "steady": steady, "resets": resets, "per_cycle": rec, "wall_s": time.time() - t0, "oi_climatological": 0.798}
     if fcst:  # I7: mean error vs lead (cycles of n_prop_steps snapshots) over the forecast starts
         nl = min(len(r["blend"]) for r in fcst)
@@ -444,7 +582,7 @@ def main() -> None:
         out["forecast"]["n_starts"] = len(fcst)
     Path("artifacts/experiments/da2d").mkdir(parents=True, exist_ok=True)
     Path(f"artifacts/experiments/da2d/h9_{a.out}.json").write_text(json.dumps(out, indent=2))
-    print(a.out, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in steady.items() if not isinstance(v, dict)},
+    print(a.out, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in steady.items() if not isinstance(v, (dict, list))},
           f"{out['wall_s']:.0f}s")
     if "diag" in steady:
         print("diag", {k: (np.round(v, 3).tolist() if k != "C" else "...") for k, v in steady["diag"].items()})

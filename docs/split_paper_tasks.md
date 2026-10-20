@@ -1280,51 +1280,51 @@ Code lives next to the existing 2D driver (`scripts/exp_k_tiled_da.py` / `script
 Every new numerical function gets a unit test against a known answer (ground rule 1).
 
 **E1 Nonlinearity diagnostics of existing-style runs**
-- [ ] E1a Code: per-cycle linearization residual r^(e) = H(z^(e)) − H(z̄) − J(z^(e) − z̄) for forecast ensembles;
+- [x] E1a (2026-10-20) Code: per-cycle linearization residual r^(e) = H(z^(e)) − H(z̄) − J(z^(e) − z̄) for forecast ensembles;
   log η, η_o, and their per-site distribution. Test: η = 0 for a linear decoder, η ∝ |δ| for a quadratic one.
-- [ ] E1b Code: log RMSE of D(z̄) and of mean_e D(z^(e)) (per tiling and blended) every cycle.
-- [ ] E1c Code: innovation statistic χ²/m = dᵀ(J B Jᵀ + R)⁻¹ d / m per cycle (per site, localized form) and
+- [x] E1b (2026-10-20) Code: log RMSE of D(z̄) and of mean_e D(z^(e)) (per tiling and blended) every cycle.
+- [x] E1c (2026-10-20) Code: innovation statistic χ²/m = dᵀ(J B Jᵀ + R)⁻¹ d / m per cycle (per site, localized form) and
   observation-space rank histograms. Test: χ²/m → 1 on a linear-Gaussian synthetic.
-- [ ] E1d Run: 44², K = 4 tilings, paper settings, seeds 0–2, 100 cycles, diagnostics on. Time one run first and
+- [~] E1d (queued 2026-10-20, `scripts/run_z20.sh`) Run: 44², K = 4 tilings, paper settings, seeds 0–2, 100 cycles, diagnostics on. Time one run first and
   report the time to the user before launching the rest.
 - [ ] E1e Analysis: table of η, η_o (median, 90th pct), χ²/m, rank-histogram flatness, D(z̄) vs decoded-mean RMSE;
   apply the *Estimator* rule.
 
 **E2 Gaussianity with adequate power**
-- [ ] E2a Code: per-site multivariate normality test (Mardia skewness/kurtosis, or energy test) in z (c = 12 dims) and
+- [x] E2a (2026-10-20) Code: per-site multivariate normality test (Mardia skewness/kurtosis, or energy test) in z (c = 12 dims) and
   in u (the patch's grid points, or its leading PCs), with the null distribution by Monte Carlo at the same N_ens.
-- [ ] E2b Run: one 256-member prior ensemble at 10 cycles of a seed-0 run (forecast from the 32-member analysis
+- [~] E2b (queued) Run: one 256-member prior ensemble at 10 cycles of a seed-0 run (forecast from the 32-member analysis
   resampled, or a 256-member filter run if affordable); climatology sample for comparison.
 - [ ] E2c Analysis: fraction of sites rejecting normality at 5% in z vs in u, for one-cycle priors and climatology.
 
 **E3 Iterative per-site update (does the nonlinearity cost accuracy?)**
-- [ ] E3a Code: per-site Gauss–Newton relinearization (T7), J recomputed at each iterate by the colouring;
+- [x] E3a (2026-10-20) Code: per-site Gauss–Newton relinearization (T7), J recomputed at each iterate by the colouring;
   1, 2, 3 iterations; stopping on relative change of the site mean. Test: equals the standard update for a linear
   decoder; converges to the exact MAP on a 1-site quadratic toy.
-- [ ] E3b Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
+- [~] E3b (queued) Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
 - [ ] E3c Analysis: 3-seed mean error and calibration vs iterations; apply *N-small* / *N-cost*.
 
 **E4 Oracle-forecast filter (coordinates vs model error)**
-- [ ] E4a Code: forecast each member with the spectral solver in physical space, encode per tiling, latent analysis
+- [x] E4a (2026-10-20) Code: forecast each member with the spectral solver in physical space, encode per tiling, latent analysis
   (standard and E3 iterative), decode, blend; physical members for the next cycle = decoded analysis members.
   Test: with an identity-like linear AE it reproduces the physics LETKF.
-- [ ] E4b Run: oracle latent filter and perfect-model physics LETKF (same obs, same N_ens budget as §6: 4 × 16 and
+- [~] E4b (queued) Run: oracle latent filter and perfect-model physics LETKF (same obs, same N_ens budget as §6: 4 × 16 and
   4 × 64 vs 64), 44², seeds 0–2; tune RTPS/localization on seed 0 for each, as in §6.
 - [ ] E4c Run: reconstruction floor — encode-decode error of the truth on the same cycles (no DA).
 - [ ] E4d Analysis: decompose latent-filter error into floor + coordinate cost (oracle − physics) + learned-model cost
   (learned − oracle); table.
 
 **E5 Where the nonlinearity starts to matter**
-- [ ] E5a Run: σ_o ∈ {0.05, 0.1, 0.2, 0.4} × cycle length ∈ {1×, 2×, 4×} for: standard latent, iterative latent (E3),
+- [~] E5a (queued) Run: σ_o ∈ {0.05, 0.1, 0.2, 0.4} × cycle length ∈ {1×, 2×, 4×} for: standard latent, iterative latent (E3),
   oracle latent (E4), perfect-model physics LETKF; seed 0 first, seeds 1–2 for the cells that cross the rule.
   RTPS retuned per cell on seed 0 (coarse grid). Same total model time.
 - [ ] E5b Analysis: η_o (E1 code) and the iterative gain vs spread/σ_o; figure.
 
 **E6 Per-site particle flow filter in 2D**
-- [ ] E6a Code: localized PFF per site on the 2D latent field (T9), reusing `ks_latent/da/pff.py` kernels with the
+- [x] E6a (2026-10-20) Code: localized PFF per site on the 2D latent field (T9), reusing `ks_latent/da/pff.py` kernels with the
   block-diagonal J; R-localization as in the per-site EnKF. Tests: `test_pff_gaussian_linear`-style check on the
   per-site version; equals the global PFF when the taper covers all sites.
-- [ ] E6b Run: 44², seeds 0–2, N_ens 16 and 32 per tiling, K = 4; tune kernel width / step size on seed 0.
+- [~] E6b (queued, `scripts/run_z20_e6.sh`, starts after `Z20 DONE`) Run: 44², seeds 0–2, N_ens 16 and 32 per tiling, K = 4; tune kernel width / step size on seed 0.
 - [ ] E6c Analysis: error and calibration vs per-site EnKF and E3 iterative; include in the E5 grid at the cells where
   η_o is largest (seed 0).
 
@@ -1357,6 +1357,38 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [ ] W11 App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
 - [ ] W12 Final: `make paperII`, `check_numbers.py --paper paperII` (0 unmatched/suspect), grayscale check, internal
   referee re-read of §3.4 (new), §5 new subsection and App. D; share the section with the co-author.
+
+**Implementation notes (2026-10-20).**
+- Code: `ks_latent/da/nonlinearity.py` (E1; `tests/unit/test_nonlinearity.py`), `LETKFLocal2DIterative` in
+  `ks_latent/da/letkf_local.py` (E3; same test file: n_iter = 1 equals the standard update bitwise, linear H is a
+  no-op, iterations move the mean towards the exact posterior mean of a quadratic toy), `ks_latent/analysis/gaussianity.py`
+  + `scripts/exp_z20_gaussianity.py` (E2; `tests/unit/test_gaussianity.py`), `ks_latent/da/pff_kernel.py` (E6;
+  `tests/unit/test_pff_kernel.py`: linear-Gaussian vs Kalman). Driver flags in `scripts/exp_h9_tiled_da.py`:
+  `--nl-diag`, `--n-iter`, `--oracle-forecast {project,increment}`, `--save-priors`, `--filter kpff`.
+- The instrumented run reproduces the paper's 44² seed-0 number exactly (blend 0.324).
+- E1b already existed: `blend` (decoded ensemble mean, what the paper reports) vs `blend_of_means` (blend of D(z̄));
+  0.3240 vs 0.3237 at seed 0. Added `tiling0_of_mean` for the single tiling.
+- E1c: the consistency ratio is a ratio of sums, Σd²/Σ(var+σ²), not a mean of ratios (the latter is biased high by
+  1/sample-variance at small N; caught by the unit test).
+- E4: two oracle variants. *project*: next physical member = D(z_a) (members live on the decoder manifold; includes the
+  reconstruction floor every cycle). *increment*: u_a = u_f + D(z_a) − D(z_f) (only the analysis is done in latent
+  coordinates). The difference between them separates the floor from the nonlinear-H cost. No model noise (perfect model).
+  Physics comparator: `exp_i11_pde_letkf.py` (same truth, observations and noise draws), loc c = 24, RTPS 0 (best on the
+  existing seed-0 grid `i11_L44_st8_*`: 0.076), 64 and 256 members.
+- E6 deviation from the plan: the kernel PFF uses Schur (B-)localization with the same GC taper, not R-localization,
+  because the Hu & van Leeuwen flow is preconditioned by B; at 44² (d = 768 per tiling) the dense localized B is cheap.
+  A per-site version is needed only at large domains and is not required for the E6 question.
+- **Found while doing E6 (needs a decision, T10/W13 below):** the 1D "particle flow filter" of Paper II
+  (`ks_latent/da/pff.py`, App. A.2 "the Gauss–Newton (NAT) variant of Hu & van Leeuwen 2021") shares one Gauss–Newton
+  precision, built at the ensemble mean, across all particles; its pseudo-time flow is an Ornstein–Uhlenbeck process
+  whose stationary distribution is the Gaussian N(z*, F⁻¹). It is an iterated Gaussian (Langevin) update, not the
+  kernel particle flow of Hu & van Leeuwen, and cannot represent a non-Gaussian posterior. The co-author is the second
+  author of that paper and will notice.
+- [ ] T10 Decide (user + co-author) how to describe the 1D "PFF": rename it in App. A.2 and §9 (e.g. "an iterated
+  Gauss–Newton Langevin update"), drop the Hu & van Leeuwen attribution for it, or replace the 1D runs with the kernel
+  PFF of E6.
+- [ ] W13 Apply T10 in `appendix/A_settings.tex` (~l.105–107), `sections/09_one_dimension.tex`, `sections/03_method.tex`
+  (~l.115–118, "also use a particle flow filter"), `sections/02_background.tex` (~l.33), App. D.3 table header.
 
 **Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
 can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the

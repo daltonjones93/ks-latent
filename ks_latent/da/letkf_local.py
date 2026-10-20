@@ -280,3 +280,85 @@ class LETKFLocal2DETKF(LETKFLocal2D):
             idx_s = s * c + torch.arange(c)
             Za[:, idx_s] = z_bar[idx_s] + W.T @ Z_pert[:, idx_s]
         return LocalLETKFResult(Z_analysis=Za.detach())
+
+
+class LETKFLocal2DIterative(LETKFLocal2D):
+    """Per-site perturbed-observation update relinearized by Gauss--Newton iterations (task Z20 E3).
+
+    Each member minimizes `|z - z_f^(e)|^2_{B^-1} + |y^(e) - H(z)|^2_{R^-1}` (the same objective the
+    one-step update solves exactly when `H` is linear), by the ensemble randomized-maximum-likelihood
+    iteration with one Jacobian per iterate, evaluated at the iterate's ensemble mean:
+
+        z_{i+1}^(e) = z_f^(e) + K_i [ y^(e) - H(z_i^(e)) - J_i (z_f^(e) - z_i^(e)) ],
+        K_i         = B J_i^T (J_i B J_i^T + R)^-1,     B = forecast sample covariance (fixed),
+
+    localized per site exactly as `LETKFLocal2D` (R-localization, the same observations, the same
+    perturbed-observation draws in every iteration). Iteration 0 starts at `z_0 = z_f`, so
+    `n_iter = 1` is `LETKFLocal2D` exactly. All sites are updated from the previous iterate (a Jacobi
+    sweep); `J_i` is recomputed by the same `channels` forward-mode passes (block-diagonal at zero
+    decoder reach), so the exactness of Proposition 1 holds at every iterate. Stops early when the
+    relative change of the ensemble mean falls below `tol`. RTPS is applied once, after the last
+    iterate, against the forecast spread. For a linear `H` every iterate equals the first."""
+
+    def __init__(self, *args, n_iter: int = 2, tol: float = 1e-4, **kw):
+        super().__init__(*args, **kw)
+        if n_iter < 1:
+            raise ValueError(f"n_iter must be >= 1, got {n_iter}")
+        self.n_iter, self.tol = n_iter, tol
+        self.iterations_used = 0
+        self.mean_changes: list[float] = []
+
+    def analyze(self, Z0: torch.Tensor, y: torch.Tensor) -> LocalLETKFResult:
+        N, d = Z0.shape
+        if d != self.d:
+            raise ValueError(f"Z0 has d={d}, expected {self.d}")
+        c = self.channels
+        Z_pert = (Z0 - Z0.mean(dim=0)) * self.inflation
+        m = y.shape[0]
+        y_ens = y.unsqueeze(0) + torch.sqrt(self.R_diag).unsqueeze(0) * torch.randn(N, m, generator=self._rng, dtype=y.dtype)
+        cols = self.site_of_obs.unsqueeze(1) * c + torch.arange(c).unsqueeze(0)  # (m, c)
+        Zi = Z0.clone()
+        self.mean_changes = []
+        for it in range(self.n_iter):
+            zi_bar = Zi.mean(dim=0)
+            J = coloured_obs_jacobian_2d_compact(self.h, zi_bar, self.site_of_obs, c).detach()
+            with torch.no_grad():
+                Hz = torch.stack([self.h(Zi[e]) for e in range(N)], dim=0)
+                lin = ((Z0 - Zi)[:, cols] * J.unsqueeze(0)).sum(-1)  # J_i (z_f - z_i), (N, m)
+                innov = y_ens - Hz - lin
+                Znew = self._site_updates(Z0, Z_pert, J, innov)
+            change = float((Znew.mean(0) - zi_bar).norm() / zi_bar.norm().clamp_min(1e-12))
+            self.mean_changes.append(change)
+            Zi = Znew
+            self.iterations_used = it + 1
+            if it > 0 and change < self.tol:
+                break
+        if self.rtps > 0:
+            Zi = _relax_to_prior_spread(Z0, Zi, self.rtps)
+        return LocalLETKFResult(Z_analysis=Zi.detach())
+
+    @torch.no_grad()
+    def _site_updates(self, Z0, Z_pert, J_compact, innovation_full):
+        """`LETKFLocal2D._analyze_no_grad`'s per-site gain with a given innovation."""
+        N = Z0.shape[0]
+        c = self.channels
+        Za = Z0.clone()
+        for s in range(self.n_sites):
+            rho = self._site_taper[s, self.site_of_obs]
+            used = torch.nonzero(rho > self.min_weight, as_tuple=True)[0]
+            if used.numel() == 0:
+                continue
+            used_sites = torch.unique(self.site_of_obs[used])
+            block_cols = (used_sites.unsqueeze(1) * c + torch.arange(c).unsqueeze(0)).reshape(-1)
+            Zb = Z_pert[:, block_cols]
+            idx_s = s * c + torch.arange(c)
+            m_s = used.numel()
+            site_pos = torch.searchsorted(used_sites, self.site_of_obs[used])
+            J_used = torch.zeros(m_s, used_sites.numel() * c, dtype=Z0.dtype)
+            J_used[torch.arange(m_s).unsqueeze(1), site_pos.unsqueeze(1) * c + torch.arange(c).unsqueeze(0)] = J_compact[used]
+            B_block = (Zb.T @ Zb) / (N - 1)
+            HB_s = ((Z_pert[:, idx_s].T @ Zb) / (N - 1)) @ J_used.T
+            denom = J_used @ B_block @ J_used.T + torch.diag(self.R_diag[used] / rho[used])
+            K_s = torch.linalg.solve(denom, HB_s.T).T
+            Za[:, idx_s] = Z0[:, idx_s] + innovation_full[:, used] @ K_s.T
+        return Za
