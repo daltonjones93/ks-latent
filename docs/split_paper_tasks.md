@@ -1401,12 +1401,12 @@ Every new numerical function gets a unit test against a known answer (ground rul
 **E7 1D rerun with the kernel particle flow filter (user decision 2026-10-20).** The 1D "PFF" of Paper II is an
 iterated Gaussian update (see T10). Rerun the 1D experiments with the real kernel PFF of E6; decide from the results
 which 1D results go in the paper (old PFF renamed, kernel PFF, or both).
-- [ ] E7a Code: `--method kpff` in `scripts/run_da_pff_ltransfer.py` using `ks_latent/da/pff_kernel.py`
+- [x] E7a (2026-10-20; `method="kpff"` in `ks_latent/da/cycling.py`, flags `--kpff-*`; smoke L=200 N=8 4 cycles OK) Code: `--method kpff` in `scripts/run_da_pff_ltransfer.py` using `ks_latent/da/pff_kernel.py`
   (Schur-localized B with the same GC taper as the 1D runs, half-width 3 sites; `--localizer none` = no taper),
   kernel width α and step cap as flags; smoke test at L = 200, N = 8.
-- [ ] E7b Tune α ∈ {1/N, 0.1, 0.5} (and RTPS 0 / 0.7 if the spread collapses) at L = 200, N = 32, Gaspari–Cohn, seed 0;
+- [~] E7b (queued, `scripts/run_z20_e7.sh`, after `E6 DONE`) Tune α ∈ {1/N, 0.1, 0.5} (and RTPS 0 / 0.7 if the spread collapses) at L = 200, N = 32, Gaspari–Cohn, seed 0;
   record the choice and why.
-- [ ] E7c Runs: the configurations of App. D.3 / `tables/1d_da` PFF columns — L ∈ {200, 400} × {none, Gaspari–Cohn}
+- [~] E7c (queued) Runs: the configurations of App. D.3 / `tables/1d_da` PFF columns — L ∈ {200, 400} × {none, Gaspari–Cohn}
   × N ∈ {8, 16, 32, 64, 128, 256}, fixed observation spacing 3.125, 100 cycles, steady skill over cycles 51–100,
   same model (the 1D model of Paper I), same truth/observations as the existing D1 runs
   (`artifacts/da_pff_ltransfer_d1_*`). Queue after E6 (`scripts/run_z20_e7.sh`).

@@ -53,12 +53,16 @@ def main() -> None:
     parser.add_argument("--n-prop-steps", type=int, default=5)
     parser.add_argument("--n-cycles", type=int, default=40)
     parser.add_argument(
-        "--method", choices=["pff", "letkf"], default="pff",
+        "--method", choices=["pff", "letkf", "kpff"], default="pff",
         help="DA analysis scheme (added 2026-09-28): 'pff' (default, this project's primary NAT-PFF) "
         "or 'letkf' (ks_latent.da.letkf, a covariance-localized EnKF comparator -- same forecast, "
         "same localization taper, different analysis update).",
     )
     parser.add_argument("--letkf-inflation", type=float, default=1.0)
+    parser.add_argument("--kpff-alpha", type=float, default=None, help="Z20 E7: kernel width factor (default 1/N)")
+    parser.add_argument("--kpff-steps", type=int, default=200)
+    parser.add_argument("--kpff-max-move", type=float, default=0.05)
+    parser.add_argument("--kpff-rtps", type=float, default=0.0)
     parser.add_argument("--obs-stride-at-old-L", type=int, default=8,
                         help="Only with --legacy-scaled-stride: scaled by new_L/old_L (E2/E7 behaviour).")
     parser.add_argument("--obs-spacing-units", type=float, default=3.125,
@@ -127,6 +131,9 @@ def main() -> None:
         n_prop_steps=args.n_prop_steps, n_cycles=args.n_cycles, n_ensemble=args.n_ensemble,
         pff_config=PFFConfig(method="NAT", n_steps=100), seed=args.seed,
         localize_fn=localize_fn, method=args.method, letkf_inflation=args.letkf_inflation,
+        kpff_taper=(taper.to(torch.float64) if args.localizer == "gaspari_cohn" else None),
+        kpff_alpha=args.kpff_alpha, kpff_steps=args.kpff_steps, kpff_max_move=args.kpff_max_move,
+        kpff_rtps=args.kpff_rtps,
     )
     result = run_da_experiment(prop, decoder, encoder, obs_op, truth_traj, z0_ensemble, z_minus1_ensemble, cfg)
 
@@ -141,6 +148,8 @@ def main() -> None:
         "skill_free_over_da": rmse_free / rmse_da if rmse_da > 0 else float("nan"),
         "n_ensemble": args.n_ensemble,
         "method": args.method,
+        "kpff": ({"alpha": args.kpff_alpha, "steps": args.kpff_steps, "max_move": args.kpff_max_move,
+                  "rtps": args.kpff_rtps} if args.method == "kpff" else None),
         "localizer": args.localizer,
         "gc_c": args.gc_c if args.localizer == "gaspari_cohn" else None,
         "old_L": args.old_L,

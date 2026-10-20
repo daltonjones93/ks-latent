@@ -29,6 +29,7 @@ from ks_latent.da.letkf import LETKF
 from ks_latent.da.letkf_local import LETKFLocal2D, LETKFLocal2DETKF
 from ks_latent.da.serial_enkf import SerialSECEnKF
 from ks_latent.da.pff import ParticleFlowFilter, PFFConfig
+from ks_latent.da.pff_kernel import KernelPFF
 from ks_latent.da.rmse import per_dim_rmse
 from ks_latent.models.propagator import LatentPropagator
 
@@ -89,6 +90,13 @@ class CycleConfig:
     # with the SEC correction on each regression coefficient (`ks_latent.da.serial_enkf`).
     # `sec_table` None = plain serial EnKF.
     sec_table: object | None = None
+    # `method="kpff"` (Z20 E7, 2026-10-20): kernel particle flow filter of Hu & van Leeuwen (2021),
+    # `ks_latent.da.pff_kernel.KernelPFF`, with `kpff_taper` the Schur taper on B (None = no localization).
+    kpff_taper: object | None = None
+    kpff_alpha: float | None = None
+    kpff_steps: int = 200
+    kpff_max_move: float = 0.05
+    kpff_rtps: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -207,10 +215,16 @@ def run_da_experiment(
                 h, torch.diagonal(R).clone(), cfg.site_of_obs, cfg.n_sites_x, cfg.n_sites_y,
                 cfg.local_channels, cfg.gc_c_local, inflation=cfg.letkf_inflation, seed=cfg.seed + cycle,
             )
+        elif cfg.method == "kpff":
+            def h_batch(Z):
+                U = decoder(Z.to(model_dtype))
+                return torch.stack([obs_operator_phys(u) for u in U]).to(torch.float64)
+            analyzer = KernelPFF(h_batch, torch.diagonal(R).clone(), taper=cfg.kpff_taper, alpha=cfg.kpff_alpha,
+                                 n_steps=cfg.kpff_steps, max_move=cfg.kpff_max_move, rtps=cfg.kpff_rtps)
         elif cfg.method == "serial_sec_enkf":
             analyzer = SerialSECEnKF(h, torch.diagonal(R).clone(), table=cfg.sec_table, seed=cfg.seed + cycle)
         else:
-            raise ValueError(f"CycleConfig.method must be 'pff', 'letkf', 'letkf_local2d', 'letkf_local2d_etkf' "
+            raise ValueError(f"CycleConfig.method must be 'pff', 'kpff', 'letkf', 'letkf_local2d', 'letkf_local2d_etkf' "
                              f"or 'serial_sec_enkf', got {cfg.method!r}")
         Z_forecast = Z_da_curr
         analysis = analyzer.analyze(Z_da_curr.to(torch.float64), y_obs.to(torch.float64))
