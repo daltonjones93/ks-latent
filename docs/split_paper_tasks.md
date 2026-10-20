@@ -1208,3 +1208,156 @@ Test: reach-3 window model (`a2*`, `scripts/run_a2_diag.sh`), same Stage A encod
   reach is needed on windows. Untested: reach six on a small box without window data.
   Three A2 `\todo`s replaced (06_results_2d, 08_discussion, 09_conclusions); R15 clause also
   written. No further experiments (user: wrap up the papers).
+
+## Z20 — Nonlinearity of the latent coordinates (co-author concern, 2026-10-20)
+
+**Concern (P. J. van Leeuwen, relayed by the user).** The ML model's nonlinearity changes the error distributions
+and makes DA harder, and Paper II does not address it. Clarified meaning, three mechanisms:
+1. *Nonlinear observation operator.* H = H_obs ∘ D is nonlinear in z, so p(y|z) is not Gaussian in z. The per-site
+   filter uses the nonlinear H in the innovation but J at the ensemble mean in the gain, i.e. one linearized
+   Gauss–Newton step. The physics LETKF has an exactly linear H and does not carry this approximation.
+2. *Change of variables.* Gaussian errors in u are non-Gaussian in z and vice versa; latent model noise N(0, q²I)
+   becomes state-dependent, non-Gaussian physical noise (≈ J q² Jᵀ + curvature terms). "Gaussian in z" and
+   "Gaussian in u" are different assumptions (cf. Gaussian anamorphosis).
+3. *Jensen gap.* D(z̄) ≠ mean_e D(z^(e)); gap ≈ ½ tr(∇²D B). We report D(z̄) (App. A); the squared-error-optimal
+   estimate is the decoded ensemble mean.
+
+**What Paper II has now and why it is not enough.** App. D.5 (`appendix/D_da_details.tex`, "Gaussianity of the latent
+priors"): marginal skewness 0.38 (z) vs 0.40 (u) for 16-member priors, below the stated sampling noise 0.6, so the
+test has no power, is marginal only, and says nothing about mechanism 1. §5.3 (`05_tilings_and_sizes.tex` ~l.205–217)
+physical-space analysis with the same model is 8–11% worse, but confounded by re-encoding. 1D PFF (§9, App. D.3) uses a
+different, non-per-patch model. §11 limitations mention isotropic latent model noise only.
+
+**Pre-registered decision rules (written before any result).**
+- *N-small:* the nonlinearity is "small at this configuration" if E3 (iterative update) and E4 (oracle forecast vs
+  perfect-model physics LETKF, after subtracting the reconstruction floor) each change the 3-seed mean analysis error
+  by less than the seed spread (0.02) and the E1 nonlinearity index is < 0.3 at the paper's σ_o = 0.1.
+- *N-cost:* otherwise, report the cost as a result: the size of the E3 gain and the E4 gap, and the σ_o / cycle length
+  (E5) where it appears. If E3 helps by ≥ 10% on every seed, the iterative update becomes the paper's filter for the
+  affected configurations (requires re-running the affected §5 rows; decide with the user).
+- *Estimator:* if mean_e D(z^(e)) is lower than D(z̄) on every seed, switch the reported analysis to the decoded
+  ensemble mean everywhere (tables regenerated); otherwise keep D(z̄) and report the gap.
+- RMSE to 3 decimals; 3 seeds at 44² unless stated; heat rule (2–4 threads, `taskpolicy -b` for long jobs).
+
+Legend: [ ] to do, [~] in progress, [x] done (date/commit).
+
+### Z20-T Theory additions (Paper II)
+
+- [ ] T1 New subsection `\subsection{What the nonlinear decoder costs the filter}` (`\label{sec:nonlinear}`) in
+  `sections/03_method.tex`, after "Latent ensemble data assimilation" (before "Shifted tilings", ~l.162). Opening
+  paragraph: the exact latent posterior p(z|y) ∝ N(y; H_obs D(z), R) p(z); the per-site update is one Gauss–Newton
+  step on it, linearized at the ensemble mean; the physics LETKF observing grid points has linear H and no such step.
+- [ ] T2 In the same subsection: nonlinearity index. Second-order expansion H(z̄+δ) = H(z̄) + Jδ + ½ δᵀ∇²H δ + O(δ³);
+  define η = E‖H(z̄+δ) − H(z̄) − Jδ‖ / ‖Jδ‖ and η_o = E‖H(z̄+δ) − H(z̄) − Jδ‖ / (σ_o √m); linearization is adequate
+  when η_o ≪ 1, i.e. when the one-cycle prior spread is small against the decoder's curvature scale. Equation number;
+  measured values come from E1.
+- [ ] T3 Corollary (state as a remark after Proposition 1, `03_method.tex` ~l.130, proof sketch in
+  `appendix/B_proof.tex`): with R_dec = 0 the Hessian of H_i is non-zero only in the c×c block of the patch owning
+  observation i; the nonlinearity never couples sites, so η is measured and (E3) corrected site by site at any domain
+  size, at the cost of c extra JVPs per relinearization.
+- [ ] T4 Change-of-variables paragraph (same subsection): Gaussian-in-z vs Gaussian-in-u are different approximations;
+  KS forecast errors are not Gaussian in u either; the coordinate choice acts like a learned anamorphosis that may
+  help or hurt; which is closer to Gaussian is measured in E2. Cite Bertino, Evensen & Wackernagel (2003) and
+  Simon & Bertino (2009) — verify both against primary sources before citing.
+- [ ] T5 Model-noise paragraph (same subsection, or `appendix/A_settings.tex` §A.2 where model noise is defined ~l.45):
+  latent noise q²I induces physical covariance J q² Jᵀ + O(q⁴) curvature terms, state dependent and per-patch;
+  extend the §11 "Model noise" limitation bullet (`11_discussion.tex` ~l.109) to say so.
+- [ ] T6 Estimator paragraph (same subsection; App. A states which is reported): Jensen gap
+  E[D(z)] − D(E z) ≈ ½ tr(∇²D B); with R_dec = 0 it is per patch; which estimator the paper reports and why (from E1c).
+- [ ] T7 Iterative update written out in `appendix/A_settings.tex` §A.2 (Analysis schemes, after the per-site filter
+  ~l.95): per-site Gauss–Newton relinearization (IEnKF form, Sakov, Oliver & Bertino 2012 — verify), iteration count,
+  stopping rule, cost; note it keeps Proposition 1 exactness (J recomputed at each iterate by the same colouring).
+- [ ] T8 Oracle-forecast filter defined in `03_method.tex` §3.5 ("A physics-based comparator", ~l.223) as a third
+  configuration: true PDE forecast per member → encode → latent analysis → decode. State what the difference to the
+  perfect-model physics LETKF isolates (coordinates + reconstruction floor) and what it does not (learned model error).
+- [ ] T9 Particle flow filter in 2D, per site (for E6): write the localized PFF update in `appendix/A_settings.tex`
+  §A.2 alongside the 1D PFF already there (kernel, B fixed in pseudo-time, NAT metric with block-diagonal J).
+
+### Z20-E Experiments (all 2D KS, 44², existing noisy-trained model, no retraining; 3 seeds unless noted)
+
+Code lives next to the existing 2D driver (`scripts/exp_k_tiled_da.py` / `scripts/exp_h9_tiled_da.py`,
+`ks_latent/da/letkf_local.py`, physics filter `ks_latent/da/letkf_phys.py`, `scripts/exp_i11_pde_letkf.py`).
+Every new numerical function gets a unit test against a known answer (ground rule 1).
+
+**E1 Nonlinearity diagnostics of existing-style runs**
+- [ ] E1a Code: per-cycle linearization residual r^(e) = H(z^(e)) − H(z̄) − J(z^(e) − z̄) for forecast ensembles;
+  log η, η_o, and their per-site distribution. Test: η = 0 for a linear decoder, η ∝ |δ| for a quadratic one.
+- [ ] E1b Code: log RMSE of D(z̄) and of mean_e D(z^(e)) (per tiling and blended) every cycle.
+- [ ] E1c Code: innovation statistic χ²/m = dᵀ(J B Jᵀ + R)⁻¹ d / m per cycle (per site, localized form) and
+  observation-space rank histograms. Test: χ²/m → 1 on a linear-Gaussian synthetic.
+- [ ] E1d Run: 44², K = 4 tilings, paper settings, seeds 0–2, 100 cycles, diagnostics on. Time one run first and
+  report the time to the user before launching the rest.
+- [ ] E1e Analysis: table of η, η_o (median, 90th pct), χ²/m, rank-histogram flatness, D(z̄) vs decoded-mean RMSE;
+  apply the *Estimator* rule.
+
+**E2 Gaussianity with adequate power**
+- [ ] E2a Code: per-site multivariate normality test (Mardia skewness/kurtosis, or energy test) in z (c = 12 dims) and
+  in u (the patch's grid points, or its leading PCs), with the null distribution by Monte Carlo at the same N_ens.
+- [ ] E2b Run: one 256-member prior ensemble at 10 cycles of a seed-0 run (forecast from the 32-member analysis
+  resampled, or a 256-member filter run if affordable); climatology sample for comparison.
+- [ ] E2c Analysis: fraction of sites rejecting normality at 5% in z vs in u, for one-cycle priors and climatology.
+
+**E3 Iterative per-site update (does the nonlinearity cost accuracy?)**
+- [ ] E3a Code: per-site Gauss–Newton relinearization (T7), J recomputed at each iterate by the colouring;
+  1, 2, 3 iterations; stopping on relative change of the site mean. Test: equals the standard update for a linear
+  decoder; converges to the exact MAP on a 1-site quadratic toy.
+- [ ] E3b Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
+- [ ] E3c Analysis: 3-seed mean error and calibration vs iterations; apply *N-small* / *N-cost*.
+
+**E4 Oracle-forecast filter (coordinates vs model error)**
+- [ ] E4a Code: forecast each member with the spectral solver in physical space, encode per tiling, latent analysis
+  (standard and E3 iterative), decode, blend; physical members for the next cycle = decoded analysis members.
+  Test: with an identity-like linear AE it reproduces the physics LETKF.
+- [ ] E4b Run: oracle latent filter and perfect-model physics LETKF (same obs, same N_ens budget as §6: 4 × 16 and
+  4 × 64 vs 64), 44², seeds 0–2; tune RTPS/localization on seed 0 for each, as in §6.
+- [ ] E4c Run: reconstruction floor — encode-decode error of the truth on the same cycles (no DA).
+- [ ] E4d Analysis: decompose latent-filter error into floor + coordinate cost (oracle − physics) + learned-model cost
+  (learned − oracle); table.
+
+**E5 Where the nonlinearity starts to matter**
+- [ ] E5a Run: σ_o ∈ {0.05, 0.1, 0.2, 0.4} × cycle length ∈ {1×, 2×, 4×} for: standard latent, iterative latent (E3),
+  oracle latent (E4), perfect-model physics LETKF; seed 0 first, seeds 1–2 for the cells that cross the rule.
+  RTPS retuned per cell on seed 0 (coarse grid). Same total model time.
+- [ ] E5b Analysis: η_o (E1 code) and the iterative gain vs spread/σ_o; figure.
+
+**E6 Per-site particle flow filter in 2D**
+- [ ] E6a Code: localized PFF per site on the 2D latent field (T9), reusing `ks_latent/da/pff.py` kernels with the
+  block-diagonal J; R-localization as in the per-site EnKF. Tests: `test_pff_gaussian_linear`-style check on the
+  per-site version; equals the global PFF when the taper covers all sites.
+- [ ] E6b Run: 44², seeds 0–2, N_ens 16 and 32 per tiling, K = 4; tune kernel width / step size on seed 0.
+- [ ] E6c Analysis: error and calibration vs per-site EnKF and E3 iterative; include in the E5 grid at the cells where
+  η_o is largest (seed 0).
+
+### Z20-W Writing (Paper II)
+
+- [ ] W1 New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
+  `sections/05_tilings_and_sizes.tex`, after "Accuracy and calibration at the native size" (~l.221), replacing the
+  one-sentence pointer to App. D.5 (~l.219–220): E1 numbers, E3 verdict, E4 decomposition, E6 one line; verdict
+  against the pre-registered rule.
+- [ ] W2 New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
+  `make paperII-assets` and the number check): rows standard / iterative 2 / iterative 3 / PFF / oracle latent /
+  perfect-model physics / reconstruction floor; columns error (3 seeds), calibration, η_o, χ²/m.
+- [ ] W3 New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
+  check): (a) η_o vs spread/σ_o from E5; (b) error vs σ_o for the four filters; (c) rank histograms (E1c).
+- [ ] W4 Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
+  power-adequate test and the E1 Jensen-gap / χ² details; rename to "Gaussianity and linearity in latent space".
+- [ ] W5 Revisit §5.3's physical-space-analysis comparison (`05_tilings_and_sizes.tex` ~l.205–217) in the light of E4:
+  say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.
+- [ ] W6 §6 (`06_physics_comparison.tex`): one paragraph or sentence relating the crossover to E4 — part of the physics
+  filter's advantage under small model error is the linear H it enjoys; quote the E4 coordinate cost.
+- [ ] W7 §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
+  "What locality buys" (~l.6–20); new limitation bullet (~l.76–112) bounding validity to the σ_o / cycle range of E5;
+  extend the "Model noise" bullet (T5).
+- [ ] W8 Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the
+  nonlinear latent observation operator is measured and separated from model error.
+- [ ] W9 Abstract, key points (≤140 chars, max 3 — replace or merge, do not add a fourth), Plain Language Summary
+  (`main.tex`), conclusions (`12_conclusions.tex`): one clause each, only after W1 has its verdict.
+- [ ] W10 Background (`02_background.tex` ~l.33, where particle filters are mentioned): one sentence on nonlinear
+  observation operators in latent DA and iterative ensemble methods (verify citations).
+- [ ] W11 App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
+- [ ] W12 Final: `make paperII`, `check_numbers.py --paper paperII` (0 unmatched/suspect), grayscale check, internal
+  referee re-read of §3.4 (new), §5 new subsection and App. D; share the section with the co-author.
+
+**Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
+can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the
+experiments, W9 last.
