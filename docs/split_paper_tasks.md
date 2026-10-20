@@ -1311,7 +1311,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
   decoder; converges to the exact MAP on a 1-site quadratic toy.
 - [x] E3b (2026-10-20 12:22; RTPS 0.5/0.8 done, 0.9 running) Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
 - [x] E3c (2026-10-20) Result: 2 and 3 iterations give 0.325/0.310/0.302 vs 0.324/0.310/0.302 (1 iteration), same
-  calibration; last iteration moves the mean by 0.02%; RTPS optimum unchanged (it3: 0.322 at 0.5, 0.330 at 0.8;
+  calibration; last iteration moves the mean by 0.02–0.03%; RTPS optimum unchanged (it3: 0.322 at 0.5, 0.330 at 0.8;
   standard: 0.322 at 0.5, D10_L44_rtps0.5). Meets *N-small* for E3 (change ≪ 0.02 seed spread). Analysis: 3-seed mean error and calibration vs iterations; apply *N-small* / *N-cost*.
 
 **E4 Oracle-forecast filter (coordinates vs model error)**
