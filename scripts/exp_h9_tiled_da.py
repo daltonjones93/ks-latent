@@ -141,6 +141,9 @@ def main() -> None:
                     help="Z20 E4: forecast every member with the TRUE PDE in physical space, encode it on each tiling, "
                          "analyse in latent space. project: next physical member = D(z_a); increment: u_f + D(z_a) - D(z_f) "
                          "(keeps the off-manifold part of the forecast). No model noise (perfect model).")
+    ap.add_argument("--oracle-latent-noise", type=float, default=0.0,
+                    help="Z20 E4: std of Gaussian noise added to each encoded oracle forecast member (latent units); "
+                         "the learned-model filter adds 0.02 per step over 5 steps, i.e. about 0.045 per cycle")
     ap.add_argument("--save-priors", type=int, default=0,
                     help="Z20 E2: save tiling 0's forecast ensemble (latent, and decoded fields) at this many steady cycles")
     ap.add_argument("--same-tiling-control", action="store_true",
@@ -317,7 +320,8 @@ def main() -> None:
                     V = _i11.step_batch(V, op_pde)
                 X = sfft.ifft2(V).real
             return (X - mean) / std
-        Uphys = [dec(Zc[k], o) for k, o in enumerate(offs)]  # physical members start from the decoded latent ensemble
+        Uphys = [dec(Zc[k], o) for k, o in enumerate(offs)]
+        gen_on = torch.Generator().manual_seed(a.seed + 4242)  # physical members start from the decoded latent ensemble
     resets = []  # (cycle, tiling, disagreement, median disagreement)
     Zfree_p, Zfree_c = Zp[0].clone(), Zc[0].clone()
     Zfree_h = Zh[0].clone() if H > 1 else None
@@ -337,7 +341,10 @@ def main() -> None:
         for k in range(len(offs)):
             if oracle:
                 Uphys[k] = pde_forecast(Uphys[k])
-                Zf.append(enc(Uphys[k], offs[k]))
+                Zo = enc(Uphys[k], offs[k])
+                if a.oracle_latent_noise > 0:
+                    Zo = Zo + a.oracle_latent_noise * torch.randn(Zo.shape, generator=gen_on)
+                Zf.append(Zo)
                 continue
             if H > 1:
                 Zh[k] = forecast_ensemble_history(prop, Zh[k], a.n_prop_steps, a.model_noise_std).z_hist_final

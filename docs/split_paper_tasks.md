@@ -1453,6 +1453,12 @@ model noise, so the standard filter's RTPS does not transfer). Physics LETKF per
 cores ran each oracle job ~3× slower: 2 h 20 min vs 44 min). Dropped: 256-member physics seeds 1–2. Kept everything
 the results need: E4 oracle (best RTPS, projected variant, seeds 1–2), E2, E5 full grid with the oracle at the
 5-snapshot cycle, then E6, E7.
+2026-10-20 17:52: oracle incremental RTPS 0: 0.192 (spread/error 0.41, collapsed) → best RTPS 0.3 (0.152). Projected
+variant at RTPS 0.3: 0.679, spread/error 0.17 — the spread decays every cycle (0.38 → 0.14 over 12 cycles) because
+members return to the decoder's range and there is no model noise; a tuning failure, not a result. New flag
+`--oracle-latent-noise` (noise added to each encoded oracle member); `scripts/run_z20e.sh` tunes the projected variant
+(RTPS 0.9; RTPS 0.7 with latent noise 0.045 = the learned filter's 0.02 per step over 5 steps; and 0.1) before its
+seeds 1–2. Oracle runs on performance cores take ~12 min (vs 44 min alone and 2 h 20 min in two lanes on E-cores).
 
 **Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
 can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the
