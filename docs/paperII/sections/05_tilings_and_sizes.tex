@@ -213,7 +213,11 @@ Its best error is $0.354$, $0.345$ and $0.338$ for seeds 0--2, at a calibration 
 $1.22$--$1.27$, against $0.324$, $0.310$ and $0.302$ at $0.92$--$0.99$ for the latent
 analysis; with one tiling the two are equal ($0.461$ and $0.457$). The latent
 analysis is $8$--$11\%$ more accurate on every seed and better calibrated.
-A physical-space analysis must re-encode fields that the decoder never
+This comparison does not isolate the coordinates: both filters forecast
+with the learned model, and the physical-space one also re-encodes its
+analysis every cycle. The oracle-forecast filter of
+Sec.~\ref{sec:da_nonlinear}, with the true equations as forecast, makes
+the clean comparison. A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
 %----------------------------------------------------------------------

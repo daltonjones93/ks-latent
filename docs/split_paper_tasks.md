@@ -1360,14 +1360,14 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [ ] W4b Fill the E2 rejection fractions and the one-sentence verdict (placeholder in place).
 - [~] W4 (split into W4a/W4b above) Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
   power-adequate test and the E1 Jensen-gap / χ² details; rename to "Gaussianity and linearity in latent space".
-- [ ] W5 Revisit §5.3's physical-space-analysis comparison (`05_tilings_and_sizes.tex` ~l.205–217) in the light of E4:
+- [~] W5 (2026-10-20: §5.3 now says the comparison does not isolate the coordinates and points to the oracle; add the E4 number when it lands) Revisit §5.3's physical-space-analysis comparison (`05_tilings_and_sizes.tex` ~l.205–217) in the light of E4:
   say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.
 - [ ] W6 §6 (`06_physics_comparison.tex`): one paragraph or sentence relating the crossover to E4 — part of the physics
   filter's advantage under small model error is the linear H it enjoys; quote the E4 coordinate cost.
-- [ ] W7 §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
+- [~] W7 (2026-10-20: paragraph "What the nonlinear coordinates cost" written with E1/E3, placeholder for E5/E4/E2/E6. ALSO revisit after E4: §11 "What locality buys" and §5.3 "The decoder is not the limit" say the remaining error is "mostly the filter's, not the decoder's"; the oracle (perfect forecast 0.174 vs blended floor 0.137, seed 0) suggests that with good forecasts the decoder floor dominates — reword once E4 has 3 seeds) §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
   "What locality buys" (~l.6–20); new limitation bullet (~l.76–112) bounding validity to the σ_o / cycle range of E5;
   extend the "Model noise" bullet (T5).
-- [ ] W8 Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the
+- [~] W8 (2026-10-20: contribution bullet "What the nonlinear decoder costs" written with E1/E3; placeholder for the E4 clause) Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the
   nonlinear latent observation operator is measured and separated from model error.
 - [ ] W9 Abstract, key points (≤140 chars, max 3 — replace or merge, do not add a fourth), Plain Language Summary
   (`main.tex`), conclusions (`12_conclusions.tex`): one clause each, only after W1 has its verdict.

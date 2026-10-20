@@ -3,6 +3,19 @@
 \label{sec:discussion}
 %======================================================================
 
+\para{What the nonlinear coordinates cost.} Analysing in a learned latent
+space replaces a linear observation operator by a nonlinear one and
+Gaussian assumptions in physical space by Gaussian assumptions in latent
+space (Sec.~\ref{sec:nonlinear}). At the configuration of this paper the
+first costs little: the term the filter neglects is about $4\%$ of the
+observation error, because one cycle leaves a prior spread at the observed
+points below the observation error, and relinearizing the update does
+not change the error. The per-patch decoder keeps this cost local, so it is
+the same on every domain size. It would grow with the spread, for sparser
+or noisier observations and longer cycles.
+\placeholder{Z20 W7: E5 range where it grows; E4 decomposition (coordinates vs learned forecast vs reconstruction
+floor); E2 Gaussian-in-which-coordinates; E6 kernel particle flow filter.}
+
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation
 operator exactly local (Proposition~\ref{prop:blockdiag}). The ensemble a localized filter needs is
