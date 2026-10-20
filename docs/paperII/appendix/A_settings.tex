@@ -102,6 +102,50 @@ test). With an earlier single-tiling filter at $44^2$ it gave the same skill as 
 perturbed-observation filter to within $0.15$ at every ensemble size, in about $40\%$ less CPU time;
 every experiment in this paper uses the perturbed-observation update.
 
+\para{Relinearized per-site filter.} To measure what the single
+linearization of Sec.~\ref{sec:nonlinear} costs, each member minimizes
+$\|z-z_f^{(e)}\|^2_{B^{-1}}+\|y^{(e)}-H(z)\|^2_{R^{-1}}$ by the ensemble
+randomized-maximum-likelihood iteration \citep{guoliver2007,chenoliver2012}
+with one Jacobian per iterate, at the iterate's ensemble mean:
+\begin{equation}
+  z_{i+1}^{(e)} = z_f^{(e)} + G_i\big[y^{(e)} - H(z_i^{(e)}) - J_i\,(z_f^{(e)}-z_i^{(e)})\big],\qquad
+  G_i = B J_i^\top\big(J_i B J_i^\top + R\big)^{-1},
+  \label{eq:iterative}
+\end{equation}
+with $z_0=z_f$, the forecast covariance $B$ held fixed, the same perturbed
+observations in every iteration, and the same per-site R-localization as
+the standard update; the first iterate is the standard update exactly
+(unit test). All sites are updated from the previous iterate, and $J_i$ is
+recomputed by the same $c$ forward passes, so Proposition~\ref{prop:blockdiag}
+holds at every iterate (Remark~\ref{rem:local_curvature}). RTPS is applied once,
+after the last iterate. For a linear $H$ every iterate equals the first.
+This is the observation-nonlinearity part of the iterative ensemble Kalman
+filters of \citet{sakov2012}; the forecast is not re-run.
+
+\para{Kernel particle flow filter.} The particle flow filter of
+\citet{huvanleeuwen2021} moves each member in pseudo-time $s$ along
+\begin{equation}
+\begin{gathered}
+  \frac{dz_i}{ds} = \frac{1}{\Nens}\,(\rho\circ B)\sum_{j=1}^{\Nens}
+  \Big[K(z_j,z_i)\,\nabla\log p(z_j\mid y) + \nabla_{z_j}\!\cdot K(z_j,z_i)\Big],\\
+  \nabla\log p(z\mid y) = -(\rho\circ B)^{-1}(z-\bar z_f) + J(z)^\top R^{-1}\big(y-H(z)\big),
+\end{gathered}
+  \label{eq:kpff}
+\end{equation}
+with the diagonal matrix-valued kernel $K_{dd}(z,z')=\exp\!\big(-(z_d-z'_d)^2/(2\alpha\sigma_d^2)\big)$,
+$\sigma_d^2$ the prior variance of coordinate $d$ and $\alpha=1/\Nens$ as in
+\citet{huvanleeuwen2021}. Unlike the update above, each member uses its own
+gradient through the nonlinear decoder, $J(z_j)^\top R^{-1}(y-H(z_j))$, one
+vector--Jacobian product per member, and the kernel term lets members repel
+one another (a Stein variational flow, \citealp{liuwang2016}), so the flow is not restricted to a Gaussian posterior. We use the
+same Gaspari--Cohn taper $\rho$ as the per-site filter, on the dense latent
+covariance of each tiling ($\dlat=768$ at $44^2$), a ridge of $10^{-6}$ times
+the mean prior variance, explicit Euler steps no larger than $0.05$ prior
+standard deviations in any coordinate, and at most 200 steps, stopping when
+the relative change of the ensemble mean falls below $10^{-4}$. For a linear
+$H$ and a Gaussian prior its fixed point reproduces the Kalman posterior
+mean and variances (unit test).
+
 \para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
 \citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
 held fixed in pseudo-time, at most 100 pseudo-time steps.

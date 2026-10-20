@@ -59,3 +59,13 @@ Eq.~\eqref{eq:blend} is a fixed linear map of the $K$ decoded analyses, with wei
 on position, so the value of the blended analysis at a grid point depends only on the $K$ sites, one per
 tiling, whose patches contain it, and through them only on the observations within the taper
 supports of those sites. No approximation enters at any step.
+
+\para{Proof of Remark~\ref{rem:local_curvature}.} Above, $H_i(z)=g(z_{s(i)})(\bm x_i)$
+for every $z$, not only at one point. Every derivative of $H_i$ of any order with
+respect to $z_j$, $j\ne s(i)$, therefore vanishes identically; in particular
+$\partial^2H_i/\partial z_{j,k}\partial z_{l,k'}=0$ unless $j=l=s(i)$, and the
+remainder of Eq.~\eqref{eq:nl_expansion} at observation $i$ is
+$g(\bar z_{s(i)}+\delta_{s(i)})(\bm x_i)-g(\bar z_{s(i)})(\bm x_i)-\nabla g(\bar z_{s(i)})(\bm x_i)\,\delta_{s(i)}$,
+a function of $\delta_{s(i)}$ alone. The Jacobian at any iterate of
+Eq.~\eqref{eq:iterative} has the block structure of the proposition, so part (a)
+recovers it with $c$ forward passes. \qed

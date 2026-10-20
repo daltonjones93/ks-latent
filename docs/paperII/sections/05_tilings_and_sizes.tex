@@ -216,8 +216,13 @@ analysis is $8$--$11\%$ more accurate on every seed and better calibrated.
 A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
-The latent coordinates and the one-cycle priors are close to Gaussian, in latent and in physical
-space alike (Appendix~\ref{app:da_gauss}).
+%----------------------------------------------------------------------
+\subsection{The cost of the nonlinear decoder}
+\label{sec:da_nonlinear}
+%----------------------------------------------------------------------
+
+\placeholder{Z20 W1: E1 nonlinearity index and calibration, E3 relinearized update, E4 oracle-forecast
+decomposition, E6 kernel particle flow filter; verdict against the pre-registered rule (docs/split\_paper\_tasks.md Z20).}
 
 %----------------------------------------------------------------------
 \subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}

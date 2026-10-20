@@ -1243,34 +1243,34 @@ Legend: [ ] to do, [~] in progress, [x] done (date/commit).
 
 ### Z20-T Theory additions (Paper II)
 
-- [ ] T1 New subsection `\subsection{What the nonlinear decoder costs the filter}` (`\label{sec:nonlinear}`) in
+- [~] T1 (drafted 2026-10-20, `03_method.tex` §3.3 "What the nonlinear decoder costs the filter") New subsection `\subsection{What the nonlinear decoder costs the filter}` (`\label{sec:nonlinear}`) in
   `sections/03_method.tex`, after "Latent ensemble data assimilation" (before "Shifted tilings", ~l.162). Opening
   paragraph: the exact latent posterior p(z|y) ∝ N(y; H_obs D(z), R) p(z); the per-site update is one Gauss–Newton
   step on it, linearized at the ensemble mean; the physics LETKF observing grid points has linear H and no such step.
-- [ ] T2 In the same subsection: nonlinearity index. Second-order expansion H(z̄+δ) = H(z̄) + Jδ + ½ δᵀ∇²H δ + O(δ³);
+- [~] T2 (drafted 2026-10-20, Eqs. nl_expansion/nl_index; numbers from E1) In the same subsection: nonlinearity index. Second-order expansion H(z̄+δ) = H(z̄) + Jδ + ½ δᵀ∇²H δ + O(δ³);
   define η = E‖H(z̄+δ) − H(z̄) − Jδ‖ / ‖Jδ‖ and η_o = E‖H(z̄+δ) − H(z̄) − Jδ‖ / (σ_o √m); linearization is adequate
   when η_o ≪ 1, i.e. when the one-cycle prior spread is small against the decoder's curvature scale. Equation number;
   measured values come from E1.
-- [ ] T3 Corollary (state as a remark after Proposition 1, `03_method.tex` ~l.130, proof sketch in
+- [~] T3 (drafted 2026-10-20 as Remark rem:local_curvature inside §3.3 (right after Prop. 1's discussion); proof in App. B) Corollary (state as a remark after Proposition 1, `03_method.tex` ~l.130, proof sketch in
   `appendix/B_proof.tex`): with R_dec = 0 the Hessian of H_i is non-zero only in the c×c block of the patch owning
   observation i; the nonlinearity never couples sites, so η is measured and (E3) corrected site by site at any domain
   size, at the cost of c extra JVPs per relinearization.
-- [ ] T4 Change-of-variables paragraph (same subsection): Gaussian-in-z vs Gaussian-in-u are different approximations;
+- [~] T4 (drafted 2026-10-20; citations checked) Change-of-variables paragraph (same subsection): Gaussian-in-z vs Gaussian-in-u are different approximations;
   KS forecast errors are not Gaussian in u either; the coordinate choice acts like a learned anamorphosis that may
   help or hurt; which is closer to Gaussian is measured in E2. Cite Bertino, Evensen & Wackernagel (2003) and
   Simon & Bertino (2009) — verify both against primary sources before citing.
-- [ ] T5 Model-noise paragraph (same subsection, or `appendix/A_settings.tex` §A.2 where model noise is defined ~l.45):
+- [~] T5 (drafted 2026-10-20 in §3.3; §11 bullet still to extend (W7)) Model-noise paragraph (same subsection, or `appendix/A_settings.tex` §A.2 where model noise is defined ~l.45):
   latent noise q²I induces physical covariance J q² Jᵀ + O(q⁴) curvature terms, state dependent and per-patch;
   extend the §11 "Model noise" limitation bullet (`11_discussion.tex` ~l.109) to say so.
-- [ ] T6 Estimator paragraph (same subsection; App. A states which is reported): Jensen gap
+- [~] T6 (drafted 2026-10-20 in §3.3 "Which mean"; placeholder for the E1 number. Found: §3.4 defines the blend from D(z̄_k), but every reported number is the mean of the blended decoded members (`blend` in exp_h9); difference < 0.001 at 44² (E1 s0/s1), say so) Estimator paragraph (same subsection; App. A states which is reported): Jensen gap
   E[D(z)] − D(E z) ≈ ½ tr(∇²D B); with R_dec = 0 it is per patch; which estimator the paper reports and why (from E1c).
-- [ ] T7 Iterative update written out in `appendix/A_settings.tex` §A.2 (Analysis schemes, after the per-site filter
+- [~] T7 (drafted 2026-10-20, App. A "Relinearized per-site filter", Eq. iterative (EnRML: Gu & Oliver 2007, Chen & Oliver 2012; Sakov et al. 2012)) Iterative update written out in `appendix/A_settings.tex` §A.2 (Analysis schemes, after the per-site filter
   ~l.95): per-site Gauss–Newton relinearization (IEnKF form, Sakov, Oliver & Bertino 2012 — verify), iteration count,
   stopping rule, cost; note it keeps Proposition 1 exactness (J recomputed at each iterate by the same colouring).
-- [ ] T8 Oracle-forecast filter defined in `03_method.tex` §3.5 ("A physics-based comparator", ~l.223) as a third
+- [~] T8 (drafted 2026-10-20 at the end of §3.6 (comparator): projected and incremental variants) Oracle-forecast filter defined in `03_method.tex` §3.5 ("A physics-based comparator", ~l.223) as a third
   configuration: true PDE forecast per member → encode → latent analysis → decode. State what the difference to the
   perfect-model physics LETKF isolates (coordinates + reconstruction floor) and what it does not (learned model error).
-- [ ] T9 Particle flow filter in 2D, per site (for E6): write the localized PFF update in `appendix/A_settings.tex`
+- [~] T9 (drafted 2026-10-20, App. A "Kernel particle flow filter", Eq. kpff; checked against Hu & van Leeuwen 2021 (PMC8252770): D = localized B, per-dimension kernel width α σ², α = 1/N_p, prior gradient with localized B⁻¹. Our step rule differs (cap of 0.05 prior std per step, ≤ 200 steps, tol stop; theirs: ×/÷1.4 adaptive, 500 iterations); stated in App. A) Particle flow filter in 2D, per site (for E6): write the localized PFF update in `appendix/A_settings.tex`
   §A.2 alongside the 1D PFF already there (kernel, B fixed in pseudo-time, NAT metric with block-diagonal J).
 
 ### Z20-E Experiments (all 2D KS, 44², existing noisy-trained model, no retraining; 3 seeds unless noted)
@@ -1384,11 +1384,36 @@ Every new numerical function gets a unit test against a known answer (ground rul
   whose stationary distribution is the Gaussian N(z*, F⁻¹). It is an iterated Gaussian (Langevin) update, not the
   kernel particle flow of Hu & van Leeuwen, and cannot represent a non-Gaussian posterior. The co-author is the second
   author of that paper and will notice.
-- [ ] T10 Decide (user + co-author) how to describe the 1D "PFF": rename it in App. A.2 and §9 (e.g. "an iterated
+- [~] T10 (user 2026-10-20: rerun 1D with the kernel PFF, E7; choose after results) Decide (user + co-author) how to describe the 1D "PFF": rename it in App. A.2 and §9 (e.g. "an iterated
   Gauss–Newton Langevin update"), drop the Hu & van Leeuwen attribution for it, or replace the 1D runs with the kernel
   PFF of E6.
 - [ ] W13 Apply T10 in `appendix/A_settings.tex` (~l.105–107), `sections/09_one_dimension.tex`, `sections/03_method.tex`
   (~l.115–118, "also use a particle flow filter"), `sections/02_background.tex` (~l.33), App. D.3 table header.
+
+**E7 1D rerun with the kernel particle flow filter (user decision 2026-10-20).** The 1D "PFF" of Paper II is an
+iterated Gaussian update (see T10). Rerun the 1D experiments with the real kernel PFF of E6; decide from the results
+which 1D results go in the paper (old PFF renamed, kernel PFF, or both).
+- [ ] E7a Code: `--method kpff` in `scripts/run_da_pff_ltransfer.py` using `ks_latent/da/pff_kernel.py`
+  (Schur-localized B with the same GC taper as the 1D runs, half-width 3 sites; `--localizer none` = no taper),
+  kernel width α and step cap as flags; smoke test at L = 200, N = 8.
+- [ ] E7b Tune α ∈ {1/N, 0.1, 0.5} (and RTPS 0 / 0.7 if the spread collapses) at L = 200, N = 32, Gaspari–Cohn, seed 0;
+  record the choice and why.
+- [ ] E7c Runs: the configurations of App. D.3 / `tables/1d_da` PFF columns — L ∈ {200, 400} × {none, Gaspari–Cohn}
+  × N ∈ {8, 16, 32, 64, 128, 256}, fixed observation spacing 3.125, 100 cycles, steady skill over cycles 51–100,
+  same model (the 1D model of Paper I), same truth/observations as the existing D1 runs
+  (`artifacts/da_pff_ltransfer_d1_*`). Queue after E6 (`scripts/run_z20_e7.sh`).
+- [ ] E7d Analysis: skill table kernel PFF vs old "PFF" vs EnKF; E1-style nonlinearity index on the 1D runs if the
+  kernel PFF differs from the EnKF by more than the seed/run spread.
+- [ ] E7e Decision (user, with co-author): which 1D results go in Paper II; then apply via W13 and regenerate
+  `tables/1d_da` (`scripts/paper_figures/tab07_1d_da.py`).
+
+**Citations checked (2026-10-20, Crossref/arXiv; added to `docs/paperII/refs.bib` with `% status: [checked]`):**
+Bertino, Evensen & Wackernagel 2003 (Int. Stat. Rev. 71:223); Simon & Bertino 2009 (Ocean Sci. 5:495); Sakov, Oliver &
+Bertino 2012 (MWR 140:1988); Gu & Oliver 2007 (SPE J. 12:438); Chen & Oliver 2012 (Math. Geosci. 44:1); Hamill 2001
+(MWR 129:550); Mardia 1970 (Biometrika 57:519); Liu & Wang 2016 (NeurIPS 29, arXiv:1608.04471). Hu & van Leeuwen 2021
+already in refs.bib (QJRMS 147:2352, doi 10.1002/qj.4028), kernel details checked against the open-access copy.
+W1 stub subsection `sec:da_nonlinear` added in `05_tilings_and_sizes.tex` (placeholder) so the cross-references build;
+the old one-line Gaussianity pointer there was removed (W4 rewrites App. D.5).
 
 **Order.** E1a–E1d first (cheap; decides how much the rest matters) → E3, E4 (decisive) → E2 → E5 → E6. Theory T1–T6
 can be drafted in parallel and filled with numbers after E1/E3/E4; T7–T9 with their code. Writing W1–W12 after the

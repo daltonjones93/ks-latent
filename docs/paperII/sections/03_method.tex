@@ -160,6 +160,96 @@ colouring nor the memory of the per-site filter depends on the domain
 size. Figure~\ref{fig:concept}b shows the measured Jacobian.
 
 %----------------------------------------------------------------------
+\subsection{What the nonlinear decoder costs the filter}
+\label{sec:nonlinear}
+%----------------------------------------------------------------------
+
+Analysing in latent coordinates changes the statistical problem the
+filter solves, and not only its size. The observation errors are Gaussian
+in physical space, but the filter's state is $z$, and the map between the
+two is nonlinear.
+
+\para{The exact problem and the filter's approximation.} With the
+forecast ensemble as prior, the latent analysis targets
+\begin{equation}
+  p(z\mid y) \;\propto\; \exp\!\Big(-\tfrac12\big\|y-\Hobs(\Dec(z))\big\|^2_{R^{-1}}\Big)\,p(z).
+  \label{eq:latent_posterior}
+\end{equation}
+The likelihood is Gaussian in $y$ but, because $H=\Hobs\circ\Dec$ is
+nonlinear, not in $z$. The per-site filter replaces $p(z)$ by a Gaussian
+with the ensemble's mean and covariance and builds its gain from the
+Jacobian $J$ at the ensemble mean; its innovation uses the nonlinear $H$
+(Appendix~\ref{app:da_filters}). This is one Gauss--Newton step on
+Eq.~\eqref{eq:latent_posterior}, exact for a linear $H$ and a Gaussian
+prior up to sampling. A physical-space LETKF that observes grid points
+has an exactly linear operator and does not make this step; the latent
+filter does.
+
+\para{A nonlinearity index.} Write a member as $z^{(e)}=\bar z+\delta^{(e)}$ and
+\begin{equation}
+  H(\bar z+\delta) = H(\bar z) + J\delta + r(\delta),\qquad
+  r(\delta) = \tfrac12\,\delta^\top\nabla^2 H\,\delta + O(|\delta|^3).
+  \label{eq:nl_expansion}
+\end{equation}
+The filter treats $r$ as zero. We measure it on the forecast ensemble by
+\begin{equation}
+  \eta = \frac{\operatorname{rms}_{e,i}\, r_i(\delta^{(e)})}{\operatorname{rms}_{e,i}\,(J\delta^{(e)})_i},
+  \qquad
+  \eta_o = \frac{\operatorname{rms}_{e,i}\, r_i(\delta^{(e)})}{\sigma_o},
+  \label{eq:nl_index}
+\end{equation}
+the size of the neglected term relative to the linear one and to the
+observation error $\sigma_o$. To the filter, $r$ acts as an additional
+observation error that depends on the state and is correlated with it;
+when $\eta_o\ll1$ it is small against the error the filter already
+accounts for, and its effect on the gain enters at order $\eta_o^2$.
+Because $r$ is second order in $\delta$, $\eta$ grows in proportion to the
+prior spread, so the index is small when the cycle is short and the
+observations are dense enough to keep the spread small against the
+curvature scale of the decoder, and large otherwise. Section~\ref{sec:da_nonlinear}
+measures $\eta_o$ and the cost of the linearization directly, by
+relinearizing the update (Appendix~\ref{app:da_filters}).
+
+\begin{remark}[The curvature is local too]
+\label{rem:local_curvature}
+Under the conditions of Proposition~\ref{prop:blockdiag}, $\partial^2 H_i/\partial z_{j,k}\,\partial z_{l,k'}=0$
+unless $j=l=s(i)$. The residual $r_i$ therefore depends only on the
+perturbation at the site that owns observation $i$; the nonlinearity
+never couples sites, $\eta$ is a per-site quantity measured in the same
+way at every domain size, and a relinearized update needs the same $c$
+forward passes per iterate as the first (Appendix~\ref{app:proof}).
+\end{remark}
+
+\para{Gaussian in which coordinates.} A Kalman update assumes a Gaussian
+prior in the coordinates in which it is applied. If forecast errors were
+Gaussian in $u$, their image under $\E$ would not be Gaussian in $z$, and
+a Gaussian ensemble in $z$ decodes to a non-Gaussian one in $u$; with a
+nonlinear decoder, "Gaussian in $z$" and "Gaussian in $u$" are different
+assumptions. Neither is exact for KS, whose forecast errors are shaped by
+the nonlinear dynamics in either space. The latent coordinates play the
+role of a Gaussian anamorphosis \citep{bertino2003,simonbertino2009}, a
+change of variables before a Gaussian update, but one learned for
+reconstruction rather than for Gaussianity; it may bring the prior closer
+to Gaussian or move it away. Which happens is an empirical question,
+tested in Appendix~\ref{app:da_gauss}.
+
+\para{Model noise.} The forecast adds isotropic Gaussian noise $\xi$ of
+standard deviation $q$ to every latent coordinate. In physical space this
+is $\Dec(z+\xi)-\Dec(z) = J_{\Dec}\xi + \tfrac12\xi^\top\nabla^2\Dec\,\xi + \dots$,
+with covariance $q^2 J_{\Dec}J_{\Dec}^\top + O(q^4)$: noise that depends on
+the state, is confined to each patch ($J_{\Dec}$ is block-diagonal), and
+is non-Gaussian at second order. Isotropic in latent coordinates is not
+isotropic in physical ones.
+
+\para{Which mean.} Under squared error the best estimate of the field is
+its posterior mean, $\Exp[\Dec(z)\mid y]$, approximated by the mean of the
+decoded members, which differs from the decoded mean $\Dec(\bar z)$ by
+$\tfrac12\tr(\nabla^2\Dec\,B_a)+\dots$, again per patch. The analyses
+reported in this paper are means of the blended decoded members; the
+difference from blending the decoded means is
+\placeholder{Z20 E1: below 0.001 field units at $44^2$, all seeds}.
+
+%----------------------------------------------------------------------
 \subsection{Shifted tilings}
 \label{sec:tilings_method}
 %----------------------------------------------------------------------
@@ -239,6 +329,22 @@ of the mean one-cycle forecast error, with additive noise drawn from the
 covariance of the remaining error \citep{dee2005}, both estimated offline
 from $r = u(t+T)-M\big(u(t)\big)$ on an independent trajectory, where $M$
 is the wrong model and $T$ one assimilation cycle.
+
+\para{An oracle-forecast latent filter.} To separate what the latent
+coordinates cost from what the learned model costs,
+Sec.~\ref{sec:da_nonlinear} also runs the latent filter with a perfect
+forecast: each member is a physical field, forecast with the spectral
+solver of the true equations, encoded on each tiling, analysed by the
+per-site filter, and decoded. In the \emph{projected} variant the next
+member is the decoded analysis $\Dec(z_a)$, so every member returns to the
+decoder's range each cycle; in the \emph{incremental} variant it is
+$u_f+\Dec(z_a)-\Dec(z_f)$, so only the analysis increment passes through the
+latent coordinates. Against the physical-space LETKF with the same perfect
+model, the incremental variant isolates the cost (or gain) of analysing in
+latent coordinates, and the difference between the two variants the cost
+of the decoder's range; against the learned-model filter, the projected
+variant isolates the cost of the learned forecast. Neither variant adds
+model noise.
 
 \begin{figure*}[htbp]
 \centering
