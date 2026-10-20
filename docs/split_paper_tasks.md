@@ -1309,8 +1309,10 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] E3a (2026-10-20) Code: per-site Gauss–Newton relinearization (T7), J recomputed at each iterate by the colouring;
   1, 2, 3 iterations; stopping on relative change of the site mean. Test: equals the standard update for a linear
   decoder; converges to the exact MAP on a 1-site quadratic toy.
-- [~] E3b (queued) Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
-- [ ] E3c Analysis: 3-seed mean error and calibration vs iterations; apply *N-small* / *N-cost*.
+- [x] E3b (2026-10-20 12:22; RTPS 0.5/0.8 done, 0.9 running) Run: 44², seeds 0–2, iterations 1 (= current), 2, 3; same RTPS (and one retune of RTPS for the best count).
+- [x] E3c (2026-10-20) Result: 2 and 3 iterations give 0.325/0.310/0.302 vs 0.324/0.310/0.302 (1 iteration), same
+  calibration; last iteration moves the mean by 0.02%; RTPS optimum unchanged (it3: 0.322 at 0.5, 0.330 at 0.8;
+  standard: 0.322 at 0.5, D10_L44_rtps0.5). Meets *N-small* for E3 (change ≪ 0.02 seed spread). Analysis: 3-seed mean error and calibration vs iterations; apply *N-small* / *N-cost*.
 
 **E4 Oracle-forecast filter (coordinates vs model error)**
 - [x] E4a (2026-10-20) Code: forecast each member with the spectral solver in physical space, encode per tiling, latent analysis
@@ -1338,7 +1340,11 @@ Every new numerical function gets a unit test against a known answer (ground rul
 
 ### Z20-W Writing (Paper II)
 
-- [ ] W1 New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
+- [x] W1a (2026-10-20) E1 + E3 paragraph of `sec:da_nonlinear` written (η_o, η, per-site spread, prior spread vs σ_o,
+  relinearized errors, RTPS optimum unchanged: 0.322 at 0.5 for 1 and 3 iterations, consistency ratios, rank histograms);
+  number check 0/0.
+- [ ] W1b E4 decomposition, E6 kernel PFF, verdict against the pre-registered rule (placeholder in place).
+- [~] W1 (split into W1a/W1b above) New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
   `sections/05_tilings_and_sizes.tex`, after "Accuracy and calibration at the native size" (~l.221), replacing the
   one-sentence pointer to App. D.5 (~l.219–220): E1 numbers, E3 verdict, E4 decomposition, E6 one line; verdict
   against the pre-registered rule.
@@ -1347,7 +1353,12 @@ Every new numerical function gets a unit test against a known answer (ground rul
   perfect-model physics / reconstruction floor; columns error (3 seeds), calibration, η_o, χ²/m.
 - [~] W3 (2026-10-20: generator written and registered; panel (c) from E1 done; (a)/(b) fill from E5) New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
   check): (a) η_o vs spread/σ_o from E5; (b) error vs σ_o for the four filters; (c) rank histograms (E1c).
-- [ ] W4 Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
+- [x] W4a (2026-10-20) App. D.5 rewritten as "Gaussianity and linearity in latent space": linearity (η_o on the
+  analysis ensemble 0.028–0.030, obs-space Jensen gap 0.020–0.021 σ_o), consistency ratio definition, rank histograms
+  (seed-0 asymmetry), Gaussianity method (Mardia, MC null, 256-member priors, climatology); old 16-member check kept as
+  one sentence saying it lacked power.
+- [ ] W4b Fill the E2 rejection fractions and the one-sentence verdict (placeholder in place).
+- [~] W4 (split into W4a/W4b above) Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
   power-adequate test and the E1 Jensen-gap / χ² details; rename to "Gaussianity and linearity in latent space".
 - [ ] W5 Revisit §5.3's physical-space-analysis comparison (`05_tilings_and_sizes.tex` ~l.205–217) in the light of E4:
   say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.

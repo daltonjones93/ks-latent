@@ -103,15 +103,48 @@ smooth noise (correlation length 4 grid points) it is $1.35$, $1.09$, $1.02$ and
 $1.01$ and $0.99$; for latent-space noise of standard deviation $0.05$--$0.2$ it is $1.00$--$1.05$ for both. The
 reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_j18b\_roundtrip.py}).
 
-\subsection{Gaussianity of the latent priors}
+\subsection{Gaussianity and linearity in latent space}
 \label{app:da_gauss}
 
-The latent coordinates are close to Gaussian in
-climatology (mean absolute skewness per coordinate $0.20$, excess kurtosis
-$-0.07$), and 16-member one-cycle priors show mean absolute skewness of $0.38$ in
-latent space and $0.40$ in physical space, within the sampling noise of about $0.6$
-for 16 members. At this cycle length the latent space offers neither an
-advantage nor a disadvantage for a Gaussian filter.
+\para{Linearity.} The nonlinearity index of Eq.~\eqref{eq:nl_index} is
+computed every cycle on each tiling's forecast ensemble, from the
+nonlinear predicted observations of the members, the prediction at the
+ensemble mean and the linearized perturbations $J\delta^{(e)}$ (the compact
+Jacobian of Proposition~\ref{prop:blockdiag}); the steady-state values are in
+Table~\ref{tab:nonlinear}. On the analysis ensemble, after RTPS, it is
+$0.028$--$0.030$. The mean of the members' predicted observations differs
+from the prediction of the ensemble mean by $0.020$--$0.021$ times the
+observation error, the observation-space counterpart of the difference
+between the two means of Sec.~\ref{sec:nonlinear}.
+
+\para{Consistency.} The consistency ratio is
+$\sum_i d_i^2/\sum_i\big(\tfrac{N+1}{N}\Var_e H_i+\sigma_o^2\big)$, with
+$d=y-\overline{H(z)}$, a ratio of sums, which avoids the bias of dividing by
+a sample variance observation by observation. Rank histograms
+\citep{hamill2001} place each observation among the members' predicted
+observations, each perturbed by its own draw of observation error, and are
+accumulated over the steady-state cycles. For the blended prior at $44^2$,
+seed 0 has too few observations below every member and too many above
+it ($81$ and $272$ against $197$ expected), while seeds 1 and 2 are flat
+to slightly dome-shaped; the asymmetry is a property of one truth, not of
+the filter.
+
+\para{Gaussianity.} A Kalman update assumes a Gaussian prior in the
+coordinates where it is applied (Sec.~\ref{sec:nonlinear}). We test each
+site's prior in both sets of coordinates with Mardia's multivariate
+skewness and kurtosis \citep{mardia1970}: in latent space on the site's
+$c=12$ channels, and in physical space on the leading $12$ principal
+components of its decoded patch, the same number of dimensions. The
+asymptotic distributions of both statistics are poor at ensemble sizes,
+so their $p$-values come from $100$ Gaussian samples of the same size passed
+through the same procedure (for the patch, Gaussian samples with the
+ensemble's own patch covariance, then the same projection). One-cycle
+priors are taken from a run with $256$ members per tiling (seed 0, ten
+steady-state cycles, $640$ site tests in each space); climatology from
+$256$ states of an independent run, two time units apart, encoded.
+\placeholder{Z20 E2: fraction of sites rejecting at 5\% (skewness, kurtosis), latent vs physical, priors vs
+climatology; one sentence on which coordinates are closer to Gaussian.} An earlier check of per-coordinate skewness with
+16-member priors could not resolve a difference: its sampling noise exceeded the measured skewness.
 
 \subsection{Run-to-run spread and transients}
 \label{app:da_tuning}

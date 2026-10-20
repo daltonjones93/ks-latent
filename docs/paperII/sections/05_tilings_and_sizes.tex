@@ -233,8 +233,29 @@ Filter & Error (seeds 0/1/2) & Spread/error & $\eta_o$ & Consistency \\
 \tabinput{tables/nonlinear}}
 \end{table*}
 
-\placeholder{Z20 W1: E1 nonlinearity index and calibration, E3 relinearized update, E4 oracle-forecast
-decomposition, E6 kernel particle flow filter; verdict against the pre-registered rule (docs/split\_paper\_tasks.md Z20).}
+At the native configuration the linearization is a small approximation.
+The nonlinearity index of the forecast ensembles is $\eta_o=0.036$--$0.038$ on
+the three seeds (Table~\ref{tab:nonlinear}): the term the gain neglects is
+about $4\%$ of the observation error, and $5\%$ of the linear term. It varies
+between sites, with a 90th percentile of $0.06$ and a largest value of
+$0.13$, but is nowhere comparable to the observation error. The prior
+spread at the observed points is $0.72$--$0.73$ times the observation
+error, so each cycle samples the decoder only over a short distance around
+the ensemble mean. Relinearizing the update (Eq.~\eqref{eq:iterative})
+tests this directly. With two or three Gauss--Newton iterations the error
+is $0.325$, $0.310$ and $0.302$ on the three seeds, against $0.324$, $0.310$
+and $0.302$ with one, at the same calibration; the iterations converge,
+the last one moving the analysis mean by $0.02\%$. The best RTPS weight is
+the same with three iterations as with one ($0.322$ at $0.5$ in both cases,
+seed 0). The ensembles are consistent with the observations: the ratio of
+the mean squared innovation to its predicted variance is $0.93$--$0.99$ for
+each tiling's ensemble and $0.85$--$0.91$ for the blended prior, which is
+slightly over-dispersed, and the rank histograms of the blended prior are
+flat to slightly dome-shaped on two seeds and skewed towards observations
+above the ensemble on the third (Appendix~\ref{app:da_gauss}).
+
+\placeholder{Z20 W1b: E4 oracle-forecast decomposition (coordinates vs learned model), E6 kernel particle flow
+filter, verdict against the pre-registered rule.}
 
 %----------------------------------------------------------------------
 \subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}
