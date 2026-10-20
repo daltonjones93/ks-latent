@@ -1285,9 +1285,17 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] E1b (2026-10-20) Code: log RMSE of D(z̄) and of mean_e D(z^(e)) (per tiling and blended) every cycle.
 - [x] E1c (2026-10-20) Code: innovation statistic χ²/m = dᵀ(J B Jᵀ + R)⁻¹ d / m per cycle (per site, localized form) and
   observation-space rank histograms. Test: χ²/m → 1 on a linear-Gaussian synthetic.
-- [~] E1d (queued 2026-10-20, `scripts/run_z20.sh`) Run: 44², K = 4 tilings, paper settings, seeds 0–2, 100 cycles, diagnostics on. Time one run first and
+- [x] E1d (2026-10-20 11:56, `h9_z20_e1_s{0,1,2}`) Run: 44², K = 4 tilings, paper settings, seeds 0–2, 100 cycles, diagnostics on. Time one run first and
   report the time to the user before launching the rest.
-- [ ] E1e Analysis: table of η, η_o (median, 90th pct), χ²/m, rank-histogram flatness, D(z̄) vs decoded-mean RMSE;
+- [~] E1e (numbers 2026-10-20; table in W2) Results, seeds 0/1/2: analysis error 0.324/0.310/0.302 (= paper);
+  η 0.050/0.052/0.050; η_o 0.036/0.038/0.036 (per site median 0.016–0.017, p90 0.058–0.061, max 0.122–0.128); on the
+  analysis ensemble η_o 0.028–0.030; Jensen gap in obs space 0.020–0.021 σ_o; prior spread at obs 0.72–0.73 σ_o;
+  consistency ratio 0.99/0.98/0.93 (tiling), 0.91/0.88/0.85 (blended prior: slightly overdispersed). Rank histograms:
+  seed 0 asymmetric (obs above the ensemble too often: ends 143/284 tiling, 81/272 blend, expected 197), seeds 1–2
+  flat to slightly dome-shaped (blend ends 145–153) → the seed-0 asymmetry is a property of that truth/seed, not
+  systematic. Estimator rule: decoded ensemble mean 0.324/0.310/0.302 vs blended D(z̄) 0.324/0.311/0.303 → the paper
+  already reports the better estimator; keep, and say so (T6, filled). E1 verdict so far: η_o ≈ 0.04 ≪ 0.3.
+- [ ] E1e (remaining) Analysis: table of η, η_o (median, 90th pct), χ²/m, rank-histogram flatness, D(z̄) vs decoded-mean RMSE;
   apply the *Estimator* rule.
 
 **E2 Gaussianity with adequate power**
