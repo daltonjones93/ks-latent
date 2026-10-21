@@ -1,7 +1,7 @@
 {
   "table": "1d_da",
-  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
-  "timestamp_utc": "2026-10-21T19:09:52Z",
+  "git_sha": "c489782d1b0dc7922cd0bece7741cad31c739eed",
+  "timestamp_utc": "2026-10-21T19:34:44Z",
   "inputs": [
     "artifacts/da_pff_ltransfer_d1_{pff,letkf}_L{200,400}_{none,gaspari_cohn}_nens{N}.json",
     "artifacts/da_pff_ltransfer_z20_e7_kpff_L{200,400}_{none,gaspari_cohn}_N{N}.json",
