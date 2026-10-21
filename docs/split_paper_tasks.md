@@ -1447,8 +1447,8 @@ over-dispersed at the EnKF's model noise (0.02 per step), which was tuned for th
   tests whether the latent filter's linearization fails where a physical-space filter's does too. Needs: an observation
   option in `exp_h9_tiled_da.py` and `exp_i11_pde_letkf.py`, 3 seeds × {EnKF, relinearized, kernel PFF, physics}.
   ~3–4 h. Would add one paragraph; strengthens the answer to the co-author's concern but widens scope.
-- [ ] E5d (optional) Seeds 1–2 for the 20-snapshot E5 cells, and RTPS 0.3 there (best RTPS at the grid edge).
-  ~1 h. Would turn the long-cycle numbers from one seed into three and remove the "upper bound" caveat.
+- [~] E5d (user 2026-10-21: add; queued `scripts/run_z20_e5d.sh` after E5C, E7 now waits for `E5D DONE`) Seeds 1–2 for the 20-snapshot E5 cells (standard and relinearized at the best RTPS), and RTPS 0.3 there (best RTPS at the grid edge).
+  ~40 min (20-snapshot runs take ~1.5 min each). Would turn the long-cycle numbers from one seed into three and remove the "upper bound" caveat.
 
 **E7 1D rerun with the kernel particle flow filter (user decision 2026-10-20).** The 1D "PFF" of Paper II is an
 iterated Gaussian update (see T10). Rerun the 1D experiments with the real kernel PFF of E6; decide from the results

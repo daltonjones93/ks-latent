@@ -2,7 +2,7 @@
 # Z20 E7 (2026-10-20): 1D data assimilation rerun with the kernel particle flow filter (Hu & van Leeuwen 2021),
 # same model, truth, observations and configurations as the D1 runs of Paper II App. D.3 (scripts/run_blockD_1d.sh):
 # L in {200, 400}, localizer none / Gaspari-Cohn (half-width 3 sites), N in {8..256}, spacing 3.125, 100 cycles.
-# Starts after run_z20_after_e6.sh (waits for "E5C DONE"). Serial, 2 threads, efficiency cores.
+# Starts after run_z20_after_e6.sh (waits for "E5D DONE"). Serial, 2 threads, efficiency cores.
 cd "$(dirname "$0")/.."
 PY=/opt/homebrew/Caskroom/miniforge/base/envs/da_env/bin/python
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
@@ -14,7 +14,7 @@ run() { tag=$1; shift; [ -f artifacts/da_pff_ltransfer_$tag.json ] && return
   $PY scripts/run_da_pff_ltransfer.py --ae-checkpoint $AE --prop-checkpoint $PR --n-cycles 100 \
     --method kpff --obs-spacing-units 3.125 --tag $tag "$@" > artifacts/logs/z20_$tag.log 2>&1
   log "done $tag rc=$? $($PY -c "import json; d=json.load(open('artifacts/da_pff_ltransfer_$tag.json')); print('skill', round(d['skill_steady'],2), 'calib', round(d['calibration_steady'],2))" 2>/dev/null)"; }
-until grep -q "E5C DONE" $LOG 2>/dev/null; do sleep 600; done
+until grep -q "E5D DONE" $LOG 2>/dev/null; do sleep 600; done
 log "E7 start"
 for al in def 0.1 0.5; do for r in 0 0.7; do
   aa=""; [ $al != def ] && aa="--kpff-alpha $al"
