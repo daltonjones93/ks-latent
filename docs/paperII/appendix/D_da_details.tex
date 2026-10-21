@@ -139,8 +139,8 @@ observations, each perturbed by its own draw of observation error, and are
 accumulated over the steady-state cycles. For the blended prior at $44^2$,
 seed 0 has too few observations below every member and too many above
 it ($81$ and $272$ against $197$ expected), while seeds 1 and 2 are flat
-to slightly dome-shaped; the asymmetry is a property of one truth, not of
-the filter.
+to slightly dome-shaped; the asymmetry appears with one truth only, so it is
+more likely a property of that truth than of the filter.
 
 \para{Gaussianity.} A Kalman update assumes a Gaussian prior in the
 coordinates where it is applied (Sec.~\ref{sec:nonlinear}). We test each
@@ -148,7 +148,7 @@ site's prior in both sets of coordinates with Mardia's multivariate
 skewness and kurtosis \citep{mardia1970}: in latent space on the site's
 $c=12$ channels, and in physical space on the leading $12$ principal
 components of its decoded patch, the same number of dimensions. The
-asymptotic distributions of both statistics are poor at ensemble sizes,
+asymptotic distributions of both statistics are poor at these ensemble sizes,
 so their $p$-values come from $100$ Gaussian samples of the same size passed
 through the same procedure (for the patch, Gaussian samples with the
 ensemble's own patch covariance, then the same projection). One-cycle

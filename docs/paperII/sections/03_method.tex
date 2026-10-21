@@ -206,9 +206,7 @@ Were it independent of the state, it would add a variance of about
 $\eta_o^2\sigma_o^2$ to $R$, a relative change of order $\eta_o^2$; because it is
 correlated with the state and has a non-zero mean, its effect on the
 analysis mean can be of first order in $\eta_o$. An index $\eta_o\ll1$ is
-therefore necessary for the linearization to be adequate, and we measure
-its cost directly by relinearizing the update
-(Appendix~\ref{app:da_filters}).
+therefore necessary for the linearization to be adequate, not sufficient.
 Because $r$ is second order in $\delta$, $\eta$ grows in proportion to the
 prior spread, so the index is small when the cycle is short and the
 observations are dense enough to keep the spread small against the
@@ -253,7 +251,9 @@ decoded members, which differs from the decoded mean $\Dec(\bar z)$ by
 $\tfrac12\tr(\nabla^2\Dec\,B_a)+\dots$, again per patch. The analyses
 reported in this paper are means of the blended decoded members; the
 difference from blending the decoded means is
-at most $0.001$ at $44^2$ on each of three seeds (Sec.~\ref{sec:da_nonlinear}).
+at most $0.001$ at $44^2$ on each of three seeds (Sec.~\ref{sec:da_nonlinear}). It grows with
+the cycle and the observation error, to about $2\%$ at twenty snapshots per cycle and $\sigma_o=0.4$,
+where the mean of the decoded members is again the lower of the two.
 
 %----------------------------------------------------------------------
 \subsection{Shifted tilings}

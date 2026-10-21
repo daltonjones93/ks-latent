@@ -37,6 +37,8 @@ def best_std(so, p):
 
 
 cols = {0.05: shade(AQUA, -0.35), 0.1: AQUA, 0.2: BLUE, 0.4: shade(BLUE, -0.4)}
+# distinct markers so the four sigma_o lines stay separable in grayscale (W12)
+mks = {0.05: "o", 0.1: "s", 0.2: "^", 0.4: "D"}
 fig, (a, b, c) = plt.subplots(1, 3, figsize=(COL2, 2.0), gridspec_kw={"wspace": 0.55})
 for so in SO:
     xs, eta, gain = [], [], []
@@ -49,8 +51,8 @@ for so in SO:
         xs.append(p); eta.append(s["nl_eta_o"])
         gain.append(100 * (it["blend"] / s["blend"] - 1) if it else float("nan"))
     if xs:
-        a.plot(xs, eta, "o-", color=cols[so], ms=3.5, lw=1, label=rf"$\sigma_o={so}$")
-        b.plot(xs, gain, "o-", color=cols[so], ms=3.5, lw=1)
+        a.plot(xs, eta, mks[so] + "-", color=cols[so], ms=3.5, lw=1, label=rf"$\sigma_o={so}$")
+        b.plot(xs, gain, mks[so] + "-", color=cols[so], ms=3.5, lw=1)
 a.axhline(0.3, color=MUTED, lw=0.7, ls=":")
 for ax in (a, b):
     ax.set_xticks(PS); ax.set_xlabel("snapshots per cycle")
@@ -79,6 +81,6 @@ for k, v in series.items():
         c.plot(*zip(*pts), sty[k][1], color=sty[k][0], ms=3.5, lw=1, label=k)
 c.set_xscale("log"); c.set_xticks(SO); c.set_xticklabels(["0.05", "0.1", "0.2", "0.4"]); c.minorticks_off()
 c.set_xlabel(r"$\sigma_o$ (standardized)"); c.set_ylabel("analysis error")
-c.legend(frameon=False, fontsize=7, handlelength=1.6)
+c.legend(frameon=False, fontsize=6, handlelength=1.4, loc="upper left", borderaxespad=0.2, labelspacing=0.25)
 panel_label(c, "c")
 save(fig, "fig_nonlinearity", inputs)

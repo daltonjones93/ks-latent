@@ -1,7 +1,7 @@
 {
   "figure": "nonlinearity",
-  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
-  "timestamp_utc": "2026-10-21T19:10:07Z",
+  "git_sha": "fe922505edb28e68dc7026db1964c4798f0ed77a",
+  "timestamp_utc": "2026-10-21T19:25:46Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_z20_e5_it3_so0.05_p10.json",
     "artifacts/experiments/da2d/h9_z20_e5_it3_so0.05_p5.json",
