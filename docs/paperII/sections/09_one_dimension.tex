@@ -6,19 +6,28 @@
 Two results from 1D KS complete the picture (Fig.~\ref{fig:da_1d};
 details, the table and the observation-density sweep in
 Appendix~\ref{app:da_1d}). They use the 1D model of Paper~I (Sec.~\ref{sec:ks1d}), deployed at
-$L=200$ and $400$ without retraining, a single tiling, and the particle flow
-filter or the stochastic ensemble Kalman filter at a fixed observation
+$L=200$ and $400$ without retraining, a single tiling, and the Gauss--Newton particle flow
+filter (GN-PFF), the kernel particle flow filter of \citet{huvanleeuwen2021} or the stochastic
+ensemble Kalman filter (Appendix~\ref{app:da_filters}) at a fixed observation
 spacing of $3.125$; skill is the ratio of free-run to analysis error.
 
 \para{The ensemble an unlocalized filter needs doubles with the domain.}
 With localization, every ensemble of 16 or more members gives a skill of
-$2.3$--$3.0$ at both sizes and with both filters. Without it, the filter is
+$2.3$--$3.0$ at both sizes and with every filter. Without it, the filter is
 worse than no assimilation until the ensemble is large enough, and how
 large depends on the domain: at $L=200$, where the truth has $n_+=26$--$27$, it is
 marginal with 64 members and works with 128; at $L=400$, where $n_+=51$, it
-fails with 64, is marginal with 128 and works only with 256. The two
-filters differ by at most $0.4$ in skill. This is Eq.~\eqref{eq:nens_local}
-and its unlocalized counterpart, measured.
+fails with 64, is marginal with 128 and works only with 256. The GN-PFF and the ensemble Kalman filter differ by at most $0.4$ in
+skill. This is Eq.~\eqref{eq:nens_local} and its unlocalized counterpart, measured.
+The kernel particle flow filter, whose members each use their own gradient
+through the decoder, gives the same picture (Table~\ref{tab:da_1d}). With
+localization and 16 or more members its skill is $2.4$--$2.9$ at both sizes,
+between $0.02$ below and $0.28$ above the ensemble Kalman filter and up to
+$0.27$ below the GN-PFF; without it, assimilation helps from 64 members at
+$L=200$ and from 128 at $L=400$, the same doubling. It is the most
+under-dispersed of the three (spread/error $0.45$--$0.62$ with localization,
+against $0.62$--$0.81$ for the GN-PFF), where in 2D it is over-dispersed
+(Sec.~\ref{sec:da_nonlinear}).
 
 \para{A distance beats a distance-free correction.} Sampling error
 correction (SEC) \citep{anderson2012} localizes without a distance and is the
@@ -43,10 +52,10 @@ error; above the dotted line assimilation helps) against ensemble size,
 observation spacing $3.125$ in every panel. (a) Training size $L=100$
 (earlier sweeps, 40 cycles, whole-run skill): a global latent vector
 without localization and with sampling error correction (SEC), and the
-local field without localization and with Gaspari--Cohn (GC), particle
-flow filter, drawn with the symbols of the particle-flow curves in (b,c). (b) $L=200$ and (c) $L=400$, the local model transferred
+local field without localization and with Gaspari--Cohn (GC), Gauss--Newton particle
+flow filter (GN-PFF), drawn with the symbols of the GN-PFF curves in (b,c). (b) $L=200$ and (c) $L=400$, the local model transferred
 without retraining (100 cycles, steady state): no localization and GC,
-for the particle flow filter (solid) and the ensemble Kalman filter
+for the GN-PFF (solid) and the ensemble Kalman filter
 (dashed); in (b) also SEC after projection onto the PSD cone and in a
 serial filter, with crosses at the ensemble sizes where SEC in matrix
 form failed. The shaded line marks $n_++1$ for the truth. With

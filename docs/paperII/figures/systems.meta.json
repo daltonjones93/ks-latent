@@ -1,7 +1,7 @@
 {
   "figure": "systems",
-  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
-  "timestamp_utc": "2026-10-21T14:22:30Z",
+  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
+  "timestamp_utc": "2026-10-21T19:09:58Z",
   "inputs": [
     "artifacts/datasets/kolmogorov_wide16_alpha0.05.h5",
     "artifacts/datasets/ks2d_wide6.h5",

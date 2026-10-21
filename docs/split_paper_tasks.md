@@ -1428,10 +1428,10 @@ Every new numerical function gets a unit test against a known answer (ground rul
   whose stationary distribution is the Gaussian N(z*, F⁻¹). It is an iterated Gaussian (Langevin) update, not the
   kernel particle flow of Hu & van Leeuwen, and cannot represent a non-Gaussian posterior. The co-author is the second
   author of that paper and will notice.
-- [~] T10 (user 2026-10-20: rerun 1D with the kernel PFF, E7; choose after results) Decide (user + co-author) how to describe the 1D "PFF": rename it in App. A.2 and §9 (e.g. "an iterated
+- [x] T10 (2026-10-21, user: "option 1" — rename the old filter GN-PFF, honestly described as an iterated Gaussian flow, and add the kernel PFF as table columns; keeps the established 1D numbers and figure, adds the real Hu & van Leeuwen filter alongside) (user 2026-10-20: rerun 1D with the kernel PFF, E7; choose after results) Decide (user + co-author) how to describe the 1D "PFF": rename it in App. A.2 and §9 (e.g. "an iterated
   Gauss–Newton Langevin update"), drop the Hu & van Leeuwen attribution for it, or replace the 1D runs with the kernel
   PFF of E6.
-- [ ] W13 Apply T10 in `appendix/A_settings.tex` (~l.105–107), `sections/09_one_dimension.tex`, `sections/03_method.tex`
+- [x] W13 (2026-10-21: A.2 "Gauss–Newton particle flow filter" paragraph rewritten (OU/Gaussian stationary law, not Hu & van Leeuwen) + 1D kPFF settings; §3 l.114; §9 naming + kPFF paragraph; Fig. 1D caption/legend GN-PFF; App. D.3 text, table with kPFF columns and caption; §11 one clause. §2 l.33 left: it is about particle flow filters in general and stays correct) Apply T10 in `appendix/A_settings.tex` (~l.105–107), `sections/09_one_dimension.tex`, `sections/03_method.tex`
   (~l.115–118, "also use a particle flow filter"), `sections/02_background.tex` (~l.33), App. D.3 table header.
 
 **E6 first results (2026-10-21 05:40, seed 0, 4 × 32 members, 44²).** Kernel PFF: α = 1/N, RTPS 0: 0.384 (spread/error
@@ -1443,7 +1443,7 @@ over-dispersed at the EnKF's model noise (0.02 per step), which was tuned for th
 - [x] E6b (2026-10-21 06:35; see E6c) Kernel-PFF model noise 0.01 / 0.005 (α = 1/N, RTPS 0, seed 0); seeds 1–2 at the best; 4 × 64 kernel PFF
   seeds 0–2 (matches the paper's 4 × 64 EnKF); EnKF 4 × 32 seeds 1–2 (seed 0 exists). Why: the over-dispersion says the
   kernel PFF needs less model noise; a fair comparison tunes it.
-- [~] E5c Observation density at the native cycle (seed 0, σ_o 0.1): stride 16 (sparser; existing standard run 0.769)
+- [x] E5c (2026-10-21; §5.4 paragraph "The nonlinearity also grows when the observations are sparser"; §11 limitation bullet updated: stride 16 0.692, η_o 0.16, relinearized −1.6%; stride 4 0.225, η_o 0.015, no change; stride-16 best RTPS 0.5 = grid edge) Observation density at the native cycle (seed 0, σ_o 0.1): stride 16 (sparser; existing standard run 0.769)
   and stride 4 (denser), RTPS {0.5, 0.7, 0.9}, nonlinearity diagnostics, relinearized at the best RTPS. Why: removes the
   "sparser networks not tested" limitation added after E5; a sparse network leaves a larger prior spread.
 - [ ] E8 (optional, not started; decide) Nonlinear observation operator, e.g. observing u² or |u| at the grid points
@@ -1451,7 +1451,7 @@ over-dispersed at the EnKF's model noise (0.02 per step), which was tuned for th
   tests whether the latent filter's linearization fails where a physical-space filter's does too. Needs: an observation
   option in `exp_h9_tiled_da.py` and `exp_i11_pde_letkf.py`, 3 seeds × {EnKF, relinearized, kernel PFF, physics}.
   ~3–4 h. Would add one paragraph; strengthens the answer to the co-author's concern but widens scope.
-- [~] E5d (user 2026-10-21: add; queued `scripts/run_z20_e5d.sh` after E5C, E7 now waits for `E5D DONE`) Seeds 1–2 for the 20-snapshot E5 cells (standard and relinearized at the best RTPS), and RTPS 0.3 there (best RTPS at the grid edge).
+- [x] E5d (2026-10-21; best RTPS 0.3 in every cell, spread/error 0.87–1.06; η_o 0.15–0.21 (0.27–0.31 at RTPS 0.5 was over-dispersion); relinearizing −0.3 to −3.3% on 3 seeds; §5.4 text, verdict, §11 and Fig. nonlinearity (20-snapshot points now RTPS 0.3) updated; the "upper bound" caveat removed) (user 2026-10-21: add; queued `scripts/run_z20_e5d.sh` after E5C, E7 now waits for `E5D DONE`) Seeds 1–2 for the 20-snapshot E5 cells (standard and relinearized at the best RTPS), and RTPS 0.3 there (best RTPS at the grid edge).
   ~40 min (20-snapshot runs take ~1.5 min each). Would turn the long-cycle numbers from one seed into three and remove the "upper bound" caveat.
 
 **E7 1D rerun with the kernel particle flow filter (user decision 2026-10-20).** The 1D "PFF" of Paper II is an
@@ -1460,15 +1460,15 @@ which 1D results go in the paper (old PFF renamed, kernel PFF, or both).
 - [x] E7a (2026-10-20; `method="kpff"` in `ks_latent/da/cycling.py`, flags `--kpff-*`; smoke L=200 N=8 4 cycles OK) Code: `--method kpff` in `scripts/run_da_pff_ltransfer.py` using `ks_latent/da/pff_kernel.py`
   (Schur-localized B with the same GC taper as the 1D runs, half-width 3 sites; `--localizer none` = no taper),
   kernel width α and step cap as flags; smoke test at L = 200, N = 8.
-- [~] E7b (queued, `scripts/run_z20_e7.sh`, after `E6 DONE`) Tune α ∈ {1/N, 0.1, 0.5} (and RTPS 0 / 0.7 if the spread collapses) at L = 200, N = 32, Gaspari–Cohn, seed 0;
+- [x] E7b (2026-10-21: α = 0.1, RTPS 0; skill 2.76–2.82 over α without RTPS, RTPS 0.7 gives spread/error 1.1 but skill 2.1–2.2) (queued, `scripts/run_z20_e7.sh`, after `E6 DONE`) Tune α ∈ {1/N, 0.1, 0.5} (and RTPS 0 / 0.7 if the spread collapses) at L = 200, N = 32, Gaspari–Cohn, seed 0;
   record the choice and why.
-- [~] E7c (queued) Runs: the configurations of App. D.3 / `tables/1d_da` PFF columns — L ∈ {200, 400} × {none, Gaspari–Cohn}
+- [x] E7c (2026-10-21, `run_z20_e7_fast.sh`; outputs `artifacts/da_pff_ltransfer_z20_e7_kpff_*.json`) (queued) Runs: the configurations of App. D.3 / `tables/1d_da` PFF columns — L ∈ {200, 400} × {none, Gaspari–Cohn}
   × N ∈ {8, 16, 32, 64, 128, 256}, fixed observation spacing 3.125, 100 cycles, steady skill over cycles 51–100,
   same model (the 1D model of Paper I), same truth/observations as the existing D1 runs
   (`artifacts/da_pff_ltransfer_d1_*`). Queue after E6 (`scripts/run_z20_e7.sh`).
-- [ ] E7d Analysis: skill table kernel PFF vs old "PFF" vs EnKF; E1-style nonlinearity index on the 1D runs if the
+- [x] E7d (2026-10-21: in App. D.3 table and §9. With GC and N ≥ 16: kPFF skill 2.4–2.9, −0.02 to +0.28 vs EnKF, 0–0.27 below GN-PFF; unlocalized: helps from 64 (L=200) / 128 (L=400) members, same doubling; most under-dispersed of the three (0.45–0.62). The conditional 1D nonlinearity index was not computed: the kPFF–EnKF differences are within the GN-PFF–EnKF spread already in the paper (≤0.4)) Analysis: skill table kernel PFF vs old "PFF" vs EnKF; E1-style nonlinearity index on the 1D runs if the
   kernel PFF differs from the EnKF by more than the seed/run spread.
-- [ ] E7e Decision (user, with co-author): which 1D results go in Paper II; then apply via W13 and regenerate
+- [x] E7e (2026-10-21: user chose option 1, see T10) Decision (user, with co-author): which 1D results go in Paper II; then apply via W13 and regenerate
   `tables/1d_da` (`scripts/paper_figures/tab07_1d_da.py`).
 
 **Citations checked (2026-10-20, Crossref/arXiv; added to `docs/paperII/refs.bib` with `% status: [checked]`):**

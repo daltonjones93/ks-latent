@@ -1,7 +1,7 @@
 {
   "figure": "concept_da",
-  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
-  "timestamp_utc": "2026-10-21T14:22:29Z",
+  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
+  "timestamp_utc": "2026-10-21T19:09:57Z",
   "inputs": [
     "artifacts/experiments/da2d/jacobian_sparsity_L44_p7c12d10_ks2d.npz"
   ]

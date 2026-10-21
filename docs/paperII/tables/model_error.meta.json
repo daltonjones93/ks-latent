@@ -1,7 +1,7 @@
 {
   "table": "model_error",
-  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
-  "timestamp_utc": "2026-10-21T14:22:24Z",
+  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
+  "timestamp_utc": "2026-10-21T19:09:53Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_J17B_e0.1_lat_T4_s0.json",
     "artifacts/experiments/da2d/h9_J17B_e0.1_lat_T4_s1.json",

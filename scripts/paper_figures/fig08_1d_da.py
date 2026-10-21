@@ -70,9 +70,9 @@ a.plot(*csv_series(ART / "da_sweep_phaseD3_local224.csv", "gaspari_cohn"), "o-",
 a.set_title(r"$L=100$ (trained)", fontsize=8)
 
 for ax, L in ((b, 200), (c, 400)):
-    ax.plot(*json_series(f"da_pff_ltransfer_d1_pff_L{L}_none_nens{{N}}.json"), "v-", color=ORANGE, label="none, PFF")
+    ax.plot(*json_series(f"da_pff_ltransfer_d1_pff_L{L}_none_nens{{N}}.json"), "v-", color=ORANGE, label="none, GN-PFF")
     ax.plot(*json_series(f"da_pff_ltransfer_d1_pff_L{L}_gaspari_cohn_nens{{N}}.json"), "o-", color=BLUE,
-            label="GC, PFF")
+            label="GC, GN-PFF")
     ax.plot(*json_series(f"da_pff_ltransfer_d1_letkf_L{L}_none_nens{{N}}.json"), "^--", color=ORANGE, mfc="white",
             lw=1.0, label="none, EnKF")
     ax.plot(*json_series(f"da_pff_ltransfer_d1_letkf_L{L}_gaspari_cohn_nens{{N}}.json"), "s--", color=BLUE,
@@ -85,7 +85,7 @@ for ax, L in ((b, 200), (c, 400)):
     ax.set_title(rf"$L={L}$", fontsize=8)
 
 b.plot(*json_series("e3_sec_vs_gc_ltransfer_d3_L200_pff_sec_psd_N{N}.json"), "D-", color=AQUA, ms=4,
-       label="SEC (PSD), PFF")
+       label="SEC (PSD), GN-PFF")
 b.plot(*json_series("e3_sec_vs_gc_ltransfer_d3_L200_serial_sec_enkf_none_N{N}.json"), "D--", color=YELLOW, ms=4,
        mfc="white", label="SEC, serial EnKF")
 failed = [N for N in NS if not (ART / f"e3_sec_vs_gc_ltransfer_d3_L200_pff_sec_N{N}.json").exists()]

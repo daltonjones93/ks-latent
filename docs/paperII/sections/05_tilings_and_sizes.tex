@@ -326,20 +326,30 @@ physical-space LETKF.}
 Figure~\ref{fig:nonlinearity} shows where this changes. The index is set by
 the cycle length, not by the observation error: it is $0.03$--$0.05$ at the
 paper's five snapshots per cycle for $\sigma_o$ from $0.05$ to $0.4$,
-$0.06$--$0.12$ at ten and $0.27$--$0.31$ at twenty (panel a). The prior spread
+$0.06$--$0.12$ at ten and $0.15$--$0.21$ at twenty (panel a). The prior spread
 grows with the forecast time; with the observation error it grows roughly
 as $\sigma_o^{1/2}$ (from $0.055$ to $0.15$ at the observed points as $\sigma_o$
 goes from $0.05$ to $0.4$), so the second-order residual, proportional to
 the square of the spread, grows about as fast as $\sigma_o$ itself and
 $\eta_o$ hardly changes. Relinearizing begins to pay once the index is large: by
-at most $1\%$ at ten snapshots and by $1$--$3.5\%$ at twenty (panel b). Even
-at four times the paper's cycle, where the index reaches the $0.3$ of the
-pre-registered rule, the nonlinearity costs a few percent, below the rule's
-$10\%$. At five snapshots the order of the four filters is the same at
-every observation error (panel c). At twenty snapshots the best RTPS weight
-is the smallest tried, $0.5$, and the ensembles are over-dispersed
-(spread/error $1.2$--$1.4$), so the errors there are upper bounds for a fully
-tuned filter.
+at most $1\%$ at ten snapshots and, on three seeds, by $0.3$--$3.3\%$ at twenty,
+more at larger observation errors ($0.3$--$1.4\%$ at $\sigma_o=0.05$,
+$1.6$--$3.3\%$ at $0.4$; panel b, seed 0). At twenty snapshots the best RTPS
+weight is $0.3$, and the index depends on it: with the weight $0.5$, which
+leaves the ensembles over-dispersed (spread/error $1.2$--$1.4$, against
+$0.87$--$1.06$ at $0.3$), it is $0.27$--$0.31$, because a larger spread samples
+more of the decoder's curvature. Even at four times the paper's cycle the
+nonlinearity costs a few percent, below the $10\%$ of the pre-registered rule.
+At five snapshots the order of the four filters is the same at every
+observation error (panel c).
+
+The nonlinearity also grows when the observations are sparser, because the
+prior spread does. With every sixteenth grid point observed in each
+direction (spacing $5.5$, a quarter of the observations) the error is
+$0.692$ and $\eta_o=0.16$, and relinearizing lowers it to $0.681$ ($-1.6\%$);
+with every fourth (spacing $1.4$) it is $0.225$, $\eta_o=0.015$, and
+relinearizing changes nothing (seed 0; at the sparse spacing the best RTPS
+weight, $0.5$, is the smallest tried).
 
 A filter that does not assume a Gaussian posterior does not help either.
 The kernel particle flow filter of \citet{huvanleeuwen2021}
@@ -353,7 +363,7 @@ which neither less model noise ($0.01$ or $0.005$ instead of $0.02$ per step),
 nor RTPS, nor a wider kernel, nor 400 pseudo-time steps without early
 stopping removes.
 In the most nonlinear cell of Fig.~\ref{fig:nonlinearity}, twenty snapshots
-per cycle at $\sigma_o=0.05$, it is also worse ($0.288$ against $0.270$, seed 0).
+per cycle at $\sigma_o=0.05$, it is also worse ($0.288$ against $0.266$, seed 0).
 With a nearly linear observation operator and nearly Gaussian priors there
 is little for a particle flow to gain, as \citet{huvanleeuwen2021} found
 for linear observations of Lorenz-96.
@@ -364,8 +374,8 @@ coordinates is small at the configuration of this paper: the index is
 $0.036$--$0.038$, below $0.3$, and relinearizing changes the error by less
 than the spread between seeds; the relinearized update, which would have
 been adopted had it lowered the error by $10\%$ on every seed, is not.
-Over the range of Fig.~\ref{fig:nonlinearity} the index reaches $0.3$ only
-at four times the cycle length, where relinearizing gains a few percent.
+Over the range of Fig.~\ref{fig:nonlinearity} and of the observation densities tried, the index stays
+below $0.3$ for a tuned filter and relinearizing gains at most a few percent.
 The rule's comparison of the oracle with the reconstruction floor is
 inconclusive ($0.015$--$0.030$ above it, against a seed spread of $0.02$),
 because the floor turned out not to bound that variant. The cost of the

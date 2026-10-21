@@ -58,8 +58,8 @@ $\omega_k=1/K$. The blended fields are output only: each tiling's next forecast 
 analysis ensemble.
 
 \para{Analysis updates.} The 2D experiments use the per-site filter below. The 1D experiments use
-a single tiling, no RTPS, model noise $0.08$, and the dense filter or the particle flow filter, with
-or without sampling error correction.
+a single tiling, no RTPS, model noise $0.08$, and the dense filter, the Gauss--Newton particle flow filter or the kernel particle flow filter,
+with or without sampling error correction.
 
 \para{Dense filter.} With perturbed observations
 $y^{(e)}=y+\varepsilon^{(e)}$, $\varepsilon^{(e)}\sim\mathcal N(0,R)$,
@@ -146,9 +146,20 @@ the relative change of the ensemble mean falls below $10^{-4}$. For a linear
 $H$ and a Gaussian prior its fixed point reproduces the Kalman posterior
 mean and variances (unit test).
 
-\para{Particle flow filter.} The Gauss--Newton (``NAT'') variant of
-\citet{huvanleeuwen2021} with the localized prior covariance $\rho\circ B$,
-held fixed in pseudo-time, at most 100 pseudo-time steps.
+\para{Gauss--Newton particle flow filter.} The 1D filter labelled GN-PFF moves the members along a
+Langevin flow towards the posterior, preconditioned by the Gauss--Newton precision
+$F=\bar J^\top R^{-1}\bar J+(\rho\circ B)^{-1}$, with $\bar J$ the Jacobian of $H$ at the current ensemble
+mean and $\rho\circ B$ the localized prior covariance, held fixed in pseudo-time:
+$dz_i=-F^{-1}\nabla_{z_i}\!\left[-\log p(z_i\mid y)\right]_{\mathrm{lin}}ds+\sqrt{2F^{-1}}\,dW_i$, where the subscript
+lin means $H$ linearized about the current mean; at most 100 pseudo-time steps. Because one matrix $F$ is
+shared by all members, each step is an Ornstein--Uhlenbeck process whose stationary distribution is the
+Gaussian $\mathcal N(z_*,F^{-1})$ about the Gauss--Newton iterate $z_*$: it relinearizes about the mean at
+every step but samples a Gaussian, so it is an iterated Gaussian filter in particle-flow form, not the
+kernel filter of \citet{huvanleeuwen2021}, whose members each use their own gradient
+(Eq.~\eqref{eq:kpff}). In 1D the kernel filter runs with $\alpha=0.1$ and no RTPS, the best of
+$\alpha\in\{1/\Nens,0.1,0.5\}$ and RTPS weights $\{0,0.7\}$ at $L=200$ with 32 members (skill $2.76$--$2.82$
+without RTPS; with $0.7$ the spread/error rises to $1.1$ but the skill falls to $2.1$--$2.2$), otherwise as in 2D, with the dense localized covariance of the single
+tiling.
 
 \para{Sampling error correction.} The correction table of
 \citet{anderson2012} is built by Monte Carlo for each ensemble size

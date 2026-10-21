@@ -13,7 +13,7 @@ points below the observation error, and relinearizing the update does
 not change the error. The per-patch decoder keeps this cost local, so it is
 the same on every domain size. It grows with the cycle length, not with the
 observation error: at four times the cycle of this paper the index
-reaches $0.3$ and relinearizing lowers the error by up to $3.5\%$
+reaches $0.15$--$0.21$ and relinearizing lowers the error by up to $3.3\%$
 (Fig.~\ref{fig:nonlinearity}), so a filter with long cycles should
 relinearize.
 The latent field has a larger cost through the decoder's range. With the
@@ -33,7 +33,7 @@ ones (Appendix~\ref{app:da_gauss}).
 A kernel particle flow filter, which uses each member's own gradient through
 the decoder and does not assume a Gaussian posterior, is $13$--$17\%$ less
 accurate than the per-site filter here, consistent with how little
-nonlinearity there is to exploit.
+nonlinearity there is to exploit; in 1D it matches the ensemble Kalman filter.
 
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation
@@ -140,9 +140,10 @@ $66^2$ box, both 12-channel and at their best RTPS). We have not identified what
   tilings, but the Kolmogorov ensemble is under-dispersed, and the
   inflation was not retuned for it.
 \item \emph{Nonlinearity.} The cost of the nonlinear decoder was measured
-  at $44^2$ on one seed beyond the native configuration, for cycles up to four
-  times the native one and observation errors up to four times $0.1$, with
-  the dense network; sparser networks were not tested.
+  at $44^2$ only, for cycles up to four times the native one (three seeds at
+  the longest), observation errors up to four times $0.1$, and observation
+  spacings from half to twice the native one (one seed); the sparsest
+  network's inflation was tuned only to the edge of the grid.
 \item \emph{Model noise.} Model error in the latent forecast is represented
   by isotropic Gaussian noise of fixed size, not by the statistics of the
   learned propagator's own error. Isotropic in latent coordinates, it is

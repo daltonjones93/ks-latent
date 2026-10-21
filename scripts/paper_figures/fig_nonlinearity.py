@@ -1,5 +1,5 @@
 """Paper II figure (Z20 W3, 2026-10-21): where the nonlinearity of the latent coordinates starts to matter,
-2D KS 44^2, seed 0, the E5 grid (observation error sigma_o x cycle length), standard filter at its best RTPS.
+2D KS 44^2, seed 0, the E5 grid (RTPS 0.3 added at 20 snapshots, E5d) (observation error sigma_o x cycle length), standard filter at its best RTPS.
 
 (a) Nonlinearity index eta_o of the forecast ensemble (Eq. nl_index) against the cycle length (snapshots between
     analyses), one line per sigma_o; the dotted line is 0.3, the threshold of the pre-registered rule.
@@ -31,7 +31,7 @@ PS = [5, 10, 20]
 
 
 def best_std(so, p):
-    c = [J(f"h9_z20_e5_std_so{so}_p{p}_r{r}.json") for r in (0.5, 0.7, 0.9)]
+    c = [J(f"h9_z20_e5_std_so{so}_p{p}_r{r}.json") for r in (0.3, 0.5, 0.7, 0.9)]
     c = [x for x in c if x]
     return min(c, key=lambda s: s["blend"]) if c else None
 
@@ -42,7 +42,8 @@ for so in SO:
     xs, eta, gain = [], [], []
     for p in PS:
         s = best_std(so, p)
-        it = J(f"h9_z20_e5_it3_so{so}_p{p}.json")
+        # 20 snapshots: the relinearized run at RTPS 0.3 (E5d), the best weight there; else the E5 run
+        it = (J(f"h9_z20_e5d_it3_so{so}_p{p}_s0.json") if p == 20 else None) or J(f"h9_z20_e5_it3_so{so}_p{p}.json")
         if s is None:
             continue
         xs.append(p); eta.append(s["nl_eta_o"])

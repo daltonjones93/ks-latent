@@ -56,10 +56,10 @@ where both were computed. Slopes are least-squares power-law fits.}
 \label{app:da_1d}
 
 Table~\ref{tab:da_1d} gives the 1D results summarized in Sec.~\ref{sec:da_1d}. They use the 1D
-model of Paper~I, a single tiling, and either the particle flow filter or the stochastic ensemble
-Kalman filter with Gaspari--Cohn localization of half-width 3 sites, without RTPS.
+model of Paper~I, a single tiling, and the Gauss--Newton particle flow filter (GN-PFF), the kernel particle flow
+filter (kPFF) or the stochastic ensemble Kalman filter with Gaspari--Cohn localization of half-width 3 sites, without RTPS.
 
-\para{Observation density.} With the particle flow filter at $L=200$ the skill is $5.2$, $2.9$, $1.2$ and
+\para{Observation density.} With the GN-PFF at $L=200$ the skill is $5.2$, $2.9$, $1.2$ and
 $1.0$ at observation spacings $1.6$, $3.1$, $6.25$ and $12.5$: with a single tiling, assimilation fails once
 the spacing reaches the site length ($6.25$), well below the pattern wavelength $2\sqrt2\,\pi\approx8.9$.
 An earlier version of the 1D experiment scaled the observation stride with the domain, which doubled
@@ -72,20 +72,23 @@ ensemble size, with errors $3$--$19\%$ lower. That comparison confounds the loca
 architecture (two different autoencoders), and at $L=100$ the taper is non-zero on 11 of the 16 sites
 of the ring, so it hardly localizes. At $L=200$ the comparison is made on one latent. The
 SEC-corrected covariance formed elementwise is indefinite at five of six ensemble sizes, and the
-particle flow filter, which factorizes it, fails; this is a property of the matrix form, not of SEC,
+GN-PFF, which factorizes it, fails; this is a property of the matrix form, not of SEC,
 and the projected and serial forms of Appendix~\ref{app:da_filters} run at every size.
 
 \begin{table*}[htbp]
 \caption{1D KS data assimilation after transfer: steady-state skill
 (free-run error over analysis error, cycles 51--100) at a fixed
-observation spacing of $3.125$, model trained at $L=100$. Pairs: no
-localization / Gaspari--Cohn (half-width 3 sites). Last two columns
-($L=200$ only): sampling error correction with the particle flow filter
+observation spacing of $3.125$, model trained at $L=100$, for the
+Gauss--Newton particle flow filter (GN-PFF), the kernel particle flow
+filter (kPFF, $\alpha=0.1$) and the stochastic ensemble Kalman filter (EnKF).
+Pairs: no localization / Gaspari--Cohn (half-width 3 sites). Last two columns
+($L=200$ only): sampling error correction with the GN-PFF
 after projection onto the PSD cone, and in a serial ensemble Kalman
 filter. Skill below 1 means the filter is worse than no assimilation.}
 \label{tab:da_1d}
-\widetabular{ccccccc}{
-$\Nens$ & PFF, $L=200$ & PFF, $L=400$ & EnKF, $L=200$ & EnKF, $L=400$ & SEC-PSD & Serial SEC \\
+\widetabular{ccccccccc}{
+$\Nens$ & \multicolumn{2}{c}{GN-PFF} & \multicolumn{2}{c}{kPFF} & \multicolumn{2}{c}{EnKF} & SEC-PSD & Serial SEC \\
+ & $L=200$ & $L=400$ & $L=200$ & $L=400$ & $L=200$ & $L=400$ & $L=200$ & $L=200$ \\
 \hline
 \tabinput{tables/1d_da}}
 \end{table*}

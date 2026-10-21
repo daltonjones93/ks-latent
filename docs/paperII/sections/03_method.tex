@@ -111,8 +111,9 @@ ensemble spread is relaxed towards the forecast spread, coordinate by
 coordinate, with weight $\alpha_{\mathrm R}=0.7$ (relaxation to prior spread, RTPS;
 \citealp{whitakerhamill2012}); the forecast adds Gaussian model noise of
 standard deviation $0.02$ per latent coordinate at every propagator step.
-The 1D experiments of Sec.~\ref{sec:da_1d} also use a particle flow filter
-\citep{huvanleeuwen2021} and a stochastic ensemble Kalman filter with
+The 1D experiments of Sec.~\ref{sec:da_1d} also use two particle flow filters, a
+Gauss--Newton flow that samples a Gaussian and the kernel filter of
+\citet{huvanleeuwen2021}, and a stochastic ensemble Kalman filter with
 Schur-product localization; all analysis schemes are written out in
 Appendix~\ref{app:da_filters}.
 

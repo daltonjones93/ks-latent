@@ -1,9 +1,10 @@
 {
   "table": "1d_da",
-  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
-  "timestamp_utc": "2026-10-21T14:22:23Z",
+  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
+  "timestamp_utc": "2026-10-21T19:09:52Z",
   "inputs": [
     "artifacts/da_pff_ltransfer_d1_{pff,letkf}_L{200,400}_{none,gaspari_cohn}_nens{N}.json",
+    "artifacts/da_pff_ltransfer_z20_e7_kpff_L{200,400}_{none,gaspari_cohn}_N{N}.json",
     "artifacts/e3_sec_vs_gc_ltransfer_d3_L200_{pff_sec_psd,serial_sec_enkf_none}_N{N}.json"
   ]
 }

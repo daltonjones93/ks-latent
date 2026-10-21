@@ -1,7 +1,7 @@
 {
   "table": "members",
-  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
-  "timestamp_utc": "2026-10-21T14:22:24Z",
+  "git_sha": "b73c844afedf17c2f1a47ae0f24cea834f1c2d44",
+  "timestamp_utc": "2026-10-21T19:09:53Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_D10_L220_I1_T4.json",
     "artifacts/experiments/da2d/h9_D10_L220_I3_N128.json",
