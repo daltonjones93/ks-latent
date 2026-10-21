@@ -200,7 +200,9 @@ within $1\%$ of the best error.
 tiling, about half of that tiling's analysis error, and $0.13$--$0.14$ for the
 blend, well below the blended analysis's $0.30$--$0.33$
 (Table~\ref{tab:da_2d_sizes}). Most of the remaining error is therefore
-the filter's, not the reconstruction's.
+the filter's, not the reconstruction's. This holds with the learned
+forecast; with a perfect forecast the analysis comes within $0.015$--$0.030$
+of the blended floor (Sec.~\ref{sec:da_nonlinear}).
 
 \para{The analysis belongs in latent space.} One could use the learned
 model only as a forecast device and do the analysis in physical space.
@@ -217,7 +219,8 @@ This comparison does not isolate the coordinates: both filters forecast
 with the learned model, and the physical-space one also re-encodes its
 analysis every cycle. The oracle-forecast filter of
 Sec.~\ref{sec:da_nonlinear}, with the true equations as forecast, makes
-the clean comparison. A physical-space analysis must re-encode fields that the decoder never
+the clean comparison: with the true forecast the latent analysis reaches
+$0.152$--$0.158$, against $0.076$--$0.086$ for the physical-space analysis. A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
 %----------------------------------------------------------------------
@@ -229,7 +232,7 @@ produced, and the latent analysis does not.
 \caption{The cost of the nonlinear decoder, 2D KS at $44^2$, steady state. Analysis error (field units) on seeds
 0/1/2, mean spread/error, nonlinearity index $\eta_o$ of the forecast ensemble (Eq.~\eqref{eq:nl_index}) and the
 observation-space consistency ratio of the blended prior (1 for a consistent ensemble). Upper block: latent filters
-with the learned model, $4\times64$ members unless stated. Lower block: perfect forecasts.}
+with the learned model, $4\times64$ members unless stated. Lower block: perfect forecasts (oracle: true equations as forecast, latent analysis, best RTPS; 256-member physical-space filter on seed 0 only).}
 \label{tab:nonlinear}
 \widetabular{lcccc}{
 Filter & Error (seeds 0/1/2) & Spread/error & $\eta_o$ & Consistency \\
@@ -258,8 +261,29 @@ slightly over-dispersed, and the rank histograms of the blended prior are
 flat to slightly dome-shaped on two seeds and skewed towards observations
 above the ensemble on the third (Appendix~\ref{app:da_gauss}).
 
-\placeholder{Z20 W1b: E4 oracle-forecast decomposition (coordinates vs learned model), E6 kernel particle flow
-filter, verdict against the pre-registered rule.}
+The oracle-forecast filter separates the two other sources of error
+(Table~\ref{tab:nonlinear}). With the true equations as forecast and the
+analysis in latent coordinates, the error is $0.152$, $0.158$ and $0.156$ at
+its best RTPS weight, $0.3$ (on seed 0, $0$, $0.5$ and $0.7$ give $0.192$,
+$0.174$ and $0.246$). The perfect-model physical-space LETKF reaches
+$0.076$, $0.085$ and $0.086$ with 64 members, and $0.073$ with 256 (seed 0),
+so it is not limited by its ensemble. Of the latent filter's error of
+$0.302$--$0.324$, the learned forecast therefore accounts for $0.15$--$0.17$,
+about half, and the latent coordinates for $0.07$--$0.08$. The oracle
+analysis is within $0.015$--$0.030$ of the blended reconstruction floor
+($0.128$--$0.137$). The floor is not a strict bound for this variant, whose
+analysis keeps the part of the forecast the decoder cannot represent
+(its single-tiling error, $0.186$--$0.193$, is below the single-tiling floor
+of $0.239$--$0.251$), but the closeness suggests that the decoder's
+precision, through which every increment passes, limits the analysis more
+than the nonlinearity does. The nonlinearity is the smallest part: with a
+perfect forecast the prior spread at the observations is $0.25$--$0.26$
+times the observation error, and $\eta_o=0.007$. The oracle ensemble is
+under-dispersed (spread/error $0.67$--$0.70$), though consistent with the
+observations at the observed points (consistency ratio $1.02$--$1.03$).
+
+\placeholder{Z20 W1b: projected oracle variant (members returned to the decoder's range each cycle), E6 kernel
+particle flow filter, verdict against the pre-registered rule.}
 
 %----------------------------------------------------------------------
 \subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}

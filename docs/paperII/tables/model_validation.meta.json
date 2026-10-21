@@ -1,7 +1,7 @@
 {
   "table": "model_validation",
-  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
-  "timestamp_utc": "2026-10-20T18:23:04Z",
+  "git_sha": "5e861ce6326c432fed8e4b99be36f2711a5c380f",
+  "timestamp_utc": "2026-10-21T00:24:06Z",
   "inputs": [
     "artifacts/experiments/crop/p7c12_ks2d_x1.0_seed0.json",
     "artifacts/experiments/crop/p7c12_ks2d_x1.5_seed0.json",

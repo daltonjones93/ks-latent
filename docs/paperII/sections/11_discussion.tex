@@ -13,8 +13,15 @@ points below the observation error, and relinearizing the update does
 not change the error. The per-patch decoder keeps this cost local, so it is
 the same on every domain size. It would grow with the spread, for sparser
 or noisier observations and longer cycles.
-\placeholder{Z20 W7: E5 range where it grows; E4 decomposition (coordinates vs learned forecast vs reconstruction
-floor); E2 Gaussian-in-which-coordinates; E6 kernel particle flow filter.}
+The coordinates have a larger cost through the decoder's precision: with a
+perfect forecast, the latent analysis error is about twice that of a
+physical-space filter ($0.152$--$0.158$ against $0.076$--$0.086$) and close
+to the reconstruction floor. With the learned forecast, which accounts for
+about half of the error, this cost is the smaller one; it would become the
+main one for a better forecast model, and a more precise decoder, or one
+that reads neighbouring sites, is where it would be reduced.
+\placeholder{Z20 W7: E5 range where the nonlinearity grows; E2 Gaussian-in-which-coordinates; E6 kernel particle
+flow filter.}
 
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation
@@ -40,7 +47,9 @@ per-patch design itself creates. The same
 construction worked in Kolmogorov flow once the tilings were restricted to
 the symmetries the model was trained on. The remaining analysis error is
 mostly the filter's, not the decoder's: the blended decoder floor is less
-than half of it (Sec.~\ref{sec:da_accuracy}). Better use of the ensemble
+than half of it (Sec.~\ref{sec:da_accuracy}); this is so with the learned
+forecast, and with a perfect one the decoder's precision becomes the main
+limit (Sec.~\ref{sec:da_nonlinear}). Better use of the ensemble
 inside each tiling, and models of the propagator's error in place of
 isotropic noise, are the natural next steps.
 

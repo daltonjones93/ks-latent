@@ -1,7 +1,7 @@
 {
   "table": "nonlinear",
-  "git_sha": "59d45eb07505e14112516442f4c37687f42af8a5",
-  "timestamp_utc": "2026-10-20T18:23:04Z",
+  "git_sha": "5e861ce6326c432fed8e4b99be36f2711a5c380f",
+  "timestamp_utc": "2026-10-21T00:24:06Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_z20_e1_s0.json",
     "artifacts/experiments/da2d/h9_z20_e1_s1.json",
@@ -11,7 +11,15 @@
     "artifacts/experiments/da2d/h9_z20_e3_it2_s2.json",
     "artifacts/experiments/da2d/h9_z20_e3_it3_s0.json",
     "artifacts/experiments/da2d/h9_z20_e3_it3_s1.json",
-    "artifacts/experiments/da2d/h9_z20_e3_it3_s2.json"
+    "artifacts/experiments/da2d/h9_z20_e3_it3_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e4_increment_r0.3_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e4_increment_r0.3_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e4_increment_r0.3_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e4_project_r0.3_s0.json",
+    "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_N256_s0.json",
+    "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_s0.json",
+    "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_s1.json",
+    "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_s2.json"
   ],
   "summary": {
     "Per-site filter (this paper)": {
@@ -56,41 +64,41 @@
     },
     "Oracle forecast, incremental": {
       "err": [
-        null,
-        null,
-        null
+        0.15222689752380292,
+        0.15824842595175956,
+        0.15566642343376816
       ],
-      "calib": null,
-      "eta_o": null,
-      "chi2_blend": null
+      "calib": 0.6798600856170621,
+      "eta_o": 0.007149824157182755,
+      "chi2_blend": 1.022921420690048
     },
     "Oracle forecast, projected": {
       "err": [
-        null,
+        0.6788596713589965,
         null,
         null
       ],
-      "calib": null,
-      "eta_o": null,
-      "chi2_blend": null
+      "calib": 0.1743669064431871,
+      "eta_o": 0.009391732008323155,
+      "chi2_blend": 3.107891367178346
     },
     "Physical-space LETKF, perfect model, 64": {
       "err": [
-        null,
-        null,
-        null
+        0.07633444896484583,
+        0.08509389100706288,
+        0.08552160870548492
       ],
-      "calib": null,
+      "calib": 0.9630363295264205,
       "eta_o": null,
       "chi2_blend": null
     },
     "Physical-space LETKF, perfect model, 256": {
       "err": [
-        null,
+        0.07348154244735329,
         null,
         null
       ],
-      "calib": null,
+      "calib": 1.1270605697768687,
       "eta_o": null,
       "chi2_blend": null
     },
@@ -106,8 +114,8 @@
     }
   },
   "chosen": {
-    "e4_increment": null,
-    "e4_project": null,
+    "e4_increment": "z20_e4_increment_r0.3",
+    "e4_project": "z20_e4_project_r0.3",
     "e6": null
   }
 }
