@@ -1,7 +1,7 @@
 {
   "table": "networks",
-  "git_sha": "b19cf943b092b8a3c3426b33140bdefd53bdbad2",
-  "timestamp_utc": "2026-10-21T11:17:25Z",
+  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
+  "timestamp_utc": "2026-10-21T14:22:25Z",
   "inputs": [
     "artifacts/da_pff_ltransfer_d1_pff_L200_gaspari_cohn_nens64.json",
     "artifacts/da_pff_ltransfer_d1_pff_L400_gaspari_cohn_nens64.json",

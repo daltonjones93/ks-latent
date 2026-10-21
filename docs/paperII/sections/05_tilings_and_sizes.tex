@@ -341,7 +341,35 @@ is the smallest tried, $0.5$, and the ensembles are over-dispersed
 (spread/error $1.2$--$1.4$), so the errors there are upper bounds for a fully
 tuned filter.
 
-\placeholder{Z20 W1b: E6 kernel particle flow filter; verdict against the pre-registered rule.}
+A filter that does not assume a Gaussian posterior does not help either.
+The kernel particle flow filter of \citet{huvanleeuwen2021}
+(Appendix~\ref{app:da_filters}), with each member's own gradient through
+the nonlinear decoder, reaches $0.373$, $0.354$ and $0.349$ with $4\times64$
+members and $0.383$, $0.365$ and $0.360$ with $4\times32$, against $0.324$,
+$0.310$ and $0.302$ and $0.330$, $0.314$ and $0.306$ for the per-site filter
+with the same members, $13$--$17\%$ worse on every seed. Its ensembles are
+over-dispersed (spread/error $1.32$--$1.37$, consistency ratio $0.59$--$0.60$),
+which neither less model noise ($0.01$ or $0.005$ instead of $0.02$ per step),
+nor RTPS, nor a wider kernel, nor 400 pseudo-time steps without early
+stopping removes.
+In the most nonlinear cell of Fig.~\ref{fig:nonlinearity}, twenty snapshots
+per cycle at $\sigma_o=0.05$, it is also worse ($0.288$ against $0.270$, seed 0).
+With a nearly linear observation operator and nearly Gaussian priors there
+is little for a particle flow to gain, as \citet{huvanleeuwen2021} found
+for linear observations of Lorenz-96.
+
+Against the rule fixed before these experiments
+(Appendix~\ref{app:da_gauss}), the nonlinearity of the latent
+coordinates is small at the configuration of this paper: the index is
+$0.036$--$0.038$, below $0.3$, and relinearizing changes the error by less
+than the spread between seeds; the relinearized update, which would have
+been adopted had it lowered the error by $10\%$ on every seed, is not.
+Over the range of Fig.~\ref{fig:nonlinearity} the index reaches $0.3$ only
+at four times the cycle length, where relinearizing gains a few percent.
+The rule's comparison of the oracle with the reconstruction floor is
+inconclusive ($0.015$--$0.030$ above it, against a seed spread of $0.02$),
+because the floor turned out not to bound that variant. The cost of the
+latent field lies in the decoder's range, not in its nonlinearity.
 
 %----------------------------------------------------------------------
 \subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}

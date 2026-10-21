@@ -106,6 +106,16 @@ reconstruction error of unperturbed states is $0.046$ and $0.039$ (\texttt{exp\_
 \subsection{Gaussianity and linearity in latent space}
 \label{app:da_gauss}
 
+\para{Decision rule.} Before the experiments of
+Sec.~\ref{sec:da_nonlinear} we fixed that the nonlinearity would be called
+small at the native configuration if the index $\eta_o$ is below $0.3$ and both
+the relinearized update and the oracle-forecast filter, after subtracting
+the reconstruction floor, change the 3-seed mean error by less than the
+spread between seeds ($0.02$); that the relinearized update would replace
+the standard one if it lowered the error by at least $10\%$ on every seed;
+and that the decoded ensemble mean would replace the decoded mean if it
+were lower on every seed.
+
 \para{Linearity.} The nonlinearity index of Eq.~\eqref{eq:nl_index} is
 computed every cycle on each tiling's forecast ensemble, from the
 nonlinear predicted observations of the members, the prediction at the

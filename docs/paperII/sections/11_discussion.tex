@@ -30,7 +30,10 @@ The second change, from Gaussian assumptions in physical space to Gaussian
 assumptions in latent space, also matters little here: one-cycle priors are
 mildly non-Gaussian in both coordinates, and slightly less so in latent
 ones (Appendix~\ref{app:da_gauss}).
-\placeholder{Z20 W7: E6 kernel particle flow filter.}
+A kernel particle flow filter, which uses each member's own gradient through
+the decoder and does not assume a Gaussian posterior, is $13$--$17\%$ less
+accurate than the per-site filter here, consistent with how little
+nonlinearity there is to exploit.
 
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation

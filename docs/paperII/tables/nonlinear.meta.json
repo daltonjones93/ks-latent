@@ -1,7 +1,7 @@
 {
   "table": "nonlinear",
-  "git_sha": "b19cf943b092b8a3c3426b33140bdefd53bdbad2",
-  "timestamp_utc": "2026-10-21T11:17:28Z",
+  "git_sha": "fb535183c2add1cc7be290eb659176d9024b02cb",
+  "timestamp_utc": "2026-10-21T14:22:28Z",
   "inputs": [
     "artifacts/experiments/da2d/h9_z20_e1_s0.json",
     "artifacts/experiments/da2d/h9_z20_e1_s1.json",
@@ -18,6 +18,12 @@
     "artifacts/experiments/da2d/h9_z20_e4_project_r0.7_n0.045_s0.json",
     "artifacts/experiments/da2d/h9_z20_e4_project_r0.7_n0.045_s1.json",
     "artifacts/experiments/da2d/h9_z20_e4_project_r0.7_n0.045_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N32_mn0.01_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N32_mn0.01_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N32_mn0.01_s2.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N64_mn0.01_s0.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N64_mn0.01_s1.json",
+    "artifacts/experiments/da2d/h9_z20_e6b_N64_mn0.01_s2.json",
     "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_N256_s0.json",
     "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_s0.json",
     "artifacts/experiments/da2d/i11_z20_e4_phys_c24_r0_s1.json",
@@ -54,15 +60,25 @@
       "eta_o": null,
       "chi2_blend": null
     },
-    "Kernel particle flow, $4\\times32$": {
+    "Kernel particle flow filter": {
       "err": [
-        null,
-        null,
-        null
+        0.37329950724178057,
+        0.35372770102197193,
+        0.34896336645864934
       ],
-      "calib": null,
-      "eta_o": null,
-      "chi2_blend": null
+      "calib": 1.3726269646330034,
+      "eta_o": 0.14368930608972932,
+      "chi2_blend": 0.5918742006225005
+    },
+    "\\quad $4\\times32$ members": {
+      "err": [
+        0.38304381162201934,
+        0.3653660270150075,
+        0.3600672560288867
+      ],
+      "calib": 1.3173876526586088,
+      "eta_o": 0.13733736743192532,
+      "chi2_blend": 0.6007077338905797
     },
     "Oracle forecast, incremental": {
       "err": [
@@ -118,6 +134,6 @@
   "chosen": {
     "e4_increment": "z20_e4_increment_r0.3",
     "e4_project": "z20_e4_project_r0.7_n0.045",
-    "e6": null
+    "e6": "z20_e6_N32_adef_r0"
   }
 }

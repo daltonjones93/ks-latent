@@ -1355,8 +1355,12 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] E6a (2026-10-20) Code: localized PFF per site on the 2D latent field (T9), reusing `ks_latent/da/pff.py` kernels with the
   block-diagonal J; R-localization as in the per-site EnKF. Tests: `test_pff_gaussian_linear`-style check on the
   per-site version; equals the global PFF when the taper covers all sites.
-- [~] E6b (queued, `scripts/run_z20_e6.sh`, starts after `Z20 DONE`) Run: 44², seeds 0–2, N_ens 16 and 32 per tiling, K = 4; tune kernel width / step size on seed 0.
-- [ ] E6c Analysis: error and calibration vs per-site EnKF and E3 iterative; include in the E5 grid at the cells where
+- [x] E6b (2026-10-21 06:35) Run: 44², seeds 0–2, N_ens 16 and 32 per tiling, K = 4; tune kernel width / step size on seed 0.
+- [x] E6c (2026-10-21) Result: kernel PFF (α = 1/N, RTPS 0) 4×64: 0.373/0.354/0.349, 4×32: 0.383/0.365/0.360 vs EnKF
+  0.324/0.310/0.302 and 0.330/0.314/0.306 → 13–17% worse on every seed; over-dispersed (spread/error 1.32–1.37,
+  consistency 0.59–0.60), not fixed by model noise 0.01/0.005 (E6b), RTPS 0.7, α 0.1/0.5 (E6), or 400 steps without
+  early stop (E6c, `h9_z20_e6c_N32_steps400_s0`: 0.391). Most nonlinear E5 cell (σ_o 0.05, 20 snapshots): 0.288 vs
+  0.270. Added `--kpff-tol`. Analysis: error and calibration vs per-site EnKF and E3 iterative; include in the E5 grid at the cells where
   η_o is largest (seed 0).
 
 ### Z20-W Writing (Paper II)
@@ -1364,12 +1368,12 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] W1a (2026-10-20) E1 + E3 paragraph of `sec:da_nonlinear` written (η_o, η, per-site spread, prior spread vs σ_o,
   relinearized errors, RTPS optimum unchanged: 0.322 at 0.5 for 1 and 3 iterations, consistency ratios, rank histograms);
   number check 0/0.
-- [~] W1b (2026-10-20 19:30: E4 written with all four configurations; left: E6, verdict) E4 decomposition, E6 kernel PFF, verdict against the pre-registered rule (placeholder in place).
-- [~] W1 (split into W1a/W1b above) New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
+- [x] W1b (2026-10-21: E4, E6 and the verdict against the pre-registered rule written; rule stated in App. D.5) E4 decomposition, E6 kernel PFF, verdict against the pre-registered rule (placeholder in place).
+- [x] W1 (W1a + W1b done 2026-10-21) New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
   `sections/05_tilings_and_sizes.tex`, after "Accuracy and calibration at the native size" (~l.221), replacing the
   one-sentence pointer to App. D.5 (~l.219–220): E1 numbers, E3 verdict, E4 decomposition, E6 one line; verdict
   against the pre-registered rule.
-- [~] W2 (2026-10-20: generator written and registered in `make paperII-assets`; table float placed in §5.4; fills as runs land) New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
+- [x] W2 (2026-10-21: kernel-PFF rows 4×64 and 4×32 from E6b; generator written and registered in `make paperII-assets`; table float placed in §5.4; fills as runs land) New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
   `make paperII-assets` and the number check): rows standard / iterative 2 / iterative 3 / PFF / oracle latent /
   perfect-model physics / reconstruction floor; columns error (3 seeds), calibration, η_o, χ²/m.
 - [x] W3 (2026-10-21: redesigned — (a) η_o vs cycle length, (b) relinearization gain, (c) error vs σ_o for four filters; rank histograms stay in App. D text) New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
@@ -1385,7 +1389,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
   say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.
 - [x] W6 (2026-10-20: §6 opening — about half of the gap to the true-equation filter is the learned forecast) §6 (`06_physics_comparison.tex`): one paragraph or sentence relating the crossover to E4 — part of the physics
   filter's advantage under small model error is the linear H it enjoys; quote the E4 coordinate cost.
-- [~] W7 (2026-10-21: E5 sentence + new limitation bullet "Nonlinearity" added; left: E6. 2026-10-20: paragraph "What the nonlinear coordinates cost" written with E1/E3, placeholder for E5/E4/E2/E6. ALSO revisit after E4: §11 "What locality buys" and §5.3 "The decoder is not the limit" say the remaining error is "mostly the filter's, not the decoder's"; the oracle (perfect forecast 0.174 vs blended floor 0.137, seed 0) suggests that with good forecasts the decoder floor dominates — DONE 2026-10-20: §5.3 and §11 now qualify it: true with the learned forecast, with a perfect one the decoder's precision is the main limit; E4 paragraph in §11 written) §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
+- [x] W7 (2026-10-21: E6 sentence added; E5 sentence + limitation bullet "Nonlinearity". 2026-10-20: paragraph "What the nonlinear coordinates cost" written with E1/E3, placeholder for E5/E4/E2/E6. ALSO revisit after E4: §11 "What locality buys" and §5.3 "The decoder is not the limit" say the remaining error is "mostly the filter's, not the decoder's"; the oracle (perfect forecast 0.174 vs blended floor 0.137, seed 0) suggests that with good forecasts the decoder floor dominates — DONE 2026-10-20: §5.3 and §11 now qualify it: true with the learned forecast, with a perfect one the decoder's precision is the main limit; E4 paragraph in §11 written) §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
   "What locality buys" (~l.6–20); new limitation bullet (~l.76–112) bounding validity to the σ_o / cycle range of E5;
   extend the "Model noise" bullet (T5).
 - [x] W8 (2026-10-20: contribution bullet with E1/E3 and the E4 clause) Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the
@@ -1436,7 +1440,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
 over-dispersed at the EnKF's model noise (0.02 per step), which was tuned for the EnKF with RTPS 0.7.
 
 **Added 2026-10-21 05:45 (`scripts/run_z20_after_e6.sh`, after E6; E7 now waits for `E5C DONE`):**
-- [~] E6b Kernel-PFF model noise 0.01 / 0.005 (α = 1/N, RTPS 0, seed 0); seeds 1–2 at the best; 4 × 64 kernel PFF
+- [x] E6b (2026-10-21 06:35; see E6c) Kernel-PFF model noise 0.01 / 0.005 (α = 1/N, RTPS 0, seed 0); seeds 1–2 at the best; 4 × 64 kernel PFF
   seeds 0–2 (matches the paper's 4 × 64 EnKF); EnKF 4 × 32 seeds 1–2 (seed 0 exists). Why: the over-dispersion says the
   kernel PFF needs less model noise; a fair comparison tunes it.
 - [~] E5c Observation density at the native cycle (seed 0, σ_o 0.1): stride 16 (sparser; existing standard run 0.769)

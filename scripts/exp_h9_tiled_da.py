@@ -137,6 +137,7 @@ def main() -> None:
     ap.add_argument("--kpff-alpha", type=float, default=None, help="kernel width factor (default 1/N)")
     ap.add_argument("--kpff-steps", type=int, default=200)
     ap.add_argument("--kpff-max-move", type=float, default=0.05)
+    ap.add_argument("--kpff-tol", type=float, default=1e-4, help="stop when the ensemble mean changes less (0: run all steps)")
     ap.add_argument("--oracle-forecast", choices=["none", "project", "increment"], default="none",
                     help="Z20 E4: forecast every member with the TRUE PDE in physical space, encode it on each tiling, "
                          "analyse in latent space. project: next physical member = D(z_a); increment: u_f + D(z_a) - D(z_f) "
@@ -407,7 +408,7 @@ def main() -> None:
         for k, o in enumerate(offs):
             if a.filter == "kpff":
                 filt = KernelPFF(make_hb(o), R_diag, taper=kpff_taper, alpha=a.kpff_alpha, n_steps=a.kpff_steps,
-                                 max_move=a.kpff_max_move, rtps=a.rtps)
+                                 max_move=a.kpff_max_move, rtps=a.rtps, tol=a.kpff_tol)
             elif a.n_iter > 1:
                 filt = LETKFLocal2DIterative(make_h(o), R_diag, FO[o][2], ns, ns, c * H, a.gc_c, inflation=a.inflation,
                                              rtps=a.rtps, seed=a.seed * 1000 + cyc * 20 + k, n_iter=a.n_iter,
