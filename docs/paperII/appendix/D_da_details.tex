@@ -142,8 +142,18 @@ ensemble's own patch covariance, then the same projection). One-cycle
 priors are taken from a run with $256$ members per tiling (seed 0, ten
 steady-state cycles, $640$ site tests in each space); climatology from
 $256$ states of an independent run, two time units apart, encoded.
-\placeholder{Z20 E2: fraction of sites rejecting at 5\% (skewness, kurtosis), latent vs physical, priors vs
-climatology; one sentence on which coordinates are closer to Gaussian.} An earlier check of per-coordinate skewness with
+At the $5\%$ level, the skewness test rejects a Gaussian prior at $35\%$ of
+the site tests in latent space and $40\%$ in physical space, and the
+kurtosis test at $9\%$ and $14\%$; the mean absolute skewness of the single
+coordinates is $0.14$ in both. The one-cycle priors are therefore mildly
+non-Gaussian, mostly through skewness, and slightly less so in latent than
+in physical coordinates. Climatology is far from Gaussian in both: the
+skewness test rejects at every site, the kurtosis test at $25\%$ (latent) and
+$20\%$ (physical). The tests at neighbouring sites and cycles are not
+independent, so the fractions are descriptive. The latent coordinates
+neither Gaussianize the prior nor make it less Gaussian to a degree that
+matters for the filter, consistent with the small effect of relinearizing
+the update (Sec.~\ref{sec:da_nonlinear}). An earlier check of per-coordinate skewness with
 16-member priors could not resolve a difference: its sampling noise exceeded the measured skewness.
 
 \subsection{Run-to-run spread and transients}

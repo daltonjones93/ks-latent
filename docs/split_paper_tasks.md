@@ -1301,9 +1301,9 @@ Every new numerical function gets a unit test against a known answer (ground rul
 **E2 Gaussianity with adequate power**
 - [x] E2a (2026-10-20) Code: per-site multivariate normality test (Mardia skewness/kurtosis, or energy test) in z (c = 12 dims) and
   in u (the patch's grid points, or its leading PCs), with the null distribution by Monte Carlo at the same N_ens.
-- [~] E2b (queued) Run: one 256-member prior ensemble at 10 cycles of a seed-0 run (forecast from the 32-member analysis
+- [x] E2b (2026-10-20 19:18, h9_z20_e2_N256_s0: error 0.322) Run: one 256-member prior ensemble at 10 cycles of a seed-0 run (forecast from the 32-member analysis
   resampled, or a 256-member filter run if affordable); climatology sample for comparison.
-- [ ] E2c Analysis: fraction of sites rejecting normality at 5% in z vs in u, for one-cycle priors and climatology.
+- [x] E2c (2026-10-20 19:29, `da2d/z20_e2.json`) Result: priors reject Gaussian skewness at 35% (z) / 40% (u) of 640 site tests, kurtosis 9% / 14%; |marginal skew| 0.14 both; climatology skewness 100% / 100%, kurtosis 25% / 20%. Mildly non-Gaussian priors, slightly less in latent coordinates; climatology strongly non-Gaussian. Analysis: fraction of sites rejecting normality at 5% in z vs in u, for one-cycle priors and climatology.
 
 **E3 Iterative per-site update (does the nonlinearity cost accuracy?)**
 - [x] E3a (2026-10-20) Code: per-site Gauss–Newton relinearization (T7), J recomputed at each iterate by the colouring;
@@ -1372,8 +1372,8 @@ Every new numerical function gets a unit test against a known answer (ground rul
   analysis ensemble 0.028–0.030, obs-space Jensen gap 0.020–0.021 σ_o), consistency ratio definition, rank histograms
   (seed-0 asymmetry), Gaussianity method (Mardia, MC null, 256-member priors, climatology); old 16-member check kept as
   one sentence saying it lacked power.
-- [ ] W4b Fill the E2 rejection fractions and the one-sentence verdict (placeholder in place).
-- [~] W4 (split into W4a/W4b above) Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
+- [x] W4b (2026-10-20) Fill the E2 rejection fractions and the one-sentence verdict (placeholder in place).
+- [x] W4 (W4a + W4b done 2026-10-20) Replace App. D.5 "Gaussianity of the latent priors" (`appendix/D_da_details.tex` ~l.106–114) with the E2
   power-adequate test and the E1 Jensen-gap / χ² details; rename to "Gaussianity and linearity in latent space".
 - [x] W5 (2026-10-20: §5.3 says the comparison does not isolate the coordinates; oracle 0.152–0.158 vs physical 0.076–0.086) Revisit §5.3's physical-space-analysis comparison (`05_tilings_and_sizes.tex` ~l.205–217) in the light of E4:
   say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.

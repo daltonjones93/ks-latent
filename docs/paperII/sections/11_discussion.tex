@@ -23,8 +23,11 @@ filter; the decoder's range is, and a more precise decoder, more channels,
 or a decoder that reads neighbouring sites is where the error would be
 reduced. Keeping the part of the forecast outside that range needs a
 forecast of the full field, which a latent model alone does not provide.
-\placeholder{Z20 W7: E5 range where the nonlinearity grows; E2 Gaussian-in-which-coordinates; E6 kernel particle
-flow filter.}
+The second change, from Gaussian assumptions in physical space to Gaussian
+assumptions in latent space, also matters little here: one-cycle priors are
+mildly non-Gaussian in both coordinates, and slightly less so in latent
+ones (Appendix~\ref{app:da_gauss}).
+\placeholder{Z20 W7: E5 range where the nonlinearity grows; E6 kernel particle flow filter.}
 
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation
