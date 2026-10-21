@@ -1430,6 +1430,26 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [ ] W13 Apply T10 in `appendix/A_settings.tex` (~l.105–107), `sections/09_one_dimension.tex`, `sections/03_method.tex`
   (~l.115–118, "also use a particle flow filter"), `sections/02_background.tex` (~l.33), App. D.3 table header.
 
+**E6 first results (2026-10-21 05:40, seed 0, 4 × 32 members, 44²).** Kernel PFF: α = 1/N, RTPS 0: 0.384 (spread/error
+1.27, consistency 0.59: over-dispersed; converges in ~94 pseudo-time steps); RTPS 0.7: 0.412; α = 0.1: 0.405 / 0.415
+(often not converged in 200 steps). EnKF at 4 × 32: 0.330 (D10_L44_I3_N32). So far the kernel PFF is ~16% worse and
+over-dispersed at the EnKF's model noise (0.02 per step), which was tuned for the EnKF with RTPS 0.7.
+
+**Added 2026-10-21 05:45 (`scripts/run_z20_after_e6.sh`, after E6; E7 now waits for `E5C DONE`):**
+- [~] E6b Kernel-PFF model noise 0.01 / 0.005 (α = 1/N, RTPS 0, seed 0); seeds 1–2 at the best; 4 × 64 kernel PFF
+  seeds 0–2 (matches the paper's 4 × 64 EnKF); EnKF 4 × 32 seeds 1–2 (seed 0 exists). Why: the over-dispersion says the
+  kernel PFF needs less model noise; a fair comparison tunes it.
+- [~] E5c Observation density at the native cycle (seed 0, σ_o 0.1): stride 16 (sparser; existing standard run 0.769)
+  and stride 4 (denser), RTPS {0.5, 0.7, 0.9}, nonlinearity diagnostics, relinearized at the best RTPS. Why: removes the
+  "sparser networks not tested" limitation added after E5; a sparse network leaves a larger prior spread.
+- [ ] E8 (optional, not started; decide) Nonlinear observation operator, e.g. observing u² or |u| at the grid points
+  (the test case where Hu & van Leeuwen 2021 find the PFF beats the LETKF). Here both filters face a nonlinear H, so it
+  tests whether the latent filter's linearization fails where a physical-space filter's does too. Needs: an observation
+  option in `exp_h9_tiled_da.py` and `exp_i11_pde_letkf.py`, 3 seeds × {EnKF, relinearized, kernel PFF, physics}.
+  ~3–4 h. Would add one paragraph; strengthens the answer to the co-author's concern but widens scope.
+- [ ] E5d (optional) Seeds 1–2 for the 20-snapshot E5 cells, and RTPS 0.3 there (best RTPS at the grid edge).
+  ~1 h. Would turn the long-cycle numbers from one seed into three and remove the "upper bound" caveat.
+
 **E7 1D rerun with the kernel particle flow filter (user decision 2026-10-20).** The 1D "PFF" of Paper II is an
 iterated Gaussian update (see T10). Rerun the 1D experiments with the real kernel PFF of E6; decide from the results
 which 1D results go in the paper (old PFF renamed, kernel PFF, or both).
