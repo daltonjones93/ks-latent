@@ -29,7 +29,11 @@ particle flow filters and the oracle forecast of Sec.~\ref{sec:da_nonlinear} are
 options of \texttt{exp\_h9\_tiled\_da.py} (\texttt{--nl-diag}, \texttt{--n-iter},
 \texttt{--filter kpff}, \texttt{--oracle-forecast}), the Gaussianity tests are
 \texttt{scripts/exp\_z20\_gaussianity.py}, and the 1D kernel particle flow runs
-use \texttt{scripts/run\_da\_pff\_ltransfer.py --method kpff}. The noisy-data model is trained by
+use \texttt{scripts/run\_da\_pff\_ltransfer.py --method kpff}. Their results are
+\texttt{artifacts/experiments/da2d/h9\_z20\_*.json} and \texttt{i11\_z20\_*.json}
+(Sec.~\ref{sec:da_nonlinear} and Fig.~\ref{fig:nonlinearity}), \texttt{z20\_e2.json}
+(Appendix~\ref{app:da_gauss}) and \texttt{artifacts/da\_pff\_ltransfer\_z20\_e7\_kpff\_*.json}
+(the kernel-filter columns of Table~\ref{tab:da_1d}). The noisy-data model is trained by
 \texttt{scripts/train\_kolmogorov\_crop.py --data-noise 0.1}. The library
 modules are \texttt{ks\_latent/da/letkf\_local.py} (per-site filter with
 RTPS), \texttt{letkf\_phys.py} (physical-space filter, multi-field states),
@@ -59,15 +63,21 @@ Jacobian is exactly block-diagonal at zero reach
 (Proposition~\ref{prop:blockdiag}); the coloured construction equals
 reverse-mode differentiation exactly, and the observation-to-site map is
 checked pixel by pixel; deployment grids keep the training spacing; with
-a linear observation operator and Gaussian prior, the particle flow
-filter, the dense and per-site ensemble Kalman filters and the serial
+a linear observation operator and Gaussian prior, both particle flow
+filters, the dense and per-site ensemble Kalman filters and the serial
 filter converge to the Kalman posterior at large ensemble size; the
 deterministic per-site transform reproduces the Kalman update with the
 ensemble covariance exactly; sites beyond the taper support are left
 unchanged; the projected and serial forms of sampling error correction
 reduce to the plain filter for an identity correction; the hidden-field
 solver matches the exact solution of its linearization; and the joint
-parameter update equals the ensemble Kalman regression.
+parameter update equals the ensemble Kalman regression; the nonlinearity
+index vanishes for a linear operator and grows linearly with the spread for a
+quadratic one; one relinearized iteration equals the standard update, and
+further iterations move the mean towards the exact posterior mean of a
+quadratic problem; the consistency ratio is one and the rank histogram flat for a
+consistent ensemble; and the Monte Carlo $p$-values of the Mardia tests are
+uniform under the Gaussian null.
 
 \subsection{Compute}
 

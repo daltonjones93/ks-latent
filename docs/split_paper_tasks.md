@@ -1394,11 +1394,11 @@ Every new numerical function gets a unit test against a known answer (ground rul
   extend the "Model noise" bullet (T5).
 - [x] W8 (2026-10-20: contribution bullet with E1/E3 and the E4 clause) Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the
   nonlinear latent observation operator is measured and separated from model error.
-- [ ] W9 Abstract, key points (≤140 chars, max 3 — replace or merge, do not add a fourth), Plain Language Summary
+- [x] W9 (2026-10-21: abstract one sentence on nonlinearity vs decoder range, trimmed to 247 words; key point 1 merged (139 chars), still 3; PLS one sentence, rewritten to 200 words (it was ~205 before, over the AGU limit); conclusions new paragraph) Abstract, key points (≤140 chars, max 3 — replace or merge, do not add a fourth), Plain Language Summary
   (`main.tex`), conclusions (`12_conclusions.tex`): one clause each, only after W1 has its verdict.
 - [x] W10 (2026-10-20, `02_background.tex` §2.3) Background (`02_background.tex` ~l.33, where particle filters are mentioned): one sentence on nonlinear
   observation operators in latent DA and iterative ensemble methods (verify citations).
-- [~] W11 (2026-10-20: scripts, flags and modules listed; add result-file names at the end) App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
+- [x] W11 (2026-10-21: Z20 result files listed; unit-test paragraph extended with the Z20 tests; "both particle flow filters") (2026-10-20: scripts, flags and modules listed; add result-file names at the end) App. E reproducibility (`appendix/E_reproducibility.tex`): list the new scripts, tests and result files.
 - [ ] W12 Final: `make paperII`, `check_numbers.py --paper paperII` (0 unmatched/suspect), grayscale check, internal
   referee re-read of §3.4 (new), §5 new subsection and App. D; share the section with the co-author.
 

@@ -39,23 +39,26 @@
 
 % Key points: AGU limit of three, at most 140 characters each, no special characters.
 \begin{keypoints}
-\item A filter in a learned local latent field is exactly local, and running it on four shifted patch lattices cuts the error by 30 percent
+\item A filter in a learned local latent field is exactly local; four shifted lattices cut its error by 30 percent; its nonlinearity costs little
 \item One learned model trained only on noisy data and one filter setting give the same analysis error on domains from 44 by 44 to 440 by 440
 \item The learned filter beat physics filters with parameter estimation only for errors of model form, not for wrong parameters
 \end{keypoints}
 
 \begin{abstract}
-Ensemble data assimilation in a learned latent space has so far used a global latent vector, which
-has no notion of distance, so the filter cannot be localized and its ensemble must grow with the
-domain's number of unstable directions. We instead assimilate in a
-learned latent field, a few channels at each site of a lattice that tiles the domain, whose
-weight-shared operators of finite reach let one model run on domains of any size (companion
+Latent-space ensemble data assimilation has so far used a global latent vector, which has no
+notion of distance, so the filter cannot be localized and its ensemble grows with the domain's
+unstable directions. We instead assimilate in a
+learned latent field, a few channels per site of a lattice tiling the domain, whose
+weight-shared local operators run on domains of any size (companion
 paper). With a decoder that reconstructs each patch from its own site, the latent observation
-operator is exactly local, so a per-site latent ensemble Kalman filter needs no truncation of it.
-Running it on four copies of the patch lattice shifted by half a patch and blending the analyses lowers the error by about $30\%$. In twin experiments with the
-two-dimensional Kuramoto--Sivashinsky equation, one model trained only on noisy fields, with one
-filter setting, reaches errors of $0.30$--$0.33$ on every domain from $44^2$ to $440^2$,
-against $0.82$ for interpolating the observations; an unlocalized filter fails once the attractor has more unstable directions than members.
+operator is exactly local, and a per-site latent ensemble Kalman filter uses it untruncated.
+Blending analyses on four copies of the patch lattice shifted by half a patch lowers the error by about $30\%$.
+The decoder's nonlinearity costs little (the term the filter neglects is $4\%$ of the observation
+error); keeping members in the decoder's range costs more.
+In twin experiments with the
+two-dimensional Kuramoto--Sivashinsky equation, one model trained only on noisy fields and one
+filter setting give errors of $0.30$--$0.33$ on every domain from $44^2$ to $440^2$,
+against $0.82$ for interpolation; an unlocalized filter fails once unstable directions outnumber members.
 Against physics-based filters with wrong models, given online parameter estimation and bias
 correction, the latent filter loses or ties when the error is in a parameter or a bias, and, in the
 configuration tested, wins when it is in the form of the equations and exceeds about a quarter to a third of
@@ -64,19 +67,19 @@ In Kolmogorov flow its errors are $43\%$ below interpolation.
 \end{abstract}
 
 \section*{Plain Language Summary}
-Weather forecasts start from an estimate of the current state of the atmosphere that combines a
-forecast model with observations, a step called data assimilation. The most widely used methods run
-a small set of forecasts and treat each region separately, which keeps the number of forecasts
-small however large the region of interest is. Machine-learned forecast models usually describe the
-whole state by one list of numbers, which has no notion of where things are, so this regional
-treatment has not been possible with them. We use a learned model that keeps a map: a few numbers
+Weather forecasts start from an estimate of the atmosphere's current state that combines a
+forecast model with observations: data assimilation. The most widely used methods run
+a small set of forecasts and treat each region separately, so few forecasts suffice however
+large the domain. Machine-learned forecast models usually describe the
+whole state by one list of numbers with no notion of where things are, so they cannot be
+treated region by region. We use a learned model that keeps a map: a few numbers
 at each point of a coarse grid, updated by the same local rule everywhere. Each grid point then
-depends only on nearby observations, the method works the same way on a small domain and on one a
-hundred times larger, and the learned model can be trained on noisy data alone. When the physical
-model used for comparison had an equation of the wrong form, which tuning and parameter estimation could
-not fix, the learned model gave better results in our tests once that error exceeded about a quarter to a
-third of the measurement error; when only a parameter was wrong, or the model was accurate, the physical
-model remained better.
+depends only on nearby observations, the method works the same way on domains a hundred times
+apart in size, and the model can be trained on noisy data alone. The model's nonlinear
+link to the physical field could mislead the method; we found the effect small. When the
+physical model used for comparison had an equation of the wrong form, the learned model did better
+in our tests once that error exceeded about a quarter to a third of the measurement error; when only
+a parameter was wrong, or the model was accurate, the physical model remained better.
 
 \input{sections/01_introduction}
 \input{sections/02_background}

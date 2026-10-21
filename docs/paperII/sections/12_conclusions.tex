@@ -23,6 +23,16 @@ than the ensemble has members. The same construction, with tilings shifted
 only along the flow's symmetry, gives errors $43$--$44\%$ below interpolation in
 Kolmogorov flow, on one box and on a domain three times wider.
 
+The decoder makes the latent observation operator nonlinear, but at this
+configuration that costs little: the term the filter neglects is about
+$4\%$ of the observation error, one-cycle priors are no less Gaussian in
+latent coordinates than in physical ones, and neither relinearizing the
+update nor a kernel particle flow filter lowers the error; at four times
+the cycle length relinearizing gains at most $3.3\%$. The larger cost of
+the latent field is the decoder's range: with the true equations as
+forecast, a filter whose members return to that range every cycle is no
+better than the learned model.
+
 Against a physics-based filter whose model is wrong, and which is given
 online parameter estimation and bias correction, the latent filter loses
 or ties whenever the model's error lies in a parameter or a bias, at every magnitude tested,
