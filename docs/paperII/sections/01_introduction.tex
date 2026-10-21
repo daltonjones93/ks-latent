@@ -85,10 +85,10 @@ model error.
   nonlinear even for linear observations, and the filter linearizes it. At
   the native configuration the neglected term is about $4\%$ of the
   observation error, and relinearizing the update changes the error by at
-  most $0.001$. With the true equations as forecast, analysing in latent
-  coordinates costs $0.07$--$0.08$ against a physical-space filter, about
-  half of what the learned forecast costs, and mostly through the
-  precision of the decoder.
+  most $0.001$. With the true equations as forecast and the members in the
+  decoder's range, the filter is no better than with the learned model; the
+  error comes from the decoder's range, which costs about half of it, not
+  from the learned dynamics or the nonlinearity.
 \item \emph{Learned versus physics-based filters}
   (Sec.~\ref{sec:da_model_error}). The latent filter loses to a
   physics-based filter whose model error lies in a parameter or a bias,

@@ -343,8 +343,11 @@ latent coordinates. Against the physical-space LETKF with the same perfect
 model, the incremental variant isolates the cost (or gain) of analysing in
 latent coordinates, and the difference between the two variants the cost
 of the decoder's range; against the learned-model filter, the projected
-variant isolates the cost of the learned forecast. Neither variant adds
-model noise.
+variant isolates the cost of the learned forecast. The incremental
+variant adds no model noise; the projected one, whose spread otherwise
+decays because every member returns to the decoder's range, adds Gaussian
+noise of standard deviation $0.045$ to each latent coordinate per cycle,
+the learned filter's $0.02$ per step over five steps.
 
 \begin{figure*}[htbp]
 \centering

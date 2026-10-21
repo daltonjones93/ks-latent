@@ -196,13 +196,13 @@ RTPS weights of $0.5$, $0.7$ and $0.9$ give $0.322$, $0.324$ and $0.340$ at
 calibrations $0.78$, $0.92$ and $1.16$; we use $0.7$, the calibrated choice
 within $1\%$ of the best error.
 
-\para{The decoder is not the limit.} The decoder floor is $0.24$--$0.25$ for one
+\para{The decoder floor.} The decoder floor is $0.24$--$0.25$ for one
 tiling, about half of that tiling's analysis error, and $0.13$--$0.14$ for the
 blend, well below the blended analysis's $0.30$--$0.33$
-(Table~\ref{tab:da_2d_sizes}). Most of the remaining error is therefore
-the filter's, not the reconstruction's. This holds with the learned
-forecast; with a perfect forecast the analysis comes within $0.015$--$0.030$
-of the blended floor (Sec.~\ref{sec:da_nonlinear}).
+(Table~\ref{tab:da_2d_sizes}). The static floor does not, however, measure
+what the decoder costs a cycling filter: with a perfect forecast, members
+returned to the decoder's range every cycle give $0.34$, and members that
+keep the whole forecast $0.15$--$0.16$ (Sec.~\ref{sec:da_nonlinear}).
 
 \para{The analysis belongs in latent space.} One could use the learned
 model only as a forecast device and do the analysis in physical space.
@@ -219,8 +219,9 @@ This comparison does not isolate the coordinates: both filters forecast
 with the learned model, and the physical-space one also re-encodes its
 analysis every cycle. The oracle-forecast filter of
 Sec.~\ref{sec:da_nonlinear}, with the true equations as forecast, makes
-the clean comparison: with the true forecast the latent analysis reaches
-$0.152$--$0.158$, against $0.076$--$0.086$ for the physical-space analysis. A physical-space analysis must re-encode fields that the decoder never
+the clean comparison: with the true forecast and the whole forecast kept,
+the latent analysis reaches $0.152$--$0.158$, against $0.076$--$0.086$ for the
+physical-space analysis. A physical-space analysis must re-encode fields that the decoder never
 produced, and the latent analysis does not.
 
 %----------------------------------------------------------------------
@@ -261,29 +262,55 @@ slightly over-dispersed, and the rank histograms of the blended prior are
 flat to slightly dome-shaped on two seeds and skewed towards observations
 above the ensemble on the third (Appendix~\ref{app:da_gauss}).
 
-The oracle-forecast filter separates the two other sources of error
-(Table~\ref{tab:nonlinear}). With the true equations as forecast and the
-analysis in latent coordinates, the error is $0.152$, $0.158$ and $0.156$ at
-its best RTPS weight, $0.3$ (on seed 0, $0$, $0.5$ and $0.7$ give $0.192$,
-$0.174$ and $0.246$). The perfect-model physical-space LETKF reaches
-$0.076$, $0.085$ and $0.086$ with 64 members, and $0.073$ with 256 (seed 0),
-so it is not limited by its ensemble. Of the latent filter's error of
-$0.302$--$0.324$, the learned forecast therefore accounts for $0.15$--$0.17$,
-about half, and the latent coordinates for $0.07$--$0.08$. The oracle
-analysis is within $0.015$--$0.030$ of the blended reconstruction floor
-($0.128$--$0.137$). The floor is not a strict bound for this variant, whose
-analysis keeps the part of the forecast the decoder cannot represent
-(its single-tiling error, $0.186$--$0.193$, is below the single-tiling floor
-of $0.239$--$0.251$), but the closeness suggests that the decoder's
-precision, through which every increment passes, limits the analysis more
-than the nonlinearity does. The nonlinearity is the smallest part: with a
-perfect forecast the prior spread at the observations is $0.25$--$0.26$
-times the observation error, and $\eta_o=0.007$. The oracle ensemble is
-under-dispersed (spread/error $0.67$--$0.70$), though consistent with the
-observations at the observed points (consistency ratio $1.02$--$1.03$).
+The oracle-forecast filter separates the remaining error into what the
+forecast model costs and what the latent coordinates cost
+(Table~\ref{tab:nonlinear}). Four configurations share the observations
+and the per-site analysis:
+\begin{enumerate}
+\item the learned model, members in the decoder's range: $0.324$, $0.310$ and
+  $0.302$ on the three seeds;
+\item the true equations as forecast, members returned to the decoder's
+  range every cycle (projected variant): $0.343$, $0.341$ and $0.339$;
+\item the true equations, members that keep the whole forecast and receive
+  only the decoded analysis increment (incremental variant): $0.152$,
+  $0.158$ and $0.156$;
+\item the perfect-model physical-space LETKF: $0.076$, $0.085$ and $0.086$
+  with 64 members, $0.073$ with 256 (seed 0), so it is not limited by its
+  ensemble.
+\end{enumerate}
+Each variant is at its best of the settings tried: RTPS $0.3$ for the
+incremental variant (on seed 0, $0$, $0.5$ and $0.7$ give $0.192$, $0.174$ and
+$0.246$), and RTPS $0.7$ with latent noise of $0.045$ per cycle for the
+projected one, whose spread otherwise collapses at low RTPS
+($0.679$ at $0.3$) or overshoots at high RTPS ($0.446$ at $0.9$, spread three
+times the error).
 
-\placeholder{Z20 W1b: projected oracle variant (members returned to the decoder's range each cycle), E6 kernel
-particle flow filter, verdict against the pre-registered rule.}
+The comparison of 1 and 2 answers the question this section set out to
+ask about the model: with the members confined to the decoder's range,
+the true equations are no better than the learned model, and on every seed
+slightly worse ($6$--$12\%$). The learned propagator was trained on such
+states, while the true equations integrate decoded fields that carry the
+decoder's reconstruction error. The comparison of 2 and 3 shows where the
+error comes from: keeping the part of each forecast that the decoder cannot
+represent halves the error. The cost of the latent field at this
+configuration is therefore mostly the decoder's range, which the filter
+returns to every cycle, and not the learned dynamics. This cost is larger
+than the static reconstruction floor suggests ($0.128$--$0.137$ for the
+blend): it accumulates through cycling. The remaining gap between 3 and
+4, $0.07$--$0.08$, is the cost of computing the analysis increment in
+latent coordinates, with the per-site filter's localization and RTPS. The
+incremental analysis is within $0.015$--$0.030$ of the blended floor, which
+does not bound it strictly (its single-tiling error, $0.186$--$0.193$, is
+below the single-tiling floor of $0.239$--$0.251$). The nonlinearity of the
+observation operator is the smallest part: with a perfect forecast and the
+whole forecast kept, the prior spread at the observations is $0.25$--$0.26$
+times the observation error and $\eta_o=0.007$; in the projected variant,
+whose spread is larger, $\eta_o$ is $0.074$--$0.084$, still well below the
+observation error. The incremental ensemble is under-dispersed
+(spread/error $0.67$--$0.70$, consistency ratio $1.02$--$1.03$), the projected one
+over-dispersed ($1.28$--$1.30$).
+
+\placeholder{Z20 W1b: E6 kernel particle flow filter; verdict against the pre-registered rule.}
 
 %----------------------------------------------------------------------
 \subsection{One model and one setting from \texorpdfstring{$44^2$ to $440^2$}{44x44 to 440x440}}

@@ -1318,10 +1318,25 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] E4a (2026-10-20) Code: forecast each member with the spectral solver in physical space, encode per tiling, latent analysis
   (standard and E3 iterative), decode, blend; physical members for the next cycle = decoded analysis members.
   Test: with an identity-like linear AE it reproduces the physics LETKF.
-- [~] E4b (incremental 3 seeds + physics 64 × 3 seeds + 256 × seed 0 done 2026-10-20 18:15; projected variant retuning) Run: oracle latent filter and perfect-model physics LETKF (same obs, same N_ens budget as §6: 4 × 16 and
+- [x] E4b (2026-10-20 19:17) Run: oracle latent filter and perfect-model physics LETKF (same obs, same N_ens budget as §6: 4 × 16 and
   4 × 64 vs 64), 44², seeds 0–2; tune RTPS/localization on seed 0 for each, as in §6.
 - [x] E4c (floors recorded in every run: floor1, floorK) Run: reconstruction floor — encode-decode error of the truth on the same cycles (no DA).
-- [~] E4d (incremental done; see W1b) Analysis: decompose latent-filter error into floor + coordinate cost (oracle − physics) + learned-model cost
+- [x] E4d (2026-10-20 19:30) **Result, reverses the first reading.** Seeds 0/1/2:
+  (1) learned model, members in decoder range: 0.324/0.310/0.302;
+  (2) true PDE, members returned to the decoder's range each cycle (projected, best of 4 settings: RTPS 0.7 + latent
+      noise 0.045/cycle; RTPS 0.3 no noise collapses 0.679, RTPS 0.9 overshoots 0.446 spread ×3, noise 0.1 0.390):
+      0.343/0.341/0.339, spread/error 1.28–1.30, η_o 0.074–0.084;
+  (3) true PDE, members keep the whole forecast (incremental, RTPS 0.3): 0.152/0.158/0.156, spread/error 0.67–0.70, η_o 0.007;
+  (4) perfect-model physics LETKF: 0.076/0.085/0.086 (64), 0.073 (256, s0).
+  Reading: (1) vs (2): within the decoder's range the true equations are no better than the learned model (6–12% worse);
+  (2) vs (3): keeping the off-range part of the forecast halves the error → the decoder's range, revisited every
+  cycle, is the main cost, more than the static floor (0.128–0.137) suggests; (3) vs (4): 0.07–0.08 for latent
+  increments + per-site localization/RTPS; nonlinearity smallest. The earlier text ("the learned forecast accounts for
+  about half") was wrong and is replaced in §5, §5.3, §6, §11, introduction; §3.6 oracle definition states the
+  projected variant's latent noise. Pre-registered *N-small*, E4 clause (oracle − floor vs 0.02 seed spread): the
+  incremental oracle is 0.015–0.030 above the blended floor — borderline as written; the clause was formulated before
+  we knew the floor is not a bound for the incremental variant; report both and let E1/E3 carry the nonlinearity
+  verdict (both clearly small). Analysis: decompose latent-filter error into floor + coordinate cost (oracle − physics) + learned-model cost
   (learned − oracle); table.
 
 **E5 Where the nonlinearity starts to matter**
@@ -1343,7 +1358,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [x] W1a (2026-10-20) E1 + E3 paragraph of `sec:da_nonlinear` written (η_o, η, per-site spread, prior spread vs σ_o,
   relinearized errors, RTPS optimum unchanged: 0.322 at 0.5 for 1 and 3 iterations, consistency ratios, rank histograms);
   number check 0/0.
-- [~] W1b (2026-10-20: E4 incremental-oracle decomposition written — learned forecast 0.15–0.17 ≈ half, coordinates 0.07–0.08, oracle within 0.015–0.030 of the blended floor (not a strict bound for the incremental variant: its single-tiling error 0.186–0.193 < single-tiling floor 0.239–0.251), η_o 0.007; left: projected variant, E6, verdict) E4 decomposition, E6 kernel PFF, verdict against the pre-registered rule (placeholder in place).
+- [~] W1b (2026-10-20 19:30: E4 written with all four configurations; left: E6, verdict) E4 decomposition, E6 kernel PFF, verdict against the pre-registered rule (placeholder in place).
 - [~] W1 (split into W1a/W1b above) New results subsection `\subsection{The cost of the nonlinear decoder}` (`\label{sec:da_nonlinear}`) in
   `sections/05_tilings_and_sizes.tex`, after "Accuracy and calibration at the native size" (~l.221), replacing the
   one-sentence pointer to App. D.5 (~l.219–220): E1 numbers, E3 verdict, E4 decomposition, E6 one line; verdict
