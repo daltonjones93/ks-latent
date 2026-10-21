@@ -1340,10 +1340,16 @@ Every new numerical function gets a unit test against a known answer (ground rul
   (learned − oracle); table.
 
 **E5 Where the nonlinearity starts to matter**
-- [~] E5a (queued) Run: σ_o ∈ {0.05, 0.1, 0.2, 0.4} × cycle length ∈ {1×, 2×, 4×} for: standard latent, iterative latent (E3),
+- [x] E5a (2026-10-21 05:15) Run: σ_o ∈ {0.05, 0.1, 0.2, 0.4} × cycle length ∈ {1×, 2×, 4×} for: standard latent, iterative latent (E3),
   oracle latent (E4), perfect-model physics LETKF; seed 0 first, seeds 1–2 for the cells that cross the rule.
   RTPS retuned per cell on seed 0 (coarse grid). Same total model time.
-- [ ] E5b Analysis: η_o (E1 code) and the iterative gain vs spread/σ_o; figure.
+- [x] E5b (2026-10-21) Result (seed 0, best RTPS): η_o 0.026–0.046 at 5 snapshots, 0.063–0.115 at 10, 0.271–0.311 at 20,
+  nearly independent of σ_o (spread ∝ ~σ_o^½, residual ∝ spread²); relinearizing: ≤ +0.9% / ≈0 at 5, ≤ −1.0% at 10,
+  −1.3 to −3.5% at 20. Verdict: η_o reaches the rule's 0.3 only at 4× the cycle, and the cost there stays < 10% →
+  *N-small* holds over the grid tested. Caveats: at 20 snapshots best RTPS = 0.5 (grid edge), spread/error 1.2–1.4;
+  physical-space filter tuned only over RTPS {0, 0.3} at loc 24, and at σ_o 0.4 with 10/20 snapshots it is slightly
+  worse than the latent filter (0.858 vs 0.844; 1.256 vs 1.211) — not claimed, filter not tuned for those regimes.
+  Analysis: η_o (E1 code) and the iterative gain vs spread/σ_o; figure.
 
 **E6 Per-site particle flow filter in 2D**
 - [x] E6a (2026-10-20) Code: localized PFF per site on the 2D latent field (T9), reusing `ks_latent/da/pff.py` kernels with the
@@ -1366,7 +1372,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
 - [~] W2 (2026-10-20: generator written and registered in `make paperII-assets`; table float placed in §5.4; fills as runs land) New table `tables/nonlinear.tex` (generator `scripts/paper_figures/tab_nonlinear.py`, registered in
   `make paperII-assets` and the number check): rows standard / iterative 2 / iterative 3 / PFF / oracle latent /
   perfect-model physics / reconstruction floor; columns error (3 seeds), calibration, η_o, χ²/m.
-- [~] W3 (2026-10-20: generator written and registered; panel (c) from E1 done; (a)/(b) fill from E5) New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
+- [x] W3 (2026-10-21: redesigned — (a) η_o vs cycle length, (b) relinearization gain, (c) error vs σ_o for four filters; rank histograms stay in App. D text) New figure `figures/nonlinearity.pdf` (generator `scripts/paper_figures/fig_nonlinearity.py`, grayscale
   check): (a) η_o vs spread/σ_o from E5; (b) error vs σ_o for the four filters; (c) rank histograms (E1c).
 - [x] W4a (2026-10-20) App. D.5 rewritten as "Gaussianity and linearity in latent space": linearity (η_o on the
   analysis ensemble 0.028–0.030, obs-space Jensen gap 0.020–0.021 σ_o), consistency ratio definition, rank histograms
@@ -1379,7 +1385,7 @@ Every new numerical function gets a unit test against a known answer (ground rul
   say what it does and does not show (re-encoding confound) and point to E4 for the clean comparison.
 - [x] W6 (2026-10-20: §6 opening — about half of the gap to the true-equation filter is the learned forecast) §6 (`06_physics_comparison.tex`): one paragraph or sentence relating the crossover to E4 — part of the physics
   filter's advantage under small model error is the linear H it enjoys; quote the E4 coordinate cost.
-- [~] W7 (2026-10-20: paragraph "What the nonlinear coordinates cost" written with E1/E3, placeholder for E5/E4/E2/E6. ALSO revisit after E4: §11 "What locality buys" and §5.3 "The decoder is not the limit" say the remaining error is "mostly the filter's, not the decoder's"; the oracle (perfect forecast 0.174 vs blended floor 0.137, seed 0) suggests that with good forecasts the decoder floor dominates — DONE 2026-10-20: §5.3 and §11 now qualify it: true with the learned forecast, with a perfect one the decoder's precision is the main limit; E4 paragraph in §11 written) §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
+- [~] W7 (2026-10-21: E5 sentence + new limitation bullet "Nonlinearity" added; left: E6. 2026-10-20: paragraph "What the nonlinear coordinates cost" written with E1/E3, placeholder for E5/E4/E2/E6. ALSO revisit after E4: §11 "What locality buys" and §5.3 "The decoder is not the limit" say the remaining error is "mostly the filter's, not the decoder's"; the oracle (perfect forecast 0.174 vs blended floor 0.137, seed 0) suggests that with good forecasts the decoder floor dominates — DONE 2026-10-20: §5.3 and §11 now qualify it: true with the learned forecast, with a perfect one the decoder's precision is the main limit; E4 paragraph in §11 written) §11 Discussion (`11_discussion.tex`): new paragraph "\para{What the nonlinear coordinates cost.}" after
   "What locality buys" (~l.6–20); new limitation bullet (~l.76–112) bounding validity to the σ_o / cycle range of E5;
   extend the "Model noise" bullet (T5).
 - [x] W8 (2026-10-20: contribution bullet with E1/E3 and the E4 clause) Introduction (`01_introduction.tex`): one sentence in the contributions list stating that the cost of the

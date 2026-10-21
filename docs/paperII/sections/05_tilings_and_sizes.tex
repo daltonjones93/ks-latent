@@ -310,6 +310,37 @@ observation error. The incremental ensemble is under-dispersed
 (spread/error $0.67$--$0.70$, consistency ratio $1.02$--$1.03$), the projected one
 over-dispersed ($1.28$--$1.30$).
 
+\begin{figure*}[htbp]
+\centering
+\includegraphics{figures/nonlinearity.pdf}
+\caption{Where the nonlinearity of the latent coordinates starts to matter, 2D KS at $44^2$, seed 0, for four
+observation errors $\sigma_o$ (standardized units) and three cycle lengths, the per-site filter at its best RTPS.
+(a) Nonlinearity index $\eta_o$ of the forecast ensemble (Eq.~\eqref{eq:nl_index}); dotted: $0.3$, the threshold of the
+pre-registered rule. (b) Relative change of the analysis error when the update is relinearized with three
+Gauss--Newton iterations (negative: relinearizing helps). (c) Analysis error at five snapshots per cycle: the latent
+filter, relinearized, with the true equations as forecast (incremental oracle), and the perfect-model
+physical-space LETKF.}
+\label{fig:nonlinearity}
+\end{figure*}
+
+Figure~\ref{fig:nonlinearity} shows where this changes. The index is set by
+the cycle length, not by the observation error: it is $0.03$--$0.05$ at the
+paper's five snapshots per cycle for $\sigma_o$ from $0.05$ to $0.4$,
+$0.06$--$0.12$ at ten and $0.27$--$0.31$ at twenty (panel a). The prior spread
+grows with the forecast time; with the observation error it grows roughly
+as $\sigma_o^{1/2}$ (from $0.055$ to $0.15$ at the observed points as $\sigma_o$
+goes from $0.05$ to $0.4$), so the second-order residual, proportional to
+the square of the spread, grows about as fast as $\sigma_o$ itself and
+$\eta_o$ hardly changes. Relinearizing begins to pay once the index is large: by
+at most $1\%$ at ten snapshots and by $1$--$3.5\%$ at twenty (panel b). Even
+at four times the paper's cycle, where the index reaches the $0.3$ of the
+pre-registered rule, the nonlinearity costs a few percent, below the rule's
+$10\%$. At five snapshots the order of the four filters is the same at
+every observation error (panel c). At twenty snapshots the best RTPS weight
+is the smallest tried, $0.5$, and the ensembles are over-dispersed
+(spread/error $1.2$--$1.4$), so the errors there are upper bounds for a fully
+tuned filter.
+
 \placeholder{Z20 W1b: E6 kernel particle flow filter; verdict against the pre-registered rule.}
 
 %----------------------------------------------------------------------

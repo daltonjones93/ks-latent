@@ -11,8 +11,11 @@ first costs little: the term the filter neglects is about $4\%$ of the
 observation error, because one cycle leaves a prior spread at the observed
 points below the observation error, and relinearizing the update does
 not change the error. The per-patch decoder keeps this cost local, so it is
-the same on every domain size. It would grow with the spread, for sparser
-or noisier observations and longer cycles.
+the same on every domain size. It grows with the cycle length, not with the
+observation error: at four times the cycle of this paper the index
+reaches $0.3$ and relinearizing lowers the error by up to $3.5\%$
+(Fig.~\ref{fig:nonlinearity}), so a filter with long cycles should
+relinearize.
 The latent field has a larger cost through the decoder's range. With the
 true equations as forecast, a filter whose members return to that range
 every cycle is no better than the learned model ($0.34$ against
@@ -27,7 +30,7 @@ The second change, from Gaussian assumptions in physical space to Gaussian
 assumptions in latent space, also matters little here: one-cycle priors are
 mildly non-Gaussian in both coordinates, and slightly less so in latent
 ones (Appendix~\ref{app:da_gauss}).
-\placeholder{Z20 W7: E5 range where the nonlinearity grows; E6 kernel particle flow filter.}
+\placeholder{Z20 W7: E6 kernel particle flow filter.}
 
 \para{What locality buys.} The latent field makes localization possible in a
 learned space, and with a per-patch decoder it makes the observation
@@ -133,6 +136,10 @@ $66^2$ box, both 12-channel and at their best RTPS). We have not identified what
 \item \emph{Calibration.} The 2D KS ensemble is well calibrated with four
   tilings, but the Kolmogorov ensemble is under-dispersed, and the
   inflation was not retuned for it.
+\item \emph{Nonlinearity.} The cost of the nonlinear decoder was measured
+  at $44^2$ on one seed beyond the native configuration, for cycles up to four
+  times the native one and observation errors up to four times $0.1$, with
+  the dense network; sparser networks were not tested.
 \item \emph{Model noise.} Model error in the latent forecast is represented
   by isotropic Gaussian noise of fixed size, not by the statistics of the
   learned propagator's own error. Isotropic in latent coordinates, it is
