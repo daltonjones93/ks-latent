@@ -1247,11 +1247,11 @@ Legend: [ ] to do, [~] in progress, [x] done (date/commit).
   `sections/03_method.tex`, after "Latent ensemble data assimilation" (before "Shifted tilings", ~l.162). Opening
   paragraph: the exact latent posterior p(z|y) ∝ N(y; H_obs D(z), R) p(z); the per-site update is one Gauss–Newton
   step on it, linearized at the ensemble mean; the physics LETKF observing grid points has linear H and no such step.
-- [~] T2 (drafted 2026-10-20, Eqs. nl_expansion/nl_index; numbers from E1) In the same subsection: nonlinearity index. Second-order expansion H(z̄+δ) = H(z̄) + Jδ + ½ δᵀ∇²H δ + O(δ³);
+- [x] T2 (2026-10-20, Eqs. nl_expansion/nl_index; corrected the same day: the draft said the effect on the gain is O(η_o²), true only if r were independent of the state; r is state-correlated with a non-zero mean, so the effect on the analysis mean can be O(η_o); text now says η_o ≪ 1 is necessary and the cost is measured by relinearizing) In the same subsection: nonlinearity index. Second-order expansion H(z̄+δ) = H(z̄) + Jδ + ½ δᵀ∇²H δ + O(δ³);
   define η = E‖H(z̄+δ) − H(z̄) − Jδ‖ / ‖Jδ‖ and η_o = E‖H(z̄+δ) − H(z̄) − Jδ‖ / (σ_o √m); linearization is adequate
   when η_o ≪ 1, i.e. when the one-cycle prior spread is small against the decoder's curvature scale. Equation number;
   measured values come from E1.
-- [~] T3 (drafted 2026-10-20 as Remark rem:local_curvature inside §3.3 (right after Prop. 1's discussion); proof in App. B) Corollary (state as a remark after Proposition 1, `03_method.tex` ~l.130, proof sketch in
+- [x] T3 (2026-10-20 as Remark rem:local_curvature; App. B retitled "Proofs" inside §3.3 (right after Prop. 1's discussion); proof in App. B) Corollary (state as a remark after Proposition 1, `03_method.tex` ~l.130, proof sketch in
   `appendix/B_proof.tex`): with R_dec = 0 the Hessian of H_i is non-zero only in the c×c block of the patch owning
   observation i; the nonlinearity never couples sites, so η is measured and (E3) corrected site by site at any domain
   size, at the cost of c extra JVPs per relinearization.
