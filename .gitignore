@@ -36,3 +36,6 @@ docs/paperII/main.pdf
 # Generated animation frames (script outputs, like docs/figures/).
 docs/anim_frames/
 docs/paperI/main_agu.pdf
+
+# CM1 simulation data and source (8 GB); never commit
+cm1data/
