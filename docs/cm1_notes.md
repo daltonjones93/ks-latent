@@ -51,3 +51,12 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 ## Decisions
 - Request **1-min output** (`tapfrq=60`), at least 2-min, from cluster runs. Reason: finding 4.
 - Request 20–40 members in the current environment first, then several environments for generalization. Reason: finding 3.
+
+## Cluster runs (2026-11-04)
+- **Saidie is the wrong cluster.** It is an AI/GPU system (one 8×H200 node), and CM1 is CPU-only. **Use Cashew** (College of Engineering CPU cluster, Slurm, default partition `coe_cpu`).
+- **Cashew caps jobs** at 20 submitted+pending per partition. The kit therefore packs one member per CPU into a few jobs; it does not use job arrays.
+- **Kit:** `cluster/cm1/` (README has step-by-step instructions). Tested end to end on the Mac:
+  - the validation member `mem000` reproduces member 1's initial state bitwise;
+  - each run uses ~0.4 GB of memory.
+- **Phase A plan:** 30 new members, original perturbation scheme (σθ = 0.1 K, z < 500 m), 6 h, 1-min output, plus `mem000`.
+- **Local build** moved to `cm1data/cm1r21.1/build_local/`, which is gitignored.
