@@ -37,6 +37,22 @@ def load_run(run: str) -> dict:
     ds = nc.Dataset(CM1 / run / "cm1out.nc")
     ds.set_auto_mask(False)
     g = lambda k: ds[k][:, :, 0, :].astype(np.float64)
+    X = transform(g)
+    out = dict(
+        X=X,
+        t=ds["time"][:].astype(np.float64),
+        x=ds["xh"][:].astype(np.float64),
+        z=ds["zh"][:].astype(np.float64),
+        cref=ds["cref"][:, 0, :].astype(np.float32),
+        dbz=ds["dbz"][:, :, 0, :].astype(np.float32),
+    )
+    ds.close()
+    np.savez(f, **out)
+    return out
+
+
+def transform(g) -> np.ndarray:
+    """Build the (T, V, Z, NX) column state from a field getter g(name) -> (T, Z, NX)."""
     th, qv, prs = g("th"), g("qv"), g("prs")
     base = lambda a: a[0, :, BASE_I][None, :, None]
     qliq = g("qc") + g("qr")
@@ -53,14 +69,15 @@ def load_run(run: str) -> dict:
         ],
         axis=1,
     ).astype(np.float32)
-    out = dict(
-        X=X,
-        t=ds["time"][:].astype(np.float64),
-        x=ds["xh"][:].astype(np.float64),
-        z=ds["zh"][:].astype(np.float64),
-        cref=ds["cref"][:, 0, :].astype(np.float32),
-        dbz=ds["dbz"][:, :, 0, :].astype(np.float32),
-    )
-    ds.close()
-    np.savez(f, **out)
-    return out
+    return X
+
+
+def load_grads_run(ctl) -> dict:
+    """Same output as load_run, from a CM1 GrADS run (output_format=1); not cached."""
+    from grads_io import read_grads
+    from pathlib import Path as _P
+    d = read_grads(ctl)
+    g = lambda k: d[k].astype(np.float64)
+    meta = read_grads(_P(ctl).parent / "cm1out_metadata.ctl")
+    return dict(X=transform(g), t=meta["mtime"].ravel().astype(np.float64), cref=d["cref"].astype(np.float32),
+                dbz=d["dbz"].astype(np.float32))
