@@ -83,9 +83,14 @@ Status as of 2026-11-05.
 ## D. A set of models on Saidie
 Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since the node is shared. Results go to `~/cm1_runs/<name>`, and summaries are copied to `artifacts/cm1/runs/`.
 
-- [ ] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU. **Running: Saidie job 8680 (`~/cm1_runs/ens_A_gpu_k45`).**
+- [ ] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU. **Ran 2026-11-05 (Saidie job 8680, 15.4 min on one H200, against ~90 min on Cashew CPU); target narrowly missed.**
+  - nMSE at 5 / 30 / 60 min: 0.110 / 0.213 / 0.270, against Cashew's 0.105 / 0.217 / 0.249. The gaps are +0.005 / −0.004 / **+0.021**, and the target was ≤ 0.01.
+  - Reconstruction matches: val 0.0479 vs 0.0481.
+  - **Not like-for-like.** Cashew k45 reused run 1's autoencoder, while this run trained its own, and GPU training is not bit-reproducible.
+  - **Next:** judge the 60-min gap against D2's seed spread. If the seed spread at 60 min is ≥ 0.02, D1 passes. If not, look for a real CPU/GPU difference.
+
   - deps: A4, A5, C2. Done when: nMSE is within 0.01 of the Cashew run at 5, 30 and 60 min.
-- [ ] **D2 (C)** Seeds: 3 seeds of the D1 recipe.
+- [ ] **D2 (C)** Seeds: 3 seeds of the D1 recipe. **Decides D1.**
   - Done when: a mean ± spread table. Every later comparison is judged against this spread.
 - [ ] **D3 (C)** Rollout curriculum: a mix of short and long rollouts, to keep the 1–5 min skill of k_max 20 and the 60-min skill of k_max 45.
   - Done when: better than both at all leads, or the trade-off is documented.

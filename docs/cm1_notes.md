@@ -117,3 +117,19 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 - **Front error at 45 / 60 min:** 3.5 / 2.5 km → 3.0 / 1.8 km.
 - **Trade-off:** error is 10–15% higher at 1–5 min leads and 22% lower at 60 min.
 - **Decision:** keep k_max 45 for forecasting and DA cycles longer than ~20 min. A curriculum that keeps some short rollouts, or a longer run, may recover the short leads.
+
+## Saidie GPU run (D1, job 8680): ens_A, k_max 45, own autoencoder, one H200, 15.4 min
+- **nMSE at 1 / 5 / 30 / 45 / 60 min:** 0.053 / 0.110 / 0.213 / 0.251 / 0.270. Cashew CPU k45 had 0.053 / 0.105 / 0.217 / 0.243 / 0.249.
+- **Reconstruction:** val 0.0479 vs 0.0481.
+- **The 60-min gap (+0.021) is above the 0.01 target.** It is attributed provisionally to run-to-run variation: different autoencoder, GPU non-determinism. To be confirmed by the seed spread (D2).
+- **Speed:** about 6× faster than Cashew CPU.
+
+## B1: Cashew build validation
+- mem000 is bitwise equal to run_e1 at t=0.
+- Build differences start ~50× below member-to-member differences, grow chaotically, and reach member size by ~2 h.
+- Fronts agree within 1 km for 3 h.
+- Same model; a rebuilt run is a new member after ~2 h.
+
+## B2: noise seed
+- CM1's fixed seed drives both the bubble noise (±0.2 K) and a domain-wide ±0.25 K θ noise (irandp = 1). All existing members share it.
+- The seed_var1 patch makes it per member.
