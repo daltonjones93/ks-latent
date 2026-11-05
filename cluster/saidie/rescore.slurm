@@ -18,7 +18,7 @@ REPO=$HOME/latent_DA
 . "${ENV:-$HOME/venvs/cm1}/bin/activate"
 export PYTHONPATH=$REPO OMP_NUM_THREADS=8
 cd "$REPO"
-python -m pytest -q tests/unit/test_cm1.py tests/unit/test_cm1_verify.py -p no:cacheprovider
+python -m pytest -q tests/unit/test_cm1*.py -p no:cacheprovider
 for r in ${RUNS:?set RUNS}; do
   echo "=== $r"
   python scripts/cm1/train_cm1.py --profile full --source "${DATA:?set DATA}" --device cuda --threads 8 \
