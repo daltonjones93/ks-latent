@@ -37,16 +37,32 @@ Status as of 2026-11-05.
   - On Saidie, train with `DATA="cache:$HOME/cm1_cache"` once the ens_A cache is copied there (C1/C2).
 
 ## B. More data on Cashew
-- [ ] **B1 (C)** Validate the Cashew build: `mem000` against the original `run_e1`, at matching 5-min times, as a job on Cashew.
-  - Done when: a short note in `cm1_notes.md` with the RMS difference over time. It should look like two runs whose tiny differences grow, not a different model.
-- [ ] **B2 (C)** Per-member random-noise seed.
-  - Use CM1's spare namelist variable `var1` as a seed offset in `init3d.F`. Members can then differ in the bubble noise as well as the sounding.
-  - Done when: two 5-min test runs with different `var1` differ at t=0, and identical `var1` gives bitwise-equal output.
-- [ ] **B3 (D+C)** Decide the next ensembles. Proposal:
-  - `ens_A2`: 30 more members in the same environment, with new noise seeds. Its purpose is a 1-min learning curve: 14 / 28 / 56 members.
-  - `ens_B`: 60 members in varied environments, low-level moisture offset −1.5…+1.0 g/kg and shear scale 0.6…1.4. Its purpose is generalization across environments, holding out whole environment regions.
-
-  Done when: Dalton approves the design (sizes, ranges, output interval 60 s).
+- [x] **B1 (C)** Validate the Cashew build — done 2026-11-05 (Cashew job 745020, `scripts/cm1/validate_cashew_build.py`, figure `docs/cm1_summary/figs/validate_build.pdf`).
+  - `mem000` is **bitwise identical to `run_e1` at t=0**.
+  - Build-level differences start **~50× smaller than the difference between two original members**: nMSE 1.7e-8 vs 8e-7 at 5 min, 6e-6 vs 2e-4 at 30 min, 4e-3 vs 6e-2 at 1 h. They then grow chaotically and reach member-to-member size by ~2 h.
+  - Gust fronts agree within 1 km for 3 h.
+  - **Verdict:** same model, not a bit-copy. A rebuilt run is effectively a new member after ~2 h.
+- [x] **B2 (C)** Per-member noise seed — done 2026-11-05.
+  - The patch `cluster/cm1/patches/apply_patches.py` (seed_var1) is applied by `build_cm1.sh` to its own copy of the source and recorded in `build/PATCHES`. The original source in `cm1data/` is untouched.
+  - Namelist `var1` ≠ 0 scrambles CM1's noise seed. That seed drives **both** the bubble noise (±0.2 K) **and** a domain-wide ±0.25 K θ noise (`irandp = 1`). The original 10 members and `ens_A` all share one noise field.
+  - `make_ensemble.py --noise-seed member` sets `var1` to the member number (`mem000` keeps 0). It refuses builds without the patch.
+  - Tests:
+    - `var1=0` reproduces run_e1's t=0 bitwise;
+    - `var1=1` vs `2` differ by up to 0.78 K (max possible 0.9 K);
+    - the same `var1` twice is bitwise identical in every field and time.
+  - Note: Cashew's existing build (`~/cm1_bundle/build`) predates the patch. Delete it before a seeded ensemble, and `go.sh` rebuilds it.
+- [ ] **B3 (D+C)** Decide the next ensembles. **Proposal ready, awaiting Dalton's approval.**
+  - **`ens_A2`: 30 members, same environment as ens_A, per-member noise seeds (B2).**
+    - Purpose: 1-min learning curve to 56–58 members (D5), and more independent truths for DA.
+    - Caveat: these differ from ens_A in noise as well as sounding, so they are slightly more varied. Report learning-curve points by ensemble.
+  - **`ens_B`: 60 members in varied environments, with per-member noise seeds.**
+    - Low-level moisture offset uniform in **−2.0…+1.0 g/kg**. **+1.0 is the limit**: +1.5 supersaturates at shear 1.4, and the generator refuses it.
+    - Shear scale uniform in **0.6…1.4**.
+    - Hold out the high-moisture, high-shear corner (offset > +0.5 and scale > 1.2) for testing generalization (D8).
+  - **Common settings:** 6 h, 60 s output, the original θ perturbations (σ = 0.1 K below 500 m).
+  - **Cost:**
+    - 90 members × ~1.5 h on 1 core each. In 8-CPU packs that is 12 jobs, under Cashew's 20-job cap, and about 1.5–3 h wall if the CPU nodes are free.
+    - Storage: ~200 GB raw on Cashew (~74 GB used of 1 TB) and ~45 GB of float16 caches to copy to Saidie (2 TB, 15 GB used).
 - [ ] **B4 (C)** Pilot for `ens_B`: 4 members at the corners of the environment ranges, 6 h.
   - Check that the storm stays inside the domain (the grid moves at a fixed 12.5 m/s) and that no member fails.
   - deps: B2, B3. Done when: storm tracks are plotted and the ranges are confirmed or narrowed.
@@ -57,15 +73,17 @@ Status as of 2026-11-05.
   - deps: B5. Done when: one `.npz` per member, with sizes and frame counts checked.
 
 ## C. Moving data to Saidie 🔒
-- [ ] **C1 (D)** Go-ahead to copy the caches from Cashew to Saidie.
+- [x] **C1 (D)** Go-ahead to copy the caches from Cashew to Saidie. Given 2026-11-05 for `ens_A`.
   - About 15 GB for `ens_A`, then about 45 GB more for `ens_A2` and `ens_B`.
-- [ ] **C2 (C)** Copy them with `rsync` run on Saidie, pulling from Cashew. That needs either your agent forwarded (`ssh -A`) or a key on Saidie for Cashew.
-  - Done when: file counts and checksums match on both sides.
+- [x] **C2 (C)** `ens_A` cache copied — done 2026-11-05.
+  - `rsync` ran on Saidie, pulling from Cashew, with the Mac's agent forwarded on a fresh connection (`ssh -A -o ControlPath=none`; the shared connection ignores `-A`).
+  - 31 files, 15,613,803,542 bytes on both sides, all 31 md5 checksums identical. The data is in `saidie:~/cm1_cache`.
+  - `ens_A2` and `ens_B` will need the same copy once they exist (and a go-ahead).
 
 ## D. A set of models on Saidie
 Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since the node is shared. Results go to `~/cm1_runs/<name>`, and summaries are copied to `artifacts/cm1/runs/`.
 
-- [ ] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU.
+- [ ] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU. **Running: Saidie job 8680 (`~/cm1_runs/ens_A_gpu_k45`).**
   - deps: A4, A5, C2. Done when: nMSE is within 0.01 of the Cashew run at 5, 30 and 60 min.
 - [ ] **D2 (C)** Seeds: 3 seeds of the D1 recipe.
   - Done when: a mean ± spread table. Every later comparison is judged against this spread.
