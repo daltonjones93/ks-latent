@@ -298,12 +298,12 @@ Each task below answers a specific objection a referee would raise. They come in
   Every outcome is reported, including failures.
 
 ### Tier 1: essential
-- [ ] **G1 (C)** **Many truths, with error bars.**
+- [x] **G1 (C)** **Done (job 8717, 12 truths × 3 seeds, `th+refl+vr`): forecast nMSE 0.236 ± 0.027 vs no DA 0.380 ± 0.099; latent beats no DA on 12/12 truths; physical-space analysis 0.245, surrogate EnOI 0.331. See `cm1_notes.md`.** **Many truths, with error bars.**
   - The 28-member model (`d34_c32_kuniform`) never saw `ens_A2`, so its 30 members are 30 independent truths, plus mem029–030.
   - Run the best DA settings on ≥ 10 truths × 3 observation-noise seeds.
   - Report mean ± 95% CI, and paired differences (DA − no DA) per truth.
   - Done when: the tables and figures of E4/E4b have error bars.
-- [ ] **G2 (C)** **Conventional (equation-free) baselines with the same observations and members.**
+- [ ] **G2 (C)** **(a) and (b) run in job 8717: latent 0.236 vs physical-space 0.245 vs surrogate EnOI 0.331; the physical-archive EnOI (alpha 0.5) is worse than no DA (0.732) and needs tuning before it is a fair baseline. (c) still to do.** **Conventional (equation-free) baselines with the same observations and members.**
   - (a) **EnOI:** a static physical-space covariance from the training members' states at the same time, with the same localization. It answers "what does a forecast model add?".
   - (b) **Physical-space LETKF on the decoded surrogate ensemble:** the same forecasts, but analysed in physical space instead of latent space. It isolates what the latent update itself buys: dimension, locality, and staying on the decoder's manifold. Paper II found a cost from returning to the decoder range, so this needs checking here.
   - (c) **Spline / optimal interpolation of the observations alone** (no ensemble), as in Paper II.

@@ -235,3 +235,21 @@ Skill = forecast nMSE / persistence nMSE (lower is better). Single-seed noise is
 - **The stochastic propagator is worse on mean error** but halves the cold-pool bias; its samples keep intensity.
 - **The vertical front end is neutral.**
 - **Next:** Stage C with k ≤ 45 (8753), and an average of 4 history propagators (8754–8757).
+
+## G1 + G2: DA over 12 truths × 3 observation seeds (2026-11-05, Saidie job 8717)
+Setup: `d34_c32_kuniform` (28 ens_A training members, never saw ens_A2); truths are 10 ens_A2 storms plus test members mem029–030. Observations θ′ (sfc) + reflectivity + radial velocity (`th+refl+vr`), every 2 km, 5-min cycles, 36 cycles, LETKF loc 5 km, RTPS 0.9, model noise 0.05. Score: all-variable forecast nMSE over the second half of the cycles (60-min forecasts from cycles 11/17/23/29), mean ± 95% CI over truths.
+
+| Method | Forecast nMSE | vs no DA (paired) | Front |disp| |
+|---|---|---|---|
+| no DA | 0.380 ± 0.099 | — | — |
+| **latent LETKF** | **0.236 ± 0.027** | **−0.144 ± 0.076** | 0.42 km |
+| physical-space LETKF on the same ensemble (G2b) | 0.245 ± 0.031 | −0.135 ± 0.072 | 0.45 km |
+| EnOI, surrogate forecast + static archive covariance (G2a) | 0.331 ± 0.065 | −0.049 ± 0.037 | 0.82 km |
+| EnOI, physical archive (alpha 0.5) | 0.732 ± 0.064 | +0.352 ± 0.042 | 1.16 km |
+
+Autoencoder floor 0.024.
+- **Latent DA beats no DA on 12 of 12 truths.** The mean gain is 38%, inflated by two truths where the free forecast goes badly wrong (ens_A2 mem001 0.80 → 0.34, mem003 0.67 → 0.31). The median ratio latent / no DA is about 0.70, so a typical gain is ~30%.
+- **Latent vs physical-space analysis:** latent is lower on 9 of 12 truths, but only by 0.009 on average, within the noise. The latent update costs nothing and is a little better; it is not a big win on its own.
+- **Latent LETKF beats the surrogate EnOI by 29%**, so the flow-dependent ensemble matters.
+- **The physical-archive EnOI is worse than no DA.** Its increments from a ±30-min climatological archive at alpha 0.5 are destructive. As it stands it is a strawman; tune alpha (and the archive window) before it goes in a paper, or drop it.
+- **Against the proposed G0 rules** (not yet signed off, so the run is not pre-registered): ≥ 10% gain with a CI excluding 0 ✓; front < 1 km ✓; ≥ 10% better than EnOI ✓. Calibration and rank histograms were not part of this run.
