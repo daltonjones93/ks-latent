@@ -17,6 +17,7 @@ for f in $(python3 -c "import sys; sys.path.insert(0,'$KIT'); import make_ensemb
   cp "$CM1"/run_e1/$f $B/template/
 done
 cp "$KIT"/*.sh "$KIT"/*.py "$KIT"/*.slurm "$KIT"/README.md $B/kit/ 2>/dev/null || true
+mkdir -p $B/kit/patches && cp "$KIT"/patches/*.py $B/kit/patches/
 tar -C $T -czf "$OUT" cm1_bundle
 rm -rf $T
 ls -lh "$OUT"

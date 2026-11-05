@@ -7,12 +7,16 @@
 # Needs gfortran (or set FC=ifort/ifx) and nf-config from netcdf-fortran on PATH.
 # NONETCDF=1 builds without NetCDF (GrADS output; then use --output-format 1).
 set -euo pipefail
+KIT=$(cd "$(dirname "$0")" && pwd)   # before any cd: $0 may be a relative path
 SRC=$(cd "$1" && pwd); BUILD=$2
 FC=${FC:-gfortran}; JOBS=${JOBS:-2}
 command -v "$FC" >/dev/null || { echo "Fortran compiler '$FC' not on PATH (module load it)"; exit 1; }
 mkdir -p "$BUILD/run"; BUILD=$(cd "$BUILD" && pwd)
 rm -rf "$BUILD/src"; cp -R "$SRC" "$BUILD/src"; cd "$BUILD/src"
 rm -f ./*.o ./*.mod ./*.f90
+# our source patches (patches/apply_patches.py), applied to this copy only; recorded for make_ensemble.py
+python3 "$KIT/patches/apply_patches.py" "$BUILD/src"
+echo "seed_var1" > "$BUILD/PATCHES"
 M=Makefile
 if [ "${NONETCDF:-0}" = 1 ]; then
     sed -i.bak -E 's/^(OUTPUTINC|OUTPUTLIB|LINKOPTS|OUTPUTOPT)/#\1/' $M

@@ -18,6 +18,9 @@ Perturbations (all optional, recorded in the manifest):
   --qv-offset A B   boundary-layer moisture offset (g/kg) drawn uniformly in [A, B],
                     applied fully below --qv-zmax and tapered to zero over 500 m.
   --shear-scale A B multiply the wind profile by a factor drawn in [A, B].
+  --noise-seed member  give each member its own seed for CM1's random initial noise (namelist var1 =
+                    member number; needs the seed_var1 source patch, see patches/apply_patches.py).
+                    mem000 keeps var1 = 0, i.e. the original fixed seed.
 Every perturbed sounding is checked for supersaturation; the script stops with
 an error rather than write one.
 
@@ -109,6 +112,8 @@ def main():
     ap.add_argument("--shear-scale", type=float, nargs=2, default=[1.0, 1.0])
     ap.add_argument("--exe-may-not-exist-yet", action="store_true",
                     help="link cm1.exe even if it is not built yet (go.sh: the build is a queued job)")
+    ap.add_argument("--noise-seed", choices=["fixed", "member"], default="fixed",
+                    help="fixed: CM1's one seed for all members; member: var1 = member number")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
     a = ap.parse_args()
 
@@ -119,6 +124,11 @@ def main():
             sys.exit("missing in template: %s" % f)
     if not os.path.exists(exe) and not a.exe_may_not_exist_yet:
         sys.exit("cm1.exe not found: %s" % exe)
+    if a.noise_seed == "member":
+        patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")  # build/run/cm1.exe -> build/PATCHES
+        if not (os.path.exists(patches) and "seed_var1" in open(patches).read()):
+            sys.exit("--noise-seed member needs a CM1 built with the seed_var1 patch (cluster/cm1/build_cm1.sh "
+                     "applies it; %s not found or lacks it). Rebuild: delete the build directory and re-run." % patches)
     if os.path.exists(a.out) and os.listdir(a.out):
         sys.exit("output directory exists and is not empty: %s (refusing to overwrite)" % a.out)
 
@@ -171,8 +181,10 @@ def main():
             shutil.copyfile(info["reference"], os.path.join(d, "input_sounding"))
         else:
             write_sounding(os.path.join(d, "input_sounding"), sfc, rows)
+        seed = int(name[3:]) if a.noise_seed == "member" else 0
         with open(os.path.join(d, "namelist.input"), "w") as f:
-            f.write(nml)
+            f.write(set_namelist(nml, "var1", "%.1f" % seed))
+        info["noise_seed_var1"] = seed
         os.symlink(exe, os.path.join(d, "cm1.exe"))
         for t in TABLES:
             os.symlink(os.path.join(tmpl, t), os.path.join(d, t))
