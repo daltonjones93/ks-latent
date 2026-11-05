@@ -283,7 +283,7 @@ def test_crps_loss_known_values():
     same = torch.zeros(4, 5)
     assert crps_loss(same, y).item() == 0.0                              # perfect, zero-spread ensemble
     two = torch.tensor([[1.0], [-1.0]])                                  # samples +-1 around y = 0
-    # E|X-y| = 1, E|X-X'| over the 2 off-diagonal pairs = 2 -> CRPS = 1 - 1 = 0? no: 1 - 0.5*2 = 0
+    # E|X-y| = 1 and E|X-X'| = 2 over the 2 off-diagonal pairs, so the fair CRPS is 1 - 0.5*2 = 0
     assert abs(crps_loss(two, torch.zeros(1)).item() - 0.0) < 1e-7
     off = torch.tensor([[1.0], [1.0]])                                   # both samples off by 1: CRPS = 1
     assert abs(crps_loss(off, torch.zeros(1)).item() - 1.0) < 1e-7
@@ -302,3 +302,36 @@ def test_stage_b_trains_history_and_stochastic_propagators():
         r = train_stage_b(prop, z, z, act, act, PATCH, StageBConfig(window_sites=12, halo_sites=1, batch=4, steps=4,
                                                                     k_max=3, val_every=2, warmup=1, **bk), log=lambda s: None)
         assert np.isfinite(r["best_val_mse"])
+
+
+def test_vertical_front_end_keeps_x_locality_and_equivariance():
+    cfg = ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3, vertical_channels=4,
+                         vertical_kernel=3)
+    ae = ColumnFieldAE(cfg, positive_channel_mask(Z)).double().eval()
+    u = torch.randn(1, V * Z, NX, dtype=torch.float64)
+    z, zs = ae.encode(u), ae.encode(torch.roll(u, 2 * PATCH, dims=-1))
+    P, r = NX // PATCH, cfg.reach_sites
+    torch.testing.assert_close(zs[:, r + 2:P - r], z[:, r:P - r - 2], atol=1e-12, rtol=0)
+    with pytest.raises(ValueError):
+        ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, hidden=V * 2, latent_channels=V, groups=V,
+                                     vertical_channels=4))
+
+
+@pytest.mark.integration
+def test_stage_c_runs_and_updates_both_models():
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", T=10, seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z))
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1))
+    a0 = {k: v.clone() for k, v in ae.state_dict().items()}
+    p0 = {k: v.clone() for k, v in prop.state_dict().items()}
+    r = train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, batch=2, steps=4, k_max=3,
+                                                     val_every=2, warmup=1, w_sfc_th=2.0, sfc_levels=2),
+                      log=lambda s: None)
+    assert np.isfinite(r["best_val_decoded_rollout_mse"])
+    assert any((ae.state_dict()[k] != a0[k]).any() for k in a0)
+    assert any((prop.state_dict()[k] != p0[k]).any() for k in p0)

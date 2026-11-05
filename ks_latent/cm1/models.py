@@ -22,6 +22,11 @@ alone: V independent autoencoders side by side. Variables then interact only thr
 propagator. `groups = 1` (default) is the joint column encoder. Requires C, hidden and
 latent_channels divisible by `groups`; channels are variable-major, so the groups are variables.
 
+Vertical front end (`vertical_channels` > 0, D14b): before the patch embedding, a convolution along
+height only (kernel `vertical_kernel` x 1) maps the V variables at each level to `vertical_channels`
+features, so the encoder starts from local vertical structure rather than one flat C-vector per
+cell. Width 1 in x: locality and shift equivariance in x are unchanged.
+
 Non-negative outputs. The condensate channels (sqrt of mixing ratio) pass
 through a sharp softplus, `log(1 + exp(beta x)) / beta`, so decoded
 condensate is >= 0 and reaches ~0 (5e-6 at x = -1 for beta = 10) without
@@ -53,6 +58,8 @@ class ColumnAEConfig:
     padding_mode: str = "replicate"
     positive_beta: float = 10.0
     groups: int = 1  # 1: joint column encoder; V: one encoder/decoder per variable (D7 ablation)
+    vertical_channels: int = 0  # > 0: per-cell vertical convolution front end with this many channels (D14b)
+    vertical_kernel: int = 5
 
     @property
     def reach_sites(self) -> int:
@@ -82,7 +89,18 @@ class ColumnFieldAE(nn.Module):
         C, H, c, p, g = cfg.n_channels, cfg.hidden, cfg.latent_channels, cfg.patch, cfg.groups
         if C % g or H % g or c % g:
             raise ValueError(f"groups={g} must divide n_channels={C}, hidden={H} and latent_channels={c}")
-        self.enc_in = nn.Conv1d(C, H, p, stride=p, groups=g)
+        self.vert = None
+        if cfg.vertical_channels:
+            if g != 1:
+                raise ValueError("vertical_channels and groups > 1 are not combined")
+            V = C // cfg.n_levels
+            if V * cfg.n_levels != C:
+                raise ValueError("n_channels must be variables x n_levels for the vertical front end")
+            k = cfg.vertical_kernel
+            self.vert = nn.Conv2d(V, cfg.vertical_channels, (k, 1), padding=(k // 2, 0))   # along z only
+            self.enc_in = nn.Conv1d(cfg.vertical_channels * cfg.n_levels, H, p, stride=p)
+        else:
+            self.enc_in = nn.Conv1d(C, H, p, stride=p, groups=g)
         self.enc_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode, g)
         self.enc_out = nn.Conv1d(H, c, 1, bias=False, groups=g)
         self.dec_in = nn.Conv1d(c, H, 1, groups=g)
@@ -96,6 +114,10 @@ class ColumnFieldAE(nn.Module):
     def encode(self, u: torch.Tensor) -> torch.Tensor:
         if u.shape[-1] % self.cfg.patch:
             raise ValueError(f"width {u.shape[-1]} is not a multiple of patch {self.cfg.patch}")
+        if self.vert is not None:
+            B, C, NX = u.shape
+            Zl = self.cfg.n_levels
+            u = F.gelu(self.vert(u.reshape(B, C // Zl, Zl, NX))).reshape(B, -1, NX)
         h = F.gelu(self.enc_in(u))
         h = self.enc_mix(h)
         return self.enc_out(h).transpose(1, 2)  # (B, P, c)

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 
-from ks_latent.cm1.data import ColumnData
+from ks_latent.cm1.data import VARS, ColumnData
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator, forced_halo_rollout
 from ks_latent.training.crop import warmup_cosine
 from ks_latent.training.losses import decorr_var_loss, logdet_barrier_loss
@@ -235,3 +235,103 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
                 best, best_state = v, {kk: t.detach().clone() for kk, t in prop.state_dict().items()}
     prop.load_state_dict(best_state)
     return {"history": hist, "best_val_mse": best}
+
+
+@dataclass
+class StageCConfig:
+    """Stage C (D12): joint fine-tuning of autoencoder and propagator on a decoded rollout loss."""
+    window_sites: int = 48
+    halo_sites: int = 3
+    batch: int = 12
+    steps: int = 4000
+    lr: float = 1e-4
+    weight_decay: float = 1e-5
+    warmup: int = 200
+    lr_min_factor: float = 0.05
+    grad_clip: float = 1.0
+    k_max: int = 20
+    k_ramp_frac: float = 0.3
+    k_sampling: str = "uniform"
+    w_rec: float = 1.0          # reconstruction of the first frame
+    w_var: float = 0.02
+    w_logdet: float = 0.0035
+    logdet_eps: float = 1e-3
+    w_sfc_th: float = 0.0       # extra weight on theta' below `sfc_levels` levels (cold pool, G10)
+    sfc_levels: int = 10        # ~ the lowest 1 km of the 62-level grid
+    active_frac: float = 0.5
+    val_every: int = 250
+    val_batches: int = 4
+    seed: int = 0
+
+
+def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnData, data_va: ColumnData,
+                  cfg: StageCConfig, log=print) -> dict:
+    """Windows of true columns over H + k frames are encoded, rolled k steps with the true (encoded) halo,
+    decoded, and scored against the true columns on the window interior (halo + decoder reach excluded),
+    plus reconstruction of the first frame and the latent anti-collapse terms. Both models are updated."""
+    dev = next(ae.parameters()).device
+    p, Hh = ae.cfg.patch, prop.cfg.n_hist
+    h, Pw = cfg.halo_sites, cfg.window_sites
+    if h < prop.cfg.reach_sites:
+        raise ValueError(f"halo {h} < propagator reach {prop.cfg.reach_sites}")
+    m_sites = h + ae.cfg.reach_sites
+    if Pw <= 2 * m_sites + 2:
+        raise ValueError("window too narrow for the halo and decoder reach")
+    W, m = Pw * p, m_sites * p
+    C, Zl = data_tr.C, data_tr.Z
+    wch = torch.ones(C, device=dev)
+    if cfg.w_sfc_th > 0:
+        ith = VARS.index("th") * Zl
+        wch[ith:ith + cfg.sfc_levels] += cfg.w_sfc_th
+    wch = wch / wch.mean()
+    g = torch.Generator().manual_seed(cfg.seed)
+    vg = torch.Generator().manual_seed(cfg.seed + 999)
+    val = [data_va.windows(cfg.batch, W, Hh + cfg.k_max, vg, cfg.active_frac)[0].to(dev) for _ in range(cfg.val_batches)]
+    params = list(ae.parameters()) + list(prop.parameters())
+    opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
+    kcfg = StageBConfig(k_max=cfg.k_max, k_ramp_frac=cfg.k_ramp_frac, k_sampling=cfg.k_sampling)
+
+    def rollout_err(u, k, weighted, gen):
+        B, F_ = u.shape[:2]
+        z = ae.encode(u.reshape(B * F_, C, W)).reshape(B, F_, Pw, -1)
+        pred = forced_halo_rollout(prop, z, k, h, gen=gen)                       # (B, k, Pw, c)
+        dec = ae.decode(pred.reshape(B * k, Pw, -1)).reshape(B, k, C, W)
+        e = (dec - u[:, Hh:Hh + k]) ** 2
+        e = e[..., m:W - m]
+        if weighted:
+            e = e * wch[None, None, :, None]
+        return e.mean(), z
+
+    hist, best, best_state, t0 = [], float("inf"), None, time.time()
+    for step in range(cfg.steps):
+        ae.train(); prop.train()
+        k = _k_now(step / cfg.steps, kcfg, g)
+        u = data_tr.windows(cfg.batch, W, Hh + k, g, cfg.active_frac)[0].to(dev)  # (B, H+k, C, W)
+        l_roll, z = rollout_err(u, k, True, g)
+        u0 = u[:, Hh - 1]
+        l_rec = F.mse_loss(_interior(ae.decode(z[:, Hh - 1]), m), _interior(u0, m))
+        zs = _interior(z[:, Hh - 1], m_sites, dim=1).reshape(-1, z.shape[-1])
+        _, l_var = decorr_var_loss(zs)
+        l_ld = logdet_barrier_loss(zs, eps=cfg.logdet_eps)
+        loss = l_roll + cfg.w_rec * l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
+        opt.step(); sched.step()
+        if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
+            ae.eval(); prop.eval()
+            with torch.no_grad():
+                v = sum(rollout_err(x, cfg.k_max, False, torch.Generator().manual_seed(3))[0].item() for x in val) / len(val)
+            rec = {"step": step + 1, "k": k, "l_roll": l_roll.item(), "l_rec": l_rec.item(), "l_logdet": l_ld.item(),
+                   "val_decoded_rollout_mse": v, "wall_s": time.time() - t0}
+            hist.append(rec)
+            log(f"  [C] step {step + 1}/{cfg.steps} k {k} roll {rec['l_roll']:.4f} rec {rec['l_rec']:.4f} "
+                f"val (decoded, k={cfg.k_max}) {v:.4f} [{rec['wall_s']:.0f}s]")
+            if v < best:
+                best = v
+                best_state = ({kk: t.detach().clone() for kk, t in ae.state_dict().items()},
+                              {kk: t.detach().clone() for kk, t in prop.state_dict().items()})
+    ae.load_state_dict(best_state[0]); prop.load_state_dict(best_state[1])
+    return {"history": hist, "best_val_decoded_rollout_mse": best}
+

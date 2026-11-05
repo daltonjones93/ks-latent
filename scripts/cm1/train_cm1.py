@@ -138,15 +138,16 @@ def build_config(a, dt: float | None) -> RunConfig:
     radius = max(1, math.ceil(reach / layers))
     reach = layers * radius
     ae = ColumnAEConfig(patch=patch, hidden=(7 * 5 if a.encoder_groups > 1 else 32) if smoke else a.hidden,
-                        latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups)
+                        latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups,
+                        vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel)
     prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else a.hidden, layers=layers,
-                             radius=radius)
+                             radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
                       val_every=max(1, a.steps_a // 20), seed=a.seed)
     sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
                       steps=a.steps_b, k_max=k_max, k_sampling=a.k_sampling, val_every=max(1, a.steps_b // 20),
-                      seed=a.seed)
+                      seed=a.seed, crps_samples=a.crps_samples)
     if smoke:
         sa.val_batches = 2
         sa.warmup = sb.warmup = 1
@@ -250,6 +251,21 @@ def main():
     ap.add_argument("--eval-every-min", type=float, default=60.0)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--reuse-ae", default=None, help="run dir whose ae.pt to reuse (skips Stage A; Stage B still runs)")
+    ap.add_argument("--n-hist", type=int, default=1, help="propagator history frames (D13)")
+    ap.add_argument("--noise-channels", type=int, default=0, help="stochastic propagator noise channels (D14c)")
+    ap.add_argument("--crps-samples", type=int, default=0, help="train the stochastic propagator with fair CRPS")
+    ap.add_argument("--eval-samples", type=int, default=8, help="samples averaged when evaluating a stochastic propagator")
+    ap.add_argument("--vertical-channels", type=int, default=0, help="vertical convolution front end (D14b)")
+    ap.add_argument("--vertical-kernel", type=int, default=5)
+    ap.add_argument("--init-from", default=None,
+                    help="run dir: start from its trained autoencoder and propagator (skips Stages A and B)")
+    ap.add_argument("--stage-c-steps", type=int, default=0, help="Stage C joint decoded-rollout fine-tuning (D12)")
+    ap.add_argument("--stage-c-k", type=int, default=20)
+    ap.add_argument("--stage-c-lr", type=float, default=1e-4)
+    ap.add_argument("--stage-c-batch", type=int, default=12)
+    ap.add_argument("--w-sfc-th", type=float, default=0.0, help="Stage C extra weight on theta' in the lowest ~1 km")
+    ap.add_argument("--average-props", nargs="*", default=[],
+                    help="run dirs whose propagators share this autoencoder: evaluate the averaged forecast (D14a)")
     ap.add_argument("--eval-only", action="store_true", help="load ae.pt/prop.pt from --out, skip training")
     ap.add_argument("--data-device", default="same", help="'same' as the model, or 'cpu' (data in host memory)")
     a = ap.parse_args()
@@ -302,6 +318,11 @@ def main():
     data = {k: ColumnData(pick(n), norm, data_dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
+    if a.init_from:   # architecture of the run we start from
+        saved = json.loads((Path(a.init_from) / "config.json").read_text())
+        cfg.ae, cfg.prop = ColumnAEConfig(**saved["ae"]), StencilPropConfig(**saved["prop"])
+        cfg.stage_b = StageBConfig(**saved["stage_b"])
+        (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
     if a.eval_only:
         saved = json.loads((out / "config.json.trained").read_text() if (out / "config.json.trained").exists()
                            else (out / "config.json").read_text())
@@ -311,13 +332,29 @@ def main():
             f"{cfg.ae.patch}, hidden {cfg.ae.hidden}, halo {cfg.stage_b.halo_sites})")
     ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z)).to(dev)
     prop = StencilPropagator(cfg.prop).to(dev)
-    if a.eval_only:
+    if a.eval_only or a.init_from:
+        src = out if a.eval_only else Path(a.init_from)
         for mod, f in ((ae, "ae.pt"), (prop, "prop.pt")):
-            ck = torch.load(out / f, map_location=dev)
+            ck = torch.load(src / f, map_location=dev)
             mod.load_state_dict(ck["state_dict"])
-        ra = json.loads((out / "history_a.json").read_text())
-        rb = json.loads((out / "history_b.json").read_text())
-        log(f"[cm1] eval only: loaded ae.pt and prop.pt from {out}")
+        ra = json.loads((src / "history_a.json").read_text())
+        rb = json.loads((src / "history_b.json").read_text())
+        log(f"[cm1] loaded ae.pt and prop.pt from {src}")
+        if a.init_from and a.stage_c_steps:
+            from ks_latent.cm1.train import StageCConfig, train_stage_c
+            sc = StageCConfig(window_sites=max(cfg.stage_b.window_sites, 4 * cfg.stage_b.halo_sites + 8),
+                              halo_sites=cfg.stage_b.halo_sites, batch=a.stage_c_batch, steps=a.stage_c_steps,
+                              lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th, seed=a.seed,
+                              val_every=max(1, a.stage_c_steps // 16))
+            log(f"[C] joint decoded-rollout fine-tuning: {sc}")
+            tc = time.time()
+            rcst = train_stage_c(ae, prop, data["train"], data["val"], sc, log=log)
+            (out / "history_c.json").write_text(json.dumps(rcst, indent=1))
+            for mod, f, c_ in ((ae, "ae.pt", cfg.ae), (prop, "prop.pt", cfg.prop)):
+                torch.save({"state_dict": mod.state_dict(), "cfg": dataclasses.asdict(c_)}, out / f)
+                write_provenance(out / f, config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - tc)
+            for f, r_ in (("history_a.json", ra), ("history_b.json", rb)):
+                (out / f).write_text(json.dumps(r_, indent=1))
         z = {k: encode_members(ae, d) for k, d in data.items()}
     else:
         # ---- Stage A ----
@@ -357,7 +394,19 @@ def main():
         log(f"  WARNING: test runs have only {T_test} frames; evaluating {n_lead} leads every {every} frames")
     t0s = list(range(every, T_test - n_lead, every))
     rec = reconstruction_report(ae, data["test"], norm)
-    fc = forecast_report(ae, prop, data["test"], z["test"], norm, t0s, n_lead, cfg.stage_b.halo_sites)
+    props = [prop]
+    for d in a.average_props:
+        ck_a = torch.load(Path(d) / "ae.pt", map_location=dev)
+        if any(not torch.equal(ck_a["state_dict"][k].to(dev), v) for k, v in ae.state_dict().items()):
+            raise ValueError(f"{d} does not share this autoencoder: averaging needs --reuse-ae runs")
+        pc = json.loads((Path(d) / "config.json").read_text())["prop"]
+        p2 = StencilPropagator(StencilPropConfig(**pc)).to(dev)
+        p2.load_state_dict(torch.load(Path(d) / "prop.pt", map_location=dev)["state_dict"])
+        props.append(p2)
+    if len(props) > 1:
+        log(f"[test] averaging the decoded forecasts of {len(props)} propagators")
+    fc = forecast_report(ae, props if len(props) > 1 else prop, data["test"], z["test"], norm, t0s, n_lead,
+                         cfg.stage_b.halo_sites, n_samples=a.eval_samples)
     results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "dt_s": dt, "reconstruction": rec,
                "forecast": fc, "stage_a_best_val": ra["best_val_recon"], "stage_b_best_val": rb["best_val_mse"]}
     (out / "results.json").write_text(json.dumps(results, indent=1))
@@ -377,17 +426,15 @@ def main():
     if t0s:
         with torch.no_grad():
             m, t0 = 0, t0s[0]
-            P = z["test"][m].shape[1]; h = cfg.stage_b.halo_sites
-            state = z["test"][m][t0:t0 + 1]
-            for j in range(n_lead):
-                state = prop(state)
-                zt = z["test"][m][t0 + j + 1:t0 + j + 2]
-                state = torch.cat([zt[:, :h], state[:, h:P - h], zt[:, P - h:]], dim=1)
+            from ks_latent.cm1.models import rollout_from
+            lat = rollout_from(prop, z["test"][m], t0, n_lead, cfg.stage_b.halo_sites,
+                               a.eval_samples if prop.cfg.noise_channels else 1, gen=torch.Generator().manual_seed(0))
+            state = lat[-1]                                   # (samples, P, c) at the last lead
             ith = VARS.index("th")
             sc = float(norm.scale[ith])
             sl = slice(ith * Z, (ith + 1) * Z)
             truth = data["test"].full(m, t0 + n_lead, device=dev)[0, sl].cpu().numpy() * sc
-            pred = ae.decode(state)[0, sl].cpu().numpy() * sc
+            pred = ae.decode(state).mean(0)[sl].cpu().numpy() * sc
             recon = ae(data["test"].full(m, t0 + n_lead, device=dev))[0][0, sl].cpu().numpy() * sc
             zc = level_heights_km(a.source, Z, log)
             sections = {"x": (np.arange(truth.shape[1]) + 0.5) * 0.25, "z": zc,
