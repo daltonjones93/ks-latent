@@ -76,3 +76,24 @@ def test_surface_theta_operator_matches_decoded_state():
     expect = dec[:, VARS.index("th") * Z, [3, 20, 41]].numpy() * nrm.scale[VARS.index("th")]
     np.testing.assert_allclose(got, expect, rtol=1e-12)
     assert np.allclose(op.x_km, [0.875, 5.125, 10.375]) and op.r_var(0.5).tolist() == [0.25] * 3
+
+
+def test_radial_velocity_operator_known_field():
+    from ks_latent.cm1.data import VARS, CM1Member, Normalizer
+    from ks_latent.cm1.obs import RadialVelocity
+    from ks_latent.cm1.physics import BaseState
+    base = BaseState.from_sounding()
+    Z, NX = base.z.size, 1600
+    X = np.ones((1, 4, len(VARS), Z), np.float16)
+    nrm = Normalizer.fit([CM1Member("a", X, np.zeros((1, 4), np.float32), np.zeros(1))])
+    op = RadialVelocity(nrm, base.z, NX, radar_x_km=330.0, tilts_deg=(0.5, 5.0))
+    # beam height: 4/3-Earth model
+    r = np.abs(op.x_km - 330.0) * 1e3
+    np.testing.assert_allclose(op.height_m, r * np.sin(np.deg2rad(np.where(op.cos > np.cos(np.deg2rad(1)), 0.5, 5.0)))
+                               + r**2 / (2 * 4 / 3 * 6.371e6), rtol=1e-12)
+    assert (np.abs(op.x_km - 330.0) <= 150.0).all() and (op.sign[op.x_km < 330] == -1).all()
+    # u' = 10 m/s and w = 2 m/s everywhere: Vr = sign * 10 cos(a) + 2 sin(a), exactly (linear interpolation of constants)
+    u = torch.zeros(len(VARS) * Z, NX, dtype=torch.float64)
+    u[VARS.index("u") * Z:(VARS.index("u") + 1) * Z] = 10.0 / nrm.scale[VARS.index("u")]
+    u[VARS.index("w") * Z:(VARS.index("w") + 1) * Z] = 2.0 / nrm.scale[VARS.index("w")]
+    np.testing.assert_allclose(op.truth_values(u), op.sign * 10.0 * op.cos + 2.0 * op.sin, rtol=1e-10)

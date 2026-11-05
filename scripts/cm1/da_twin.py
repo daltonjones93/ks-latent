@@ -106,10 +106,13 @@ def main():
     ap.add_argument("--loc-km", type=float, nargs="+", default=[5.0, 10.0, 20.0])
     ap.add_argument("--rtps", type=float, nargs="+", default=[0.3, 0.5])
     ap.add_argument("--inflation", type=float, default=1.0)
-    ap.add_argument("--obs-sets", nargs="+", default=["th"], choices=["th", "refl", "th+refl"],
+    ap.add_argument("--obs-sets", nargs="+", default=["th"], choices=["th", "refl", "th+refl", "th+vr", "th+refl+vr"],
                     help="what is assimilated: surface theta', composite reflectivity (needs refl_head.pt), or both")
     ap.add_argument("--refl-km", type=float, default=2.0)
     ap.add_argument("--sigma-refl", type=float, default=5.0)
+    ap.add_argument("--vr-tilts", type=float, nargs="+", default=[0.5, 2.0, 5.0])
+    ap.add_argument("--sigma-vr", type=float, default=2.0)
+    ap.add_argument("--radar-x-km", type=float, default=330.0)
     ap.add_argument("--extra-props", nargs="*", default=[],
                     help="run dirs with propagators trained on the SAME autoencoder (--reuse-ae): multi-model ensemble")
     ap.add_argument("--model-noise", type=float, nargs="+", default=[0.0],
@@ -170,6 +173,7 @@ def main():
         tc = TwinConfig(**base, obs_every_cells=int(round(obs_km / 0.25)), model_noise=mn,
                         assim_theta="th" in oset,
                         refl_every_cells=int(round(a.refl_km / 0.25)) if "refl" in oset else 0, sigma_refl=a.sigma_refl,
+                        vr_tilts=tuple(a.vr_tilts) if "vr" in oset else (), sigma_vr=a.sigma_vr, radar_x_km=a.radar_x_km,
                         letkf=LETKFConfig(loc_km=loc, inflation=a.inflation, rtps=rtps))
         r = run_twin(ae, props, truth, z_truth, Z0, norm, tc, refl_head=refl_head)
         res["runs"][key] = r
@@ -181,6 +185,8 @@ def main():
               + (f"  refl RMSE/echo {s['prior']['refl_obs_rmse']:.1f}/{s['prior']['refl_echo_rmse']:.1f} dBZ "
                  f"(no DA {summ['free']['prior']['refl_obs_rmse']:.1f}/{summ['free']['prior']['refl_echo_rmse']:.1f})"
                  if "refl_obs_rmse" in s["prior"] else "")
+              + (f"  vr RMSE {s['prior']['vr_obs_rmse']:.2f} m/s" if "vr_obs_rmse" in s["prior"] else "")
+              + f"  u {s['prior']['rmse_phys']['u']:.2f} (no DA {summ['free']['prior']['rmse_phys']['u']:.2f})"
               + f"  qliq {s['prior']['rmse_phys']['qliq']:.3f} qice {s['prior']['rmse_phys']['qice']:.3f}"
               f" (no DA {summ['free']['prior']['rmse_phys']['qliq']:.3f}/{summ['free']['prior']['rmse_phys']['qice']:.3f})"
               f"  [{time.time() - t_start:.0f}s]", flush=True)
