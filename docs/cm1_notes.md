@@ -266,3 +266,18 @@ Autoencoder floor 0.024.
 - **Stage C works once its rollouts match the base model's (k ≤ 45).** One fine-tuned model beats the 4-propagator average at 5 and 60 min (−12% at 60 min against the baseline) and ties it at 30. It also has the smallest cold-pool bias and much the best low-level rain FSS. The cost is a worse 30-min front (0.69 vs 0.43 km). Round 1's k ≤ 20 was the problem.
 - **History adds nothing once propagators are averaged** (0.192 / 0.319 / 0.332 vs 0.193 / 0.315 / 0.330), and the twin cannot use it yet. Dropped from the recipe.
 - **Averaging and Stage C don't combine directly:** Stage C also fine-tunes the autoencoder, so 4 Stage-C models have 4 latent spaces. Averaging decoded forecasts works for forecasts; a multi-model DA ensemble needs one shared latent space (fine-tune 4 propagators against one shared autoencoder in Stage C).
+
+## D16 ens_B screen (2026-11-05, Saidie jobs 8761–8765; 46 training storms, 10 test storms spread over moisture × shear, single seed)
+| Run | Skill 5 / 30 / 60 min | θ′ at 60 min | Cold-pool max-C bias | Front 30 / 60 min | Rain FSS at 60 min | Recon |
+|---|---|---|---|---|---|---|
+| S0 baseline (d34 recipe) | 0.265 / 0.400 / 0.385 | 0.83 K | −17.7% | 0.66 / 1.72 km | 0.540 | 0.079 |
+| **S0 + Stage C (k ≤ 45)** | **0.237 / 0.383 / 0.370** | **0.79** | **−14.7%** | 0.77 / 1.87 | **0.569** | 0.083 |
+| S1 + environment conditioning (D11) | 0.265 / 0.399 / 0.388 | 0.83 | −19.1% | 0.76 / 2.04 | 0.496 | 0.079 |
+| S2 + mirrors (D9) | 0.297 / 0.402 / 0.399 | 0.87 | −21.5% | 0.86 / 2.11 | 0.470 | 0.085 |
+| S3 + both | 0.294 / 0.407 / 0.397 | 0.89 | −17.5% | 0.81 / 1.88 | 0.359 | 0.085 |
+
+- **ens_B is harder than ens_A** (baseline 0.265 / 0.400 / 0.385 vs 0.214 / 0.332 / 0.351): more varied storms from fewer storms per environment.
+- **Stage C helps again** (−11% / −4% / −4%), with a smaller cold-pool bias and better rain FSS, and slightly worse fronts, as on ens_A. In the recipe.
+- **Environment conditioning is neutral** on skill and worse on rain FSS. At these leads the storm's own columns seem to carry what the model needs; the environment enters through them.
+- **Mirrors hurt** (+0.03 at 5 min, worse rain FSS), as on ens_A: mirrored storms live in reversed shear, which no test storm has, so they spend capacity on states that never occur. D9 is closed unless D8's held-out-environment test asks for it.
+- **Recipe for the full run:** d34 recipe + Stage C, no environment conditioning, no mirrors (jobs 8797 → 8798).

@@ -165,7 +165,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 - [ ] **D8 (C)** (deps: D10, D11) Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
   - deps: `ens_B`. Done when: error in held-out environments against in-distribution ones.
 
-- [ ] **D9 (C)** **Code done 2026-11-05:** `--mirror` adds the mirrored copy of each training member; `mirror_member` and `env.mirror_env` (u_m = 2·umove − u, umove 12.5 m/s) are tested involutions. The namelist has icor 0, free-slip bottom and no surface fluxes, so the symmetry is exact in the grid frame. Being tested in the ens_B screen (D16). Mirror-image augmentation, after `ens_B` exists (D8).
+- [x] **D9 (C)** **Tested on ens_B (D16 S2/S3): mirrors hurt (+0.03 skill at 5 min, worse rain FSS); not in the recipe.** **Code done 2026-11-05:** `--mirror` adds the mirrored copy of each training member; `mirror_member` and `env.mirror_env` (u_m = 2·umove − u, umove 12.5 m/s) are tested involutions. The namelist has icor 0, free-slip bottom and no surface fluxes, so the symmetry is exact in the grid frame. Being tested in the ens_B screen (D16). Mirror-image augmentation, after `ens_B` exists (D8).
   - With icor = 0 the equations are exactly symmetric under x → −x, u → −u. A mirrored member is a valid storm in mirrored shear.
   - Add an option to `train_cm1.py` that adds mirrored copies of the training members: reverse x, negate u′, reverse `cref`. Test it with a unit test that mirroring twice is the identity.
   - On `ens_A` alone (5-min data, locality test), mirrors did *not* help predict the same environment, because they live in reversed shear.
@@ -173,7 +173,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
 
 - [ ] **D10 (C)** **Environment-based split** for ens_B: `--holdout-env` reads each member's moisture offset and shear scale from the ensemble's `manifest.csv` and keeps a region entirely out of training and validation. Members are otherwise split by name, which would leak held-out environments into training. Needed before D8 and G5.
-- [~] **D11 (C)** **Environment conditioning. Code done 2026-11-05; awaits ens_B for a real test.**
+- [x] **D11 (C)** **Tested on ens_B (D16 S1): neutral on skill, worse rain FSS; not in the recipe.** **Environment conditioning. Code done 2026-11-05.**
   - `ks_latent/cm1/env.py`: features from each member's input sounding minus the reference, (θ, qv, u) on 62 levels, scaled 1 K / 1 g/kg / 5 m/s.
   - The encoder projects them (186 → 16) and broadcasts them as input channels, threaded through Stages A/C, the reports and the twin. `--env-file`, `scripts/cm1/build_env.py`.
   - Files `ens_A.json` and `ens_A2.json` are in `~/cm1_env` on Cashew and Saidie.
@@ -207,7 +207,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - [ ] Train `d15_split` with the `d34_c32_kuniform` recipe (c=32, uniform k ≤ 45) on the split caches.
   - Done when: skill vs persistence at 5 / 30 / 60 min against `d34_c32_kuniform`, scored on the 7 combined variables (sum the species back) so the comparison is like for like; per-species RMSE and storm-column FSS for qr and qs; rain and snow section figures. Watch for: rain and graupel are sparse and fast-falling, so the per-variable RMS scaling may give them too little weight (try a floor on the scale), and c=32 may now be too few latent channels (try c=48).
 
-- [ ] **D16 (C)** **Pick the best model on ens_B, then one full run on all the data** (added 2026-11-05, Dalton: pick the best model before the full run).
+- [ ] **D16 (C)** **Screen done (8761–8765): Stage C wins (0.237 / 0.383 / 0.370 vs 0.265 / 0.400 / 0.385); environment conditioning neutral; mirrors hurt. Full run with d34 recipe + Stage C: jobs 8797 → 8798. Stochastic + Stage C on ens_A: job 8794.** **Pick the best model on ens_B, then one full run on all the data** (added 2026-11-05, Dalton: pick the best model before the full run).
   - **Screen on ens_B alone** (60 storms over moisture −2.0…+0.2 g/kg × shear 0.63…1.40), where the environment varies. The split is explicit (`--val-members` / `--test-members`) and spread over a 3 × 3 grid of moisture × shear:
     - test (10): ens_B mem003, 049, 016 (dry: low / mid / high shear), 054, 022, 017 (middle), 050, 030, 011 (moist), and 044 (the moist, high-shear corner);
     - val (4): mem025, 053, 055, 058;
