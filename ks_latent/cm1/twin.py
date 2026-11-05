@@ -19,6 +19,16 @@ time, so nothing is derived from the truth. Each cycle:
              - front displacement of the decoded-members mean (`verify.displacement_km`);
              - rank of each observation among the members (rank histogram)
 A no-DA run from the same initial ensemble is the baseline (`run_twin(..., assimilate=False)`).
+
+Observations: surface theta' (`assim_theta`, every `obs_every_cells`, error `sigma_obs` K) and/or
+composite reflectivity (`refl_every_cells` > 0, error `sigma_refl` dBZ) through a learned operator
+(`refl.ReflectivityHead`) on the decoded members. Reflectivity observations are CM1's own composite
+reflectivity plus Gaussian noise, clipped at 0 dBZ ("no echo" is a hard floor, so the observation error
+is not Gaussian near zero), so the operator's error is a genuine representation error.
+
+Multi-model ensembles (E3b): `prop` may be a list; member i is forecast by prop[i % len(prop)]. The
+propagators must share the autoencoder (trained with `--reuse-ae` on one run), so that their
+disagreement is model error in one latent space.
 """
 from __future__ import annotations
 
@@ -43,6 +53,9 @@ class TwinConfig:
     letkf: LETKFConfig = field(default_factory=LETKFConfig)
     halo: int = 3
     model_noise: float = 0.0      # std of additive latent noise per forecast step (latent units)
+    assim_theta: bool = True      # assimilate surface theta'
+    refl_every_cells: int = 0     # assimilate composite reflectivity every this many cells (0 = no)
+    sigma_refl: float = 5.0       # dBZ
     seed: int = 0
 
 
@@ -51,8 +64,15 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
     """Advance the latent ensemble `Z` (N, P, c) from frame t by `steps` frames, truth at the edges,
     optionally with additive model-error noise of std `model_noise` per step."""
     P = Z.shape[1]
+    props = prop if isinstance(prop, (list, tuple)) else [prop]
     for j in range(steps):
-        Z = prop(Z)
+        if len(props) == 1:
+            Z = props[0](Z)
+        else:
+            Zn = torch.empty_like(Z)
+            for k, pk in enumerate(props):
+                Zn[k::len(props)] = pk(Z[k::len(props)])
+            Z = Zn
         if model_noise > 0:
             Z = Z + model_noise * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
         if halo > 0:
@@ -63,7 +83,8 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
 
 @torch.no_grad()
 def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: np.ndarray, y: np.ndarray | None,
-            norm: Normalizer, Z_levels: int) -> dict:
+            norm: Normalizer, Z_levels: int, refl_head=None, refl_cols=None, cref_true=None,
+            y_refl=None) -> dict:
     """Scores of ensemble `Z` against the true normalized columns `u_true` (C, NX)."""
     dec = ae.decode(Z)                                       # (N, C, NX)
     mean_dec = dec.mean(0)
@@ -87,16 +108,32 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
            "front_true_km": float(front), "front_disp_km": displacement_km(th_mean, th_true, center_km=front)}
     if y is not None:
         out["ranks"] = (th_mem < y[None, :]).sum(0).tolist()   # rank of each observation among members
+    if refl_head is not None:
+        r_mem = refl_head(dec)[:, refl_cols].double().cpu().numpy()          # (N, m_r)
+        r_true = cref_true[refl_cols]
+        out["refl_obs_rmse"] = float(np.sqrt(np.mean((r_mem.mean(0) - r_true) ** 2)))
+        out["refl_obs_spread"] = float(np.sqrt(np.mean(r_mem.var(0, ddof=1))))
+        echo = r_true > 10
+        out["refl_echo_rmse"] = float(np.sqrt(np.mean((r_mem.mean(0)[echo] - r_true[echo]) ** 2))) if echo.any() else float("nan")
+        if y_refl is not None:
+            out["ranks_refl"] = (r_mem < y_refl[None, :]).sum(0).tolist()
     return out
 
 
 @torch.no_grad()
-def run_twin(ae: ColumnFieldAE, prop: StencilPropagator, truth: ColumnData, z_truth: torch.Tensor,
-             Z0: torch.Tensor, norm: Normalizer, cfg: TwinConfig, assimilate: bool = True) -> dict:
+def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
+             Z0: torch.Tensor, norm: Normalizer, cfg: TwinConfig, assimilate: bool = True,
+             refl_head=None) -> dict:
     """`truth`: ColumnData holding the truth member only (index 0); `z_truth` its encoded latent
     trajectory (T, P, c) (used only for the boundary halo); `Z0` (N, P, c) initial ensemble at frame
     `cfg.t0`. Returns per-cycle prior/analysis scores."""
-    ae.eval(); prop.eval()
+    ae.eval()
+    for pk in (prop if isinstance(prop, (list, tuple)) else [prop]):
+        pk.eval()
+    if cfg.refl_every_cells > 0 and refl_head is None:
+        raise ValueError("refl_every_cells > 0 needs refl_head")
+    if not cfg.assim_theta and cfg.refl_every_cells == 0 and assimilate:
+        raise ValueError("nothing to assimilate")
     dev = Z0.device
     rng = np.random.default_rng(cfg.seed)
     NX, Zl = truth.NX, truth.Z
@@ -107,6 +144,8 @@ def run_twin(ae: ColumnFieldAE, prop: StencilPropagator, truth: ColumnData, z_tr
     P = Z0.shape[1]
     x_site = (np.arange(P) + 0.5) * ae.cfg.patch * 0.25
     r_var = np.full(obs_cols.size, cfg.sigma_obs ** 2)
+    refl_cols = np.arange(cfg.refl_every_cells // 2, NX, cfg.refl_every_cells) if cfg.refl_every_cells else obs_cols
+    x_refl = (refl_cols + 0.5) * 0.25
     T_last = cfg.t0 + cfg.n_cycles * cfg.steps_per_cycle
     if T_last >= truth.T[0]:
         raise ValueError(f"truth has {truth.T[0]} frames; the experiment needs {T_last + 1}")
@@ -119,17 +158,32 @@ def run_twin(ae: ColumnFieldAE, prop: StencilPropagator, truth: ColumnData, z_tr
         t1 = t + cfg.steps_per_cycle
         u_true = truth.full(0, t1, device=dev)[0]
         y = (u_true[ith, obs_cols] * s_th).double().cpu().numpy() + rng.normal(0.0, cfg.sigma_obs, obs_cols.size)
-        rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl)}
+        cref_true = truth.cref[0][t1].clamp(min=0).double().numpy()
+        y_refl = None
+        if cfg.refl_every_cells:
+            y_refl = np.clip(cref_true[refl_cols] + rng.normal(0.0, cfg.sigma_refl, refl_cols.size), 0.0, None)
+        sk = dict(refl_head=refl_head, refl_cols=refl_cols, cref_true=cref_true, y_refl=y_refl)
+        rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)}
         if assimilate:
-            Yb = (ae.decode(Z)[:, ith, obs_cols] * s_th).double().cpu().numpy()
-            Za = letkf_analysis(Z.double().cpu().numpy(), Yb, y, r_var, x_site, x_obs, cfg.letkf)
+            dec = ae.decode(Z)
+            Ys, ys, rs, xs = [], [], [], []
+            if cfg.assim_theta:
+                Ys.append((dec[:, ith, obs_cols] * s_th).double().cpu().numpy()); ys.append(y)
+                rs.append(r_var); xs.append(x_obs)
+            if cfg.refl_every_cells:
+                Ys.append(refl_head(dec)[:, refl_cols].double().cpu().numpy()); ys.append(y_refl)
+                rs.append(np.full(refl_cols.size, cfg.sigma_refl ** 2)); xs.append(x_refl)
+            Za = letkf_analysis(Z.double().cpu().numpy(), np.concatenate(Ys, 1), np.concatenate(ys),
+                                np.concatenate(rs), x_site, np.concatenate(xs), cfg.letkf)
             Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)
-            rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl)
+            rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
         hist.append(rec)
     return {"config": {"t0": cfg.t0, "n_cycles": cfg.n_cycles, "steps_per_cycle": cfg.steps_per_cycle,
                        "obs_every_cells": cfg.obs_every_cells, "sigma_obs": cfg.sigma_obs,
                        "loc_km": cfg.letkf.loc_km, "inflation": cfg.letkf.inflation, "rtps": cfg.letkf.rtps,
-                       "model_noise": cfg.model_noise,
+                       "model_noise": cfg.model_noise, "assim_theta": cfg.assim_theta,
+                       "refl_every_cells": cfg.refl_every_cells, "sigma_refl": cfg.sigma_refl,
+                       "n_models": len(prop) if isinstance(prop, (list, tuple)) else 1,
                        "n_members": int(Z0.shape[0]), "n_obs": int(obs_cols.size), "assimilate": assimilate},
             "cycles": hist}
 
@@ -146,6 +200,9 @@ def summarize_twin(res: dict) -> dict:
                       "th_obs_rmse": g("th_obs_rmse"), "th_obs_spread": g("th_obs_spread"),
                       "front_abs_disp_km_median": float(np.nanmedian([abs(c[stage]["front_disp_km"]) for c in cyc])),
                       "rmse_phys": {v: float(np.mean([c[stage]["rmse_phys_mean_dec"][v] for c in cyc])) for v in VARS}}
+        for k in ("refl_obs_rmse", "refl_obs_spread", "refl_echo_rmse"):
+            if k in cyc[0][stage]:
+                out[stage][k] = float(np.nanmean([c[stage][k] for c in cyc]))
         if "ranks" in cyc[0][stage]:
             N = res["config"]["n_members"]
             ranks = np.concatenate([c[stage]["ranks"] for c in cyc])

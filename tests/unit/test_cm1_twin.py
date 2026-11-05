@@ -78,3 +78,25 @@ def test_model_noise_keeps_spread(setup):
     inner = slice(1, -1)
     assert yes[:, inner].std(0).mean() > no[:, inner].std(0).mean()
     torch.testing.assert_close(yes[:, :1], no[:, :1])          # the halo still carries the truth exactly
+
+
+def test_reflectivity_and_multimodel(setup):
+    from ks_latent.cm1.refl import ReflectivityHead, ReflHeadConfig
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    head = ReflectivityHead(ReflHeadConfig(n_channels=7 * Zl, hidden=8, layers=2)).eval()
+    g = torch.Generator().manual_seed(2)
+    Zs = z_truth[3][None] + 1.0 * torch.randn(30, *z_truth.shape[1:], generator=g)
+    cfg = TwinConfig(t0=3, n_cycles=3, steps_per_cycle=2, halo=1, assim_theta=False, refl_every_cells=8,
+                     letkf=LETKFConfig(loc_km=6.0, rtps=0.5))
+    r = run_twin(ae, prop, truth, z_truth, Zs, nrm, cfg, refl_head=head)
+    c = r["cycles"][-1]
+    assert "refl_obs_rmse" in c["prior"] and len(c["prior"]["ranks_refl"]) == NX // 8
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Zs, nrm, cfg)                 # reflectivity needs the head
+    p2 = StencilPropagator(StencilPropConfig(latent_channels=4, hidden=8, layers=1, radius=1)).eval()
+    torch.nn.init.normal_(p2.head.weight, std=0.5)
+    Zm = _forecast([prop, p2], Zs, z_truth, 3, 1, halo=1)
+    torch.testing.assert_close(Zm[0::2], _forecast(prop, Zs[0::2], z_truth, 3, 1, halo=1))
+    torch.testing.assert_close(Zm[1::2], _forecast(p2, Zs[1::2], z_truth, 3, 1, halo=1))
+    rm = run_twin(ae, [prop, p2], truth, z_truth, Zs, nrm, TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, halo=1))
+    assert rm["config"]["n_models"] == 2

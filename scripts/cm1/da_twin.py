@@ -106,6 +106,12 @@ def main():
     ap.add_argument("--loc-km", type=float, nargs="+", default=[5.0, 10.0, 20.0])
     ap.add_argument("--rtps", type=float, nargs="+", default=[0.3, 0.5])
     ap.add_argument("--inflation", type=float, default=1.0)
+    ap.add_argument("--obs-sets", nargs="+", default=["th"], choices=["th", "refl", "th+refl"],
+                    help="what is assimilated: surface theta', composite reflectivity (needs refl_head.pt), or both")
+    ap.add_argument("--refl-km", type=float, default=2.0)
+    ap.add_argument("--sigma-refl", type=float, default=5.0)
+    ap.add_argument("--extra-props", nargs="*", default=[],
+                    help="run dirs with propagators trained on the SAME autoencoder (--reuse-ae): multi-model ensemble")
     ap.add_argument("--model-noise", type=float, nargs="+", default=[0.0],
                     help="additive latent noise std per forecast step (spread maintenance); several = sweep")
     ap.add_argument("--device", default="auto")
@@ -116,6 +122,19 @@ def main():
     dev = get_device(a.device)
     run = Path(a.run).expanduser()
     ae, prop, norm, cfg, split = load_run(run, dev)
+    props = [prop]
+    for d in a.extra_props:
+        d = Path(d).expanduser()
+        a2, p2, _, c2, _ = load_run(d, dev)
+        if c2["ae"] != cfg["ae"] or any(not torch.equal(x, y) for x, y in zip(a2.state_dict().values(), ae.state_dict().values())):
+            raise ValueError(f"{d} does not share the autoencoder of {run}: multi-model needs --reuse-ae runs")
+        props.append(p2)
+    refl_head = None
+    if any("refl" in s for s in a.obs_sets):
+        from ks_latent.cm1.refl import ReflectivityHead, ReflHeadConfig
+        ck = torch.load(run / "refl_head.pt", map_location=dev)
+        refl_head = ReflectivityHead(ReflHeadConfig(**ck["cfg"])).to(dev)
+        refl_head.load_state_dict(ck["state_dict"]); refl_head.eval()
     files = member_files(a.source)
     truth_name = a.truth or split["test"][0]
     ens_names = split["train"][: a.n_members or None]
@@ -140,21 +159,31 @@ def main():
     halo = cfg["stage_b"]["halo_sites"]
     base = dict(t0=t0, n_cycles=n_cycles, steps_per_cycle=spc, sigma_obs=a.sigma_obs, halo=halo, seed=a.seed)
     res = {"truth": truth_name, "ensemble": ens_names, "run": str(run), "dt_s": dt, "ae_floor_nmse": floor,
-           "free": run_twin(ae, prop, truth, z_truth, Z0, norm, TwinConfig(**base), assimilate=False), "runs": {}}
+           "n_models": len(props),
+           "free": run_twin(ae, props, truth, z_truth, Z0, norm, TwinConfig(**base), assimilate=False,
+                            refl_head=refl_head), "runs": {}}
     summ = {"free": summarize_twin(res["free"]), "runs": {}}
     print(f"[e3] no DA: forecast nMSE (2nd half) {summ['free']['prior']['nmse_mean_dec']:.3f}; "
           f"autoencoder floor {np.mean(floor[n_cycles // 2:]):.3f}  [{time.time() - t_start:.0f}s]")
-    for obs_km, loc, rtps, mn in itertools.product(a.obs_km, a.loc_km, a.rtps, a.model_noise):
-        key = f"obs{obs_km:g}km_loc{loc:g}km_rtps{rtps:g}_mn{mn:g}"
+    for oset, obs_km, loc, rtps, mn in itertools.product(a.obs_sets, a.obs_km, a.loc_km, a.rtps, a.model_noise):
+        key = f"{oset}_obs{obs_km:g}km_loc{loc:g}km_rtps{rtps:g}_mn{mn:g}" + (f"_{len(props)}models" if len(props) > 1 else "")
         tc = TwinConfig(**base, obs_every_cells=int(round(obs_km / 0.25)), model_noise=mn,
+                        assim_theta="th" in oset,
+                        refl_every_cells=int(round(a.refl_km / 0.25)) if "refl" in oset else 0, sigma_refl=a.sigma_refl,
                         letkf=LETKFConfig(loc_km=loc, inflation=a.inflation, rtps=rtps))
-        r = run_twin(ae, prop, truth, z_truth, Z0, norm, tc)
+        r = run_twin(ae, props, truth, z_truth, Z0, norm, tc, refl_head=refl_head)
         res["runs"][key] = r
         s = summarize_twin(r); summ["runs"][key] = s
         print(f"[e3] {key:28s} forecast nMSE {s['prior']['nmse_mean_dec']:.3f}  analysis {s['analysis']['nmse_mean_dec']:.3f}  "
               f"th obs RMSE/spread {s['prior']['th_obs_rmse']:.2f}/{s['prior']['th_obs_spread']:.2f} K  "
               f"w {s['prior']['rmse_phys']['w']:.2f} (no DA {summ['free']['prior']['rmse_phys']['w']:.2f})  "
-              f"front |disp| {s['prior']['front_abs_disp_km_median']:.2f} km  [{time.time() - t_start:.0f}s]", flush=True)
+              f"front |disp| {s['prior']['front_abs_disp_km_median']:.2f} km"
+              + (f"  refl RMSE/echo {s['prior']['refl_obs_rmse']:.1f}/{s['prior']['refl_echo_rmse']:.1f} dBZ "
+                 f"(no DA {summ['free']['prior']['refl_obs_rmse']:.1f}/{summ['free']['prior']['refl_echo_rmse']:.1f})"
+                 if "refl_obs_rmse" in s["prior"] else "")
+              + f"  qliq {s['prior']['rmse_phys']['qliq']:.3f} qice {s['prior']['rmse_phys']['qice']:.3f}"
+              f" (no DA {summ['free']['prior']['rmse_phys']['qliq']:.3f}/{summ['free']['prior']['rmse_phys']['qice']:.3f})"
+              f"  [{time.time() - t_start:.0f}s]", flush=True)
     res["summary"] = summ
     res["best"] = min(summ["runs"], key=lambda k: summ["runs"][k]["prior"]["nmse_mean_dec"])
     (out / "twin.json").write_text(json.dumps(res))
