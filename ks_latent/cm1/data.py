@@ -114,6 +114,22 @@ class Normalizer:
         return np.repeat(self.scale, n_levels)  # (V*Z,), variable-major
 
 
+MIRROR_SUFFIX = "_mirror"
+
+
+def mirror_member(m: CM1Member) -> CM1Member:
+    """D9: the x-mirrored storm. With icor = 0, a free-slip lower boundary and no surface fluxes, the
+    equations in the moving grid's frame are symmetric under x -> -x, u -> -u, so the mirror image is
+    a valid storm in the mirrored environment. Columns are perturbations from the far-field t=0 column,
+    so only u' changes sign; every other variable is reversed in x only. Mirroring twice is the
+    identity (`mirror_member(mirror_member(m))` has the original data and name)."""
+    vs = vars_for(m.X.shape[2])
+    X = m.X[:, ::-1].copy()
+    X[:, :, vs.index("u")] *= -1
+    name = m.name[:-len(MIRROR_SUFFIX)] if m.name.endswith(MIRROR_SUFFIX) else m.name + MIRROR_SUFFIX
+    return CM1Member(name=name, X=X, cref=m.cref[:, ::-1].copy(), t=m.t.copy())
+
+
 def positive_channel_mask(n_levels: int, vars_: tuple = VARS) -> torch.Tensor:
     """Boolean (V*Z,) mask of the non-negative (condensate) channels. Pass `norm.vars` (or
     `vars_for(n_channels // n_levels)`) for data that may use the split species set."""
@@ -242,9 +258,9 @@ def synthetic_members(n: int, T: int = 24, NX: int = 256, Z: int = 8, dt: float 
         for t in range(T):
             X[t] = np.sin(k[None] * (x[:, None, None] - 0.5 * t) + ph[None]).astype(np.float32)
         X += 0.1 * rng.normal(size=X.shape).astype(np.float32)
-        for i, v in enumerate(names):
+        for j, v in enumerate(names):
             if v in POSITIVE_VARS:
-                X[:, :, i] = np.abs(X[:, :, i])
+                X[:, :, j] = np.abs(X[:, :, j])
         cref = np.zeros((T, NX), np.float32)
         cref[:, NX // 2 - 16:NX // 2 + 16] = 30.0
         out.append(CM1Member(name=f"syn{i:03d}", X=X.astype(np.float16), cref=cref, t=np.arange(T) * dt))

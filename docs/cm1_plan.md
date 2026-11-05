@@ -165,7 +165,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 - [ ] **D8 (C)** (deps: D10, D11) Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
   - deps: `ens_B`. Done when: error in held-out environments against in-distribution ones.
 
-- [ ] **D9 (C)** Mirror-image augmentation, after `ens_B` exists (D8).
+- [ ] **D9 (C)** **Code done 2026-11-05:** `--mirror` adds the mirrored copy of each training member; `mirror_member` and `env.mirror_env` (u_m = 2·umove − u, umove 12.5 m/s) are tested involutions. The namelist has icor 0, free-slip bottom and no surface fluxes, so the symmetry is exact in the grid frame. Being tested in the ens_B screen (D16). Mirror-image augmentation, after `ens_B` exists (D8).
   - With icor = 0 the equations are exactly symmetric under x → −x, u → −u. A mirrored member is a valid storm in mirrored shear.
   - Add an option to `train_cm1.py` that adds mirrored copies of the training members: reverse x, negate u′, reverse `cref`. Test it with a unit test that mirroring twice is the identity.
   - On `ens_A` alone (5-min data, locality test), mirrors did *not* help predict the same environment, because they live in reversed shear.
@@ -199,13 +199,24 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - (c) a stochastic propagator trained on CRPS, which learns its own spread for DA and usually lowers ensemble-mean error.
 
   Report each against the same baseline.
-- [ ] **D15 (C)** **Rain, snow and graupel as separate model variables** (added 2026-11-05).
+- [–] **D15 (C)** **Deferred (Dalton, 2026-11-05): saved for later; the split-cache build was cancelled. The code stays in place.** **Rain, snow and graupel as separate model variables** (added 2026-11-05).
   - Why: the 7-variable state lumps cloud water + rain into `qliq` and cloud ice + snow + graupel into `qice`, so the model cannot forecast rain or snow separately, and the reflectivity head has to guess the species mix. Hydrometeor species are also what a radar operator and a precipitation forecast need.
   - State: 10 variables, `VARS_SPLIT = (u, w, θ′, qv′, p′, qc, qr, qi, qs, qg)`, each condensate species as sqrt(g/kg); 620 channels instead of 434. The first five variables are unchanged.
   - **Code: done.** `io.transform(split=True)`, `data.vars_for(V)` (picks the set from the data's shape), `Normalizer.vars`, positivity mask, reports, physics (condensate sums all species present), twin scores, `plot_sections.py` styles for qc/qr/qi/qs/qg, `build_cache.py --split`. Test `test_split_species_pipeline_and_physics`: the species sums reproduce the 7-variable condensate mass and low-level liquid exactly; on the 1-min scratch run the split recombines to 2e-7.
   - [ ] Build split caches from the raw GrADS on Cashew (`~/cm1_cache_split`, `~/cm1_cache_A2_split`; ens_B once done), copy to Saidie.
   - [ ] Train `d15_split` with the `d34_c32_kuniform` recipe (c=32, uniform k ≤ 45) on the split caches.
   - Done when: skill vs persistence at 5 / 30 / 60 min against `d34_c32_kuniform`, scored on the 7 combined variables (sum the species back) so the comparison is like for like; per-species RMSE and storm-column FSS for qr and qs; rain and snow section figures. Watch for: rain and graupel are sparse and fast-falling, so the per-variable RMS scaling may give them too little weight (try a floor on the scale), and c=32 may now be too few latent channels (try c=48).
+
+- [ ] **D16 (C)** **Pick the best model on ens_B, then one full run on all the data** (added 2026-11-05, Dalton: pick the best model before the full run).
+  - **Screen on ens_B alone** (60 storms over moisture −2.0…+0.2 g/kg × shear 0.63…1.40), where the environment varies. The split is explicit (`--val-members` / `--test-members`) and spread over a 3 × 3 grid of moisture × shear:
+    - test (10): ens_B mem003, 049, 016 (dry: low / mid / high shear), 054, 022, 017 (middle), 050, 030, 011 (moist), and 044 (the moist, high-shear corner);
+    - val (4): mem025, 053, 055, 058;
+    - train: the other 46.
+  - Runs, all with the `d34_c32_kuniform` recipe (c 32, k ≤ 45 uniform): S0 baseline; S1 + environment conditioning (D11); S2 + mirrors (D9); S3 both.
+  - In parallel on the other GPU: round 2 on ens_A (Stage C k ≤ 45, job 8753; history propagators averaged, 8754–8757).
+  - Then pick the recipe: the best of S0–S3, plus Stage C or history if round 2 shows a real gain. Averaging 4 propagators (D14a) is applied to the final model either way.
+  - **Full run:** ens_A + ens_A2 + ens_B (121 storms). Test: ens_A mem029–030, ens_A2 mem001–010 (the G1 DA truths, so DA results stay paired) and the 10 ens_B test storms. Val: ens_A mem028, ens_A2 mem011 and the 4 ens_B val storms.
+  - Done when: skill vs persistence at 5 / 30 / 60 min, cold-pool bias and fronts for S0–S3 in one table, and the full run scored on the same ens_B test storms.
 
 ## E. Latent DA twin experiments (the Paper III core)
 - [x] **E1 (C)** Observation operators — done 2026-11-05.

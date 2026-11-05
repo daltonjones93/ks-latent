@@ -392,3 +392,34 @@ def test_split_species_pipeline_and_physics():
     C[6] = np.sqrt(S[7] ** 2 + S[8] ** 2 + S[9] ** 2)               # qice = sqrt(qi + qs + qg)
     np.testing.assert_allclose(condensate_mass(S, base), condensate_mass(C, base), rtol=1e-12)
     np.testing.assert_allclose(low_level_liquid(S, base), low_level_liquid(C, base), rtol=1e-12)
+
+
+def test_synthetic_member_names_are_unique():
+    from ks_latent.cm1.data import synthetic_members
+    assert [m.name for m in synthetic_members(4, T=4, NX=32, Z=2)] == ["syn000", "syn001", "syn002", "syn003"]
+
+
+def test_mirror_member_and_env_are_involutions():
+    """D9: mirroring reverses x, negates only u', and twice is the identity (data, name, env)."""
+    from ks_latent.cm1.data import mirror_member, synthetic_members
+    from ks_latent.cm1.env import UMOVE, mirror_env
+    from ks_latent.cm1.physics import BaseState
+    m = synthetic_members(1, T=5, NX=64, Z=4)[0]
+    mm = mirror_member(m)
+    assert mm.name == m.name + "_mirror"
+    np.testing.assert_array_equal(mm.X[:, :, 0], -m.X[:, ::-1, 0])
+    np.testing.assert_array_equal(mm.X[:, :, 1:], m.X[:, ::-1, 1:])
+    np.testing.assert_array_equal(mm.cref, m.cref[:, ::-1])
+    back = mirror_member(mm)
+    assert back.name == m.name
+    np.testing.assert_array_equal(back.X, m.X)
+    Zr = BaseState.from_sounding().z.size
+    f = np.random.default_rng(0).normal(size=3 * Zr).astype(np.float32)
+    np.testing.assert_allclose(mirror_env(mirror_env(f)), f, atol=1e-5)
+    np.testing.assert_array_equal(mirror_env(f)[:2 * Zr], f[:2 * Zr])
+    # a sounding moving with the grid (u = umove everywhere) is its own mirror image
+    from ks_latent.cm1.env import SCALES, _profiles
+    from ks_latent.cm1.physics import BASE_SOUNDING
+    u_ref = _profiles(BASE_SOUNDING)[:, 3]
+    g = np.zeros(3 * Zr, np.float32); g[2 * Zr:] = (UMOVE - u_ref) / SCALES[2]
+    np.testing.assert_allclose(mirror_env(g), g, atol=1e-5)

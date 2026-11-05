@@ -37,6 +37,22 @@ def sounding_env(path, ref=BASE_SOUNDING) -> np.ndarray:
     return f.T.reshape(-1).astype(np.float32)                        # variable-major
 
 
+UMOVE = 12.5   # m/s, the moving grid's speed in every ensemble (namelist umove)
+
+
+def mirror_env(f: np.ndarray, umove: float = UMOVE, ref=BASE_SOUNDING) -> np.ndarray:
+    """Environment features of the x-mirrored member (D9). Mirroring negates the grid-relative wind,
+    u - umove -> -(u - umove), so the ground-relative sounding becomes u_m = 2 umove - u; theta and qv
+    are unchanged. With u = u_ref + 5 f_u: f_u,m = (2 umove - 2 u_ref) / 5 - f_u. An involution."""
+    f = np.asarray(f, np.float32).copy()
+    u_ref = _profiles(ref)[:, 3]
+    Z = u_ref.size
+    if f.size != 3 * Z:
+        raise ValueError(f"{f.size} features, expected 3 x {Z} levels")
+    f[2 * Z:] = (2 * umove - 2 * u_ref) / SCALES[2] - f[2 * Z:]
+    return f
+
+
 def build_env_file(ens_dir, out_json, name_prefix: str = "") -> dict:
     """{prefix + member: features} for every member directory with a sounding."""
     out = {}

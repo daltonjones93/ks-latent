@@ -229,6 +229,10 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-val", type=int, default=1)
     ap.add_argument("--n-test", type=int, default=2)
+    ap.add_argument("--val-members", default="", help="'+'-separated member names for validation (overrides --n-val)")
+    ap.add_argument("--test-members", default="", help="'+'-separated member names for test (overrides --n-test)")
+    ap.add_argument("--mirror", action="store_true",
+                    help="D9: add the x-mirrored copy of every training member (reverse x, negate u')")
     ap.add_argument("--max-train", type=int, default=0,
                     help="use only this many training members (seeded random subset; val/test unchanged)")
     ap.add_argument("--max-frames", type=int, default=0)
@@ -295,7 +299,16 @@ def main():
     if a.profile == "smoke":
         members = members[:3]
     names = [m.name for m in members]
-    tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
+    if a.val_members or a.test_members:
+        va_n = [n for n in a.val_members.split("+") if n]
+        te_n = [n for n in a.test_members.split("+") if n]
+        missing = sorted(set(va_n + te_n) - set(names))
+        if missing or set(va_n) & set(te_n) or not va_n or not te_n:
+            raise ValueError(f"bad explicit split: missing {missing}, overlap {sorted(set(va_n) & set(te_n))}, "
+                             f"{len(va_n)} val, {len(te_n)} test (both lists are needed)")
+        tr_n = [n for n in names if n not in set(va_n + te_n)]
+    else:
+        tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
     if a.max_train and a.max_train < len(tr_n):
         rs = np.random.default_rng(1000 + a.seed)
         tr_n = sorted(rs.choice(tr_n, a.max_train, replace=False).tolist(), key=_natural_key)
@@ -325,6 +338,16 @@ def main():
         log(f"[cm1] environment-conditioned encoder: {cfg.ae.env_raw_dim} features per member from {a.env_file}")
         if not a.eval_only and not a.init_from:
             (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
+    if a.mirror:   # training members only; val/test stay real storms
+        from ks_latent.cm1.data import mirror_member
+        mir = [mirror_member(m) for m in pick(tr_n)]
+        members += mir
+        tr_n = tr_n + [m.name for m in mir]
+        if env is not None:
+            from ks_latent.cm1.env import mirror_env
+            for m in mir:
+                env[m.name] = mirror_env(env[mirror_member(m).name])
+        log(f"[cm1] D9 mirrors: {len(mir)} mirrored training members added ({len(tr_n)} in training)")
     data = {k: ColumnData(pick(n), norm, data_dev, env=env) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
