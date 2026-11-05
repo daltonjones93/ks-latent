@@ -215,3 +215,23 @@ Joint wins: w reconstruction error is 2× lower with the joint encoder, and fore
 - Skill relative to persistence at 5 / 30 / 60 min: 28 members 0.214 / 0.332 / 0.350, 58 members 0.206 / 0.328 / 0.347.
 - θ′ and front metrics are mixed. ens_A2 adds members with other noise seeds.
 - **Caution:** raw nMSE across runs with different training sets is not comparable, because the per-variable normalization differs.
+
+## Model ideas, round 1 (2026-11-05, Saidie jobs 8718–8723; ens_A, single seed, baseline d34_c32_kuniform)
+Skill = forecast nMSE / persistence nMSE (lower is better). Single-seed noise is ~±0.01–0.02.
+
+| Run | Skill 5 / 30 / 60 min | θ′ at 60 min | Cold-pool max-C bias | Front 30 / 60 min | Rain FSS at 60 min |
+|---|---|---|---|---|---|
+| baseline | 0.214 / 0.332 / 0.351 | 0.83 K | −17.3% | 0.43 / 1.21 km | 0.696 |
+| **D14a, average of 4 propagators** | **0.193 / 0.315 / 0.330** | **0.78** | −19.6% | 0.47 / 1.06 | **0.704** |
+| D12, Stage C (k ≤ 20, 4000 steps) | 0.191 / 0.337 / 0.350 | 0.86 | −17.3% | 0.56 / 1.53 | 0.678 |
+| D12, Stage C + θ′ sfc weight 2 | 0.192 / 0.338 / 0.351 | 0.85 | −17.1% | 0.57 / 1.57 | 0.678 |
+| D13, 2-frame history | 0.207 / 0.347 / 0.345 | 0.80 | −18.6% | 0.47 / **0.72** | 0.701 |
+| D14c, stochastic CRPS (mean of 8) | 0.257 / 0.383 / 0.369 | 0.83 | **−10.1%** | 0.71 / 1.94 | 0.647 |
+| D14b, vertical front end | 0.203 / 0.337 / 0.346 | 0.84 | −17.5% | 0.43 / 1.22 | 0.683 |
+
+- **Averaging is best and consistent:** 5–10% lower error at all leads.
+- **History gives the best long-lead fronts.**
+- **Stage C at k ≤ 20 helps only at 5 min, and the cold-pool weighting does nothing.** It is probably misconfigured: the baseline was trained to k 45. Retry with k ≤ 45 and 15 000 steps (job 8753).
+- **The stochastic propagator is worse on mean error** but halves the cold-pool bias; its samples keep intensity.
+- **The vertical front end is neutral.**
+- **Next:** Stage C with k ≤ 45 (8753), and an average of 4 history propagators (8754–8757).

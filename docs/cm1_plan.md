@@ -182,13 +182,18 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - Problem: columns are perturbations from each member's own far-field t=0 column, which removes the base moisture and shear that distinguish ens_B storms.
   - Fix: append the member's base profiles (u₀(z), qv₀(z), θ₀(z)) as extra input channels, constant in x and not reconstructed, to the encoder and propagator; or condition the propagator on a small learned environment embedding.
   - Test on ens_A (should be neutral) and ens_B (should help). Needed for a fair D8/G5.
-- [ ] **D12 (C)** **Queued on Saidie (chain, one GPU at a time): jobs 8719 (Stage C) and 8720 (Stage C + near-surface θ′ weight 2).** **Stage C: joint fine-tuning on a decoded multi-step rollout loss** (encoder + propagator + decoder; error on physical columns over k steps).
+- [ ] **D12 (C)** **Round 1 (jobs 8719/8720, k ≤ 20, 4000 steps): skill only at 5 min (0.191 vs 0.214); 30/60 unchanged, fronts worse, the near-surface weight does not reduce the cold-pool bias. Retry with k ≤ 45, 15 000 steps: job 8753.** **Stage C: joint fine-tuning on a decoded multi-step rollout loss** (encoder + propagator + decoder; error on physical columns over k steps).
   - Why: Stage B minimizes latent error, weighting latent directions equally rather than by physical importance. Decoded-space targets also avoid the documented latent-target collapse.
   - Keep the log-det anti-collapse term on the latents. Optionally up-weight θ′ below ~1 km against the cold-pool bias (G10).
   - Done when: skill vs persistence at 5 / 30 / 60 min and max-C bias, against `d34_c32_kuniform`.
-- [ ] **D13 (C)** **Queued: job 8721 (2-frame history, Stage B on the d34 autoencoder).** **History in the propagator:** 2–3 past frames as input, reusing the codebase's history-mode propagator ideas. Unresolved sub-site convection appears as memory (Mori–Zwanzig).
+- [ ] **D13 (C)** **Round 1 (job 8721): best long-lead fronts (0.72 vs 1.21 km at 60 min), skill 0.345 vs 0.351 at 60, slightly worse at 30. Averaging 4 history propagators: jobs 8754–8757.** **History in the propagator:** 2–3 past frames as input, reusing the codebase's history-mode propagator ideas. Unresolved sub-site convection appears as memory (Mori–Zwanzig).
   - Done when: same table as D12.
-- [ ] **D14 (C)** **Queued:** (a) job 8718 (average of 4 propagators, evaluation only); (c) job 8722 (stochastic, 4 noise channels, CRPS with 4 samples); (b) job 8723 (vertical front end, 16 channels, full retrain). **Lower-cost improvements:**
+- [ ] **D14 (C)** **Round 1:**
+  - (a) **averaging 4 propagators is the best single idea:** skill 0.193 / 0.315 / 0.330 vs 0.214 / 0.332 / 0.351;
+  - (c) the stochastic CRPS propagator is worse on mean error but halves the cold-pool bias (−10% vs −17%);
+  - (b) the vertical front end is neutral.
+
+  Details in `cm1_notes.md`. **Lower-cost improvements:**
   - (a) average the forecasts of several independently trained propagators (the 4 E3b ones exist), as a forecast ensemble mean;
   - (b) vertical 1D convolutions within each variable's column before the encoder mixes channels;
   - (c) a stochastic propagator trained on CRPS, which learns its own spread for DA and usually lowers ensemble-mean error.
