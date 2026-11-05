@@ -182,7 +182,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
     - the unobserved w is not improved yet, and the analysis is sometimes worse than the prior over all variables. Both are expected with 7 members; the 28-member run decides.
   - Original task: a held-out member is the truth, surface θ′ every 2 km every 5 min is observed, with a 30-member latent ensemble.
   - Done when: analysis and forecast error against a free run and against the truth-member spread, consistency ratio, rank histograms.
-- [ ] **E3b (C)** Spread from model disagreement: a multi-model ensemble that cycles members through the 6 trained propagators (D3/D4 variants) instead of, or as well as, additive noise. Compare calibration and error with E3.
+- [ ] **E3b (C)** **Running:** 3 propagators on `d34_c32_kuniform`'s autoencoder (seeds 1–3; Saidie jobs 8702–8704; a first attempt failed on a too-strict config check, now fixed), then the multi-model twin (8705: θ′ + reflectivity, model noise 0 and 0.05). Spread from model disagreement: a multi-model ensemble that cycles members through the 6 trained propagators (D3/D4 variants) instead of, or as well as, additive noise. Compare calibration and error with E3.
 - [ ] **E3c (C)** Shifted tilings (Paper II): 4 offsets of the patch lattice (2/4/6 cells; non-periodic, so pad at the edges), each cycling independently and blended only for output.
   - Expectation: a modest gain only. The autoencoder floor (0.022) is small against the forecast error (~0.30), and tilings do not add model-error spread; each tiling collapses on its own.
 - [x] **E4 (C)** **Done 2026-11-05 (Saidie job 8697, 36 configs in 1.3 min).** 28 members, truth mem029, observations every 2 km every 5 min (θ′ σ 0.5 K; reflectivity σ 5 dBZ, clipped at 0). Second-half means:
@@ -198,7 +198,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - **Reflectivity alone degrades θ′** through spurious ensemble correlations; θ′ observations anchor it.
   - **w is barely constrained:** neither observation type sees the wind.
   - **Best setting:** loc 5–10 km, RTPS 0.9, model noise 0.05.
-- [ ] **E4b (C)** Doppler radial-velocity observations. In the 2D slice a low-elevation beam measures ≈ u cos α + w sin α: linear in the decoded state, with α from radar geometry (a radar at a fixed x, beam elevation 0.5–2°). Add it to the twin with θ′ + reflectivity, and see whether w and u improve.
+- [ ] **E4b (C)** **Built 2026-11-05** (`obs.py RadialVelocity`, known-field test). Local test, 7 members: θ′ + reflectivity + radial velocity gives forecast nMSE 0.307 vs 0.333 for θ′ alone, u 2.84 → 2.23 m/s, w unchanged. **Running: Saidie job 8701.** Doppler radial-velocity observations. In the 2D slice a low-elevation beam measures ≈ u cos α + w sin α: linear in the decoded state, with α from radar geometry (a radar at a fixed x, beam elevation 0.5–2°). Add it to the twin with θ′ + reflectivity, and see whether w and u improve.
   - Original E4 task: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
 - [ ] **E5 (D+C)** Decide the Paper III framing from E3–E4: what is claimed, against which baselines.
