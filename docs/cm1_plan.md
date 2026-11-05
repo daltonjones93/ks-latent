@@ -148,7 +148,9 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
 
 ## E. Latent DA twin experiments (the Paper III core)
-- [~] **E1 (C)** Observation operators. **(a) done 2026-11-05:** `ks_latent/cm1/obs.py SurfaceTheta`, tested against the decoded field. (b) reflectivity head still to do.
+- [x] **E1 (C)** Observation operators — done 2026-11-05.
+  - (a) `obs.py SurfaceTheta`.
+  - (b) `refl.py ReflectivityHead`: a per-column net to composite reflectivity, trained on true columns of the training members (Saidie job 8696, 8000 steps). Test RMSE is 1.34 dBZ on true columns and 1.63 on decoded columns (echo columns: 2.00 / 2.47).
   - (a) Surface θ′ at selected columns: linear in the decoded state.
   - (b) Reflectivity: a small learned column head from decoded condensate to dBZ, trained against CM1's own `dbz`. Its error is measured.
   - Done when: both operators are tested, with the reflectivity head's error reported.
@@ -183,7 +185,21 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 - [ ] **E3b (C)** Spread from model disagreement: a multi-model ensemble that cycles members through the 6 trained propagators (D3/D4 variants) instead of, or as well as, additive noise. Compare calibration and error with E3.
 - [ ] **E3c (C)** Shifted tilings (Paper II): 4 offsets of the patch lattice (2/4/6 cells; non-periodic, so pad at the edges), each cycling independently and blended only for output.
   - Expectation: a modest gain only. The autoencoder floor (0.022) is small against the forecast error (~0.30), and tilings do not add model-error spread; each tiling collapses on its own.
-- [ ] **E4 (C)** **Priority after E3.** Twin experiment 2: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
+- [x] **E4 (C)** **Done 2026-11-05 (Saidie job 8697, 36 configs in 1.3 min).** 28 members, truth mem029, observations every 2 km every 5 min (θ′ σ 0.5 K; reflectivity σ 5 dBZ, clipped at 0). Second-half means:
+
+  | Observed | Forecast nMSE | Analysis nMSE | θ′ | Front | Echo dBZ | Liquid / ice | w |
+  |---|---|---|---|---|---|---|---|
+  | none | 0.329 | — | 0.73 K | ~1–1.8 km | 7.7 | 0.126 / 0.126 | 1.10 |
+  | θ′ | 0.302 | 0.300 | 0.47 | 0.25 | 7.6 | 0.120 / 0.119 | 1.08 |
+  | reflectivity | 0.295 | 0.291 | **0.96 (worse)** | 1.0 | 4.6 | 0.114 / 0.104 | 1.08 |
+  | **both** | **0.271** | **0.261** | **0.46** | **0.17–0.23** | **4.3** | **0.107 / 0.100** | 1.05 |
+
+  - **The two types are complementary:** θ′ pins the cold pool and front, reflectivity the condensate aloft.
+  - **Reflectivity alone degrades θ′** through spurious ensemble correlations; θ′ observations anchor it.
+  - **w is barely constrained:** neither observation type sees the wind.
+  - **Best setting:** loc 5–10 km, RTPS 0.9, model noise 0.05.
+- [ ] **E4b (C)** Doppler radial-velocity observations. In the 2D slice a low-elevation beam measures ≈ u cos α + w sin α: linear in the decoded state, with α from radar geometry (a radar at a fixed x, beam elevation 0.5–2°). Add it to the twin with θ′ + reflectivity, and see whether w and u improve.
+  - Original E4 task: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
 - [ ] **E5 (D+C)** Decide the Paper III framing from E3–E4: what is claimed, against which baselines.
 

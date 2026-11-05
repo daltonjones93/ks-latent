@@ -191,3 +191,11 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 
 ## D7 joint vs per-variable encoder
 Joint wins: w reconstruction error is 2× lower with the joint encoder, and forecast nMSE at 5 min is 0.092 vs 0.118. The per-variable encoder has 7× fewer parameters, which is part of the gap.
+
+## E4 reflectivity + surface θ′ (2026-11-05, Saidie jobs 8696/8697)
+- **Reflectivity operator:** test RMSE 1.63 dBZ on decoded columns (2.47 in echo columns).
+- **θ′ + reflectivity** is best: forecast / analysis nMSE 0.271 / 0.261, against 0.329 without DA (−18 / −21%).
+  - θ′ 0.46 K, front 0.17–0.23 km, echo reflectivity 7.7 → 4.3 dBZ, ice RMSE −21%.
+  - w only −5%.
+- **Reflectivity alone degrades surface θ′** (0.73 → 0.96 K): a spurious cross-variable update.
+- **Next observation type:** Doppler radial velocity (E4b), for the wind.
