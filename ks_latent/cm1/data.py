@@ -24,6 +24,7 @@ environment. Splits are by whole member, never by frame or window.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -176,3 +177,45 @@ def split_members(names: list[str], n_val: int, n_test: int) -> tuple[list[str],
         raise ValueError(f"{len(names)} members cannot give {n_val} val + {n_test} test + >=1 train")
     n_tr = len(names) - n_val - n_test
     return names[:n_tr], names[n_tr:n_tr + n_val], names[n_tr + n_val:]
+
+
+def _natural_key(s: str):
+    """`mem2` < `mem10`, `run_e2` < `run_e10` (the split takes the last members as test)."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s)]
+
+
+def load_cached_members(directory, pattern: str = "*.npz") -> list[CM1Member]:
+    """Members saved by `save_member` (the float16 cache `train_cm1.py` writes), in natural order of
+    member name. Raises if none match."""
+    files = list(Path(directory).glob(pattern))
+    if not files:
+        raise FileNotFoundError(f"no cached members matching {pattern!r} in {directory}")
+    members = [load_member(f) for f in files]
+    names = [m.name for m in members]
+    if len(set(names)) != len(names):
+        raise ValueError(f"duplicate member names in {directory} ({pattern}): narrow the pattern")
+    return sorted(members, key=lambda m: _natural_key(m.name))
+
+
+def synthetic_members(n: int, T: int = 24, NX: int = 256, Z: int = 8, dt: float = 60.0,
+                      seed: int = 0) -> list[CM1Member]:
+    """Random members with the right layout, for testing the code path where no CM1 data exist
+    (e.g. a fresh cluster). Smooth in x (a moving pattern plus noise), a storm patch in `cref`,
+    non-negative condensate. Not physics: never report results from these."""
+    rng = np.random.default_rng(seed)
+    V = len(VARS)
+    x = np.arange(NX)
+    out = []
+    for i in range(n):
+        k = rng.uniform(0.02, 0.08, size=(V, Z))
+        ph = rng.uniform(0, 2 * np.pi, size=(V, Z))
+        X = np.empty((T, NX, V, Z), np.float32)
+        for t in range(T):
+            X[t] = np.sin(k[None] * (x[:, None, None] - 0.5 * t) + ph[None]).astype(np.float32)
+        X += 0.1 * rng.normal(size=X.shape).astype(np.float32)
+        for v in POSITIVE_VARS:
+            X[:, :, VARS.index(v)] = np.abs(X[:, :, VARS.index(v)])
+        cref = np.zeros((T, NX), np.float32)
+        cref[:, NX // 2 - 16:NX // 2 + 16] = 30.0
+        out.append(CM1Member(name=f"syn{i:03d}", X=X.astype(np.float16), cref=cref, t=np.arange(T) * dt))
+    return out

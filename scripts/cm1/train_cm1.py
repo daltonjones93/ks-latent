@@ -4,6 +4,8 @@ Data sources
   --source local10        the 10 original members (cm1data/cm1r21.1/run_e*, 5-min frames)
   --source grads:DIR      an ensemble made by cluster/cm1 (DIR/members/mem*/cm1out_s.ctl, GrADS)
   --source netcdf:DIR     the same with NetCDF output (DIR/members/mem*/cm1out.nc)
+  --source cache:DIR[:PATTERN]  float16 member files written by an earlier run (DIR/PATTERN, default *.npz)
+  --source synthetic      random fields with the right layout: tests the code path only, no physics
 Members are split by whole member: the last --n-test are test, the --n-val before them validation.
 
 Profiles
@@ -34,8 +36,9 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_member, member_from_cm1io,  # noqa: E402
-                                positive_channel_mask, save_member, split_members)
+from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_cached_members, load_member,  # noqa: E402
+                                member_from_cm1io, positive_channel_mask, save_member, split_members,
+                                synthetic_members)
 from ks_latent.cm1.evaluate import forecast_report, reconstruction_report, summarize  # noqa: E402
 from ks_latent.cm1.io import load_grads_run, load_netcdf_run  # noqa: E402
 from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
@@ -66,6 +69,19 @@ class RunConfig:
 
 
 def load_source(source: str, cache: Path, max_frames: int, log) -> list:
+    if source == "synthetic" or source.startswith("cache:"):
+        if source == "synthetic":
+            log("  WARNING: synthetic data (code-path test only; never report these numbers)")
+            members = synthetic_members(4, T=max_frames or 24)
+        else:
+            d, _, pattern = source[len("cache:"):].partition(":")
+            members = load_cached_members(d, pattern or "*.npz")
+        if max_frames:
+            members = [dataclasses.replace(m, X=m.X[:max_frames], cref=m.cref[:max_frames], t=m.t[:max_frames])
+                       for m in members]
+        for m in members:
+            log(f"  loaded {m.name}: {m.X.shape[0]} frames, dt {m.dt:.0f} s")
+        return members
     cache.mkdir(parents=True, exist_ok=True)
     if source == "local10":
         items = [(f"run_e{i}", lambda r=f"run_e{i}": load_netcdf_run(CM1 / r / "cm1out.nc")) for i in range(1, 11)]
@@ -289,7 +305,11 @@ def main():
     # ---- test report ----
     n_lead = max(1, int(round(cfg.eval_lead_min * 60 / dt)))
     every = max(1, int(round(cfg.eval_every_min * 60 / dt)))
-    t0s = list(range(every, min(data["test"].T) - n_lead, every))
+    T_test = min(data["test"].T)
+    if every + n_lead >= T_test:  # a short run (smoke): shrink the evaluation to fit
+        n_lead, every = max(1, T_test // 3), max(1, T_test // 3)
+        log(f"  WARNING: test runs have only {T_test} frames; evaluating {n_lead} leads every {every} frames")
+    t0s = list(range(every, T_test - n_lead, every))
     rec = reconstruction_report(ae, data["test"], norm)
     fc = forecast_report(ae, prop, data["test"], z["test"], norm, t0s, n_lead, cfg.stage_b.halo_sites)
     results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "dt_s": dt, "reconstruction": rec,

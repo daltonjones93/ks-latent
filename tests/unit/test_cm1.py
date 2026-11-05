@@ -180,3 +180,31 @@ def test_data_on_another_device_than_model_gives_same_reports():
     prop = _prop().float()
     a = forecast_report(ae, prop, d, z, nrm, t0s=[1], n_lead=2, halo=2)
     assert np.isfinite(a["nmse"]).all()
+
+
+def test_cached_members_round_trip_in_natural_order(tmp_path):
+    from ks_latent.cm1.data import load_cached_members, save_member
+    names = ["mem10", "mem2", "mem1"]
+    for i, n in enumerate(names):
+        m = _member(n, seed=i)
+        save_member(m, tmp_path / f"src__{n}.npz")
+    got = load_cached_members(tmp_path)
+    assert [m.name for m in got] == ["mem1", "mem2", "mem10"]
+    ref = _member("mem2", seed=1)
+    np.testing.assert_array_equal(got[1].X, ref.X)
+    np.testing.assert_array_equal(got[1].cref, ref.cref)
+    assert got[1].dt == 60.0
+    save_member(_member("mem1"), tmp_path / "other__mem1.npz")
+    with pytest.raises(ValueError):
+        load_cached_members(tmp_path)  # two sources mixed: refuse
+    assert len(load_cached_members(tmp_path, "src__*.npz")) == 3
+    with pytest.raises(FileNotFoundError):
+        load_cached_members(tmp_path / "empty")
+
+
+def test_synthetic_members_layout():
+    from ks_latent.cm1.data import synthetic_members
+    ms = synthetic_members(3, T=10, NX=128, Z=4)
+    assert len(ms) == 3 and ms[0].X.shape == (10, 128, V, 4) and ms[0].dt == 60.0
+    pos = [VARS.index(v) for v in ("qliq", "qice")]
+    assert (ms[0].X[:, :, pos] >= 0).all() and (ms[0].cref > 10).any()
