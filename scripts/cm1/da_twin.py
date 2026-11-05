@@ -38,7 +38,7 @@ def member_files(source: str) -> dict:
     if not source.startswith("cache:"):
         raise ValueError("da_twin.py reads cached members: --source cache:DIR[,DIR2...]")
     out = {}
-    for d in source[len("cache:"):].split(","):
+    for d in source[len("cache:"):].replace("+", ",").split(","):
         for f in sorted(Path(d).expanduser().glob("*.npz")):
             with np.load(f) as z:
                 name = str(z["name"])

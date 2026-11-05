@@ -4,8 +4,9 @@ Data sources
   --source local10        the 10 original members (cm1data/cm1r21.1/run_e*, 5-min frames)
   --source grads:DIR      an ensemble made by cluster/cm1 (DIR/members/mem*/cm1out_s.ctl, GrADS)
   --source netcdf:DIR     the same with NetCDF output (DIR/members/mem*/cm1out.nc)
-  --source cache:DIR[:PATTERN][,DIR2[:PATTERN2]...]  float16 member files (build_cache.py, or an earlier run's
-                          cache), from one or more directories; member names must be unique across them
+  --source cache:DIR[:PATTERN][+DIR2[:PATTERN2]...]  float16 member files (build_cache.py, or an earlier run's
+                          cache), from one or more directories separated by '+' (or ','; but sbatch --export
+                          splits on commas, so use '+' there); member names must be unique across them
   --source synthetic      random fields with the right layout: tests the code path only, no physics
 Members are split by whole member: the last --n-test are test, the --n-val before them validation.
 
@@ -78,9 +79,11 @@ def load_source(source: str, cache: Path, max_frames: int, log) -> list:
             members = synthetic_members(4, T=max_frames or 24)
         else:
             members = []
-            for part in source[len("cache:"):].split(","):
+            for part in source[len("cache:"):].replace("+", ",").split(","):
                 d, _, pattern = part.partition(":")
-                members += load_cached_members(d, pattern or "*.npz")
+                got = load_cached_members(d, pattern or "*.npz")
+                log(f"  {len(got)} members from {d}")
+                members += got
             names = [m.name for m in members]
             if len(set(names)) != len(names):
                 raise ValueError("duplicate member names across cache directories")
