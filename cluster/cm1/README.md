@@ -2,7 +2,7 @@
 
 This kit generates more members of the 2D CM1 squall line in `cm1data/`. The setup is the same as before; only the run length, output interval and perturbations change.
 
-- **Why Cashew.** CM1 is CPU-only Fortran, so GPUs don't help. Cashew's default partition (`coe_cpu`) is the general College of Engineering CPU pool.
+- **Why Cashew.** CM1 is CPU-only Fortran, so GPUs don't help. The kit submits to `coe_cpu`, the general College of Engineering CPU pool. That's not the cluster default, which is `coe_gpu`.
 - **What a member costs.** One CPU, about 0.4 GB of memory, and an estimated 1–2 h for 6 simulated hours. On the Mac, 90 min took 7.6 min, and cluster cores may be slower.
 - **The job cap.** Cashew allows at most **20 submitted plus pending jobs per partition**. The kit therefore packs several members into each job (one member per CPU) instead of one job per member.
 
@@ -130,7 +130,7 @@ bash kit/submit_ensemble.sh ens_A 8 --mail-type=END --mail-user=FILL_EMAIL
 ```
 - This makes 4 jobs of up to 8 CPUs each (31 members). Each job runs its members side by side, so a job takes about as long as one member.
 - Use a larger second argument for fewer, bigger jobs, e.g. 16 makes 2 jobs. The script refuses if your queued jobs would exceed 18, leaving headroom under the cap of 20.
-- There is no `--partition`: the default `coe_cpu` is right. Don't use `all`, because jobs there are killed and requeued when a group's own jobs need the node.
+- Jobs go to `coe_cpu` (4 nodes × 64 CPUs). That's set in the job scripts because the cluster's actual default is `coe_gpu`, its single GPU node, despite what the docs page says. Don't use `all`, because jobs there are killed and requeued when a group's own jobs need the node.
 
 ## 8. Watch
 ```bash
@@ -154,7 +154,7 @@ From the Mac, with the VPN on if off campus:
 bash cluster/cm1/fetch_results.sh USER@CASHEW_HOST cm1_bundle/ens_A    # -> cm1data/ens_A/
 ```
 - **What's copied:** only outputs, namelists, soundings, logs and the manifest.
-- **Size:** about 0.6–1 GB per member, so roughly 20–30 GB for `ens_A`. The Mac has 669 GB free.
+- **Size:** Cashew has no netcdf-fortran module, so the kit builds without NetCDF and output is uncompressed GrADS binary: about 2.3 GB per member, roughly 70 GB for `ens_A`. `rsync -z` compresses it in transit, and the Mac has 669 GB free.
 - **Large transfers:** for much bigger ensembles, ask ETS about the Globus data transfer node.
 
 `cm1data/` is ignored by git, so nothing lands in the repository.

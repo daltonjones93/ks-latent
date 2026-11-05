@@ -7,7 +7,7 @@ REMOTE=$1; RDIR=$2
 KIT=$(cd "$(dirname "$0")" && pwd)
 DEST=${3:-$KIT/../../cm1data/$(basename "$RDIR")}
 mkdir -p "$DEST"
-rsync -av --partial --progress \
+rsync -avz --partial --progress \
   --include='*/' --include='manifest.*' --include='cm1out*' --include='namelist.input' \
   --include='input_sounding' --include='cm1.log' --include='cm1.done' --include='cm1.failed' \
   --exclude='*' "$REMOTE:$RDIR/" "$DEST/"

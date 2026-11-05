@@ -2,6 +2,7 @@
 # Build CM1 as a Slurm job (submitted by go.sh).
 #SBATCH --job-name=cm1build
 #SBATCH --ntasks=1
+#SBATCH --partition=coe_cpu
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=4G
 #SBATCH --time=01:00:00

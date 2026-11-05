@@ -3,6 +3,7 @@
 # The ensemble jobs only start if this succeeds.
 #SBATCH --job-name=cm1smoke
 #SBATCH --ntasks=1
+#SBATCH --partition=coe_cpu
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=2G
 #SBATCH --time=00:30:00
