@@ -97,3 +97,17 @@ def test_radial_velocity_operator_known_field():
     u[VARS.index("u") * Z:(VARS.index("u") + 1) * Z] = 10.0 / nrm.scale[VARS.index("u")]
     u[VARS.index("w") * Z:(VARS.index("w") + 1) * Z] = 2.0 / nrm.scale[VARS.index("w")]
     np.testing.assert_allclose(op.truth_values(u), op.sign * 10.0 * op.cos + 2.0 * op.sin, rtol=1e-10)
+
+
+@pytest.mark.parametrize("loc,rtps", [(5.0, 0.0), (1e9, 0.5), (3.0, 0.9)])
+def test_batched_letkf_equals_per_site_loop(loc, rtps):
+    from ks_latent.cm1.letkf import letkf_analysis_torch
+    N, P, c, m = 15, 37, 4, 23
+    Zb = rng.normal(size=(N, P, c))
+    Yb = rng.normal(size=(N, m))
+    y, R = rng.normal(size=m), rng.uniform(0.3, 2.0, m)
+    xs, xo = np.arange(P) * 2.0, rng.uniform(-5, 80, m)
+    cfg = LETKFConfig(loc_km=loc, inflation=1.1, rtps=rtps)
+    a = letkf_analysis(Zb, Yb, y, R, xs, xo, cfg)
+    b = letkf_analysis_torch(Zb, Yb, y, R, xs, xo, cfg, chunk=8)
+    np.testing.assert_allclose(b, a, atol=1e-10, rtol=0)

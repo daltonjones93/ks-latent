@@ -59,7 +59,7 @@ import numpy as np
 import torch
 
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
-from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis
+from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis_torch
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
 from ks_latent.cm1.verify import displacement_km, main_pool_front_km
 
@@ -295,18 +295,18 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
             Yall, yall, rall, xall = np.concatenate(Ys, 1), np.concatenate(ys), np.concatenate(rs), np.concatenate(xs)
             if cfg.ensemble_mode == "enoi_phys":   # physical background, physical analysis, no latent at all
                 x_cell = (np.arange(NX) + 0.5) * 0.25
-                Ua = letkf_analysis(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf)
+                Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf, device=dev)
                 Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()
                 Ua = torch.where(ae.positive_mask[None, :, None], Ua.clamp(min=0), Ua)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
                 U_mean = Ua.mean(0)
             elif cfg.analysis_space == "latent":
-                Za = letkf_analysis(Z.double().cpu().numpy(), Yall, yall, rall, x_site, xall, cfg.letkf)
+                Za = letkf_analysis_torch(Z.double().cpu().numpy(), Yall, yall, rall, x_site, xall, cfg.letkf, device=dev)
                 Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
             else:  # per-cell LETKF on the decoded columns, then back into the latent space
                 x_cell = (np.arange(NX) + 0.5) * 0.25
-                Ua = letkf_analysis(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf)
+                Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf, device=dev)
                 Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()
                 pm = ae.positive_mask[None, :, None]
                 Ua = torch.where(pm, Ua.clamp(min=0), Ua)

@@ -88,3 +88,47 @@ def letkf_analysis(Zb: np.ndarray, Yb: np.ndarray, y: np.ndarray, r_var: np.ndar
         fac = np.where(sa > 0, 1 + cfg.rtps * (sb - sa) / np.where(sa > 0, sa, 1), 1.0)
         Za = za_bar + Zap * fac
     return Za
+
+
+def letkf_analysis_torch(Zb, Yb, y, r_var, x_site_km, x_obs_km, cfg: LETKFConfig, device=None, chunk: int = 256):
+    """Batched version of `letkf_analysis`: all sites at once (in chunks of `chunk` sites), in torch
+    float64 on `device`. Every observation enters every site with its Gaspari-Cohn weight; weights are
+    exactly zero beyond 2c, so the result equals the per-site loop (tested to 1e-10). Same arguments
+    and return value as `letkf_analysis` (numpy in, numpy out)."""
+    import torch
+    dev = device or "cpu"
+    Zb = torch.as_tensor(np.asarray(Zb, np.float64), device=dev)
+    Yb = torch.as_tensor(np.asarray(Yb, np.float64), device=dev)
+    y = torch.as_tensor(np.asarray(y, np.float64), device=dev)
+    rinv = 1.0 / torch.as_tensor(np.asarray(r_var, np.float64), device=dev)
+    N, P, c = Zb.shape
+    zbar, ybar = Zb.mean(0), Yb.mean(0)
+    Zp, Yp, d = Zb - zbar, Yb - ybar, y - ybar
+    W_all = torch.as_tensor(gaspari_cohn((np.asarray(x_site_km)[:, None] - np.asarray(x_obs_km)[None, :]) / cfg.loc_km),
+                            device=dev)                                   # (P, m)
+    Za = Zb.clone()
+    eye = torch.eye(N, dtype=torch.float64, device=dev)
+    for s0 in range(0, P, chunk):
+        s1 = min(P, s0 + chunk)
+        w = W_all[s0:s1] * rinv                                           # (S, m) = w_i / R_i
+        has = (W_all[s0:s1] > 0).any(1)
+        C = Yp[None] * w[:, None, :]                                      # (S, N, m)
+        A = (N - 1) / cfg.inflation * eye + C @ Yp.T[None]                # (S, N, N)
+        ev, V = torch.linalg.eigh(A)
+        if (ev[has].min() <= 0) if has.any() else False:
+            raise np.linalg.LinAlgError("ensemble-space matrix not positive definite")
+        Pt = (V / ev[:, None, :]) @ V.transpose(1, 2)
+        wbar = (Pt @ (C @ d)[..., None])[..., 0]                          # (S, N)
+        Wt = (V * torch.sqrt((N - 1) / ev)[:, None, :]) @ V.transpose(1, 2)
+        T = wbar[:, None, :] + Wt                                         # (S, N, N), rows: members
+        upd = zbar[s0:s1][:, None, :] + T @ Zp[:, s0:s1].transpose(0, 1)                # (S, N, c)
+        Za[:, s0:s1] = torch.where(has[None, :, None], upd.transpose(0, 1), Zb[:, s0:s1])
+    if cfg.rtps > 0:
+        sb = Zp.std(0, unbiased=True)
+        za_bar = Za.mean(0)
+        Zap = Za - za_bar
+        sa = Zap.std(0, unbiased=True)
+        fac = torch.where(sa > 0, 1 + cfg.rtps * (sb - sa) / torch.where(sa > 0, sa, torch.ones_like(sa)),
+                          torch.ones_like(sa))
+        Za = za_bar + Zap * fac
+    return Za.cpu().numpy()
