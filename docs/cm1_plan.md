@@ -128,6 +128,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - On `ens_A` alone (5-min data, locality test), mirrors did *not* help predict the same environment, because they live in reversed shear.
   - With `ens_B`'s spread of shears, they may help generalization. Train D8's held-out-environment split with and without mirrors.
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
+
 ## E. Latent DA twin experiments (the Paper III core)
 - [ ] **E1 (C)** Observation operators.
   - (a) Surface θ′ at selected columns: linear in the decoded state.
