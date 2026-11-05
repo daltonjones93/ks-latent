@@ -129,7 +129,7 @@ def main():
     for d in a.extra_props:
         d = Path(d).expanduser()
         a2, p2, _, c2, _ = load_run(d, dev)
-        if c2["ae"] != cfg["ae"] or any(not torch.equal(x, y) for x, y in zip(a2.state_dict().values(), ae.state_dict().values())):
+        if ColumnAEConfig(**c2["ae"]) != ColumnAEConfig(**cfg["ae"]) or any(not torch.equal(x, y) for x, y in zip(a2.state_dict().values(), ae.state_dict().values())):
             raise ValueError(f"{d} does not share the autoencoder of {run}: multi-model needs --reuse-ae runs")
         props.append(p2)
     refl_head = None

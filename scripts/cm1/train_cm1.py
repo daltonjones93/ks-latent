@@ -322,7 +322,7 @@ def main():
         if a.reuse_ae:
             src = Path(a.reuse_ae)
             ck = torch.load(src / "ae.pt", map_location=dev)
-            if ck["cfg"] != dataclasses.asdict(cfg.ae):
+            if ColumnAEConfig(**ck["cfg"]) != cfg.ae:  # compare with defaults filled (older runs lack newer fields)
                 raise ValueError(f"autoencoder config in {src} differs from this run's: {ck['cfg']} vs {cfg.ae}")
             ae.load_state_dict(ck["state_dict"])
             ra = json.loads((src / "history_a.json").read_text())
