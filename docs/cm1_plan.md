@@ -156,7 +156,14 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 
   Originally: adapt `ks_latent/da/letkf_local.py`, which assumes periodic rolls, and use the true state at the domain edges as boundary conditions.
   - Done when: in a linear-Gaussian test, the analysis matches the Kalman answer, as in the KS tests.
-- [ ] **E3 (C)** **Built 2026-11-05.** Code in `ks_latent/cm1/twin.py` and `scripts/cm1/da_twin.py` (tests in `tests/unit/test_cm1_twin.py`). **Running: Saidie job 8695 (`~/cm1_da/e3_v1`).**
+- [x] **E3 (C)** **Done 2026-11-05 (Saidie job 8695, 48 configs in 1.4 min).** 28 members, 1-min model `d34_c32_kuniform`, truth mem029. Second-half means:
+  - **All-variable forecast nMSE:** no DA 0.329; best LETKF 0.302 (−8%; obs 2 km, loc 10 km, RTPS 0.9, model noise 0.05). Most configs are 0.32–0.33.
+  - **Observed surface θ′ RMSE:** 0.73 → 0.46–0.48 K.
+  - **Front displacement:** ~1–1.8 km → 0.2–0.3 km.
+  - **Unobserved w:** 1.10 → 1.08 m/s, i.e. no real change. Condensate aloft is likewise unchanged.
+  - **Spread:** model noise 0.05–0.1 is needed against collapse (spread 0.26–0.40 K vs ~0.1 without); 0.2 over-disperses and hurts.
+  - **Verdict:** the filter pins what it sees (cold pool, gust front) but surface θ′ alone barely constrains the storm aloft. Observations aloft (E4, reflectivity) are the priority.
+  - Details: Code in `ks_latent/cm1/twin.py` and `scripts/cm1/da_twin.py` (tests in `tests/unit/test_cm1_twin.py`). **Running: Saidie job 8695 (`~/cm1_da/e3_v1`).**
   - **Design:**
     - truth = held-out mem029, observations from the true columns;
     - ensemble = encoded states of the 28 training members at 1 h;
@@ -168,7 +175,10 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
     - the unobserved w is not improved yet, and the analysis is sometimes worse than the prior over all variables. Both are expected with 7 members; the 28-member run decides.
   - Original task: a held-out member is the truth, surface θ′ every 2 km every 5 min is observed, with a 30-member latent ensemble.
   - Done when: analysis and forecast error against a free run and against the truth-member spread, consistency ratio, rank histograms.
-- [ ] **E4 (C)** Twin experiment 2: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
+- [ ] **E3b (C)** Spread from model disagreement: a multi-model ensemble that cycles members through the 6 trained propagators (D3/D4 variants) instead of, or as well as, additive noise. Compare calibration and error with E3.
+- [ ] **E3c (C)** Shifted tilings (Paper II): 4 offsets of the patch lattice (2/4/6 cells; non-periodic, so pad at the edges), each cycling independently and blended only for output.
+  - Expectation: a modest gain only. The autoencoder floor (0.022) is small against the forecast error (~0.30), and tilings do not add model-error spread; each tiling collapses on its own.
+- [ ] **E4 (C)** **Priority after E3.** Twin experiment 2: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
 - [ ] **E5 (D+C)** Decide the Paper III framing from E3–E4: what is claimed, against which baselines.
 

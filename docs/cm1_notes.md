@@ -171,3 +171,14 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
   - q > 1 at 1 km: 0.89–0.97 for models, 0.80–0.95 for persistence.
 
   Column-max condensate is dominated by the large anvil and stratiform region. **Follow-up:** FSS of low-level condensate or surface rain, where convective cells are.
+
+## E3 latent DA twin (2026-11-05, Saidie job 8695)
+- **Setup:** 28 training members as the ensemble, truth mem029, surface θ′ observations (σ 0.5 K) every 2 or 10 km every 5 min, 3 h of cycling from 1 h.
+- **Results** (second-half means):
+  - all-variable forecast nMSE: no DA 0.329; best LETKF 0.302;
+  - observed θ′ RMSE 0.73 → 0.47 K;
+  - front displacement ~1–1.8 → 0.2–0.3 km;
+  - unobserved w unchanged (1.10 → 1.08 m/s).
+- **Spread** collapses without model-error noise (spread ~0.1 K vs error ~0.7 K). Noise std 0.05–0.1 in latent units restores 0.26–0.40 K; 0.2 is too much.
+- **Conclusion:** surface θ′ constrains the cold pool and front but not the storm aloft, so reflectivity observations are next (E4).
+- **Shifted tilings (Paper II) are unlikely to cure collapse.** Each tiling cycles independently and collapses on its own, and blending averages spreads down. A multi-model ensemble over the 6 trained propagators is the principled spread source to try (E3b).
