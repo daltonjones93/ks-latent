@@ -41,7 +41,8 @@ from ks_latent.cm1.data import _natural_key  # noqa: E402
 from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_cached_members, load_member,  # noqa: E402
                                 member_from_cm1io, positive_channel_mask, save_member, split_members,
                                 synthetic_members)
-from ks_latent.cm1.evaluate import forecast_report, reconstruction_report, summarize, summarize_fronts  # noqa: E402
+from ks_latent.cm1.evaluate import (forecast_report, reconstruction_report, summarize, summarize_fronts,  # noqa: E402
+                                    summarize_physics)
 from ks_latent.cm1.io import load_grads_run, load_netcdf_run  # noqa: E402
 from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
 from ks_latent.cm1.train import StageAConfig, StageBConfig, encode_members, train_stage_a, train_stage_b  # noqa: E402
@@ -364,6 +365,9 @@ def main():
     log("[test] forecasts (mean over start times " + ", ".join(f"{t * dt / 3600:.1f} h" for t in t0s) + "):")
     log(summarize(fc))
     log(summarize_fronts(fc))
+    log(summarize_physics(fc))
+    if rec.get("physics"):
+        log("[test] reconstruction physics: " + ", ".join(f"{k} {v:.3f}" for k, v in rec["physics"].items()))
 
     # a section: truth vs forecast theta' at the last lead from the first start time, first test member
     sections = None

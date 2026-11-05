@@ -23,6 +23,10 @@ surface theta' RMSE (K) and front metrics from `verify.py`:
   - Fractions Skill Score of column-max condensate (sqrt(g/kg)) at thresholds `FSS_THRESH` and
     window sizes `FSS_SCALES_KM`.
 The older easternmost-cold-cell front error is kept as `front_err_km` for comparison.
+Physical consistency (`physics.py`, real 62-level CM1 data only): mass-divergence ratio of decoded or
+forecast states against the truth's own (~0.2, from interpolated winds and compressibility),
+relative condensate-mass error, maximum cold-pool intensity C, and the FSS of low-level liquid
+condensate (z < 1 km, a rain proxy that discriminates better than column-max condensate).
 """
 from __future__ import annotations
 
@@ -31,6 +35,8 @@ import torch
 
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
+from ks_latent.cm1.physics import (BaseState, cold_pool_intensity, condensate_mass, divergence_ratio,
+                                   low_level_liquid)
 from ks_latent.cm1.verify import displacement_km, fss, main_pool_front_km
 
 FSS_THRESH = (0.3, 1.0)          # sqrt(g/kg): ~0.1 g/kg (cloud or rain present), 1 g/kg (heavy)
@@ -65,7 +71,22 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
             se += e.mean(dim=1).sum(dim=1); n += e.shape[-1]
             se_act += e.mean(dim=1)[:, act].sum(dim=1); n_act += int(act.sum())
     sc = torch.tensor(norm.scale, dtype=torch.float32)
-    out = {"rmse_phys_all": dict(zip(VARS, (sc * (se / n).sqrt()).tolist())),
+    if Z == 62:
+        base = BaseState.from_sounding()
+        chs = torch.tensor(norm.channel_scale(Z), dtype=torch.float32)
+        dt_, dr_, mt_, mr_ = [], [], [], []
+        for m in range(len(data.u)):
+            for t in range(data.T[m] // 3, data.T[m], max(1, data.T[m] // 6)):
+                u = data.full(m, t, device=dev)
+                tr = (u[0].cpu() * chs[:, None]).reshape(V, Z, -1).numpy()
+                rc = (ae(u)[0][0].cpu() * chs[:, None]).reshape(V, Z, -1).numpy()
+                dt_.append(divergence_ratio(tr, base)); dr_.append(divergence_ratio(rc, base))
+                mt_.append(float(condensate_mass(tr, base))); mr_.append(float(condensate_mass(rc, base)))
+        phys = {"div_ratio_truth": float(np.mean(dt_)), "div_ratio_recon": float(np.mean(dr_)),
+                "condensate_mass_rel_err": float(np.median(np.abs(np.array(mr_) / np.array(mt_) - 1)))}
+    else:
+        phys = {}
+    out = {"physics": phys, "rmse_phys_all": dict(zip(VARS, (sc * (se / n).sqrt()).tolist())),
            "nmse_all": float((se / n).mean())}
     if n_act:
         out["rmse_phys_storm"] = dict(zip(VARS, (sc * (se_act / n_act).sqrt()).tolist()))
@@ -81,6 +102,13 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
     Z = data.Z
     M = len(data.u)
     cases = []  # numpy (surface theta', column-max condensate) of forecast, persistence and truth, per case
+    base = BaseState.from_sounding() if Z == 62 else None
+    chs = torch.tensor(norm.channel_scale(Z), dtype=torch.float32, device=dev)
+    phys_cases = []
+    def _phys(u):  # (L, C, NX) normalized -> per-lead physics (small)
+        X = (u * chs[None, :, None]).reshape(u.shape[0], len(VARS), Z, -1).cpu().numpy()
+        return {"div": np.array([divergence_ratio(x, base) for x in X]), "mass": condensate_mass(X, base),
+                "cmax": cold_pool_intensity(X, base).max(axis=-1), "ll": low_level_liquid(X, base)}
     iql, iqi = VARS.index("qliq") * Z, VARS.index("qice") * Z
     def _np_fields(u):
         th = _th_sfc(u, Z, norm).cpu().numpy()
@@ -120,8 +148,11 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
             rows["front_err_km"].append((front_x_km(ths_p) - ft).abs().cpu())
             rows["front_err_pers_km"].append((front_x_km(ths_0) - ft).abs().cpu())
             cases.append({"fc": _np_fields(pred), "pers": _np_fields(pers), "ob": _np_fields(tr)})
+            if base is not None:
+                phys_cases.append({"fc": _phys(pred), "pers": _phys(pers), "ob": _phys(tr)})
     out = {"t0s": t0s, "n_lead": n_lead, "lead_s": [(j + 1) * data.dt for j in range(n_lead)], "halo_sites": halo}
     out.update(_front_and_fss(cases, n_lead))
+    out.update(_physics_stats(phys_cases))
     for k, v in rows.items():
         if v:
             out[k] = torch.stack(v).nanmean(0).tolist()
@@ -187,5 +218,46 @@ def summarize_fronts(fc: dict, leads_min=(1, 5, 15, 30, 45, 60)) -> str:
                      f"{fc['front_main_err_km_median'][j]:5.2f}/{fc['front_main_err_km_p90'][j]:5.2f} "
                      f"({fc['front_main_err_pers_km_median'][j]:5.2f})       "
                      f"{fc['fss']['0.3'][fk][j]:.3f} ({fc['fss_pers']['0.3'][fk][j]:.3f})")
+    return "\n".join(lines)
+
+
+def _physics_stats(phys_cases: list) -> dict:
+    """Per-lead physical consistency of forecasts against the truth (see module docstring)."""
+    if not phys_cases:
+        return {}
+    st = lambda k, who: np.stack([c[who][k] for c in phys_cases])
+    rel = lambda a, b: np.abs(a / b - 1)
+    dx = 0.25
+    out = {"div_ratio_fc": st("div", "fc").mean(0).tolist(), "div_ratio_truth": st("div", "ob").mean(0).tolist(),
+           "condensate_mass_rel_err_median": np.median(rel(st("mass", "fc"), st("mass", "ob")), 0).tolist(),
+           "condensate_mass_rel_err_pers_median": np.median(rel(st("mass", "pers"), st("mass", "ob")), 0).tolist(),
+           "cold_pool_cmax_fc": st("cmax", "fc").mean(0).tolist(), "cold_pool_cmax_truth": st("cmax", "ob").mean(0).tolist(),
+           "cold_pool_cmax_rel_err_median": np.median(rel(st("cmax", "fc"), st("cmax", "ob")), 0).tolist()}
+    n_lead = st("div", "fc").shape[1]
+    scales = [max(1, int(round(s / dx))) for s in (1.0, 4.0)]
+    for who, name in (("fc", "fss_lowliq"), ("pers", "fss_lowliq_pers")):
+        out[name] = {}
+        for thr in (0.3, 1.0):
+            vals = {n: np.full((len(phys_cases), n_lead), np.nan) for n in scales}
+            for c, case in enumerate(phys_cases):
+                for j in range(n_lead):
+                    for n, v in fss(case[who]["ll"][j], case["ob"]["ll"][j], thr, scales).items():
+                        vals[n][c, j] = v
+            out[name][f"{thr:g}"] = {f"{n * dx:g}km": np.nanmean(vals[n], 0).tolist() for n in scales}
+    return out
+
+
+def summarize_physics(fc: dict, leads_min=(1, 5, 15, 30, 60)) -> str:
+    if "div_ratio_fc" not in fc:
+        return ""
+    lead = [round(s / 60) for s in fc["lead_s"]]
+    js = [lead.index(m) for m in leads_min if m in lead]
+    lines = ["lead_min  div ratio fc (truth)   condensate |rel err| fc (pers)   Cmax fc/truth m/s   "
+             "FSS low-level liquid q>1 @1km (pers)"]
+    for j in js:
+        lines.append(f"{lead[j]:7d}   {fc['div_ratio_fc'][j]:.3f} ({fc['div_ratio_truth'][j]:.3f})        "
+                     f"{fc['condensate_mass_rel_err_median'][j]:.3f} ({fc['condensate_mass_rel_err_pers_median'][j]:.3f})"
+                     f"            {fc['cold_pool_cmax_fc'][j]:5.1f}/{fc['cold_pool_cmax_truth'][j]:5.1f}       "
+                     f"{fc['fss_lowliq']['1']['1km'][j]:.3f} ({fc['fss_lowliq_pers']['1']['1km'][j]:.3f})")
     return "\n".join(lines)
 
