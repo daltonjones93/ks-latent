@@ -211,6 +211,8 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 ## G. Paper III: from promising to publishable (added 2026-11-05)
 Working title: **equation-free ensemble data assimilation of a squall line with a learned local latent surrogate.** It is the sequel to Papers I–II on a full cloud model, with open boundaries and learned observation operators. Candidate venues: JAMES or MWR.
 
+**Framing:** CM1 is the *nature run* only, the stand-in for reality that produces the truth and observations. The DA system and every baseline see only data, never the equations.
+
 Each task below answers a specific objection a referee would raise. They come in priority order: **tier 1** is essential, **tier 2** strengthens the paper a lot, **tier 3** is a stretch goal or polish.
 
 ### G0. Pre-register the claims (before the final runs; ground rule from CLAUDE.md)
@@ -228,11 +230,15 @@ Each task below answers a specific objection a referee would raise. They come in
   - Run the best DA settings on ≥ 10 truths × 3 observation-noise seeds.
   - Report mean ± 95% CI, and paired differences (DA − no DA) per truth.
   - Done when: the tables and figures of E4/E4b have error bars.
-- [ ] **G2 (C)** **Conventional baselines with the same observations and members.**
+- [ ] **G2 (C)** **Conventional (equation-free) baselines with the same observations and members.**
   - (a) **EnOI:** a static physical-space covariance from the training members' states at the same time, with the same localization. It answers "what does a forecast model add?".
   - (b) **Physical-space LETKF on the decoded surrogate ensemble:** the same forecasts, but analysed in physical space instead of latent space. It isolates what the latent update itself buys: dimension, locality, and staying on the decoder's manifold. Paper II found a cost from returning to the decoder range, so this needs checking here.
   - (c) **Spline / optimal interpolation of the observations alone** (no ensemble), as in Paper II.
   - Done when: one table with the latent LETKF vs (a)–(c), on the G1 truths.
+- [ ] **G2b (C)** **Equation-free forecast-model baselines with the same LETKF and observations.**
+  - (a) **Analog forecasting:** each member's forecast is what followed its nearest neighbours in the training archive. Distance in latent space, k neighbours, averaged increments; matched by time since initiation. It asks whether a learned surrogate beats looking things up.
+  - (b) **Persistence ensemble:** members do not evolve between analyses. This is the floor for any forecast model.
+  - Done when: both appear in the G2 table on the G1 truths.
 - [ ] **G3 (C)** **DA-initialized forecasts.** From analyses at 1.5, 2, 2.5 and 3 h, run 0–60 min ensemble forecasts. Compare them with no-DA forecasts and with persistence of the analysis: nMSE, front displacement, low-level-rain FSS, reflectivity ≥ 35 dBZ.
   - Done when: a "forecast skill vs lead after DA" figure. This is the result forecasters care about: how long DA keeps paying off.
 - [ ] **G4 (C)** **Calibration without hand tuning.**
@@ -262,12 +268,7 @@ Each task below answers a specific objection a referee would raise. They come in
   Done when: max C bias at 60 min < 5%, without losing the D3/D4 forecast skill.
 
 ### Tier 3: stretch and polish
-- [ ] **G11 (C)** **Gold standard: CM1-EnKF.** A physical-space LETKF whose forecasts are CM1 itself: each cycle restarts CM1 from analysis states. Staged:
-  - (a) **Spike:** read a binary CM1 restart (Cashew has no NetCDF, so restart_format = 1), write it back unchanged, and confirm the restarted run continues **bitwise identical** to an uninterrupted one.
-  - (b) Modify θ, qv, u, w and condensate in a restart and confirm CM1 accepts it.
-  - (c) The cycling driver on Cashew: 28 members in parallel, 5-min CM1 segments.
-
-  This would answer "how close is the cheap surrogate DA to DA with the real model?". About 28 cores × a few hours per experiment.
+- [–] **G11** ~~CM1-EnKF~~. **Dropped (Dalton, 2026-11-05):** the paper's premise is DA *without* the equations, so CM1 is only the nature run and is never used by the DA system or its baselines. Every baseline must be equation-free; see G2 and G2b.
 - [ ] **G12 (C)** **Literature review (verify every citation).** Latent-space DA (latent EnKF/ETKF, ROAD-EnKF, LAE-EnKF, score-based latent filters), ML emulators of cloud-resolving models, convective-scale radar DA (reflectivity and radial-velocity assimilation in EnKF systems). Confirm the novelty claim: convective-scale, equation-free latent DA with learned reflectivity on a full cloud model.
 - [ ] **G13 (C)** **Shifted tilings (E3c)** and **multi-model ensembles (E3b)**: include whichever helps, as ablations.
 - [ ] **G14 (D+C)** **Paper skeleton** `docs/paperIII/` (same layout as Papers I–II): intro; data and data-only locality analysis; model; forecast skill and physics; DA method; twin experiments (θ′, reflectivity, radial velocity, N, localization, observations); baselines; unseen environments; cost; limitations (2D, cold-pool bias, twin setting); conclusions. Draft only after G0–G5.
@@ -276,4 +277,4 @@ Each task below answers a specific objection a referee would raise. They come in
   - the Cashew kit regenerates all ensembles from the bundle;
   - a data availability statement (CM1 r21.1, our namelists, soundings and seeds).
 
-**Suggested order:** G0 → G1 + G2 (now, with `ens_A`/`ens_A2`) → G3 → G4 → G6/G7 (cheap sweeps) → G5 (when `ens_B` exists) → G8–G10 → G11 spike in parallel on Cashew → G12, G14.
+**Suggested order:** G0 → G1 + G2 (now, with `ens_A`/`ens_A2`) → G3 → G4 → G6/G7 (cheap sweeps) → G5 (when `ens_B` exists) → G8–G10 → G12, G14.
