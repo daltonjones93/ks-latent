@@ -51,7 +51,7 @@ Status as of 2026-11-05.
     - `var1=1` vs `2` differ by up to 0.78 K (max possible 0.9 K);
     - the same `var1` twice is bitwise identical in every field and time.
   - Note: Cashew's existing build (`~/cm1_bundle/build`) predates the patch. Delete it before a seeded ensemble, and `go.sh` rebuilds it.
-- [ ] **B3 (D+C)** Decide the next ensembles. **Proposal ready, awaiting Dalton's approval.**
+- [x] **B3 (D+C)** Decide the next ensembles. **Approved by Dalton 2026-11-05 as proposed.** Noise-seed offsets keep ensembles apart: ens_A2 1000+, ens_B 2000+, pilot 3000+.
   - **`ens_A2`: 30 members, same environment as ens_A, per-member noise seeds (B2).**
     - Purpose: 1-min learning curve to 56–58 members (D5), and more independent truths for DA.
     - Caveat: these differ from ens_A in noise as well as sounding, so they are slightly more varied. Report learning-curve points by ensemble.
@@ -63,10 +63,10 @@ Status as of 2026-11-05.
   - **Cost:**
     - 90 members × ~1.5 h on 1 core each. In 8-CPU packs that is 12 jobs, under Cashew's 20-job cap, and about 1.5–3 h wall if the CPU nodes are free.
     - Storage: ~200 GB raw on Cashew (~74 GB used of 1 TB) and ~45 GB of float16 caches to copy to Saidie (2 TB, 15 GB used).
-- [ ] **B4 (C)** Pilot for `ens_B`: 4 members at the corners of the environment ranges, 6 h.
+- [ ] **B4 (C)** Pilot for `ens_B`: 4 members at the corners of the environment ranges, 6 h. **Running: `ens_B_pilot`, Cashew job 745140** (`--design corners`, after the patched build 745134 and smoke test 745135).
   - Check that the storm stays inside the domain (the grid moves at a fixed 12.5 m/s) and that no member fails.
   - deps: B2, B3. Done when: storm tracks are plotted and the ranges are confirmed or narrowed.
-- [ ] **B5 (D or C)** Launch `ens_A2` and `ens_B` with `launch_cashew.sh`, using a new `ENS` name and `SEED` for each.
+- [ ] **B5 (D or C)** **`ens_A2` launched 2026-11-05** (30 members, seeds 1001–1030, Cashew jobs 745136–745139); `ens_B` waits for the pilot. Launch `ens_A2` and `ens_B` with `launch_cashew.sh`, using a new `ENS` name and `SEED` for each.
   - Respect the 20-job cap; run the two ensembles one after the other.
   - deps: B4. Done when: `status.sh` shows all members done.
 - [ ] **B6 (C)** Build the float16 member caches on Cashew, as a CPU job.
@@ -83,18 +83,13 @@ Status as of 2026-11-05.
 ## D. A set of models on Saidie
 Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since the node is shared. Results go to `~/cm1_runs/<name>`, and summaries are copied to `artifacts/cm1/runs/`.
 
-- [ ] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU. **Ran 2026-11-05 (Saidie job 8680, 15.4 min on one H200, against ~90 min on Cashew CPU); target narrowly missed.**
-  - nMSE at 5 / 30 / 60 min: 0.110 / 0.213 / 0.270, against Cashew's 0.105 / 0.217 / 0.249. The gaps are +0.005 / −0.004 / **+0.021**, and the target was ≤ 0.01.
-  - Reconstruction matches: val 0.0479 vs 0.0481.
-  - **Not like-for-like.** Cashew k45 reused run 1's autoencoder, while this run trained its own, and GPU training is not bit-reproducible.
-  - **Next:** judge the 60-min gap against D2's seed spread. If the seed spread at 60 min is ≥ 0.02, D1 passes. If not, look for a real CPU/GPU difference.
-
-  - deps: A4, A5, C2. Done when: nMSE is within 0.01 of the Cashew run at 5, 30 and 60 min.
-- [ ] **D2 (C)** Seeds: 3 seeds of the D1 recipe. **Decides D1.**
-  - Done when: a mean ± spread table. Every later comparison is judged against this spread.
-- [ ] **D3 (C)** Rollout curriculum: a mix of short and long rollouts, to keep the 1–5 min skill of k_max 20 and the 60-min skill of k_max 45.
+- [–] **D1 (C)** Reproduce `ens_A_cpu_k45` on the GPU. **Dropped (Dalton, 2026-11-05).** A ~0.02 gap at 60 min between CPU and GPU runs is not unexpected.
+  - The run (Saidie job 8680, `ens_A_gpu_k45`) serves as the GPU reference for D3/D4: nMSE 0.110 / 0.213 / 0.270 at 5 / 30 / 60 min.
+  - Treat differences of ~0.02 at 60 min as within run-to-run noise.
+- [–] **D2 (C)** Seeds. **Dropped (Dalton, 2026-11-05):** go straight to training.
+- [ ] **D3 (C)** **Running: Saidie job 8681 (`d3_kuniform`, `--k-sampling uniform`).** Rollout curriculum: a mix of short and long rollouts, to keep the 1–5 min skill of k_max 20 and the 60-min skill of k_max 45.
   - Done when: better than both at all leads, or the trade-off is documented.
-- [ ] **D4 (C)** Capacity sweep: latent channels 16 / 32, sites 2 km / 1 km, propagator width 256 / 512.
+- [ ] **D4 (C)** **Running: Saidie jobs 8682 (`d4_c32`), 8683 (`d4_patch4`) and 8684 (`d4_h512`).** Two GPUs at a time, since the node is shared. Capacity sweep: latent channels 16 / 32, sites 2 km / 1 km, propagator width 256 / 512.
   - Done when: a table of reconstruction error and forecast nMSE at 5 / 30 / 60 min.
 - [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
