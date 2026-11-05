@@ -100,3 +100,61 @@ def test_reflectivity_and_multimodel(setup):
     torch.testing.assert_close(Zm[1::2], _forecast(p2, Zs[1::2], z_truth, 3, 1, halo=1))
     rm = run_twin(ae, [prop, p2], truth, z_truth, Zs, nrm, TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, halo=1))
     assert rm["config"]["n_models"] == 2
+
+
+def test_baseline_modes_and_forecasts_from_analyses(setup):
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    g = torch.Generator().manual_seed(3)
+    Zs = z_truth[3][None] + 0.5 * torch.randn(20, *z_truth.shape[1:], generator=g)
+    base = dict(t0=3, n_cycles=3, steps_per_cycle=2, halo=1, letkf=LETKFConfig(loc_km=6.0, rtps=0.5))
+    # persistence, no DA: the members never change
+    per = run_twin(ae, prop, truth, z_truth, Zs, nrm, TwinConfig(**base, forecast_model="persistence"), assimilate=False)
+    assert per["config"]["forecast_model"] == "persistence"
+    Zp = _forecast(None, Zs, z_truth, 3, 2, halo=0)          # without the boundary halo, nothing changes
+    torch.testing.assert_close(Zp, Zs)
+    # EnOI: prior = forecast analysis mean + static anomalies about their own mean
+    S = torch.randn(20, *z_truth.shape[1:], generator=g)
+    en = run_twin(ae, prop, truth, z_truth, Zs, nrm, TwinConfig(**base, ensemble_mode="enoi"),
+                  static_ens=lambda t: S)
+    assert len(en["cycles"]) == 3 and "analysis" in en["cycles"][0]
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Zs, nrm, TwinConfig(**base, ensemble_mode="enoi"))
+    # physical-space analysis, re-encoded; forecasts from the last analysis
+    ph = run_twin(ae, prop, truth, z_truth, Zs, nrm,
+                  TwinConfig(**base, analysis_space="physical", forecast_from=(2,), forecast_frames=4))
+    c = ph["cycles"][-1]
+    assert "analysis_reencoded" in c and len(c["forecast"]) == 4
+    assert c["forecast"][0]["lead_frames"] == 1 and np.isfinite(c["forecast"][-1]["nmse_mean_dec"])
+    # full surface mesonet
+    ms = run_twin(ae, prop, truth, z_truth, Zs, nrm, TwinConfig(**base, surface_vars=("th", "u", "prs", "qv")))
+    assert ms["config"]["surface_vars"] == ["th", "u", "prs", "qv"]
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Zs, nrm, TwinConfig(**base, surface_vars=("w",)))
+
+
+def test_enoi_prior_is_mean_plus_static_anomalies(setup):
+    """Check the EnOI prior construction directly: one cycle, no assimilation."""
+    from ks_latent.cm1.twin import _forecast as fc
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    g = torch.Generator().manual_seed(4)
+    Zs = torch.randn(10, *z_truth.shape[1:], generator=g)
+    S = torch.randn(10, *z_truth.shape[1:], generator=g)
+    mean = fc(prop, Zs.mean(0, keepdim=True), z_truth, 3, 2, 1)
+    expect = mean + (S - S.mean(0, keepdim=True))
+    torch.testing.assert_close(expect.mean(0), mean[0], atol=1e-6, rtol=0)
+    torch.testing.assert_close(expect - expect.mean(0, keepdim=True), S - S.mean(0, keepdim=True), atol=1e-6, rtol=0)
+
+
+def test_enoi_phys_uses_no_latent_and_assimilates(setup):
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    g = torch.Generator().manual_seed(5)
+    Zs = z_truth[3][None] + 0.5 * torch.randn(20, *z_truth.shape[1:], generator=g)
+    A = torch.randn(20, truth.C, truth.NX, generator=g)
+    cfg = TwinConfig(t0=3, n_cycles=3, steps_per_cycle=2, halo=1, ensemble_mode="enoi_phys", forecast_model="persistence",
+                     sigma_obs=0.05, obs_every_cells=4, letkf=LETKFConfig(loc_km=6.0))
+    r = run_twin(ae, prop, truth, z_truth, Zs, nrm, cfg, static_phys=lambda t: A)
+    pri = [c["prior"]["th_obs_rmse"] for c in r["cycles"]]
+    ana = [c["analysis"]["th_obs_rmse"] for c in r["cycles"]]
+    assert all(a < p for a, p in zip(ana, pri))
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Zs, nrm, cfg)

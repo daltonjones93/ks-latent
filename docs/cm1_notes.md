@@ -210,3 +210,8 @@ Joint wins: w reconstruction error is 2× lower with the joint encoder, and fore
 ## D5 learning curve (valid part, ens_A subsets)
 - nMSE at 30 / 60 min: 0.271 / 0.328 (7 members), 0.230 / 0.277 (14), 0.196 / 0.262 (28). Still rising.
 - The 58-member point (ens_A + ens_A2) is being rerun (job 8706) after the `sbatch --export` comma bug.
+
+## D5 complete: the learning curve saturates near 28 storms
+- Skill relative to persistence at 5 / 30 / 60 min: 28 members 0.214 / 0.332 / 0.350, 58 members 0.206 / 0.328 / 0.347.
+- θ′ and front metrics are mixed. ens_A2 adds members with other noise seeds.
+- **Caution:** raw nMSE across runs with different training sets is not comparable, because the per-variable normalization differs.

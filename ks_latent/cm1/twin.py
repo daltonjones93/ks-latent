@@ -30,6 +30,23 @@ Doppler radial velocity (E4b, `vr_tilts` non-empty): `obs.RadialVelocity` from a
 `radar_x_km`, error `sigma_vr` m/s; observations from the true columns through the same (linear)
 operator.
 
+Baselines (G2/G2b), all equation-free and with the same observations:
+  - `forecast_model="persistence"`: members do not evolve between analyses.
+  - `ensemble_mode="enoi"`: ensemble optimal interpolation. The prior is the previous analysis MEAN
+    (forecast with `forecast_model`) plus STATIC anomalies: the encoded training members at the same
+    frame about their own mean (`static_ens(t)`). With persistence this uses no forecast model at all.
+  - `ensemble_mode="enoi_phys"`: classic EnOI with no machine learning at all. The background mean is
+    the previous PHYSICAL analysis mean (persistence); the anomalies are the training archive's TRUE
+    columns at the same frame about their mean (`static_phys(t)`, (N, C, NX) normalized); the LETKF runs
+    cell by cell. (Latent EnOI with a persistence background is not offered: with a stale background
+    the large innovations push latents where the decoder extrapolates badly, a strawman.)
+  - `analysis_space="physical"`: the LETKF runs cell by cell on the decoded columns (C channels per
+    250 m cell), and the analysis is re-encoded for the next forecast, so the filter leaves the decoder's
+    range and is projected back. Condensate is clipped at 0 before re-encoding.
+Surface network (`surface_vars`): any of theta', u', p', qv' at the lowest level, same columns, errors
+`sigma_surface`. Forecasts from analyses (G3): after each cycle in `forecast_from`, a free forecast of
+the analysis ensemble for `forecast_frames` frames is scored against the truth.
+
 Multi-model ensembles (E3b): `prop` may be a list; member i is forecast by prop[i % len(prop)]. The
 propagators must share the autoencoder (trained with `--reuse-ae` on one run), so that their
 disagreement is model error in one latent space.
@@ -64,6 +81,13 @@ class TwinConfig:
     vr_every_cells: int = 8
     sigma_vr: float = 2.0         # m/s
     radar_x_km: float = 330.0
+    surface_vars: tuple = ("th",)
+    sigma_surface: tuple = (("th", 0.5), ("u", 1.0), ("prs", 0.2), ("qv", 0.5))  # K, m/s, hPa, g/kg
+    forecast_model: str = "surrogate"      # or "persistence"
+    ensemble_mode: str = "cycled"          # "cycled", "enoi" (latent static anomalies), "enoi_phys" (no ML)
+    analysis_space: str = "latent"         # or "physical"
+    forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
+    forecast_frames: int = 60
     seed: int = 0
 
 
@@ -74,7 +98,9 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
     P = Z.shape[1]
     props = prop if isinstance(prop, (list, tuple)) else [prop]
     for j in range(steps):
-        if len(props) == 1:
+        if props[0] is None:          # persistence
+            pass
+        elif len(props) == 1:
             Z = props[0](Z)
         else:
             Zn = torch.empty_like(Z)
@@ -92,11 +118,15 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
 @torch.no_grad()
 def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: np.ndarray, y: np.ndarray | None,
             norm: Normalizer, Z_levels: int, refl_head=None, refl_cols=None, cref_true=None,
-            y_refl=None, vr_op=None, vr_true=None) -> dict:
-    """Scores of ensemble `Z` against the true normalized columns `u_true` (C, NX)."""
-    dec = ae.decode(Z)                                       # (N, C, NX)
+            y_refl=None, vr_op=None, vr_true=None, dec: torch.Tensor | None = None) -> dict:
+    """Scores of ensemble `Z` (or of decoded members `dec`, for physical-space analyses) against the
+    true normalized columns `u_true` (C, NX)."""
+    if dec is None:
+        dec = ae.decode(Z)                                   # (N, C, NX)
+        dec_mean = ae.decode(Z.mean(0, keepdim=True))[0]
+    else:
+        dec_mean = dec.mean(0)
     mean_dec = dec.mean(0)
-    dec_mean = ae.decode(Z.mean(0, keepdim=True))[0]
     V = len(VARS)
     sc = torch.tensor(norm.scale, dtype=torch.float32, device=dec.device)
     def per_var(est):
@@ -133,18 +163,59 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
 
 
 @torch.no_grad()
+def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) -> list:
+    """Free forecast of ensemble Z from frame t for cfg.forecast_frames frames; per-lead scores (G3)."""
+    out, Zf = [], Z.clone()
+    Zl = truth.Z
+    ith = VARS.index("th") * Zl
+    s_th = float(norm.scale[VARS.index("th")])
+    dev = Z.device
+    for j in range(cfg.forecast_frames):
+        if t + j + 1 >= truth.T[0]:
+            break
+        Zf = _forecast(prop, Zf, z_truth, t + j, 1, cfg.halo, cfg.model_noise, gen)
+        u_true = truth.full(0, t + j + 1, device=dev)[0]
+        dec = ae.decode(Zf)
+        md = dec.mean(0)
+        th_t = (u_true[ith] * s_th).double().cpu().numpy()
+        th_m = (md[ith] * s_th).double().cpu().numpy()
+        f = main_pool_front_km(th_t)
+        rec = {"lead_frames": j + 1, "nmse_mean_dec": float(((md - u_true) ** 2).mean()),
+               "front_disp_km": displacement_km(th_m, th_t, center_km=f)}
+        if refl_head is not None:
+            cref_t = truth.cref[0][t + j + 1].clamp(min=0).double().numpy()
+            r = refl_head(dec).mean(0).double().cpu().numpy()
+            echo = cref_t > 10
+            rec["refl_echo_rmse"] = float(np.sqrt(np.mean((r[echo] - cref_t[echo]) ** 2))) if echo.any() else float("nan")
+        out.append(rec)
+    return out
+
+
+@torch.no_grad()
 def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
              Z0: torch.Tensor, norm: Normalizer, cfg: TwinConfig, assimilate: bool = True,
-             refl_head=None) -> dict:
+             refl_head=None, static_ens=None, static_phys=None) -> dict:
     """`truth`: ColumnData holding the truth member only (index 0); `z_truth` its encoded latent
     trajectory (T, P, c) (used only for the boundary halo); `Z0` (N, P, c) initial ensemble at frame
     `cfg.t0`. Returns per-cycle prior/analysis scores."""
     ae.eval()
+    if cfg.forecast_model == "persistence":
+        prop = None
+    elif cfg.forecast_model != "surrogate":
+        raise ValueError(f"unknown forecast_model {cfg.forecast_model!r}")
     for pk in (prop if isinstance(prop, (list, tuple)) else [prop]):
-        pk.eval()
+        if pk is not None:
+            pk.eval()
+    if cfg.ensemble_mode == "enoi_phys" and static_phys is None:
+        raise ValueError("ensemble_mode='enoi_phys' needs static_phys(frame) -> (N, C, NX)")
+    if cfg.ensemble_mode == "enoi" and static_ens is None:
+        raise ValueError("ensemble_mode='enoi' needs static_ens(frame) -> (N, P, c)")
+    if cfg.analysis_space not in ("latent", "physical"):
+        raise ValueError(f"unknown analysis_space {cfg.analysis_space!r}")
     if cfg.refl_every_cells > 0 and refl_head is None:
         raise ValueError("refl_every_cells > 0 needs refl_head")
-    if not cfg.assim_theta and cfg.refl_every_cells == 0 and not cfg.vr_tilts and assimilate:
+    if not cfg.assim_theta and not [v for v in cfg.surface_vars if v != "th"] and cfg.refl_every_cells == 0 \
+            and not cfg.vr_tilts and assimilate:
         raise ValueError("nothing to assimilate")
     dev = Z0.device
     rng = np.random.default_rng(cfg.seed)
@@ -156,6 +227,10 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     P = Z0.shape[1]
     x_site = (np.arange(P) + 0.5) * ae.cfg.patch * 0.25
     r_var = np.full(obs_cols.size, cfg.sigma_obs ** 2)
+    sig_sfc = dict(cfg.sigma_surface)
+    sfc_extra = [v for v in cfg.surface_vars if v != "th"]
+    if not set(cfg.surface_vars) <= {"th", "u", "prs", "qv"}:
+        raise ValueError(f"surface_vars must be from th, u, prs, qv: {cfg.surface_vars}")
     refl_cols = np.arange(cfg.refl_every_cells // 2, NX, cfg.refl_every_cells) if cfg.refl_every_cells else obs_cols
     x_refl = (refl_cols + 0.5) * 0.25
     vr_op = None
@@ -171,12 +246,22 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     if T_last >= truth.T[0]:
         raise ValueError(f"truth has {truth.T[0]} frames; the experiment needs {T_last + 1}")
     Z = Z0.clone()
+    U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
     gen = torch.Generator().manual_seed(cfg.seed)
     hist = []
     for k in range(cfg.n_cycles):
         t = cfg.t0 + k * cfg.steps_per_cycle
-        Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen)
         t1 = t + cfg.steps_per_cycle
+        dec_prior = None
+        if cfg.ensemble_mode == "enoi":
+            mean = _forecast(prop, Z.mean(0, keepdim=True), z_truth, t, cfg.steps_per_cycle, cfg.halo, 0.0, gen)
+            S = static_ens(t1).to(dev, Z.dtype)
+            Z = mean + (S - S.mean(0, keepdim=True))
+        elif cfg.ensemble_mode == "enoi_phys":
+            A = static_phys(t1).to(dev, U_mean.dtype)
+            dec_prior = U_mean[None] + (A - A.mean(0, keepdim=True))
+        else:
+            Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen)
         u_true = truth.full(0, t1, device=dev)[0]
         y = (u_true[ith, obs_cols] * s_th).double().cpu().numpy() + rng.normal(0.0, cfg.sigma_obs, obs_cols.size)
         cref_true = truth.cref[0][t1].clamp(min=0).double().numpy()
@@ -189,23 +274,47 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
             y_vr = vr_true + rng.normal(0.0, cfg.sigma_vr, vr_true.size)
         sk = dict(refl_head=refl_head, refl_cols=refl_cols, cref_true=cref_true, y_refl=y_refl,
                   vr_op=vr_op, vr_true=vr_true)
-        rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)}
+        rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=dec_prior, **sk)}
         if assimilate:
-            dec = ae.decode(Z)
+            dec = ae.decode(Z) if dec_prior is None else dec_prior
             Ys, ys, rs, xs = [], [], [], []
-            if cfg.assim_theta:
+            if cfg.assim_theta and "th" in cfg.surface_vars:
                 Ys.append((dec[:, ith, obs_cols] * s_th).double().cpu().numpy()); ys.append(y)
                 rs.append(r_var); xs.append(x_obs)
+            for v in sfc_extra:
+                iv, sv = VARS.index(v) * Zl, float(norm.scale[VARS.index(v)])
+                yv = (u_true[iv, obs_cols] * sv).double().cpu().numpy() + rng.normal(0.0, sig_sfc[v], obs_cols.size)
+                Ys.append((dec[:, iv, obs_cols] * sv).double().cpu().numpy()); ys.append(yv)
+                rs.append(np.full(obs_cols.size, sig_sfc[v] ** 2)); xs.append(x_obs)
             if cfg.refl_every_cells:
                 Ys.append(refl_head(dec)[:, refl_cols].double().cpu().numpy()); ys.append(y_refl)
                 rs.append(np.full(refl_cols.size, cfg.sigma_refl ** 2)); xs.append(x_refl)
             if vr_op is not None:
                 Ys.append(vr_op._from_columns(dec).double().cpu().numpy()); ys.append(y_vr)
                 rs.append(np.full(y_vr.size, cfg.sigma_vr ** 2)); xs.append(vr_op.x_km)
-            Za = letkf_analysis(Z.double().cpu().numpy(), np.concatenate(Ys, 1), np.concatenate(ys),
-                                np.concatenate(rs), x_site, np.concatenate(xs), cfg.letkf)
-            Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)
-            rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+            Yall, yall, rall, xall = np.concatenate(Ys, 1), np.concatenate(ys), np.concatenate(rs), np.concatenate(xs)
+            if cfg.ensemble_mode == "enoi_phys":   # physical background, physical analysis, no latent at all
+                x_cell = (np.arange(NX) + 0.5) * 0.25
+                Ua = letkf_analysis(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf)
+                Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()
+                Ua = torch.where(ae.positive_mask[None, :, None], Ua.clamp(min=0), Ua)
+                rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
+                U_mean = Ua.mean(0)
+            elif cfg.analysis_space == "latent":
+                Za = letkf_analysis(Z.double().cpu().numpy(), Yall, yall, rall, x_site, xall, cfg.letkf)
+                Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)
+                rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+            else:  # per-cell LETKF on the decoded columns, then back into the latent space
+                x_cell = (np.arange(NX) + 0.5) * 0.25
+                Ua = letkf_analysis(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf)
+                Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()
+                pm = ae.positive_mask[None, :, None]
+                Ua = torch.where(pm, Ua.clamp(min=0), Ua)
+                rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
+                Z = ae.encode(Ua)
+                rec["analysis_reencoded"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+        if k in cfg.forecast_from:
+            rec["forecast"] = _forecast_scores(ae, prop, Z, z_truth, truth, t1, cfg, norm, refl_head, gen)
         hist.append(rec)
     return {"config": {"t0": cfg.t0, "n_cycles": cfg.n_cycles, "steps_per_cycle": cfg.steps_per_cycle,
                        "obs_every_cells": cfg.obs_every_cells, "sigma_obs": cfg.sigma_obs,
@@ -214,6 +323,8 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                        "refl_every_cells": cfg.refl_every_cells, "sigma_refl": cfg.sigma_refl,
                        "vr_tilts": list(cfg.vr_tilts), "sigma_vr": cfg.sigma_vr, "radar_x_km": cfg.radar_x_km,
                        "n_models": len(prop) if isinstance(prop, (list, tuple)) else 1,
+                       "surface_vars": list(cfg.surface_vars), "forecast_model": cfg.forecast_model,
+                       "ensemble_mode": cfg.ensemble_mode, "analysis_space": cfg.analysis_space,
                        "n_members": int(Z0.shape[0]), "n_obs": int(obs_cols.size), "assimilate": assimilate},
             "cycles": hist}
 

@@ -117,7 +117,17 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
       - new metrics in `ks_latent/cm1/verify.py`: main-pool front, threshold-free displacement, FSS;
       - all runs re-scored (job 8687): median displacement ≤ 0.5 km to 30 min and 0.8–1.7 km at 60 min, against 6 / 11.5 km for persistence;
       - c = 32 has the smallest worst cases. See `cm1_notes.md`.
-- [ ] **D5 (C)** **Partly done 2026-11-05.**
+- [x] **D5 (C)** **Done 2026-11-05. The learning curve flattens after ~28 storms in this environment.**
+  - Corrected 58-member run: Saidie job 8706, 31 + 30 members loaded, 58 trained.
+  - **Normalized errors are not comparable across runs with different training sets:** each fits its own per-variable scales (u 4.98 vs 5.15 m/s here). Compare skill relative to persistence, or physical units.
+  - **Results, 28 vs 58 members:**
+    - error / persistence at 5 / 30 / 60 min: 0.214 / 0.332 / 0.350 vs 0.206 / 0.328 / 0.347 (1–4% better);
+    - surface θ′ RMSE at 30 / 60 min: 0.59 / 0.83 vs 0.64 / 0.89 K (slightly worse);
+    - low-level-rain FSS at 30 / 60 min: 0.831 / 0.696 vs 0.849 / 0.714.
+
+    All of this is within single-seed noise.
+  - **Verdict:** big gains from 7 → 14 → 28, then essentially none. Same-environment data is no longer the bottleneck; environmental variety (ens_B) and model changes (G10, the cold-pool bias) are.
+  - Earlier notes:
   - **Bug:** `DATA=cache:A,B` inside `sbatch --export` was cut at the comma, so every D5 run trained on ens_A only. The 58 point duplicated the 28 point. Fixed: `+` separates cache directories, and the log reports members per directory. The 58 run is resubmitted as job 8706; the invalid one is kept as `d5_train58_INVALID_onlyensA`.
   - **Valid points (subsets of ens_A; c = 32 + uniform k):**
 
