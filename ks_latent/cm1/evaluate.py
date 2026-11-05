@@ -15,8 +15,14 @@ lead time against
     error of a perfect model started from another member's initial state,
     i.e. the predictability floor for the original perturbation size.
 Errors are normalized MSE over all channels (unit-variance variables), plus
-surface theta' RMSE (K) and the gust-front position error (km): the front
-is the easternmost cell with surface theta' < -1 K.
+surface theta' RMSE (K) and front metrics from `verify.py`:
+  - main-pool front error (km): leading edge of the main cold pool, median and 90th percentile
+    over cases (heavy-tailed: squall lines advance in discrete jumps);
+  - displacement (km): threshold-free signed shift of the forecast's surface theta' against the
+    truth around the true front (bias, and median / 90th percentile of its magnitude);
+  - Fractions Skill Score of column-max condensate (sqrt(g/kg)) at thresholds `FSS_THRESH` and
+    window sizes `FSS_SCALES_KM`.
+The older easternmost-cold-cell front error is kept as `front_err_km` for comparison.
 """
 from __future__ import annotations
 
@@ -25,6 +31,10 @@ import torch
 
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
+from ks_latent.cm1.verify import displacement_km, fss, main_pool_front_km
+
+FSS_THRESH = (0.3, 1.0)          # sqrt(g/kg): ~0.1 g/kg (cloud or rain present), 1 g/kg (heavy)
+FSS_SCALES_KM = (0.25, 1.0, 4.0, 16.0)
 
 
 def _th_sfc(u: torch.Tensor, Z: int, norm: Normalizer) -> torch.Tensor:
@@ -70,6 +80,14 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
     dev = next(ae.parameters()).device
     Z = data.Z
     M = len(data.u)
+    cases = []  # numpy (surface theta', column-max condensate) of forecast, persistence and truth, per case
+    iql, iqi = VARS.index("qliq") * Z, VARS.index("qice") * Z
+    def _np_fields(u):
+        th = _th_sfc(u, Z, norm).cpu().numpy()
+        ql = u[..., iql:iql + Z, :] * float(norm.scale[VARS.index("qliq")])
+        qi = u[..., iqi:iqi + Z, :] * float(norm.scale[VARS.index("qice")])
+        cond = torch.sqrt(ql.clamp(min=0) ** 2 + qi.clamp(min=0) ** 2).amax(dim=-2).cpu().numpy()
+        return th, cond
     rows = {k: [] for k in ("nmse", "nmse_pers", "nmse_spread", "th_sfc_rmse", "th_sfc_rmse_pers", "front_err_km",
                             "front_err_pers_km")}
     for t0 in t0s:
@@ -101,7 +119,9 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
             ft = front_x_km(ths_t)
             rows["front_err_km"].append((front_x_km(ths_p) - ft).abs().cpu())
             rows["front_err_pers_km"].append((front_x_km(ths_0) - ft).abs().cpu())
+            cases.append({"fc": _np_fields(pred), "pers": _np_fields(pers), "ob": _np_fields(tr)})
     out = {"t0s": t0s, "n_lead": n_lead, "lead_s": [(j + 1) * data.dt for j in range(n_lead)], "halo_sites": halo}
+    out.update(_front_and_fss(cases, n_lead))
     for k, v in rows.items():
         if v:
             out[k] = torch.stack(v).nanmean(0).tolist()
@@ -116,3 +136,56 @@ def summarize(fc: dict) -> str:
                      f"{g('th_sfc_rmse'):7.2f} {g('th_sfc_rmse_pers'):6.2f} {g('front_err_km'):8.2f} "
                      f"{g('front_err_pers_km'):7.2f}")
     return "\n".join(lines)
+
+
+def _front_and_fss(cases: list, n_lead: int) -> dict:
+    """Front, displacement and FSS statistics per lead over all cases (see module docstring)."""
+    if not cases:
+        return {}
+    dx = 0.25
+    scales = [max(1, int(round(s / dx))) for s in FSS_SCALES_KM]
+    fe = {"fc": np.full((len(cases), n_lead), np.nan), "pers": np.full((len(cases), n_lead), np.nan)}
+    dp = {"fc": np.full((len(cases), n_lead), np.nan), "pers": np.full((len(cases), n_lead), np.nan)}
+    fs = {k: {th: {n: np.full((len(cases), n_lead), np.nan) for n in scales} for th in FSS_THRESH}
+          for k in ("fc", "pers")}
+    for c, case in enumerate(cases):
+        th_ob, cond_ob = case["ob"]
+        f_ob = main_pool_front_km(th_ob)
+        for k in ("fc", "pers"):
+            th_k, cond_k = case[k]
+            fe[k][c] = np.abs(main_pool_front_km(th_k) - f_ob)
+            for j in range(n_lead):
+                dp[k][c, j] = displacement_km(th_k[j], th_ob[j], center_km=f_ob[j])
+                for thr in FSS_THRESH:
+                    for n, v in fss(cond_k[j], cond_ob[j], thr, scales).items():
+                        fs[k][thr][n][c, j] = v
+    med = lambda a: np.nanmedian(a, axis=0).tolist()
+    p90 = lambda a: np.nanpercentile(a, 90, axis=0).tolist()
+    out = {"n_cases": len(cases),
+           "front_main_err_km_median": med(fe["fc"]), "front_main_err_km_p90": p90(fe["fc"]),
+           "front_main_err_pers_km_median": med(fe["pers"]), "front_main_err_pers_km_p90": p90(fe["pers"]),
+           "disp_km_bias": np.nanmean(dp["fc"], axis=0).tolist(),
+           "disp_abs_km_median": med(np.abs(dp["fc"])), "disp_abs_km_p90": p90(np.abs(dp["fc"])),
+           "disp_pers_abs_km_median": med(np.abs(dp["pers"])), "disp_pers_abs_km_p90": p90(np.abs(dp["pers"]))}
+    for k, name in (("fc", "fss"), ("pers", "fss_pers")):
+        out[name] = {f"{thr:g}": {f"{n * dx:g}km": np.nanmean(fs[k][thr][n], axis=0).tolist() for n in scales}
+                     for thr in FSS_THRESH}
+    return out
+
+
+def summarize_fronts(fc: dict, leads_min=(1, 5, 15, 30, 45, 60)) -> str:
+    """Front, displacement and FSS lines for the leads in `leads_min` that exist."""
+    if "disp_abs_km_median" not in fc:
+        return ""
+    lead = [round(s / 60) for s in fc["lead_s"]]
+    js = [lead.index(m) for m in leads_min if m in lead]
+    fk = "4km" if "4km" in fc["fss"]["0.3"] else sorted(fc["fss"]["0.3"])[0]
+    lines = [f"lead_min  |disp| med/p90 (pers)    bias   main-front med/p90 (pers)   FSS q>0.3 @{fk} (pers)"]
+    for j in js:
+        lines.append(f"{lead[j]:7d}   {fc['disp_abs_km_median'][j]:5.2f}/{fc['disp_abs_km_p90'][j]:5.2f} "
+                     f"({fc['disp_pers_abs_km_median'][j]:5.2f})  {fc['disp_km_bias'][j]:+6.2f}   "
+                     f"{fc['front_main_err_km_median'][j]:5.2f}/{fc['front_main_err_km_p90'][j]:5.2f} "
+                     f"({fc['front_main_err_pers_km_median'][j]:5.2f})       "
+                     f"{fc['fss']['0.3'][fk][j]:.3f} ({fc['fss_pers']['0.3'][fk][j]:.3f})")
+    return "\n".join(lines)
+

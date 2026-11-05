@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT))
 from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_cached_members, load_member,  # noqa: E402
                                 member_from_cm1io, positive_channel_mask, save_member, split_members,
                                 synthetic_members)
-from ks_latent.cm1.evaluate import forecast_report, reconstruction_report, summarize  # noqa: E402
+from ks_latent.cm1.evaluate import forecast_report, reconstruction_report, summarize, summarize_fronts  # noqa: E402
 from ks_latent.cm1.io import load_grads_run, load_netcdf_run  # noqa: E402
 from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
 from ks_latent.cm1.train import StageAConfig, StageBConfig, encode_members, train_stage_a, train_stage_b  # noqa: E402
@@ -166,15 +166,29 @@ def plot(results: dict, out: Path, sections: dict | None):
     fc = results["forecast"]
     lead = np.array(fc["lead_s"]) / 60
     col = {"model": "#2a6fdb", "pers": "#888888", "spread": "#d9822b"}
-    fig, ax = plt.subplots(1, 3, figsize=(12, 3.4), constrained_layout=True)
-    for a_, (k, kp, ylab) in zip(ax, [("nmse", "nmse_pers", "normalized MSE (all channels)"),
-                                      ("th_sfc_rmse", "th_sfc_rmse_pers", "surface θ′ RMSE (K)"),
-                                      ("front_err_km", "front_err_pers_km", "gust-front position error (km)")]):
+    fig, ax = plt.subplots(1, 4, figsize=(15, 3.4), constrained_layout=True)
+    for a_, (k, kp, ylab) in zip(ax[:2], [("nmse", "nmse_pers", "normalized MSE (all channels)"),
+                                          ("th_sfc_rmse", "th_sfc_rmse_pers", "surface θ′ RMSE (K)")]):
         a_.plot(lead, fc[k], "-o", ms=3, lw=2, color=col["model"], label="learned model")
         a_.plot(lead, fc[kp], "--", lw=1.5, color=col["pers"], label="persistence")
         if k == "nmse" and "nmse_spread" in fc:
             a_.plot(lead, fc["nmse_spread"], ":", lw=2, color=col["spread"], label="truth-member spread")
-        a_.set_xlabel("lead time (min)"); a_.set_ylabel(ylab); a_.grid(alpha=0.25)
+    if "disp_abs_km_median" in fc:
+        ax[2].fill_between(lead, fc["disp_abs_km_median"], fc["disp_abs_km_p90"], color=col["model"], alpha=0.15, lw=0,
+                           label="model, median–90th pct")
+        ax[2].plot(lead, fc["disp_abs_km_median"], "-", lw=2, color=col["model"], label="|displacement|, model")
+        ax[2].plot(lead, fc["disp_pers_abs_km_median"], "--", lw=1.5, color=col["pers"], label="|displacement|, persistence")
+        ax[2].plot(lead, fc["front_main_err_km_median"], ":", lw=1.5, color=col["model"], label="main-pool front error, model")
+        ax[2].set_ylabel("front position error (km)")
+        fk = "4km" if "4km" in fc["fss"]["0.3"] else sorted(fc["fss"]["0.3"])[0]
+        for thr, ls in (("0.3", "-"), ("1", "--")):
+            ax[3].plot(lead, fc["fss"][thr][fk], ls, lw=2, color=col["model"], label=f"model, q > {thr}")
+            ax[3].plot(lead, fc["fss_pers"][thr][fk], ls, lw=1.5, color=col["pers"], label=f"persistence, q > {thr}")
+        ax[3].set_ylabel(f"FSS, column-max condensate, {fk} window"); ax[3].set_ylim(0, 1)
+        ax[2].legend(frameon=False, fontsize=7); ax[3].legend(frameon=False, fontsize=7)
+    for a_ in ax:
+        a_.set_xlabel("lead time (min)"); a_.grid(alpha=0.25)
+    ax[0].set_ylabel("normalized MSE (all channels)"); ax[1].set_ylabel("surface θ′ RMSE (K)")
     ax[0].legend(frameon=False, fontsize=8)
     fig.suptitle(f"Held-out members {', '.join(results['split']['test'])}: forecasts from the encoded truth, "
                  f"true state at the domain edges")
@@ -252,20 +266,30 @@ def main():
     norm = Normalizer.fit(pick(tr_n))
     dt = members[0].dt
     cfg = build_config(a, dt)
-    (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
+    Z = members[0].X.shape[3]
+    cfg.ae.n_channels, cfg.ae.n_levels = len(VARS) * Z, Z  # before the config is saved
+    if a.eval_only and (out / "config.json").exists() and not (out / "config.json.trained").exists():
+        (out / "config.json.trained").write_text((out / "config.json").read_text())
+    if not a.eval_only:
+        (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
     (out / "normalizer.json").write_text(json.dumps(norm.to_dict(), indent=1))
     log(f"[cm1] split train {tr_n} | val {va_n} | test {te_n}; dt {dt:.0f} s; scales "
         + ", ".join(f"{v} {s:.3g}" for v, s in zip(VARS, norm.scale)))
     log(f"[cm1] AE patch {cfg.ae.patch} ({cfg.ae.patch * 0.25:g} km sites), c {cfg.ae.latent_channels}, reach "
         f"{cfg.ae.reach_sites}; propagator reach {cfg.prop.reach_sites} sites/step "
         f"({cfg.prop.reach_sites * cfg.ae.patch * 0.25:g} km), k_max {cfg.stage_b.k_max}")
-    Z = members[0].X.shape[3]
-    cfg.ae.n_channels, cfg.ae.n_levels = len(VARS) * Z, Z
     data_dev = dev if a.data_device == "same" else torch.device(a.data_device)
     log(f"[cm1] data on {data_dev}, model on {dev}")
     data = {k: ColumnData(pick(n), norm, data_dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
+    if a.eval_only:
+        saved = json.loads((out / "config.json.trained").read_text() if (out / "config.json.trained").exists()
+                           else (out / "config.json").read_text())
+        cfg.ae, cfg.prop = ColumnAEConfig(**saved["ae"]), StencilPropConfig(**saved["prop"])
+        cfg.stage_a, cfg.stage_b = StageAConfig(**saved["stage_a"]), StageBConfig(**saved["stage_b"])
+        log(f"[cm1] eval only: architecture from the run's saved config (c {cfg.ae.latent_channels}, patch "
+            f"{cfg.ae.patch}, hidden {cfg.ae.hidden}, halo {cfg.stage_b.halo_sites})")
     ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z)).to(dev)
     prop = StencilPropagator(cfg.prop).to(dev)
     if a.eval_only:
@@ -324,6 +348,7 @@ def main():
         + ", ".join(f"{k} {v:.3g}" for k, v in rec.get("rmse_phys_storm", rec["rmse_phys_all"]).items()))
     log("[test] forecasts (mean over start times " + ", ".join(f"{t * dt / 3600:.1f} h" for t in t0s) + "):")
     log(summarize(fc))
+    log(summarize_fronts(fc))
 
     # a section: truth vs forecast theta' at the last lead from the first start time, first test member
     sections = None
