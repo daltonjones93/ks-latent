@@ -173,17 +173,22 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
 
 - [ ] **D10 (C)** **Environment-based split** for ens_B: `--holdout-env` reads each member's moisture offset and shear scale from the ensemble's `manifest.csv` and keeps a region entirely out of training and validation. Members are otherwise split by name, which would leak held-out environments into training. Needed before D8 and G5.
-- [ ] **D11 (C)** **Environment conditioning.**
+- [~] **D11 (C)** **Environment conditioning. Code done 2026-11-05; awaits ens_B for a real test.**
+  - `ks_latent/cm1/env.py`: features from each member's input sounding minus the reference, (θ, qv, u) on 62 levels, scaled 1 K / 1 g/kg / 5 m/s.
+  - The encoder projects them (186 → 16) and broadcasts them as input channels, threaded through Stages A/C, the reports and the twin. `--env-file`, `scripts/cm1/build_env.py`.
+  - Files `ens_A.json` and `ens_A2.json` are in `~/cm1_env` on Cashew and Saidie.
+  - **Still to do for DA with conditioned models:** pass the environment in `da_twin.py` / `da_study.py` (they fail loudly until then).
+  - Original task:
   - Problem: columns are perturbations from each member's own far-field t=0 column, which removes the base moisture and shear that distinguish ens_B storms.
   - Fix: append the member's base profiles (u₀(z), qv₀(z), θ₀(z)) as extra input channels, constant in x and not reconstructed, to the encoder and propagator; or condition the propagator on a small learned environment embedding.
   - Test on ens_A (should be neutral) and ens_B (should help). Needed for a fair D8/G5.
-- [ ] **D12 (C)** **Stage C: joint fine-tuning on a decoded multi-step rollout loss** (encoder + propagator + decoder; error on physical columns over k steps).
+- [ ] **D12 (C)** **Queued on Saidie (chain, one GPU at a time): jobs 8719 (Stage C) and 8720 (Stage C + near-surface θ′ weight 2).** **Stage C: joint fine-tuning on a decoded multi-step rollout loss** (encoder + propagator + decoder; error on physical columns over k steps).
   - Why: Stage B minimizes latent error, weighting latent directions equally rather than by physical importance. Decoded-space targets also avoid the documented latent-target collapse.
   - Keep the log-det anti-collapse term on the latents. Optionally up-weight θ′ below ~1 km against the cold-pool bias (G10).
   - Done when: skill vs persistence at 5 / 30 / 60 min and max-C bias, against `d34_c32_kuniform`.
-- [ ] **D13 (C)** **History in the propagator:** 2–3 past frames as input, reusing the codebase's history-mode propagator ideas. Unresolved sub-site convection appears as memory (Mori–Zwanzig).
+- [ ] **D13 (C)** **Queued: job 8721 (2-frame history, Stage B on the d34 autoencoder).** **History in the propagator:** 2–3 past frames as input, reusing the codebase's history-mode propagator ideas. Unresolved sub-site convection appears as memory (Mori–Zwanzig).
   - Done when: same table as D12.
-- [ ] **D14 (C)** **Lower-cost improvements:**
+- [ ] **D14 (C)** **Queued:** (a) job 8718 (average of 4 propagators, evaluation only); (c) job 8722 (stochastic, 4 noise channels, CRPS with 4 samples); (b) job 8723 (vertical front end, 16 channels, full retrain). **Lower-cost improvements:**
   - (a) average the forecasts of several independently trained propagators (the 4 E3b ones exist), as a forecast ensemble mean;
   - (b) vertical 1D convolutions within each variable's column before the encoder mixes channels;
   - (c) a stochastic propagator trained on CRPS, which learns its own spread for DA and usually lowers ensemble-mean error.
