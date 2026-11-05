@@ -159,7 +159,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - **Caveat:** the per-variable encoder has 7× fewer parameters (0.36 M vs 2.53 M), so part of the gap is capacity.
   - Originally: ablation: one encoder per variable against the joint column encoder.
   - Done when: reconstruction and forecast tables. Do the variables need to be encoded jointly?
-- [ ] **D8 (C)** Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
+- [ ] **D8 (C)** (deps: D10, D11) Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
   - deps: `ens_B`. Done when: error in held-out environments against in-distribution ones.
 
 - [ ] **D9 (C)** Mirror-image augmentation, after `ens_B` exists (D8).
@@ -168,6 +168,24 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - On `ens_A` alone (5-min data, locality test), mirrors did *not* help predict the same environment, because they live in reversed shear.
   - With `ens_B`'s spread of shears, they may help generalization. Train D8's held-out-environment split with and without mirrors.
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
+
+- [ ] **D10 (C)** **Environment-based split** for ens_B: `--holdout-env` reads each member's moisture offset and shear scale from the ensemble's `manifest.csv` and keeps a region entirely out of training and validation. Members are otherwise split by name, which would leak held-out environments into training. Needed before D8 and G5.
+- [ ] **D11 (C)** **Environment conditioning.**
+  - Problem: columns are perturbations from each member's own far-field t=0 column, which removes the base moisture and shear that distinguish ens_B storms.
+  - Fix: append the member's base profiles (u₀(z), qv₀(z), θ₀(z)) as extra input channels, constant in x and not reconstructed, to the encoder and propagator; or condition the propagator on a small learned environment embedding.
+  - Test on ens_A (should be neutral) and ens_B (should help). Needed for a fair D8/G5.
+- [ ] **D12 (C)** **Stage C: joint fine-tuning on a decoded multi-step rollout loss** (encoder + propagator + decoder; error on physical columns over k steps).
+  - Why: Stage B minimizes latent error, weighting latent directions equally rather than by physical importance. Decoded-space targets also avoid the documented latent-target collapse.
+  - Keep the log-det anti-collapse term on the latents. Optionally up-weight θ′ below ~1 km against the cold-pool bias (G10).
+  - Done when: skill vs persistence at 5 / 30 / 60 min and max-C bias, against `d34_c32_kuniform`.
+- [ ] **D13 (C)** **History in the propagator:** 2–3 past frames as input, reusing the codebase's history-mode propagator ideas. Unresolved sub-site convection appears as memory (Mori–Zwanzig).
+  - Done when: same table as D12.
+- [ ] **D14 (C)** **Lower-cost improvements:**
+  - (a) average the forecasts of several independently trained propagators (the 4 E3b ones exist), as a forecast ensemble mean;
+  - (b) vertical 1D convolutions within each variable's column before the encoder mixes channels;
+  - (c) a stochastic propagator trained on CRPS, which learns its own spread for DA and usually lowers ensemble-mean error.
+
+  Report each against the same baseline.
 
 ## E. Latent DA twin experiments (the Paper III core)
 - [x] **E1 (C)** Observation operators — done 2026-11-05.
