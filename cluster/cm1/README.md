@@ -14,6 +14,54 @@ Things the kit cannot know are marked **FILL**: the login host name and the modu
 
 ---
 
+## Quick start: one command from the Mac
+
+```bash
+cd ~/Documents/latent_DA
+EMAIL=you@colostate.edu bash cluster/cm1/launch_cashew.sh USER@CASHEW_HOST
+```
+
+Fill in your eID and the login host from the Cashew page's "Connecting to the Cluster" section. Connect to the CSU VPN first if you're off campus. You'll be asked for your password, and possibly a Duo approval, twice: once for the copy, once for the login.
+
+The command does this:
+1. Makes the bundle and copies it to `~/cm1_bundle` on Cashew.
+2. Runs `kit/go.sh` on the login node. That script:
+   - finds gfortran and netcdf-fortran modules and saves the choice in `kit/cashew.conf` (edit that file if the guess is wrong);
+   - submits a **build job**, then a **5-min smoke test** that runs only if the build succeeds;
+   - generates 31 members (`mem000` = validation copy of member 1, `mem001`–`mem030` new; 6 h each, 1-min output);
+   - submits **4 packed ensemble jobs**, which run only if the smoke test passes.
+3. Returns. Everything else happens in the queue: 6 jobs in total, well under Cashew's cap of 20.
+
+Nothing heavy runs on the login node. If the build or smoke test fails, Slurm cancels the later jobs (`--kill-on-invalid-dep`), and the reason is in `~/cm1_bundle/logs/`.
+
+**Re-running the same command is always safe.** It skips the build and smoke test if they already succeeded, and resubmits only unfinished members. Use it after a failure, a timeout, or once you've fixed `kit/cashew.conf`.
+
+**Watching it, on Cashew:**
+```bash
+squeue -u $USER
+bash ~/cm1_bundle/kit/status.sh ~/cm1_bundle/ens_A
+grep SMOKE ~/cm1_bundle/logs/cm1_smoke_*.out    # time estimate per member
+```
+
+**Copying results back**, on the Mac, when `status.sh` says all are done:
+```bash
+bash cluster/cm1/fetch_results.sh USER@CASHEW_HOST cm1_bundle/ens_A
+```
+
+**Settings**, as environment variables before the command:
+- `N=30`: new members;
+- `CPUS=8`: members per job;
+- `SEED=1`;
+- `ENS=ens_A`: ensemble name;
+- `TIMAX=21600` and `TAPFRQ=60`: run length and output interval, in seconds;
+- `EXTRA_ARGS="--qv-offset -1.5 1.0 --shear-scale 0.6 1.4"`: varied environments, for Phase B. Use a new `ENS` name and `SEED` for it.
+
+If NetCDF-Fortran isn't available, the kit builds without it automatically and writes GrADS output, which the Mac reads too. It prints a warning when it does.
+
+The numbered steps below are the same pipeline done by hand, for when something needs debugging.
+
+---
+
 ## 0. Once: get access
 - **Eligibility.** Engineering students are pre-approved. Ask ETS to add you to the cluster users group (the request form on the Cashew page). Faculty and staff need to own a node.
 - **VPN.** Off campus, connect to the CSU VPN first. Both ssh and the OnDemand web portal need it.

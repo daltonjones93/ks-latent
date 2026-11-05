@@ -20,5 +20,5 @@ mkdir -p logs
 echo "$n members -> $njobs jobs of up to $CPUS CPUs"
 for ((j = 0; j < njobs; j++)); do
   chunk=("${todo[@]:$((j * CPUS)):$CPUS}")
-  sbatch --cpus-per-task="${#chunk[@]}" "$@" "$KIT/cm1_pack.slurm" "$KIT" "$ENS" "${chunk[@]}"
+  sbatch --cpus-per-task="${#chunk[@]}" ${@+"$@"} "$KIT/cm1_pack.slurm" "$KIT" "$ENS" "${chunk[@]}"
 done

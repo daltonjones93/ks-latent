@@ -10,6 +10,7 @@
 #SBATCH --output=logs/cm1_%j.out
 set -uo pipefail
 KIT=$1; ENS=$2; shift 2
+KIT_DIR=$KIT . "$KIT/env.sh"
 echo "job $SLURM_JOB_ID on $(hostname): ${#@} members, ${SLURM_CPUS_PER_TASK} at a time: $*"
 printf "%s\n" "$@" | xargs -P "${SLURM_CPUS_PER_TASK:-1}" -I{} bash "$KIT/run_member.sh" "$ENS/members/{}"
 rc=$?
