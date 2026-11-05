@@ -87,10 +87,25 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - The run (Saidie job 8680, `ens_A_gpu_k45`) serves as the GPU reference for D3/D4: nMSE 0.110 / 0.213 / 0.270 at 5 / 30 / 60 min.
   - Treat differences of ~0.02 at 60 min as within run-to-run noise.
 - [–] **D2 (C)** Seeds. **Dropped (Dalton, 2026-11-05):** go straight to training.
-- [ ] **D3 (C)** **Running: Saidie job 8681 (`d3_kuniform`, `--k-sampling uniform`).** Rollout curriculum: a mix of short and long rollouts, to keep the 1–5 min skill of k_max 20 and the 60-min skill of k_max 45.
-  - Done when: better than both at all leads, or the trade-off is documented.
-- [ ] **D4 (C)** **Running: Saidie jobs 8682 (`d4_c32`), 8683 (`d4_patch4`) and 8684 (`d4_h512`).** Two GPUs at a time, since the node is shared. Capacity sweep: latent channels 16 / 32, sites 2 km / 1 km, propagator width 256 / 512.
-  - Done when: a table of reconstruction error and forecast nMSE at 5 / 30 / 60 min.
+- [x] **D3 (C)** Rollout curriculum — done 2026-11-05 (Saidie job 8681, `--k-sampling uniform`: each batch draws its rollout length in [2, curriculum max]).
+  - Short leads recovered: nMSE 0.096 at 5 min vs 0.110 for the reference, at the k ≤ 20 level. The 60-min error is unchanged (0.267 vs 0.270).
+  - Surface θ′ and front errors are slightly worse at 45–60 min.
+- [x] **D4 (C)** Capacity sweep — done 2026-11-05 (jobs 8682–8685, 12–16 min each on one H200). nMSE at 1 / 5 / 15 / 30 / 45 / 60 min:
+
+  | Run | 1 | 5 | 15 | 30 | 45 | 60 min |
+  |---|---|---|---|---|---|---|
+  | reference | 0.053 | 0.110 | 0.185 | 0.213 | 0.251 | 0.270 |
+  | c = 32 | 0.048 | 0.106 | 0.174 | 0.201 | **0.229** | **0.245** |
+  | 1 km sites | 0.057 | 0.107 | 0.166 | 0.199 | 0.240 | 0.256 |
+  | width 512 | 0.046 | 0.099 | 0.186 | 0.237 | 0.270 | 0.283 |
+  | **c = 32 + uniform k** | **0.040** | **0.092** | **0.166** | **0.196** | 0.240 | 0.262 |
+
+  - **Verdict:** adopt **c = 32 with uniform k** as the default, since it is best at 1–30 min, the leads that matter for DA cycles. c = 32 with k at the maximum is best at 45–60 min, but within ~noise.
+  - **Width 512 is worse beyond 15 min:** the model is data-limited, not capacity-limited, so more members should help more than more parameters (D5).
+  - **1 km sites** improve reconstruction of w and condensate, with no clear forecast gain at 2× the sites.
+  - **Caveats:**
+    - single seed (D2 dropped), and differences ≤ 0.02 at 60 min are within run-to-run noise;
+    - the gust-front error at 45–60 min (~2–3.5 km) is dominated by jumps when new cells form ahead of the front, so a better front metric is needed.
 - [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
 - [ ] **D6 (C)** Physics checks:

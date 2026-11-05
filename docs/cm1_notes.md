@@ -133,3 +133,12 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 ## B2: noise seed
 - CM1's fixed seed drives both the bubble noise (±0.2 K) and a domain-wide ±0.25 K θ noise (irandp = 1). All existing members share it.
 - The seed_var1 patch makes it per member.
+
+## D3/D4 on Saidie (2026-11-05): ens_A, single seed each, ~12–16 min per run on one H200
+- **Recipe:**
+  - random rollout lengths up to 45 (`--k-sampling uniform`) recover short-lead skill without hurting 60 min;
+  - 32 latent channels improve reconstruction (storm RMSE 15–20% lower for every variable) and the 45–60 min forecasts.
+- **Best at 1–30 min: c = 32 + uniform k.** nMSE 0.040 / 0.092 / 0.166 / 0.196, against the reference's 0.053 / 0.110 / 0.185 / 0.213.
+- **Wider networks hurt beyond 15 min.** The model is data-limited.
+- **1 km sites:** no clear forecast gain.
+- **Front metric:** errors at 45–60 min are dominated by detector jumps when new cells form ahead of the front.
