@@ -358,3 +358,37 @@ def test_environment_features_and_conditioned_encoder(tmp_path):
     zs, z = ae.encode(torch.roll(u, 2 * PATCH, dims=-1), e1), ae.encode(u, e1)
     r, P = cfg.reach_sites, NX // PATCH
     torch.testing.assert_close(zs[:, r + 2:P - r], z[:, r:P - r - 2], atol=1e-12, rtol=0)   # still equivariant in x
+
+
+def test_split_species_pipeline_and_physics():
+    """D15: rain/snow/graupel as separate variables. The normalizer, positivity mask, reports and
+    condensate physics follow the data's variable set; total condensate equals the 7-variable one."""
+    from ks_latent.cm1.data import VARS_SPLIT, synthetic_members, vars_for
+    from ks_latent.cm1.physics import BaseState, condensate_mass, low_level_liquid
+    from ks_latent.cm1.train import encode_members
+    ms = synthetic_members(3, T=6, NX=96, Z=Z, split=True)
+    nrm = Normalizer.fit(ms[:2])
+    assert nrm.vars == VARS_SPLIT and vars_for(10) == VARS_SPLIT and vars_for(7) == VARS
+    with pytest.raises(ValueError):
+        vars_for(8)
+    mask = positive_channel_mask(Z, nrm.vars).reshape(10, Z)
+    assert mask[5:].all() and not mask[:5].any()
+    dev = torch.device("cpu")
+    va = ColumnData(ms[2:], nrm, dev)
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=10 * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z, nrm.vars))
+    rr = reconstruction_report(ae, va, nrm)
+    assert list(rr["rmse_phys_all"]) == list(VARS_SPLIT)
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=2, radius=1))
+    fc = forecast_report(ae, prop, va, encode_members(ae, va), nrm, t0s=[0], n_lead=2, halo=2)
+    assert np.isfinite(fc["nmse"]).all()
+    # physics: species sums reproduce the combined liquid/ice condensate exactly
+    rng = np.random.default_rng(0)
+    base = BaseState.from_sounding()
+    Zr = base.z.size
+    S = np.abs(rng.normal(size=(10, Zr, 40)))                       # sqrt(g/kg) per species
+    C = S[:7].copy()
+    C[5] = np.sqrt(S[5] ** 2 + S[6] ** 2)                           # qliq = sqrt(qc + qr)
+    C[6] = np.sqrt(S[7] ** 2 + S[8] ** 2 + S[9] ** 2)               # qice = sqrt(qi + qs + qg)
+    np.testing.assert_allclose(condensate_mass(S, base), condensate_mass(C, base), rtol=1e-12)
+    np.testing.assert_allclose(low_level_liquid(S, base), low_level_liquid(C, base), rtol=1e-12)

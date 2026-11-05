@@ -127,11 +127,11 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
     else:
         dec_mean = dec.mean(0)
     mean_dec = dec.mean(0)
-    V = len(VARS)
+    V = len(norm.vars)
     sc = torch.tensor(norm.scale, dtype=torch.float32, device=dec.device)
     def per_var(est):
         e = ((est - u_true) ** 2).reshape(V, Z_levels, -1).mean(dim=(1, 2)).sqrt() * sc
-        return dict(zip(VARS, e.tolist()))
+        return dict(zip(norm.vars, e.tolist()))
     ith = VARS.index("th") * Z_levels
     s_th = float(norm.scale[VARS.index("th")])
     th_true = (u_true[ith] * s_th).double().cpu().numpy()
@@ -342,7 +342,8 @@ def summarize_twin(res: dict) -> dict:
         out[stage] = {"nmse_mean_dec": g("nmse_mean_dec"), "nmse_dec_mean": g("nmse_dec_mean"),
                       "th_obs_rmse": g("th_obs_rmse"), "th_obs_spread": g("th_obs_spread"),
                       "front_abs_disp_km_median": float(np.nanmedian([abs(c[stage]["front_disp_km"]) for c in cyc])),
-                      "rmse_phys": {v: float(np.mean([c[stage]["rmse_phys_mean_dec"][v] for c in cyc])) for v in VARS}}
+                      "rmse_phys": {v: float(np.mean([c[stage]["rmse_phys_mean_dec"][v] for c in cyc]))
+                                    for v in cyc[0][stage]["rmse_phys_mean_dec"]}}
         for k in ("refl_obs_rmse", "refl_obs_spread", "refl_echo_rmse", "vr_obs_rmse", "vr_obs_spread"):
             if k in cyc[0][stage]:
                 out[stage][k] = float(np.nanmean([c[stage][k] for c in cyc]))

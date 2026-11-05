@@ -16,26 +16,20 @@ import numpy as np
 BASE_I = 1500  # far-field column at t=0 (the bubble is at x = 200 km, radius 10 km)
 
 
-def transform(g) -> np.ndarray:
-    """`g(name) -> (T, Z, NX)` float64 raw field; returns `(T, V, Z, NX)` float32."""
+def transform(g, split: bool = False) -> np.ndarray:
+    """`g(name) -> (T, Z, NX)` float64 raw field; returns `(T, V, Z, NX)` float32 in the variables of
+    `data.VARS` (condensate as liquid and ice), or with `split=True` of `data.VARS_SPLIT` (cloud water,
+    rain, cloud ice, snow and graupel separately; D15). Condensate is sqrt(g/kg) either way."""
     th, qv, prs = g("th"), g("qv"), g("prs")
     base = lambda a: a[0, :, BASE_I][None, :, None]
-    qliq = g("qc") + g("qr")
-    qice = g("qi") + g("qs") + g("qg")
     u = g("uinterp")
-    X = np.stack(
-        [
-            u - base(u),
-            g("winterp"),
-            th - base(th),
-            (qv - base(qv)) * 1e3,          # g/kg
-            (prs - base(prs)) / 100.0,      # hPa
-            np.sqrt(np.clip(qliq, 0, None) * 1e3),
-            np.sqrt(np.clip(qice, 0, None) * 1e3),
-        ],
-        axis=1,
-    ).astype(np.float32)
-    return X
+    sq = lambda q: np.sqrt(np.clip(q, 0, None) * 1e3)
+    common = [u - base(u), g("winterp"), th - base(th), (qv - base(qv)) * 1e3, (prs - base(prs)) / 100.0]
+    if split:
+        cond = [sq(g(k)) for k in ("qc", "qr", "qi", "qs", "qg")]
+    else:
+        cond = [sq(g("qc") + g("qr")), sq(g("qi") + g("qs") + g("qg"))]
+    return np.stack(common + cond, axis=1).astype(np.float32)
 
 
 def parse_ctl(ctl: Path) -> dict:
@@ -89,26 +83,26 @@ def read_grads(ctl) -> dict:
     return out
 
 
-def load_netcdf_run(path) -> dict:
+def load_netcdf_run(path, split: bool = False) -> dict:
     """`{'X': (T, V, Z, NX), 't', 'cref', 'x', 'z'}` from a CM1 `cm1out.nc`."""
     import netCDF4 as nc
 
     ds = nc.Dataset(path)
     ds.set_auto_mask(False)
     g = lambda k: ds[k][:, :, 0, :].astype(np.float64)
-    out = dict(X=transform(g), t=ds["time"][:].astype(np.float64), x=ds["xh"][:].astype(np.float64),
+    out = dict(X=transform(g, split), t=ds["time"][:].astype(np.float64), x=ds["xh"][:].astype(np.float64),
                z=ds["zh"][:].astype(np.float64), cref=ds["cref"][:, 0, :].astype(np.float32),
                dbz=ds["dbz"][:, :, 0, :].astype(np.float32))
     ds.close()
     return out
 
 
-def load_grads_run(ctl) -> dict:
+def load_grads_run(ctl, split: bool = False) -> dict:
     """Same keys as `load_netcdf_run` (no coordinates), from a GrADS run directory's `cm1out_s.ctl`."""
     ctl = Path(ctl)
     d = read_grads(ctl)
     meta = read_grads(ctl.parent / "cm1out_metadata.ctl")
     nt = min(d["th"].shape[0], meta["mtime"].shape[0])
     g = lambda k: d[k][:nt].astype(np.float64)
-    return dict(X=transform(g), t=meta["mtime"].ravel()[:nt].astype(np.float64),
+    return dict(X=transform(g, split), t=meta["mtime"].ravel()[:nt].astype(np.float64),
                 cref=d["cref"][:nt].astype(np.float32), dbz=d["dbz"][:nt].astype(np.float32))

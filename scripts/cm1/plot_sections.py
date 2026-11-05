@@ -32,7 +32,10 @@ from ks_latent.utils.device import get_device  # noqa: E402
 
 STYLE = {"qliq": ("liquid water: cloud + rain (g/kg)", "Blues", (0, 2.0), True),
          "qice": ("ice: cloud ice + snow + graupel (g/kg)", "Purples", (0, 2.0), True),
-         "th": ("θ′ (K)", "RdBu_r", (-8, 8), False), "w": ("w (m/s)", "RdBu_r", (-10, 10), False)}
+         "th": ("θ′ (K)", "RdBu_r", (-8, 8), False), "w": ("w (m/s)", "RdBu_r", (-10, 10), False),
+         "qc": ("cloud water (g/kg)", "Blues", (0, 1.5), True), "qr": ("rain (g/kg)", "Blues", (0, 2.5), True),
+         "qi": ("cloud ice (g/kg)", "Purples", (0, 0.5), True), "qs": ("snow (g/kg)", "Purples", (0, 1.5), True),
+         "qg": ("graupel (g/kg)", "Purples", (0, 2.5), True)}
 
 
 def main():
@@ -88,8 +91,10 @@ def main():
                            constrained_layout=True, squeeze=False)
     for j, v in enumerate(a.vars):
         lab, cmap, (lo, hi), squared = STYLE[v]
-        sc = float(norm.scale[VARS.index(v)])
-        sl = slice(VARS.index(v) * Z, (VARS.index(v) + 1) * Z)
+        if v not in norm.vars:
+            raise ValueError(f"{v} is not a variable of this model ({norm.vars})")
+        sc = float(norm.scale[norm.vars.index(v)])
+        sl = slice(norm.vars.index(v) * Z, (norm.vars.index(v) + 1) * Z)
         for i, (title, field) in enumerate(rows):
             F = field[sl].double().cpu().numpy() * sc
             if squared:

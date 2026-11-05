@@ -199,6 +199,13 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - (c) a stochastic propagator trained on CRPS, which learns its own spread for DA and usually lowers ensemble-mean error.
 
   Report each against the same baseline.
+- [ ] **D15 (C)** **Rain, snow and graupel as separate model variables** (added 2026-11-05).
+  - Why: the 7-variable state lumps cloud water + rain into `qliq` and cloud ice + snow + graupel into `qice`, so the model cannot forecast rain or snow separately, and the reflectivity head has to guess the species mix. Hydrometeor species are also what a radar operator and a precipitation forecast need.
+  - State: 10 variables, `VARS_SPLIT = (u, w, θ′, qv′, p′, qc, qr, qi, qs, qg)`, each condensate species as sqrt(g/kg); 620 channels instead of 434. The first five variables are unchanged.
+  - **Code: done.** `io.transform(split=True)`, `data.vars_for(V)` (picks the set from the data's shape), `Normalizer.vars`, positivity mask, reports, physics (condensate sums all species present), twin scores, `plot_sections.py` styles for qc/qr/qi/qs/qg, `build_cache.py --split`. Test `test_split_species_pipeline_and_physics`: the species sums reproduce the 7-variable condensate mass and low-level liquid exactly; on the 1-min scratch run the split recombines to 2e-7.
+  - [ ] Build split caches from the raw GrADS on Cashew (`~/cm1_cache_split`, `~/cm1_cache_A2_split`; ens_B once done), copy to Saidie.
+  - [ ] Train `d15_split` with the `d34_c32_kuniform` recipe (c=32, uniform k ≤ 45) on the split caches.
+  - Done when: skill vs persistence at 5 / 30 / 60 min against `d34_c32_kuniform`, scored on the 7 combined variables (sum the species back) so the comparison is like for like; per-species RMSE and storm-column FSS for qr and qs; rain and snow section figures. Watch for: rain and graupel are sparse and fast-falling, so the per-variable RMS scaling may give them too little weight (try a floor on the scale), and c=32 may now be too few latent channels (try c=48).
 
 ## E. Latent DA twin experiments (the Paper III core)
 - [x] **E1 (C)** Observation operators — done 2026-11-05.

@@ -55,7 +55,7 @@ def compact(s: dict) -> dict:
     for stage in ("prior", "analysis"):
         if stage in s:
             d = {k: s[stage][k] for k in METRICS if k in s[stage]}
-            d.update({f"rmse_{v}": s[stage]["rmse_phys"][v] for v in VARS})
+            d.update({f"rmse_{v}": x for v, x in s[stage]["rmse_phys"].items()})
             out[stage] = d
     return out
 
@@ -187,7 +187,7 @@ def main():
     per_truth = lambda m, st, k: [np.mean([x[st][k] for x in rows[t][m] if k in x[st]]) for t in truths]
     free_of = lambda st, k: [rows[t]["free"]["prior"][k] for t in truths]
     keys = ["nmse_mean_dec", "front_abs_disp_km_median", "th_obs_rmse", "refl_echo_rmse", "vr_obs_rmse",
-            "th_obs_spread"] + [f"rmse_{v}" for v in VARS]
+            "th_obs_spread"] + [f"rmse_{v}" for v in norm.vars]
     for m in a.modes:
         agg["modes"][m] = {}
         for st in ("prior", "analysis"):

@@ -1,6 +1,6 @@
 """Physical consistency diagnostics for decoded CM1 columns (D6).
 
-Inputs are physical-unit column fields `(..., V, Z, NX)` in the variables of `data.VARS`
+Inputs are physical-unit column fields `(..., V, Z, NX)` in the variables of `data.VARS` or `data.VARS_SPLIT`
 (u', w, theta', qv', p', sqrt(q_liq), sqrt(q_ice); g/kg for moisture), on the model levels.
 
 - `BaseState`: base-state height, density rho0(z) and potential temperature theta0(z) from an input
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ks_latent.cm1.data import VARS
+from ks_latent.cm1.data import ICE, LIQUID, vars_for
 
 G, CP, RD = 9.81, 1004.0, 287.04
 DX_M = 250.0
@@ -51,23 +51,29 @@ class BaseState:
         return cls(z=z, rho0=rho, theta0=th)
 
 
-def _v(name: str) -> int:
-    return VARS.index(name)
+def _v(name: str, V: int = 7) -> int:
+    return vars_for(V).index(name)
+
+
+def _sq_sum(X: np.ndarray, names: tuple) -> np.ndarray:
+    """Sum over the condensate species in `names` present in X of q (g/kg), from the stored sqrt(g/kg)."""
+    vs = vars_for(X.shape[-3])
+    return sum(X[..., vs.index(n), :, :] ** 2 for n in names if n in vs)
 
 
 def divergence_ratio(X: np.ndarray, base: BaseState) -> float:
     """RMS of d(rho0 u)/dx + d(rho0 w)/dz over RMS of d(rho0 u)/dx, for fields `(..., V, Z, NX)`."""
     X = np.asarray(X, np.float64)
     r = base.rho0[:, None]
-    dudx = r * np.gradient(X[..., _v("u"), :, :], DX_M, axis=-1)
-    dwdz = np.gradient(r * X[..., _v("w"), :, :], base.z, axis=-2)
+    dudx = r * np.gradient(X[..., _v("u", X.shape[-3]), :, :], DX_M, axis=-1)
+    dwdz = np.gradient(r * X[..., _v("w", X.shape[-3]), :, :], base.z, axis=-2)
     return float(np.sqrt(np.mean((dudx + dwdz) ** 2) / np.mean(dudx ** 2)))
 
 
 def condensate_mass(X: np.ndarray, base: BaseState) -> np.ndarray:
     """Liquid + ice condensate per unit length of line (kg/m), one value per leading index."""
     X = np.asarray(X, np.float64)
-    q = (X[..., _v("qliq"), :, :] ** 2 + X[..., _v("qice"), :, :] ** 2) / 1000.0   # kg/kg
+    q = (_sq_sum(X, LIQUID) + _sq_sum(X, ICE)) / 1000.0                       # kg/kg, every species
     dz = np.gradient(base.z)
     return (q * (base.rho0 * dz)[:, None]).sum(axis=(-2, -1)) * DX_M
 
@@ -75,7 +81,7 @@ def condensate_mass(X: np.ndarray, base: BaseState) -> np.ndarray:
 def cold_pool_intensity(X: np.ndarray, base: BaseState) -> np.ndarray:
     """C(x) in m/s, `(..., NX)`: buoyancy integral over the surface-based layer with theta' < 0."""
     X = np.asarray(X, np.float64)
-    th = X[..., _v("th"), :, :]                              # (..., Z, NX)
+    th = X[..., _v("th", X.shape[-3]), :, :]                              # (..., Z, NX)
     neg = th < 0
     layer = np.cumprod(neg, axis=-2).astype(bool)            # contiguous from the surface
     dz = np.gradient(base.z)[:, None]
@@ -86,4 +92,5 @@ def cold_pool_intensity(X: np.ndarray, base: BaseState) -> np.ndarray:
 def low_level_liquid(X: np.ndarray, base: BaseState, z_max_m: float = 1000.0) -> np.ndarray:
     """Max over levels below `z_max_m` of sqrt(q_liq) (sqrt(g/kg)): a rain proxy, `(..., NX)`."""
     k = base.z < z_max_m
-    return np.asarray(X, np.float64)[..., _v("qliq"), :, :][..., k, :].max(axis=-2)
+    X = np.asarray(X, np.float64)
+    return np.sqrt(_sq_sum(X, LIQUID))[..., k, :].max(axis=-2)        # cloud + rain in either set

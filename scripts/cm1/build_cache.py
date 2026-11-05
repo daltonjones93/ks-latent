@@ -17,6 +17,7 @@ def main():
     ap.add_argument("ens")
     ap.add_argument("out")
     ap.add_argument("--format", choices=["grads", "netcdf"], default="grads")
+    ap.add_argument("--split", action="store_true", help="condensate by species: qc, qr, qi, qs, qg (D15)")
     a = ap.parse_args()
     ens, out = Path(a.ens).resolve(), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,8 @@ def main():
             print(f"{mdir.name}: not finished, skipped")
             n_skip += 1
             continue
-        run = load_grads_run(mdir / "cm1out_s.ctl") if a.format == "grads" else load_netcdf_run(mdir / "cm1out.nc")
+        run = (load_grads_run(mdir / "cm1out_s.ctl", a.split) if a.format == "grads"
+               else load_netcdf_run(mdir / "cm1out.nc", a.split))
         m = member_from_cm1io(run, f"{tag}_{mdir.name}")
         save_member(m, f)
         chk = load_member(f)

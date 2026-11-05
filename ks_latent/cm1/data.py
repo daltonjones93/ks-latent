@@ -32,7 +32,21 @@ import numpy as np
 import torch
 
 VARS = ("u", "w", "th", "qv", "prs", "qliq", "qice")
-POSITIVE_VARS = ("qliq", "qice")
+# D15: condensate split by species (each sqrt(g/kg)); the first five variables are the same and in the
+# same positions as in VARS, so everything indexed by u, w, th, qv, prs works for both sets
+VARS_SPLIT = ("u", "w", "th", "qv", "prs", "qc", "qr", "qi", "qs", "qg")
+LIQUID = ("qliq", "qc", "qr")                 # liquid condensate names in either set
+ICE = ("qice", "qi", "qs", "qg")              # ice condensate names in either set
+POSITIVE_VARS = LIQUID + ICE
+
+
+def vars_for(V: int) -> tuple:
+    """The variable set of data with V variables per level (7: combined condensate, 10: split)."""
+    if V == len(VARS):
+        return VARS
+    if V == len(VARS_SPLIT):
+        return VARS_SPLIT
+    raise ValueError(f"no variable set with {V} variables")
 
 
 @dataclass
@@ -77,6 +91,7 @@ class Normalizer:
     @classmethod
     def fit(cls, members: list[CM1Member], stride: int = 4) -> "Normalizer":
         V = members[0].X.shape[2]
+        names = vars_for(V)
         ss = np.zeros(V)
         n = 0
         for m in members:
@@ -85,8 +100,8 @@ class Normalizer:
             n += x.shape[0] * x.shape[1] * x.shape[3]
         scale = np.sqrt(ss / n)
         if (scale <= 0).any():
-            raise ValueError(f"zero scale for a variable: {dict(zip(VARS, scale))}")
-        return cls(scale=scale)
+            raise ValueError(f"zero scale for a variable: {dict(zip(names, scale))}")
+        return cls(scale=scale, vars=names)
 
     def to_dict(self) -> dict:
         return {"vars": list(self.vars), "scale": self.scale.tolist()}
@@ -100,7 +115,8 @@ class Normalizer:
 
 
 def positive_channel_mask(n_levels: int, vars_: tuple = VARS) -> torch.Tensor:
-    """Boolean (V*Z,) mask of the non-negative (condensate) channels."""
+    """Boolean (V*Z,) mask of the non-negative (condensate) channels. Pass `norm.vars` (or
+    `vars_for(n_channels // n_levels)`) for data that may use the split species set."""
     m = np.zeros((len(vars_), n_levels), bool)
     for i, v in enumerate(vars_):
         if v in POSITIVE_VARS:
@@ -210,12 +226,13 @@ def load_cached_members(directory, pattern: str = "*.npz") -> list[CM1Member]:
 
 
 def synthetic_members(n: int, T: int = 24, NX: int = 256, Z: int = 8, dt: float = 60.0,
-                      seed: int = 0) -> list[CM1Member]:
+                      seed: int = 0, split: bool = False) -> list[CM1Member]:
     """Random members with the right layout, for testing the code path where no CM1 data exist
     (e.g. a fresh cluster). Smooth in x (a moving pattern plus noise), a storm patch in `cref`,
     non-negative condensate. Not physics: never report results from these."""
     rng = np.random.default_rng(seed)
-    V = len(VARS)
+    names = VARS_SPLIT if split else VARS
+    V = len(names)
     x = np.arange(NX)
     out = []
     for i in range(n):
@@ -225,8 +242,9 @@ def synthetic_members(n: int, T: int = 24, NX: int = 256, Z: int = 8, dt: float 
         for t in range(T):
             X[t] = np.sin(k[None] * (x[:, None, None] - 0.5 * t) + ph[None]).astype(np.float32)
         X += 0.1 * rng.normal(size=X.shape).astype(np.float32)
-        for v in POSITIVE_VARS:
-            X[:, :, VARS.index(v)] = np.abs(X[:, :, VARS.index(v)])
+        for i, v in enumerate(names):
+            if v in POSITIVE_VARS:
+                X[:, :, i] = np.abs(X[:, :, i])
         cref = np.zeros((T, NX), np.float32)
         cref[:, NX // 2 - 16:NX // 2 + 16] = 30.0
         out.append(CM1Member(name=f"syn{i:03d}", X=X.astype(np.float16), cref=cref, t=np.arange(T) * dt))

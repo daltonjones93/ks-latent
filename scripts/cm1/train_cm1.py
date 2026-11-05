@@ -304,14 +304,14 @@ def main():
     dt = members[0].dt
     cfg = build_config(a, dt)
     Z = members[0].X.shape[3]
-    cfg.ae.n_channels, cfg.ae.n_levels = len(VARS) * Z, Z  # before the config is saved
+    cfg.ae.n_channels, cfg.ae.n_levels = members[0].X.shape[2] * Z, Z  # before the config is saved (7 or 10 variables)
     if a.eval_only and (out / "config.json").exists() and not (out / "config.json.trained").exists():
         (out / "config.json.trained").write_text((out / "config.json").read_text())
     if not a.eval_only:
         (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
     (out / "normalizer.json").write_text(json.dumps(norm.to_dict(), indent=1))
     log(f"[cm1] split train {tr_n} | val {va_n} | test {te_n}; dt {dt:.0f} s; scales "
-        + ", ".join(f"{v} {s:.3g}" for v, s in zip(VARS, norm.scale)))
+        + ", ".join(f"{v} {s:.3g}" for v, s in zip(norm.vars, norm.scale)))
     log(f"[cm1] AE patch {cfg.ae.patch} ({cfg.ae.patch * 0.25:g} km sites), c {cfg.ae.latent_channels}, reach "
         f"{cfg.ae.reach_sites}; propagator reach {cfg.prop.reach_sites} sites/step "
         f"({cfg.prop.reach_sites * cfg.ae.patch * 0.25:g} km), k_max {cfg.stage_b.k_max}")
@@ -340,7 +340,7 @@ def main():
         cfg.stage_a, cfg.stage_b = StageAConfig(**saved["stage_a"]), StageBConfig(**saved["stage_b"])
         log(f"[cm1] eval only: architecture from the run's saved config (c {cfg.ae.latent_channels}, patch "
             f"{cfg.ae.patch}, hidden {cfg.ae.hidden}, halo {cfg.stage_b.halo_sites})")
-    ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z)).to(dev)
+    ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z, norm.vars)).to(dev)
     prop = StencilPropagator(cfg.prop).to(dev)
     if a.eval_only or a.init_from:
         src = out if a.eval_only else Path(a.init_from)

@@ -33,7 +33,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from ks_latent.cm1.data import VARS, ColumnData, Normalizer
+from ks_latent.cm1.data import POSITIVE_VARS, VARS, ColumnData, Normalizer
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator, rollout_from
 from ks_latent.cm1.physics import (BaseState, cold_pool_intensity, condensate_mass, divergence_ratio,
                                    low_level_liquid)
@@ -89,10 +89,10 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
                 "condensate_mass_rel_err": float(np.median(np.abs(np.array(mr_) / np.array(mt_) - 1)))}
     else:
         phys = {}
-    out = {"physics": phys, "rmse_phys_all": dict(zip(VARS, (sc * (se / n).sqrt()).tolist())),
+    out = {"physics": phys, "rmse_phys_all": dict(zip(norm.vars, (sc * (se / n).sqrt()).tolist())),
            "nmse_all": float((se / n).mean())}
     if n_act:
-        out["rmse_phys_storm"] = dict(zip(VARS, (sc * (se_act / n_act).sqrt()).tolist()))
+        out["rmse_phys_storm"] = dict(zip(norm.vars, (sc * (se_act / n_act).sqrt()).tolist()))
         out["nmse_storm"] = float((se_act / n_act).mean())
     return out
 
@@ -114,15 +114,14 @@ def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Ten
     chs = torch.tensor(norm.channel_scale(Z), dtype=torch.float32, device=dev)
     phys_cases = []
     def _phys(u):  # (L, C, NX) normalized -> per-lead physics (small)
-        X = (u * chs[None, :, None]).reshape(u.shape[0], len(VARS), Z, -1).cpu().numpy()
+        X = (u * chs[None, :, None]).reshape(u.shape[0], len(norm.vars), Z, -1).cpu().numpy()
         return {"div": np.array([divergence_ratio(x, base) for x in X]), "mass": condensate_mass(X, base),
                 "cmax": cold_pool_intensity(X, base).max(axis=-1), "ll": low_level_liquid(X, base)}
-    iql, iqi = VARS.index("qliq") * Z, VARS.index("qice") * Z
+    cond_ix = [(norm.vars.index(v) * Z, float(norm.scale[norm.vars.index(v)])) for v in POSITIVE_VARS if v in norm.vars]
     def _np_fields(u):
         th = _th_sfc(u, Z, norm).cpu().numpy()
-        ql = u[..., iql:iql + Z, :] * float(norm.scale[VARS.index("qliq")])
-        qi = u[..., iqi:iqi + Z, :] * float(norm.scale[VARS.index("qice")])
-        cond = torch.sqrt(ql.clamp(min=0) ** 2 + qi.clamp(min=0) ** 2).amax(dim=-2).cpu().numpy()
+        q2 = sum((u[..., i:i + Z, :] * s).clamp(min=0) ** 2 for i, s in cond_ix)   # total condensate, g/kg
+        cond = torch.sqrt(q2).amax(dim=-2).cpu().numpy()
         return th, cond
     rows = {k: [] for k in ("nmse", "nmse_pers", "nmse_spread", "th_sfc_rmse", "th_sfc_rmse_pers", "front_err_km",
                             "front_err_pers_km")}
