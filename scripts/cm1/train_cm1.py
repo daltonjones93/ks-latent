@@ -4,7 +4,8 @@ Data sources
   --source local10        the 10 original members (cm1data/cm1r21.1/run_e*, 5-min frames)
   --source grads:DIR      an ensemble made by cluster/cm1 (DIR/members/mem*/cm1out_s.ctl, GrADS)
   --source netcdf:DIR     the same with NetCDF output (DIR/members/mem*/cm1out.nc)
-  --source cache:DIR[:PATTERN]  float16 member files written by an earlier run (DIR/PATTERN, default *.npz)
+  --source cache:DIR[:PATTERN][,DIR2[:PATTERN2]...]  float16 member files (build_cache.py, or an earlier run's
+                          cache), from one or more directories; member names must be unique across them
   --source synthetic      random fields with the right layout: tests the code path only, no physics
 Members are split by whole member: the last --n-test are test, the --n-val before them validation.
 
@@ -36,6 +37,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from ks_latent.cm1.data import _natural_key  # noqa: E402
 from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_cached_members, load_member,  # noqa: E402
                                 member_from_cm1io, positive_channel_mask, save_member, split_members,
                                 synthetic_members)
@@ -74,8 +76,14 @@ def load_source(source: str, cache: Path, max_frames: int, log) -> list:
             log("  WARNING: synthetic data (code-path test only; never report these numbers)")
             members = synthetic_members(4, T=max_frames or 24)
         else:
-            d, _, pattern = source[len("cache:"):].partition(":")
-            members = load_cached_members(d, pattern or "*.npz")
+            members = []
+            for part in source[len("cache:"):].split(","):
+                d, _, pattern = part.partition(":")
+                members += load_cached_members(d, pattern or "*.npz")
+            names = [m.name for m in members]
+            if len(set(names)) != len(names):
+                raise ValueError("duplicate member names across cache directories")
+            members.sort(key=lambda m: _natural_key(m.name))
         if max_frames:
             members = [dataclasses.replace(m, X=m.X[:max_frames], cref=m.cref[:max_frames], t=m.t[:max_frames])
                        for m in members]
@@ -216,6 +224,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-val", type=int, default=1)
     ap.add_argument("--n-test", type=int, default=2)
+    ap.add_argument("--max-train", type=int, default=0,
+                    help="use only this many training members (seeded random subset; val/test unchanged)")
     ap.add_argument("--max-frames", type=int, default=0)
     ap.add_argument("--patch", type=int, default=8)
     ap.add_argument("--hidden", type=int, default=256)
@@ -262,6 +272,9 @@ def main():
         members = members[:3]
     names = [m.name for m in members]
     tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
+    if a.max_train and a.max_train < len(tr_n):
+        rs = np.random.default_rng(1000 + a.seed)
+        tr_n = sorted(rs.choice(tr_n, a.max_train, replace=False).tolist(), key=_natural_key)
     pick = lambda ns: [m for m in members if m.name in ns]
     norm = Normalizer.fit(pick(tr_n))
     dt = members[0].dt
