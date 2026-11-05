@@ -156,7 +156,17 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 
   Originally: adapt `ks_latent/da/letkf_local.py`, which assumes periodic rolls, and use the true state at the domain edges as boundary conditions.
   - Done when: in a linear-Gaussian test, the analysis matches the Kalman answer, as in the KS tests.
-- [ ] **E3 (C)** Twin experiment 1: a held-out member is the truth, surface θ′ every 2 km every 5 min is observed, with a 30-member latent ensemble.
+- [ ] **E3 (C)** **Built 2026-11-05.** Code in `ks_latent/cm1/twin.py` and `scripts/cm1/da_twin.py` (tests in `tests/unit/test_cm1_twin.py`). **Running: Saidie job 8695 (`~/cm1_da/e3_v1`).**
+  - **Design:**
+    - truth = held-out mem029, observations from the true columns;
+    - ensemble = encoded states of the 28 training members at 1 h;
+    - 5-min cycles for 3 h, truth at the domain edges;
+    - sweep: observations every 2 / 10 km × localization 5 / 10 / 20 km × RTPS 0.5 / 0.9 × model-error noise 0 / 0.05 / 0.1 / 0.2.
+  - **Local first run** (5-min model, 7 members):
+    - the deterministic propagator collapses the spread (0.05 K vs 0.8 K error at the observations), hence the model-error noise option;
+    - noise 0.1 + RTPS 0.9 gives forecast nMSE 0.333 vs 0.431 without DA and a front displacement of 0.25 km;
+    - the unobserved w is not improved yet, and the analysis is sometimes worse than the prior over all variables. Both are expected with 7 members; the 28-member run decides.
+  - Original task: a held-out member is the truth, surface θ′ every 2 km every 5 min is observed, with a 30-member latent ensemble.
   - Done when: analysis and forecast error against a free run and against the truth-member spread, consistency ratio, rank histograms.
 - [ ] **E4 (C)** Twin experiment 2: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
