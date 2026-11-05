@@ -199,3 +199,14 @@ Joint wins: w reconstruction error is 2× lower with the joint encoder, and fore
   - w only −5%.
 - **Reflectivity alone degrades surface θ′** (0.73 → 0.96 K): a spurious cross-variable update.
 - **Next observation type:** Doppler radial velocity (E4b), for the wind.
+
+## E4b radial velocity (2026-11-05, Saidie job 8701)
+- **θ′ + reflectivity + Doppler radial velocity:** forecast / analysis nMSE 0.229 / 0.212, against 0.329 without DA (−30 / −36%).
+  - Wind: u 2.20 → 1.70, w 1.10 → 1.00 m/s.
+  - Condensate: liquid / ice −25 / −29%.
+  - Echo reflectivity: 7.7 → 4.2 dBZ.
+- **θ′ + radial velocity alone** reaches 0.239, so radial velocity is the single most valuable addition.
+
+## D5 learning curve (valid part, ens_A subsets)
+- nMSE at 30 / 60 min: 0.271 / 0.328 (7 members), 0.230 / 0.277 (14), 0.196 / 0.262 (28). Still rising.
+- The 58-member point (ens_A + ens_A2) is being rerun (job 8706) after the `sbatch --export` comma bug.

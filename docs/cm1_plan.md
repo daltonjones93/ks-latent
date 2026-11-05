@@ -117,7 +117,18 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
       - new metrics in `ks_latent/cm1/verify.py`: main-pool front, threshold-free displacement, FSS;
       - all runs re-scored (job 8687): median displacement ≤ 0.5 km to 30 min and 0.8–1.7 km at 60 min, against 6 / 11.5 km for persistence;
       - c = 32 has the smallest worst cases. See `cm1_notes.md`.
-- [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
+- [ ] **D5 (C)** **Partly done 2026-11-05.**
+  - **Bug:** `DATA=cache:A,B` inside `sbatch --export` was cut at the comma, so every D5 run trained on ens_A only. The 58 point duplicated the 28 point. Fixed: `+` separates cache directories, and the log reports members per directory. The 58 run is resubmitted as job 8706; the invalid one is kept as `d5_train58_INVALID_onlyensA`.
+  - **Valid points (subsets of ens_A; c = 32 + uniform k):**
+
+    | Train members | nMSE 30 / 60 min | Low-level-rain FSS at 60 min | Condensate-mass error at 60 min |
+    |---|---|---|---|
+    | 7 | 0.271 / 0.328 | 0.48 | 27% |
+    | 14 | 0.230 / 0.277 | 0.62 | 18% |
+    | 28 | **0.196 / 0.262** | **0.70** | **7.5%** |
+
+    Skill is still rising at 28 members (−15% at 30 min from 14 to 28), so more storms should keep helping.
+  - Original task: learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
 - [x] **D6 (C)** Physics checks — done 2026-11-05 (`ks_latent/cm1/physics.py`; analytic tests; Saidie re-score job 8690). Best model `d34_c32_kuniform`:
   - **Mass continuity is respected.** The divergence ratio of forecasts is 0.23–0.25 against the truth's 0.21–0.22, and reconstructions 0.234 against 0.223. The 16-channel reference is worse (0.284).
@@ -199,7 +210,18 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - **Reflectivity alone degrades θ′** through spurious ensemble correlations; θ′ observations anchor it.
   - **w is barely constrained:** neither observation type sees the wind.
   - **Best setting:** loc 5–10 km, RTPS 0.9, model noise 0.05.
-- [ ] **E4b (C)** **Built 2026-11-05** (`obs.py RadialVelocity`, known-field test). Local test, 7 members: θ′ + reflectivity + radial velocity gives forecast nMSE 0.307 vs 0.333 for θ′ alone, u 2.84 → 2.23 m/s, w unchanged. **Running: Saidie job 8701.** Doppler radial-velocity observations. In the 2D slice a low-elevation beam measures ≈ u cos α + w sin α: linear in the decoded state, with α from radar geometry (a radar at a fixed x, beam elevation 0.5–2°). Add it to the twin with θ′ + reflectivity, and see whether w and u improve.
+- [x] **E4b (C)** **Done 2026-11-05 (Saidie job 8701). Radial velocity is the most valuable observation.**
+  - Setup: 28 members, loc 5 km, RTPS 0.9, model noise 0.05; radar at x = 330 km, tilts 0.5 / 2 / 5°, σ 2 m/s.
+
+    | Observed | Forecast nMSE | Analysis nMSE | u m/s | w m/s | Liquid / ice | Echo dBZ |
+    |---|---|---|---|---|---|---|
+    | none | 0.329 | — | 2.20 | 1.10 | 0.126 / 0.126 | 7.7 |
+    | θ′ + reflectivity | 0.271 | 0.263 | 1.92 | 1.05 | 0.108 / 0.100 | 4.4 |
+    | θ′ + radial velocity | 0.239 | 0.226 | 1.72 | 1.01 | 0.102 / 0.097 | 5.9 |
+    | **all three** | **0.229 (−30%)** | **0.212 (−36%)** | **1.70** | **1.00** | **0.095 / 0.089** | **4.2** |
+
+  - Model noise 0.1 is worse than 0.05 with radial velocity.
+  - Earlier note: (`obs.py RadialVelocity`, known-field test). Local test, 7 members: θ′ + reflectivity + radial velocity gives forecast nMSE 0.307 vs 0.333 for θ′ alone, u 2.84 → 2.23 m/s, w unchanged. **Running: Saidie job 8701.** Doppler radial-velocity observations. In the 2D slice a low-elevation beam measures ≈ u cos α + w sin α: linear in the decoded state, with α from radar geometry (a radar at a fixed x, beam elevation 0.5–2°). Add it to the twin with θ′ + reflectivity, and see whether w and u improve.
   - Original E4 task: add reflectivity observations (nonlinear, bounded). Report the nonlinearity index from Paper II.
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
 - [ ] **E5 (D+C)** Decide the Paper III framing from E3–E4: what is claimed, against which baselines.
