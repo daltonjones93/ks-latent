@@ -76,7 +76,7 @@ Status as of 2026-11-05.
 - [ ] **B5 (D or C)** **`ens_A2` launched 2026-11-05** (30 members, seeds 1001–1030, Cashew jobs 745136–745139); `ens_B` waits for the pilot. Launch `ens_A2` and `ens_B` with `launch_cashew.sh`, using a new `ENS` name and `SEED` for each.
   - Respect the 20-job cap; run the two ensembles one after the other.
   - deps: B4. Done when: `status.sh` shows all members done.
-- [ ] **B6 (C)** Build the float16 member caches on Cashew, as a CPU job.
+- [ ] **B6 (C)** Build the float16 member caches on Cashew, as a CPU job (`scripts/cm1/build_cache.py`, ensemble-prefixed names). **ens_A2: 30/30 members done; cache job 745513 running, then an automatic copy to `saidie:~/cm1_cache_A2` with checksums.**
   - deps: B5. Done when: one `.npz` per member, with sizes and frame counts checked.
 
 ## C. Moving data to Saidie 🔒
@@ -118,13 +118,19 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
       - c = 32 has the smallest worst cases. See `cm1_notes.md`.
 - [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
-- [ ] **D6 (C)** Physics checks (add: FSS of low-level condensate or surface rain; column-max condensate FSS barely discriminates):
+- [ ] **D6 (C)** Physics checks. **Code done 2026-11-05** (`ks_latent/cm1/physics.py`, in both reports; analytic tests: a streamfunction flow is non-divergent, plus uniform condensate and cold-pool layers):
+  - mass-divergence ratio (truth ≈ 0.20–0.23 on run_e1, from interpolated winds and compressibility);
+  - condensate mass budget;
+  - cold-pool intensity C (truth 16–30 m/s);
+  - FSS of low-level liquid.
+
+  **Re-score of 3 models queued (Saidie job 8690).** Original list:
   - mass divergence ∂(ρu)/∂x + ∂(ρw)/∂z of decoded states against the truth;
   - non-negativity and totals of condensate;
   - cold-pool strength and depth.
 
   Done when: added to `evaluate.py`, with a test against an analytic field.
-- [ ] **D7 (C)** Ablation: one encoder per variable against the joint column encoder.
+- [ ] **D7 (C)** **Running: Saidie jobs 8688 (joint, c 28, width 252) and 8689 (`--encoder-groups 7`: one encoder per variable, same sizes).** Ablation: one encoder per variable against the joint column encoder.
   - Done when: reconstruction and forecast tables. Do the variables need to be encoded jointly?
 - [ ] **D8 (C)** Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
   - deps: `ens_B`. Done when: error in held-out environments against in-distribution ones.
@@ -137,11 +143,18 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
 
 ## E. Latent DA twin experiments (the Paper III core)
-- [ ] **E1 (C)** Observation operators.
+- [~] **E1 (C)** Observation operators. **(a) done 2026-11-05:** `ks_latent/cm1/obs.py SurfaceTheta`, tested against the decoded field. (b) reflectivity head still to do.
   - (a) Surface θ′ at selected columns: linear in the decoded state.
   - (b) Reflectivity: a small learned column head from decoded condensate to dBZ, trained against CM1's own `dbz`. Its error is measured.
   - Done when: both operators are tested, with the reflectivity head's error reported.
-- [ ] **E2 (C)** Per-site latent LETKF for open boundaries: adapt `ks_latent/da/letkf_local.py`, which assumes periodic rolls, and use the true state at the domain edges as boundary conditions.
+- [x] **E2 (C)** Per-site latent LETKF — done 2026-11-05 (`ks_latent/cm1/letkf.py`).
+  - Method: Hunt et al. 2007, in ensemble space, R-localization with Gaspari–Cohn, plain distances (open boundaries, no wrap), inflation, RTPS. No Jacobian, so it works with nonlinear operators and decoder reach > 0.
+  - Tests:
+    - equals the Kalman update on the sample covariance to 1e-10 without localization;
+    - sites beyond 2c are untouched, including the far edge;
+    - RTPS restores the prior spread.
+
+  Originally: adapt `ks_latent/da/letkf_local.py`, which assumes periodic rolls, and use the true state at the domain edges as boundary conditions.
   - Done when: in a linear-Gaussian test, the analysis matches the Kalman answer, as in the KS tests.
 - [ ] **E3 (C)** Twin experiment 1: a held-out member is the truth, surface θ′ every 2 km every 5 min is observed, with a 30-member latent ensemble.
   - Done when: analysis and forecast error against a free run and against the truth-member spread, consistency ratio, rank histograms.
