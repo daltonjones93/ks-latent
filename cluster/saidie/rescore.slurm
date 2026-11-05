@@ -22,5 +22,5 @@ python -m pytest -q tests/unit/test_cm1*.py -p no:cacheprovider
 for r in ${RUNS:?set RUNS}; do
   echo "=== $r"
   python scripts/cm1/train_cm1.py --profile full --source "${DATA:?set DATA}" --device cuda --threads 8 \
-      --out "$HOME/cm1_runs/$r" --eval-only
+      --out "$HOME/cm1_runs/$r" --eval-only ${EXTRA:-}
 done

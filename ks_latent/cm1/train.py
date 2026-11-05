@@ -186,6 +186,20 @@ def crps_loss(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return (skill - 0.5 * spread).mean()
 
 
+def crps_elements(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Fair ensemble CRPS per element, `samples` (M, ...), `target` (...) -> (...). The spread term uses
+    the sorted-sample identity sum_ij |x_i - x_j| = 2 sum_i (2i - M - 1) x_(i), so memory is O(M) rather
+    than the O(M^2) of the pairwise form (`crps_loss`); the two agree exactly."""
+    M = samples.shape[0]
+    if M < 2:
+        raise ValueError("CRPS needs at least 2 samples")
+    skill = (samples - target[None]).abs().mean(0)
+    xs = torch.sort(samples, dim=0).values
+    w = (2 * torch.arange(1, M + 1, device=samples.device, dtype=samples.dtype) - M - 1)
+    spread = 2 * (w.view(-1, *([1] * (samples.dim() - 1))) * xs).sum(0) / (M * (M - 1))
+    return skill - 0.5 * spread
+
+
 def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[torch.Tensor],
                   act_tr: list[torch.Tensor], act_va: list[torch.Tensor], patch: int, cfg: StageBConfig,
                   log=print) -> dict:
@@ -266,6 +280,7 @@ class StageCConfig:
     logdet_eps: float = 1e-3
     w_sfc_th: float = 0.0       # extra weight on theta' below `sfc_levels` levels (cold pool, G10)
     sfc_levels: int = 10        # ~ the lowest 1 km of the 62-level grid
+    crps_samples: int = 0       # > 1: stochastic propagator, decoded-space fair CRPS over this many rollouts
     active_frac: float = 0.5
     val_every: int = 250
     val_batches: int = 4
@@ -276,7 +291,10 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                   cfg: StageCConfig, log=print) -> dict:
     """Windows of true columns over H + k frames are encoded, rolled k steps with the true (encoded) halo,
     decoded, and scored against the true columns on the window interior (halo + decoder reach excluded),
-    plus reconstruction of the first frame and the latent anti-collapse terms. Both models are updated."""
+    plus reconstruction of the first frame and the latent anti-collapse terms. Both models are updated.
+    With `crps_samples` S > 1 the (stochastic) propagator is rolled S times per window with independent
+    noise and the decoded samples are scored with the fair CRPS instead of the MSE: an MSE would train
+    the noise away, CRPS rewards a sharp, calibrated sample ensemble. Validation uses the same loss."""
     dev = next(ae.parameters()).device
     p, Hh = ae.cfg.patch, prop.cfg.n_hist
     h, Pw = cfg.halo_sites, cfg.window_sites
@@ -287,6 +305,9 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         raise ValueError("window too narrow for the halo and decoder reach")
     W, m = Pw * p, m_sites * p
     C, Zl = data_tr.C, data_tr.Z
+    Ms = cfg.crps_samples
+    if Ms and (Ms < 2 or not prop.cfg.noise_channels):
+        raise ValueError("Stage C CRPS needs crps_samples >= 2 and a stochastic propagator (noise_channels > 0)")
     wch = torch.ones(C, device=dev)
     if cfg.w_sfc_th > 0:
         ith = VARS.index("th") * Zl
@@ -308,10 +329,12 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         B, F_ = u.shape[:2]
         e = None if env is None else env.repeat_interleave(F_, dim=0)
         z = ae.encode(u.reshape(B * F_, C, W), e).reshape(B, F_, Pw, -1)
-        pred = forced_halo_rollout(prop, z, k, h, gen=gen)                       # (B, k, Pw, c)
-        dec = ae.decode(pred.reshape(B * k, Pw, -1)).reshape(B, k, C, W)
-        e = (dec - u[:, Hh:Hh + k]) ** 2
-        e = e[..., m:W - m]
+        S = Ms or 1
+        zr = z.repeat(S, 1, 1, 1) if S > 1 else z                                  # (S*B, F, Pw, c), sample-major
+        pred = forced_halo_rollout(prop, zr, k, h, gen=gen)                      # (S*B, k, Pw, c)
+        dec = ae.decode(pred.reshape(S * B * k, Pw, -1)).reshape(S, B, k, C, W)[..., m:W - m]
+        tgt = u[:, Hh:Hh + k][..., m:W - m]
+        e = crps_elements(dec, tgt) if S > 1 else (dec[0] - tgt) ** 2             # CRPS (stochastic) or MSE
         if weighted:
             e = e * wch[None, None, :, None]
         return e.mean(), z

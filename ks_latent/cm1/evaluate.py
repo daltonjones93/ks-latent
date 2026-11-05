@@ -34,6 +34,7 @@ import numpy as np
 import torch
 
 from ks_latent.cm1.data import POSITIVE_VARS, VARS, ColumnData, Normalizer
+from ks_latent.cm1.train import crps_elements
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator, rollout_from
 from ks_latent.cm1.physics import (BaseState, cold_pool_intensity, condensate_mass, divergence_ratio,
                                    low_level_liquid)
@@ -124,20 +125,32 @@ def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Ten
         cond = torch.sqrt(q2).amax(dim=-2).cpu().numpy()
         return th, cond
     rows = {k: [] for k in ("nmse", "nmse_pers", "nmse_spread", "th_sfc_rmse", "th_sfc_rmse_pers", "front_err_km",
-                            "front_err_pers_km")}
+                            "front_err_pers_km", "crps", "crps_pers", "spread_err")}
     for t0 in t0s:
         if any(t0 + n_lead >= T for T in data.T):
             continue
         truth = torch.stack([data.full(m, slice(t0, t0 + n_lead + 1), device=dev) for m in range(M)])  # (M, L+1, C, NX)
         for m in range(M):
             pred = 0
+            tr = truth[m, 1:]
+            pers = truth[m, :1].expand_as(tr)
+            ens_all = []
             for p_ in props:
                 ns = n_samples if p_.cfg.noise_channels else 1
                 lat = rollout_from(p_, z[m], t0, n_lead, halo, ns, gen=torch.Generator().manual_seed(m))
-                pred = pred + torch.stack([ae.decode(lat[j]).mean(0) for j in range(n_lead)]) / len(props)
-            # pred: (L, C, NX)
-            tr = truth[m, 1:]
-            pers = truth[m, :1].expand_as(tr)
+                dec = torch.stack([ae.decode(lat[j]) for j in range(n_lead)])                # (L, ns, C, NX)
+                pred = pred + dec.mean(1) / len(props)
+                ens_all.append(dec)
+            # pred: (L, C, NX). CRPS of the forecast ensemble (all samples of all propagators; for one
+            # deterministic forecast the CRPS is the MAE), and spread / error of its mean (E >= 2 only).
+            ens = torch.cat(ens_all, dim=1)                                                  # (L, E, C, NX)
+            if ens.shape[1] > 1:
+                rows["crps"].append(torch.stack([crps_elements(ens[j], tr[j]).mean() for j in range(n_lead)]).cpu())
+                var = ens.var(dim=1).mean(dim=(1, 2))
+                rows["spread_err"].append((var / ((pred - tr) ** 2).mean(dim=(1, 2))).sqrt().cpu())
+            else:
+                rows["crps"].append((ens[:, 0] - tr).abs().mean(dim=(1, 2)).cpu())
+            rows["crps_pers"].append((pers - tr).abs().mean(dim=(1, 2)).cpu())
             rows["nmse"].append(((pred - tr) ** 2).mean(dim=(1, 2)).cpu())
             rows["nmse_pers"].append(((pers - tr) ** 2).mean(dim=(1, 2)).cpu())
             others = [o for o in range(M) if o != m]

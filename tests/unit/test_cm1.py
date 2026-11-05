@@ -423,3 +423,37 @@ def test_mirror_member_and_env_are_involutions():
     u_ref = _profiles(BASE_SOUNDING)[:, 3]
     g = np.zeros(3 * Zr, np.float32); g[2 * Zr:] = (UMOVE - u_ref) / SCALES[2]
     np.testing.assert_allclose(mirror_env(g), g, atol=1e-5)
+
+
+def test_crps_elements_matches_pairwise_crps():
+    from ks_latent.cm1.train import crps_elements, crps_loss
+    g = torch.Generator().manual_seed(0)
+    x, y = torch.randn(5, 3, 7, generator=g, dtype=torch.float64), torch.randn(3, 7, generator=g, dtype=torch.float64)
+    torch.testing.assert_close(crps_elements(x, y).mean(), crps_loss(x, y), rtol=1e-12, atol=1e-12)
+    # identical samples: CRPS is the MAE
+    torch.testing.assert_close(crps_elements(y[None].repeat(4, 1, 1), y + 1.0), torch.ones_like(y))
+
+
+def test_stage_c_crps_trains_a_stochastic_propagator_and_reports_probabilistic_scores():
+    from ks_latent.cm1.train import StageCConfig, encode_members, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", T=10, seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z))
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1, noise_channels=2))
+    with pytest.raises(ValueError):
+        train_stage_c(ae, StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1)),
+                      tr, va, StageCConfig(window_sites=14, halo_sites=1, steps=1, crps_samples=3), log=lambda s: None)
+    p0 = {k: v.clone() for k, v in prop.state_dict().items()}
+    r = train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, batch=2, steps=4, k_max=3,
+                                                     val_every=2, warmup=1, crps_samples=3), log=lambda s: None)
+    assert np.isfinite(r["best_val_decoded_rollout_mse"])
+    assert any((prop.state_dict()[k] != p0[k]).any() for k in p0)
+    z = encode_members(ae, va)
+    fc = forecast_report(ae, prop, va, z, nrm, t0s=[0], n_lead=3, halo=1, n_samples=4)
+    assert len(fc["crps"]) == 3 and len(fc["spread_err"]) == 3 and all(np.isfinite(fc["crps"]))
+    det = forecast_report(ae, StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1)),
+                          va, z, nrm, t0s=[0], n_lead=3, halo=1)
+    assert "spread_err" not in det and len(det["crps"]) == 3        # deterministic: CRPS = MAE, no spread
