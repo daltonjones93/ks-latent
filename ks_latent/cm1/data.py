@@ -13,6 +13,10 @@ Storage. float16 (relative precision ~5e-4, far below model errors), so 31
 members x 361 one-minute frames (~15 GB) fit on one large GPU; batches are
 cast to float32.
 
+Device. The data may live on a different device from the model (e.g. CPU
+memory with the model on a small GPU): `windows` returns tensors on the data
+device and callers move them; `full(..., device=)` moves on request.
+
 Sampling. Random x-windows of `width` cells, never wrapping (open lateral
 boundaries). A fraction `active_frac` of windows is centred on a storm column
 (composite reflectivity > `active_dbz`), because most of the domain is quiet
@@ -158,12 +162,12 @@ class ColumnData:
                            for m, t, x in zip(mem, t0, x0)])  # (B, F, width, C)
         return out.float().permute(0, 1, 3, 2).contiguous(), mem, t0, x0
 
-    def full(self, m: int, t: slice | int = slice(None)) -> torch.Tensor:
-        """Whole domain of member `m`: `(T', C, NX)` float32."""
+    def full(self, m: int, t: slice | int = slice(None), device: torch.device | None = None) -> torch.Tensor:
+        """Whole domain of member `m`: `(T', C, NX)` float32, on `device` (default: the data's device)."""
         x = self.u[m][t]
         if x.dim() == 2:
             x = x[None]
-        return x.float().permute(0, 2, 1).contiguous()
+        return x.to(device or self.device).float().permute(0, 2, 1).contiguous()
 
 
 def split_members(names: list[str], n_val: int, n_test: int) -> tuple[list[str], list[str], list[str]]:

@@ -44,11 +44,12 @@ def front_x_km(th_sfc: torch.Tensor, dx_km: float = 0.25, thresh: float = -1.0) 
 @torch.no_grad()
 def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer, stride_t: int = 2) -> dict:
     ae.eval()
+    dev = next(ae.parameters()).device
     V, Z = data.V, data.Z
     se = torch.zeros(V); se_act = torch.zeros(V); n = 0; n_act = 0
     for m in range(len(data.u)):
         for t in range(0, data.T[m], stride_t):
-            u = data.full(m, t)                           # (1, C, NX)
+            u = data.full(m, t, device=dev)               # (1, C, NX)
             e = (ae(u)[0] - u)[0].reshape(V, Z, -1).cpu() ** 2  # normalized
             act = data.cref[m][t] > 10
             se += e.mean(dim=1).sum(dim=1); n += e.shape[-1]
@@ -66,6 +67,7 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
 def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData, z: list[torch.Tensor],
                     norm: Normalizer, t0s: list[int], n_lead: int, halo: int) -> dict:
     ae.eval(); prop.eval()
+    dev = next(ae.parameters()).device
     Z = data.Z
     M = len(data.u)
     rows = {k: [] for k in ("nmse", "nmse_pers", "nmse_spread", "th_sfc_rmse", "th_sfc_rmse_pers", "front_err_km",
@@ -73,7 +75,7 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
     for t0 in t0s:
         if any(t0 + n_lead >= T for T in data.T):
             continue
-        truth = torch.stack([data.full(m, slice(t0, t0 + n_lead + 1)) for m in range(M)])  # (M, L+1, C, NX)
+        truth = torch.stack([data.full(m, slice(t0, t0 + n_lead + 1), device=dev) for m in range(M)])  # (M, L+1, C, NX)
         for m in range(M):
             state = z[m][t0:t0 + 1]                                                       # (1, P, c)
             P = state.shape[1]

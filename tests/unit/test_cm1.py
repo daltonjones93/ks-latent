@@ -163,3 +163,20 @@ def test_smoke_both_stages_and_reports():
     assert set(rr["rmse_phys_all"]) == set(VARS)
     fc = forecast_report(ae, prop, va, z_va, nrm, t0s=[0, 2], n_lead=3, halo=2)
     assert len(fc["nmse"]) == 3 and len(fc["nmse_pers"]) == 3
+
+
+@pytest.mark.integration
+def test_data_on_another_device_than_model_gives_same_reports():
+    """Data in host memory, model elsewhere: every consumer must move what it needs (here both are CPU,
+    but `full(device=)` and the reports must accept a device argument and give identical numbers)."""
+    from ks_latent.cm1.train import encode_members
+    ms = [_member(f"m{i}", T=8, seed=i) for i in range(2)]
+    nrm = Normalizer.fit(ms)
+    d = ColumnData(ms, nrm, torch.device("cpu"))
+    ae = _ae().float()
+    z = encode_members(ae, d)
+    assert z[0].shape == (8, NX // PATCH, 3)
+    torch.testing.assert_close(d.full(0, 3, device=torch.device("cpu")), d.full(0, 3))
+    prop = _prop().float()
+    a = forecast_report(ae, prop, d, z, nrm, t0s=[1], n_lead=2, halo=2)
+    assert np.isfinite(a["nmse"]).all()

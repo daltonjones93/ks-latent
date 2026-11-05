@@ -76,7 +76,7 @@ def _interior(x: torch.Tensor, m: int, dim: int = -1) -> torch.Tensor:
 
 def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, cfg: StageAConfig,
                   log=print) -> dict:
-    dev = data_tr.device
+    dev = next(ae.parameters()).device  # the model's device; data may live elsewhere
     p, reach = ae.cfg.patch, ae.cfg.reach_sites
     mask_sites = 2 * reach  # encoder + decoder reach
     W = cfg.window_sites * p
@@ -123,9 +123,10 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
 def encode_members(ae: ColumnFieldAE, data: ColumnData, batch: int = 16) -> list[torch.Tensor]:
     """Whole-domain latent trajectories, one `(T, P, c)` tensor per member."""
     ae.eval()
+    dev = next(ae.parameters()).device
     out = []
     for m in range(len(data.u)):
-        zs = [ae.encode(data.full(m, slice(t, t + batch))) for t in range(0, data.T[m], batch)]
+        zs = [ae.encode(data.full(m, slice(t, t + batch), device=dev)) for t in range(0, data.T[m], batch)]
         out.append(torch.cat(zs))
     return out
 

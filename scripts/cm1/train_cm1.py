@@ -185,6 +185,7 @@ def main():
     ap.add_argument("--eval-lead-min", type=float, default=60.0)
     ap.add_argument("--eval-every-min", type=float, default=60.0)
     ap.add_argument("--threads", type=int, default=2)
+    ap.add_argument("--data-device", default="same", help="'same' as the model, or 'cpu' (data in host memory)")
     a = ap.parse_args()
     defaults = {"smoke": (6, 6), "local": (4000, 4000), "full": (20000, 20000)}[a.profile]
     a.steps_a = a.steps_a or defaults[0]
@@ -224,7 +225,9 @@ def main():
         f"({cfg.prop.reach_sites * cfg.ae.patch * 0.25:g} km), k_max {cfg.stage_b.k_max}")
     Z = members[0].X.shape[3]
     cfg.ae.n_channels, cfg.ae.n_levels = len(VARS) * Z, Z
-    data = {k: ColumnData(pick(n), norm, dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
+    data_dev = dev if a.data_device == "same" else torch.device(a.data_device)
+    log(f"[cm1] data on {data_dev}, model on {dev}")
+    data = {k: ColumnData(pick(n), norm, data_dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
     # ---- Stage A ----
@@ -277,9 +280,9 @@ def main():
             ith = VARS.index("th")
             sc = float(norm.scale[ith])
             sl = slice(ith * Z, (ith + 1) * Z)
-            truth = data["test"].full(m, t0 + n_lead)[0, sl].cpu().numpy() * sc
+            truth = data["test"].full(m, t0 + n_lead, device=dev)[0, sl].cpu().numpy() * sc
             pred = ae.decode(state)[0, sl].cpu().numpy() * sc
-            recon = ae(data["test"].full(m, t0 + n_lead))[0][0, sl].cpu().numpy() * sc
+            recon = ae(data["test"].full(m, t0 + n_lead, device=dev))[0][0, sl].cpu().numpy() * sc
             # model level heights = the heights in the input sounding (CM1 writes zh there)
             zc = np.loadtxt(CM1 / "run" / "input_sounding", skiprows=1)[:, 0] / 1000.0
             if len(zc) != Z:
