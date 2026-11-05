@@ -208,3 +208,16 @@ def test_synthetic_members_layout():
     assert len(ms) == 3 and ms[0].X.shape == (10, 128, V, 4) and ms[0].dt == 60.0
     pos = [VARS.index(v) for v in ("qliq", "qice")]
     assert (ms[0].X[:, :, pos] >= 0).all() and (ms[0].cref > 10).any()
+
+
+def test_rollout_length_sampling():
+    from ks_latent.cm1.train import StageBConfig, _k_now
+    cfg = StageBConfig(k_max=20, k_ramp_frac=0.5)
+    assert _k_now(0.0, cfg) == 2 and _k_now(0.25, cfg) == 11 and _k_now(0.9, cfg) == 20
+    u = StageBConfig(k_max=20, k_ramp_frac=0.5, k_sampling="uniform")
+    g = torch.Generator().manual_seed(0)
+    ks = [_k_now(0.9, u, g) for _ in range(2000)]
+    assert min(ks) == 2 and max(ks) == 20 and 9 < np.mean(ks) < 13   # uniform on 2..20, mean 11
+    assert all(_k_now(0.0, u, g) == 2 for _ in range(20))            # curriculum still caps it
+    with pytest.raises(ValueError):
+        _k_now(0.5, u)

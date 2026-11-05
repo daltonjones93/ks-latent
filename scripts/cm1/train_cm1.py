@@ -133,7 +133,8 @@ def build_config(a, dt: float | None) -> RunConfig:
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
                       val_every=max(1, a.steps_a // 20), seed=a.seed)
     sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
-                      steps=a.steps_b, k_max=k_max, val_every=max(1, a.steps_b // 20), seed=a.seed)
+                      steps=a.steps_b, k_max=k_max, k_sampling=a.k_sampling, val_every=max(1, a.steps_b // 20),
+                      seed=a.seed)
     if smoke:
         sa.val_batches = 2
         sa.warmup = sb.warmup = 1
@@ -213,6 +214,8 @@ def main():
     ap.add_argument("--steps-a", type=int, default=None)
     ap.add_argument("--steps-b", type=int, default=None)
     ap.add_argument("--k-max", type=int, default=0)
+    ap.add_argument("--k-sampling", choices=["max", "uniform"], default="max",
+                    help="rollout length per batch: always the curriculum maximum, or uniform in [2, max]")
     ap.add_argument("--eval-lead-min", type=float, default=60.0)
     ap.add_argument("--eval-every-min", type=float, default=60.0)
     ap.add_argument("--threads", type=int, default=2)

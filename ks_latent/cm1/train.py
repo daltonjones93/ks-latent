@@ -63,6 +63,9 @@ class StageBConfig:
     grad_clip: float = 1.0
     k_max: int = 8
     k_ramp_frac: float = 0.6  # k grows 2 -> k_max over this fraction of training
+    # "max": every batch rolls out the current curriculum length; "uniform": each batch draws its
+    # length uniformly in [2, current length], so short leads keep being trained (D3)
+    k_sampling: str = "max"
     noise_start: float = 0.10
     noise_end: float = 0.02
     active_frac: float = 0.5
@@ -131,8 +134,15 @@ def encode_members(ae: ColumnFieldAE, data: ColumnData, batch: int = 16) -> list
     return out
 
 
-def _k_now(frac: float, cfg: StageBConfig) -> int:
-    return min(cfg.k_max, int(round(2 + (cfg.k_max - 2) * frac / cfg.k_ramp_frac)))
+def _k_now(frac: float, cfg: StageBConfig, gen: torch.Generator | None = None) -> int:
+    k = min(cfg.k_max, int(round(2 + (cfg.k_max - 2) * frac / cfg.k_ramp_frac)))
+    if cfg.k_sampling == "uniform":
+        if gen is None:
+            raise ValueError("k_sampling='uniform' needs a generator")
+        return int(torch.randint(2, k + 1, (1,), generator=gen))
+    if cfg.k_sampling != "max":
+        raise ValueError(f"unknown k_sampling {cfg.k_sampling!r}")
+    return k
 
 
 def latent_windows(zs: list[torch.Tensor], active: list[torch.Tensor], patch: int, B: int, width: int,
@@ -169,7 +179,7 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
     hist, best, best_state, t0 = [], float("inf"), None, time.time()
     for step in range(cfg.steps):
         frac = step / cfg.steps
-        k = _k_now(frac, cfg)
+        k = _k_now(frac, cfg, g)
         noise = cfg.noise_start + (cfg.noise_end - cfg.noise_start) * frac
         prop.train()
         win = latent_windows(z_tr, act_tr, patch, cfg.batch, cfg.window_sites, k + 1, g, cfg.active_frac).to(dev)
