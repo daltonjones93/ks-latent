@@ -34,7 +34,7 @@ import numpy as np
 import torch
 
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
-from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
+from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator, rollout_from
 from ks_latent.cm1.physics import (BaseState, cold_pool_intensity, condensate_mass, divergence_ratio,
                                    low_level_liquid)
 from ks_latent.cm1.verify import displacement_km, fss, main_pool_front_km
@@ -95,9 +95,14 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
 
 
 @torch.no_grad()
-def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData, z: list[torch.Tensor],
-                    norm: Normalizer, t0s: list[int], n_lead: int, halo: int) -> dict:
-    ae.eval(); prop.eval()
+def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Tensor],
+                    norm: Normalizer, t0s: list[int], n_lead: int, halo: int, n_samples: int = 1) -> dict:
+    """`prop` may be one propagator or a list sharing the autoencoder (D14a: their decoded forecasts are
+    averaged); a stochastic propagator is run `n_samples` times and its decoded samples averaged."""
+    props = prop if isinstance(prop, (list, tuple)) else [prop]
+    ae.eval()
+    for p_ in props:
+        p_.eval()
     dev = next(ae.parameters()).device
     Z = data.Z
     M = len(data.u)
@@ -123,16 +128,12 @@ def forecast_report(ae: ColumnFieldAE, prop: StencilPropagator, data: ColumnData
             continue
         truth = torch.stack([data.full(m, slice(t0, t0 + n_lead + 1), device=dev) for m in range(M)])  # (M, L+1, C, NX)
         for m in range(M):
-            state = z[m][t0:t0 + 1]                                                       # (1, P, c)
-            P = state.shape[1]
-            preds = []
-            for j in range(n_lead):
-                state = prop(state)
-                if halo > 0:
-                    zt = z[m][t0 + j + 1:t0 + j + 2]
-                    state = torch.cat([zt[:, :halo], state[:, halo:P - halo], zt[:, P - halo:]], dim=1)
-                preds.append(ae.decode(state)[0])
-            pred = torch.stack(preds)                                                     # (L, C, NX)
+            pred = 0
+            for p_ in props:
+                ns = n_samples if p_.cfg.noise_channels else 1
+                lat = rollout_from(p_, z[m], t0, n_lead, halo, ns, gen=torch.Generator().manual_seed(m))
+                pred = pred + torch.stack([ae.decode(lat[j]).mean(0) for j in range(n_lead)]) / len(props)
+            # pred: (L, C, NX)
             tr = truth[m, 1:]
             pers = truth[m, :1].expand_as(tr)
             rows["nmse"].append(((pred - tr) ** 2).mean(dim=(1, 2)).cpu())

@@ -206,6 +206,8 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     for pk in (prop if isinstance(prop, (list, tuple)) else [prop]):
         if pk is not None:
             pk.eval()
+            if pk.cfg.n_hist > 1:
+                raise ValueError("the twin steps frame by frame and cannot feed a history propagator (n_hist > 1) yet")
     if cfg.ensemble_mode == "enoi_phys" and static_phys is None:
         raise ValueError("ensemble_mode='enoi_phys' needs static_phys(frame) -> (N, C, NX)")
     if cfg.ensemble_mode == "enoi" and static_ens is None:

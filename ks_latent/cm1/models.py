@@ -121,6 +121,8 @@ class StencilPropConfig:
     layers: int = 3
     radius: int = 1
     padding_mode: str = "replicate"
+    n_hist: int = 1          # frames of history the step sees (D13); 1 = Markovian
+    noise_channels: int = 0  # random input channels per site (D14c stochastic propagator); 0 = deterministic
 
     @property
     def reach_sites(self) -> int:
@@ -128,44 +130,89 @@ class StencilPropConfig:
 
 
 class StencilPropagator(nn.Module):
-    """`z`: `(B, P, c)` -> `z + f(z)`, `f` local with reach `layers * radius` sites."""
+    """One step `z_{n+1} = z_n + f(...)`, `f` local with reach `layers * radius` sites.
+
+    Input: `(B, P, c)` for `n_hist = 1`, or `(B, n_hist, P, c)` oldest-to-newest history; the update is
+    added to the newest frame. With `noise_channels > 0`, `f` also sees standard-normal channels drawn
+    per call (pass `eps` to fix them), so repeated calls give samples of a stochastic one-step map.
+    Defaults (`n_hist = 1`, no noise) are the original Markovian deterministic propagator, with the same
+    parameter shapes, so earlier checkpoints load unchanged."""
 
     def __init__(self, cfg: StencilPropConfig):
         super().__init__()
         if cfg.padding_mode == "circular":
             raise ValueError("circular padding is wrong for CM1 (open lateral boundaries)")
+        if cfg.n_hist < 1 or cfg.noise_channels < 0:
+            raise ValueError("n_hist >= 1 and noise_channels >= 0 required")
         self.cfg = cfg
         c, H, r = cfg.latent_channels, cfg.hidden, cfg.radius
-        dims = [c] + [H] * (cfg.layers - 1)
+        dims = [c * cfg.n_hist + cfg.noise_channels] + [H] * (cfg.layers - 1)
         self.convs = nn.ModuleList(nn.Conv1d(a, H, 2 * r + 1, padding=r, padding_mode=cfg.padding_mode)
                                    for a in dims)
         self.head = nn.Conv1d(H, c, 1)
         nn.init.zeros_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
-        h = z.transpose(1, 2)
+    def forward(self, z: torch.Tensor, eps: torch.Tensor | None = None,
+                gen: torch.Generator | None = None) -> torch.Tensor:
+        if self.cfg.n_hist == 1:
+            if z.dim() == 4:
+                z = z[:, -1]
+            last, x = z, z.transpose(1, 2)                                   # (B, c, P)
+        else:
+            if z.dim() != 4 or z.shape[1] != self.cfg.n_hist:
+                raise ValueError(f"expected (B, {self.cfg.n_hist}, P, c) history, got {tuple(z.shape)}")
+            last = z[:, -1]
+            B, Hh, P, c = z.shape
+            x = z.permute(0, 1, 3, 2).reshape(B, Hh * c, P)
+        if self.cfg.noise_channels:
+            if eps is None:
+                eps = torch.randn((x.shape[0], self.cfg.noise_channels, x.shape[2]), generator=gen,
+                                  device="cpu").to(x.device, x.dtype)
+            x = torch.cat([x, eps], dim=1)
+        h = x
         for conv in self.convs:
             h = F.gelu(conv(h))
-        return z + self.head(h).transpose(1, 2)
+        return last + self.head(h).transpose(1, 2)
+
+
+def _with_true_halo(state: torch.Tensor, truth: torch.Tensor, halo: int) -> torch.Tensor:
+    if halo <= 0:
+        return state
+    P = state.shape[-2]
+    return torch.cat([truth[..., :halo, :], state[..., halo:P - halo, :], truth[..., P - halo:, :]], dim=-2)
 
 
 def forced_halo_rollout(prop: StencilPropagator, z_true: torch.Tensor, k: int, halo: int,
-                        noise: float = 0.0) -> torch.Tensor:
-    """`z_true`: `(B, k+1, P, c)`. Rolls `k` steps from `z_true[:, 0]` (+ input
-    noise), setting the `halo` sites at each end to the true state before
-    every step (the boundary condition a limited-area model is given).
-    Returns all `k` predicted states, `(B, k, P, c)`, halo included (true)."""
-    state = z_true[:, 0]
+                        noise: float = 0.0, gen: torch.Generator | None = None) -> torch.Tensor:
+    """`z_true`: `(B, H-1+k+1, P, c)` with H = `prop.cfg.n_hist` (H-1 extra history frames first). Rolls
+    `k` steps from the true history ending at frame H-1 (+ input noise on the history), setting the
+    `halo` sites at each end of every frame the step sees to the true state (the boundary condition a
+    limited-area model is given). Returns the `k` predicted states, `(B, k, P, c)`, halo true."""
+    H = prop.cfg.n_hist
+    if z_true.shape[1] < H + k:
+        raise ValueError(f"need {H + k} frames for history {H} and k = {k}, got {z_true.shape[1]}")
+    hist = [z_true[:, j] for j in range(H)]
     if noise > 0:
-        state = state + noise * torch.randn_like(state)
-    P = z_true.shape[2]
+        hist = [h + noise * torch.randn_like(h) for h in hist]
     out = []
     for j in range(k):
-        if halo > 0:
-            state = torch.cat([z_true[:, j, :halo], state[:, halo:P - halo], z_true[:, j, P - halo:]], dim=1)
-        state = prop(state)
-        if halo > 0:
-            state = torch.cat([z_true[:, j + 1, :halo], state[:, halo:P - halo], z_true[:, j + 1, P - halo:]], dim=1)
+        t = H - 1 + j                                                       # index of the newest frame
+        seen = [_with_true_halo(hist[-H + i], z_true[:, t - H + 1 + i], halo) for i in range(H)]
+        inp = seen[0] if H == 1 else torch.stack(seen, dim=1)
+        state = _with_true_halo(prop(inp, gen=gen), z_true[:, t + 1], halo)
         out.append(state)
+        hist.append(state)
     return torch.stack(out, dim=1)
+
+
+def rollout_from(prop: StencilPropagator, z_traj: torch.Tensor, t0: int, n: int, halo: int,
+                 n_samples: int = 1, gen: torch.Generator | None = None) -> torch.Tensor:
+    """Free forecast from frame `t0` of one latent trajectory `z_traj` (T, P, c), true halo at each step,
+    history from the true trajectory. Returns `(n, n_samples, P, c)`."""
+    H = prop.cfg.n_hist
+    if t0 - H + 1 < 0 or t0 + n >= z_traj.shape[0]:
+        raise ValueError("forecast window outside the trajectory")
+    win = z_traj[t0 - H + 1:t0 + n + 1][None].expand(n_samples, -1, -1, -1)
+    return forced_halo_rollout(prop, win, n, halo, gen=gen).transpose(0, 1)
+

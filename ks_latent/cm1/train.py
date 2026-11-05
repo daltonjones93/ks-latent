@@ -66,6 +66,9 @@ class StageBConfig:
     # "max": every batch rolls out the current curriculum length; "uniform": each batch draws its
     # length uniformly in [2, current length], so short leads keep being trained (D3)
     k_sampling: str = "max"
+    # > 0: a stochastic propagator (noise_channels > 0) is trained with the fair CRPS of this many samples
+    # instead of MSE (D14c); 0 = MSE
+    crps_samples: int = 0
     noise_start: float = 0.10
     noise_end: float = 0.02
     active_frac: float = 0.5
@@ -164,15 +167,30 @@ def latent_windows(zs: list[torch.Tensor], active: list[torch.Tensor], patch: in
     return torch.stack(out)
 
 
+def crps_loss(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Fair (unbiased) ensemble CRPS, averaged over elements: E|X - y| - E|X - X'| / 2 with the
+    M(M-1) off-diagonal pairs. `samples` (M, ...), `target` (...)."""
+    M = samples.shape[0]
+    if M < 2:
+        raise ValueError("CRPS needs at least 2 samples")
+    skill = (samples - target[None]).abs().mean(0)
+    spread = (samples[:, None] - samples[None]).abs().sum(dim=(0, 1)) / (M * (M - 1))
+    return (skill - 0.5 * spread).mean()
+
+
 def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[torch.Tensor],
                   act_tr: list[torch.Tensor], act_va: list[torch.Tensor], patch: int, cfg: StageBConfig,
                   log=print) -> dict:
     if cfg.halo_sites < prop.cfg.reach_sites:
         raise ValueError(f"halo {cfg.halo_sites} < propagator reach {prop.cfg.reach_sites} sites per step")
     dev = z_tr[0].device
+    Hh = prop.cfg.n_hist
+    M = cfg.crps_samples
+    if M and not prop.cfg.noise_channels:
+        raise ValueError("crps_samples > 0 needs a stochastic propagator (noise_channels > 0)")
     g = torch.Generator().manual_seed(cfg.seed)
     vg = torch.Generator().manual_seed(cfg.seed + 54321)
-    val = latent_windows(z_va, act_va, patch, 64, cfg.window_sites, cfg.k_max + 1, vg, cfg.active_frac).to(dev)
+    val = latent_windows(z_va, act_va, patch, 64, cfg.window_sites, cfg.k_max + Hh, vg, cfg.active_frac).to(dev)
     opt = torch.optim.AdamW(prop.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     h = cfg.halo_sites
@@ -182,9 +200,14 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
         k = _k_now(frac, cfg, g)
         noise = cfg.noise_start + (cfg.noise_end - cfg.noise_start) * frac
         prop.train()
-        win = latent_windows(z_tr, act_tr, patch, cfg.batch, cfg.window_sites, k + 1, g, cfg.active_frac).to(dev)
-        pred = forced_halo_rollout(prop, win, k, h, noise)
-        loss = F.mse_loss(_interior(pred, h, dim=2), _interior(win[:, 1:], h, dim=2))
+        win = latent_windows(z_tr, act_tr, patch, cfg.batch, cfg.window_sites, k + Hh, g, cfg.active_frac).to(dev)
+        target = _interior(win[:, Hh:], h, dim=2)
+        if M:
+            pred = forced_halo_rollout(prop, win.repeat(M, 1, 1, 1), k, h, noise, gen=g)
+            loss = crps_loss(_interior(pred, h, dim=2).reshape(M, *target.shape), target)
+        else:
+            pred = forced_halo_rollout(prop, win, k, h, noise, gen=g)
+            loss = F.mse_loss(_interior(pred, h, dim=2), target)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(prop.parameters(), cfg.grad_clip)
@@ -193,9 +216,15 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             prop.eval()
             with torch.no_grad():
-                pv = forced_halo_rollout(prop, val, cfg.k_max, h)
-                err = ((_interior(pv, h, dim=2) - _interior(val[:, 1:], h, dim=2)) ** 2).mean(dim=(0, 2, 3))
-                pers = ((_interior(val[:, :1], h, dim=2) - _interior(val[:, 1:], h, dim=2)) ** 2).mean(dim=(0, 2, 3))
+                vgen = torch.Generator().manual_seed(7)
+                if M:   # score the sample mean
+                    pv = forced_halo_rollout(prop, val.repeat(M, 1, 1, 1), cfg.k_max, h, gen=vgen)
+                    pv = pv.reshape(M, *val[:, Hh:].shape).mean(0)
+                else:
+                    pv = forced_halo_rollout(prop, val, cfg.k_max, h, gen=vgen)
+                tv = _interior(val[:, Hh:], h, dim=2)
+                err = ((_interior(pv, h, dim=2) - tv) ** 2).mean(dim=(0, 2, 3))
+                pers = ((_interior(val[:, Hh - 1:Hh], h, dim=2) - tv) ** 2).mean(dim=(0, 2, 3))
             v = err.mean().item()
             rec = {"step": step + 1, "k": k, "train_loss": loss.item(), "val_mse_kmax": v,
                    "val_mse_by_lead": err.tolist(), "persistence_by_lead": pers.tolist(), "wall_s": time.time() - t0}

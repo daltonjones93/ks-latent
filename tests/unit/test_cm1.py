@@ -241,3 +241,64 @@ def test_grouped_encoder_keeps_variables_separate():
         assert lat.nonzero().ravel().tolist() == [v]
     with pytest.raises(ValueError):
         ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, hidden=16, latent_channels=V, groups=V))
+
+
+def test_history_propagator_forced_halo_equals_full_domain():
+    cfg = StencilPropConfig(latent_channels=3, hidden=8, layers=2, radius=1, n_hist=2)
+    p = StencilPropagator(cfg).double().eval()
+    torch.nn.init.normal_(p.head.weight, std=0.3)
+    P, k = 40, 4
+    traj = [torch.randn(1, P, 3, dtype=torch.float64) for _ in range(2)]
+    for _ in range(k):
+        traj.append(p(torch.stack(traj[-2:], dim=1)))
+    traj = torch.stack(traj, dim=1)                       # (1, 2 + k, P, c): 2 history frames + k steps
+    win = traj[:, :, 10:26]
+    pred = forced_halo_rollout(p, win, k, halo=2)
+    torch.testing.assert_close(pred, win[:, 2:], atol=1e-12, rtol=0)
+    with pytest.raises(ValueError):
+        p(torch.randn(1, P, 3, dtype=torch.float64))      # a single frame is not a 2-frame history
+    with pytest.raises(ValueError):
+        forced_halo_rollout(p, win[:, :3], k, halo=2)     # too few frames for history + k
+
+
+def test_stochastic_propagator_samples_and_identity_at_init():
+    cfg = StencilPropConfig(latent_channels=3, hidden=8, layers=2, radius=1, noise_channels=2)
+    p0 = StencilPropagator(cfg).double().eval()
+    z = torch.randn(2, 20, 3, dtype=torch.float64)
+    torch.testing.assert_close(p0(z), z, atol=0, rtol=0)              # zero head: identity whatever the noise
+    p = StencilPropagator(cfg).double().eval()
+    torch.nn.init.normal_(p.head.weight, std=0.3)
+    a = p(z, gen=torch.Generator().manual_seed(0))
+    b = p(z, gen=torch.Generator().manual_seed(0))
+    c = p(z, gen=torch.Generator().manual_seed(1))
+    torch.testing.assert_close(a, b, atol=0, rtol=0)
+    assert (a - c).abs().max() > 1e-6
+    legacy = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=2, radius=1))
+    assert legacy.convs[0].in_channels == 3                           # defaults keep the original shapes
+
+
+def test_crps_loss_known_values():
+    from ks_latent.cm1.train import crps_loss
+    y = torch.zeros(5)
+    same = torch.zeros(4, 5)
+    assert crps_loss(same, y).item() == 0.0                              # perfect, zero-spread ensemble
+    two = torch.tensor([[1.0], [-1.0]])                                  # samples +-1 around y = 0
+    # E|X-y| = 1, E|X-X'| over the 2 off-diagonal pairs = 2 -> CRPS = 1 - 1 = 0? no: 1 - 0.5*2 = 0
+    assert abs(crps_loss(two, torch.zeros(1)).item() - 0.0) < 1e-7
+    off = torch.tensor([[1.0], [1.0]])                                   # both samples off by 1: CRPS = 1
+    assert abs(crps_loss(off, torch.zeros(1)).item() - 1.0) < 1e-7
+    with pytest.raises(ValueError):
+        crps_loss(torch.zeros(1, 3), torch.zeros(3))
+
+
+@pytest.mark.integration
+def test_stage_b_trains_history_and_stochastic_propagators():
+    from ks_latent.cm1.train import StageBConfig, train_stage_b
+    torch.manual_seed(0)
+    z = [torch.randn(12, 16, 3) for _ in range(2)]
+    act = [torch.zeros((0, 2), dtype=torch.long)] * 2
+    for kw, bk in (({"n_hist": 2}, {}), ({"noise_channels": 2}, {"crps_samples": 3})):
+        prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1, **kw))
+        r = train_stage_b(prop, z, z, act, act, PATCH, StageBConfig(window_sites=12, halo_sites=1, batch=4, steps=4,
+                                                                    k_max=3, val_every=2, warmup=1, **bk), log=lambda s: None)
+        assert np.isfinite(r["best_val_mse"])
