@@ -63,7 +63,14 @@ Status as of 2026-11-05.
   - **Cost:**
     - 90 members × ~1.5 h on 1 core each. In 8-CPU packs that is 12 jobs, under Cashew's 20-job cap, and about 1.5–3 h wall if the CPU nodes are free.
     - Storage: ~200 GB raw on Cashew (~74 GB used of 1 TB) and ~45 GB of float16 caches to copy to Saidie (2 TB, 15 GB used).
-- [ ] **B4 (C)** Pilot for `ens_B`: 4 members at the corners of the environment ranges, 6 h. **Running: `ens_B_pilot`, Cashew job 745140** (`--design corners`, after the patched build 745134 and smoke test 745135).
+- [ ] **B4 (C)** Pilot for `ens_B`: 4 members at the corners of the environment ranges, 6 h.
+  - **Pilot 1 done 2026-11-05** (`ens_B_pilot`, job 745140, 73–87 min per member; `scripts/cm1/pilot_check.py`, `artifacts/cm1/pilot_check.json`):
+    - **qv −2.0:** a single squall line at both shears.
+      - Shear 0.6: slower than the 12.5 m/s grid; the front stays at 160–180 km, and only the trailing stratiform echo comes within 30 km of the west edge after 3.5 h, which is harmless with open boundaries.
+      - Shear 1.4: faster; the front reaches 298 km by 6 h.
+    - **qv +1.0 is NOT a squall line.** Echo covers 0–400 km within 40–60 min: in a near-saturated boundary layer (max RH 0.99), CM1's domain-wide ±0.25 K noise triggers convection everywhere. The upper end of the moisture range must come down.
+  - **Pilot 2 running** (`ens_B_pilot2`, job 745484): qv +0.25 / +0.5 × shear 0.6 / 1.4, to find where single-line behaviour stops.
+  - **Edge criterion refined:** what matters is the main-pool front and convective cores, not the trailing light echo.
   - Check that the storm stays inside the domain (the grid moves at a fixed 12.5 m/s) and that no member fails.
   - deps: B2, B3. Done when: storm tracks are plotted and the ranges are confirmed or narrowed.
 - [ ] **B5 (D or C)** **`ens_A2` launched 2026-11-05** (30 members, seeds 1001–1030, Cashew jobs 745136–745139); `ens_B` waits for the pilot. Launch `ens_A2` and `ens_B` with `launch_cashew.sh`, using a new `ENS` name and `SEED` for each.
