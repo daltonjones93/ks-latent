@@ -11,6 +11,7 @@ Status as of 2026-11-05.
   - `ens_A` is done on Cashew: 31 members, 6 h at 1-min output, 64 GB of GrADS. A float16 cache of it is in `~/cm1_cache` on Cashew, about 15 GB.
   - All members share one environment.
 - **Model.** `ks_latent/cm1`: a column local field (2 km sites) plus a local stencil propagator, with forced-halo training. Best so far (`ens_A_cpu_k45`, trained on Cashew CPU) has forecast nMSE 0.105 / 0.217 / 0.249 at 5 / 30 / 60 min. That is below the truth-member spread (~0.26) for the whole hour. The front error is ≤0.8 km for the first 20 min and ≤3.3 km over the hour.
+- **DA so far (E3/E4):** latent LETKF with θ′ + reflectivity cuts forecast nMSE 0.329 → 0.271, the front error to ~0.2 km and echo reflectivity error 7.7 → 4.3 dBZ (one truth, one seed). The path to a publishable Paper III is section G.
 - **Infrastructure.**
   - Cashew runs CM1 ensembles and CPU training with one command each.
   - Saidie is reachable without a password: account `chen-saidie`, partitions `general` (2 d) and `long-runs` (7 d), one node with 8 × H200, 224 CPUs and 1.8 TB RAM. Saidie and Cashew share no filesystem, but Saidie can ssh to Cashew.
@@ -206,3 +207,73 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
 ## F. Writing
 - [x] **F1 (C)** `docs/cm1_summary/cm1_summary.tex`: a short illustrated summary of what we have found so far.
 - [ ] **F2 (C)** Update the summary after each of B1, D2, D5, D8 and E3.
+
+## G. Paper III: from promising to publishable (added 2026-11-05)
+Working title: **equation-free ensemble data assimilation of a squall line with a learned local latent surrogate.** It is the sequel to Papers I–II on a full cloud model, with open boundaries and learned observation operators. Candidate venues: JAMES or MWR.
+
+Each task below answers a specific objection a referee would raise. They come in priority order: **tier 1** is essential, **tier 2** strengthens the paper a lot, **tier 3** is a stretch goal or polish.
+
+### G0. Pre-register the claims (before the final runs; ground rule from CLAUDE.md)
+- [ ] **G0 (D+C)** Write the paper's decision rules into `docs/cm1_notes.md` *before* running G1–G5. Proposal:
+  - **DA works:** θ′ + reflectivity beats no DA by ≥ 10% in all-variable forecast nMSE, averaged over truths, with a 95% confidence interval excluding 0. Front median |displacement| < 1 km.
+  - **Calibrated:** spread/error at the observations is in 0.7–1.3, and rank histograms are not U-shaped (a χ² test, stated).
+  - **Better than a static method:** latent LETKF beats EnOI (G2) by ≥ 10%.
+  - **Generalizes:** in held-out environments (G5) the DA gain is ≥ half its in-distribution value.
+
+  Every outcome is reported, including failures.
+
+### Tier 1: essential
+- [ ] **G1 (C)** **Many truths, with error bars.**
+  - The 28-member model (`d34_c32_kuniform`) never saw `ens_A2`, so its 30 members are 30 independent truths, plus mem029–030.
+  - Run the best DA settings on ≥ 10 truths × 3 observation-noise seeds.
+  - Report mean ± 95% CI, and paired differences (DA − no DA) per truth.
+  - Done when: the tables and figures of E4/E4b have error bars.
+- [ ] **G2 (C)** **Conventional baselines with the same observations and members.**
+  - (a) **EnOI:** a static physical-space covariance from the training members' states at the same time, with the same localization. It answers "what does a forecast model add?".
+  - (b) **Physical-space LETKF on the decoded surrogate ensemble:** the same forecasts, but analysed in physical space instead of latent space. It isolates what the latent update itself buys: dimension, locality, and staying on the decoder's manifold. Paper II found a cost from returning to the decoder range, so this needs checking here.
+  - (c) **Spline / optimal interpolation of the observations alone** (no ensemble), as in Paper II.
+  - Done when: one table with the latent LETKF vs (a)–(c), on the G1 truths.
+- [ ] **G3 (C)** **DA-initialized forecasts.** From analyses at 1.5, 2, 2.5 and 3 h, run 0–60 min ensemble forecasts. Compare them with no-DA forecasts and with persistence of the analysis: nMSE, front displacement, low-level-rain FSS, reflectivity ≥ 35 dBZ.
+  - Done when: a "forecast skill vs lead after DA" figure. This is the result forecasters care about: how long DA keeps paying off.
+- [ ] **G4 (C)** **Calibration without hand tuning.**
+  - Replace the fixed model-noise level with adaptive inflation driven by the innovations (e.g. Desroziers-type / Anderson 2009 adaptive inflation; *verify the exact scheme before citing*), and/or the multi-model spread of E3b.
+  - Report spread/error, rank histograms (θ′, reflectivity, radial velocity), and **reliability of reflectivity exceedance probabilities**: Brier score and reliability diagram for ≥ 35 dBZ.
+  - Done when: calibration meets G0 with no per-experiment tuning.
+- [ ] **G5 (C)** **Unseen environments (needs `ens_B`).**
+  - Train on `ens_B` minus a held-out region of moisture × shear.
+  - The truth comes from the held-out region; the ensemble from training environments, i.e. an imperfect surrogate *and* a mismatched prior.
+  - Done when: DA gain in held-out vs in-distribution environments, with the G1 error bars.
+
+### Tier 2: strengthens the paper
+- [ ] **G6 (C)** **Ensemble size:** 8 / 16 / 28 / 58 members (`ens_A` + `ens_A2` as the pool, with the D5 58-member model). Plot error and calibration against N; this is the classic EnKF figure, and it connects to Paper II's local-dimension argument.
+- [ ] **G7 (C)** **Localization against the reach rule.** Sweep the localization radius against the measured information reach (8–12 km per 5 min, i.e. ~2 km per 1-min step, times the cycle length) and the decoder reach. Check whether Paper II's rule (localization ≥ reach) predicts the best radius here. This ties the DA design to the data-only locality analysis.
+- [ ] **G8 (C)** **Observation realism and sensitivity:**
+  - surface network density 2 / 5 / 10 / 20 km;
+  - radar coverage limited to range (and a blocked sector);
+  - observation-error sweeps;
+  - **operator error:** the learned reflectivity operator against a perfect one (using the truth's own reflectivity at analysis time, as an upper bound).
+
+  Done when: a sensitivity table, and which observations matter most.
+- [ ] **G9 (C)** **Cost table.** Wall time per cycle for the latent DA (forecast + analysis) against CM1 for the same ensemble (~90 min per member per 6 h on one core, measured), in core-hours and GPU-seconds.
+- [ ] **G10 (C)** **Fix the weak cold pool (D6 finding).** Try:
+  - a decoded-space loss term in Stage B (physical-space rollout loss on the lowest ~1 km of θ′);
+  - longer rollouts with surface weighting.
+
+  Done when: max C bias at 60 min < 5%, without losing the D3/D4 forecast skill.
+
+### Tier 3: stretch and polish
+- [ ] **G11 (C)** **Gold standard: CM1-EnKF.** A physical-space LETKF whose forecasts are CM1 itself: each cycle restarts CM1 from analysis states. Staged:
+  - (a) **Spike:** read a binary CM1 restart (Cashew has no NetCDF, so restart_format = 1), write it back unchanged, and confirm the restarted run continues **bitwise identical** to an uninterrupted one.
+  - (b) Modify θ, qv, u, w and condensate in a restart and confirm CM1 accepts it.
+  - (c) The cycling driver on Cashew: 28 members in parallel, 5-min CM1 segments.
+
+  This would answer "how close is the cheap surrogate DA to DA with the real model?". About 28 cores × a few hours per experiment.
+- [ ] **G12 (C)** **Literature review (verify every citation).** Latent-space DA (latent EnKF/ETKF, ROAD-EnKF, LAE-EnKF, score-based latent filters), ML emulators of cloud-resolving models, convective-scale radar DA (reflectivity and radial-velocity assimilation in EnKF systems). Confirm the novelty claim: convective-scale, equation-free latent DA with learned reflectivity on a full cloud model.
+- [ ] **G13 (C)** **Shifted tilings (E3c)** and **multi-model ensembles (E3b)**: include whichever helps, as ablations.
+- [ ] **G14 (D+C)** **Paper skeleton** `docs/paperIII/` (same layout as Papers I–II): intro; data and data-only locality analysis; model; forecast skill and physics; DA method; twin experiments (θ′, reflectivity, radial velocity, N, localization, observations); baselines; unseen environments; cost; limitations (2D, cold-pool bias, twin setting); conclusions. Draft only after G0–G5.
+- [ ] **G15 (C)** **Reproducibility:**
+  - every figure from a script and config;
+  - the Cashew kit regenerates all ensembles from the bundle;
+  - a data availability statement (CM1 r21.1, our namelists, soundings and seeds).
+
+**Suggested order:** G0 → G1 + G2 (now, with `ens_A`/`ens_A2`) → G3 → G4 → G6/G7 (cheap sweeps) → G5 (when `ens_B` exists) → G8–G10 → G11 spike in parallel on Cashew → G12, G14.
