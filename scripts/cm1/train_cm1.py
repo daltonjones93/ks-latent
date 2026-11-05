@@ -126,6 +126,21 @@ def build_config(a, dt: float | None) -> RunConfig:
                      eval_lead_min=a.eval_lead_min, eval_every_min=a.eval_every_min)
 
 
+def level_heights_km(source: str, Z: int, log) -> np.ndarray:
+    """Model level heights (km): the heights in an input sounding (CM1 writes zh there), taken from the
+    ensemble's own member directories, or the original runs; level index if neither is found."""
+    cands = [CM1 / "run" / "input_sounding"]
+    if ":" in source:
+        cands = sorted(Path(source.split(":", 1)[1]).glob("members/mem*/input_sounding"))[:1] + cands
+    for f in cands:
+        if f.exists():
+            zc = np.loadtxt(f, skiprows=1)[:, 0] / 1000.0
+            if len(zc) == Z:
+                return zc
+    log(f"  WARNING: no input_sounding with {Z} levels found; plotting against level index")
+    return np.arange(Z, dtype=float)
+
+
 def plot(results: dict, out: Path, sections: dict | None):
     import matplotlib
     matplotlib.use("Agg")
@@ -185,6 +200,8 @@ def main():
     ap.add_argument("--eval-lead-min", type=float, default=60.0)
     ap.add_argument("--eval-every-min", type=float, default=60.0)
     ap.add_argument("--threads", type=int, default=2)
+    ap.add_argument("--reuse-ae", default=None, help="run dir whose ae.pt to reuse (skips Stage A; Stage B still runs)")
+    ap.add_argument("--eval-only", action="store_true", help="load ae.pt/prop.pt from --out, skip training")
     ap.add_argument("--data-device", default="same", help="'same' as the model, or 'cpu' (data in host memory)")
     a = ap.parse_args()
     defaults = {"smoke": (6, 6), "local": (4000, 4000), "full": (20000, 20000)}[a.profile]
@@ -230,25 +247,44 @@ def main():
     data = {k: ColumnData(pick(n), norm, data_dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
-    # ---- Stage A ----
     ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z)).to(dev)
-    log(f"[A] autoencoder: {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M parameters")
-    ta = time.time()
-    ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log)
-    torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae.pt")
-    write_provenance(out / "ae.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - ta)
-    (out / "history_a.json").write_text(json.dumps(ra, indent=1))
-
-    # ---- Stage B (always run) ----
-    z = {k: encode_members(ae, d) for k, d in data.items()}
-    act = {k: d.active for k, d in data.items()}
     prop = StencilPropagator(cfg.prop).to(dev)
-    log(f"[B] propagator: {sum(p.numel() for p in prop.parameters()) / 1e6:.2f} M parameters")
-    tb = time.time()
-    rb = train_stage_b(prop, z["train"], z["val"], act["train"], act["val"], cfg.ae.patch, cfg.stage_b, log=log)
-    torch.save({"state_dict": prop.state_dict(), "cfg": dataclasses.asdict(cfg.prop)}, out / "prop.pt")
-    write_provenance(out / "prop.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - tb)
-    (out / "history_b.json").write_text(json.dumps(rb, indent=1))
+    if a.eval_only:
+        for mod, f in ((ae, "ae.pt"), (prop, "prop.pt")):
+            ck = torch.load(out / f, map_location=dev)
+            mod.load_state_dict(ck["state_dict"])
+        ra = json.loads((out / "history_a.json").read_text())
+        rb = json.loads((out / "history_b.json").read_text())
+        log(f"[cm1] eval only: loaded ae.pt and prop.pt from {out}")
+        z = {k: encode_members(ae, d) for k, d in data.items()}
+    else:
+        # ---- Stage A ----
+        ta = time.time()
+        if a.reuse_ae:
+            src = Path(a.reuse_ae)
+            ck = torch.load(src / "ae.pt", map_location=dev)
+            if ck["cfg"] != dataclasses.asdict(cfg.ae):
+                raise ValueError(f"autoencoder config in {src} differs from this run's: {ck['cfg']} vs {cfg.ae}")
+            ae.load_state_dict(ck["state_dict"])
+            ra = json.loads((src / "history_a.json").read_text())
+            ra["reused_from"] = str(src)
+            log(f"[A] reusing the autoencoder of {src}")
+        else:
+            log(f"[A] autoencoder: {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M parameters")
+            ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log)
+        torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae.pt")
+        write_provenance(out / "ae.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - ta)
+        (out / "history_a.json").write_text(json.dumps(ra, indent=1))
+
+        # ---- Stage B (always run) ----
+        z = {k: encode_members(ae, d) for k, d in data.items()}
+        act = {k: d.active for k, d in data.items()}
+        log(f"[B] propagator: {sum(p.numel() for p in prop.parameters()) / 1e6:.2f} M parameters")
+        tb = time.time()
+        rb = train_stage_b(prop, z["train"], z["val"], act["train"], act["val"], cfg.ae.patch, cfg.stage_b, log=log)
+        torch.save({"state_dict": prop.state_dict(), "cfg": dataclasses.asdict(cfg.prop)}, out / "prop.pt")
+        write_provenance(out / "prop.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - tb)
+        (out / "history_b.json").write_text(json.dumps(rb, indent=1))
 
     # ---- test report ----
     n_lead = max(1, int(round(cfg.eval_lead_min * 60 / dt)))
@@ -283,10 +319,7 @@ def main():
             truth = data["test"].full(m, t0 + n_lead, device=dev)[0, sl].cpu().numpy() * sc
             pred = ae.decode(state)[0, sl].cpu().numpy() * sc
             recon = ae(data["test"].full(m, t0 + n_lead, device=dev))[0][0, sl].cpu().numpy() * sc
-            # model level heights = the heights in the input sounding (CM1 writes zh there)
-            zc = np.loadtxt(CM1 / "run" / "input_sounding", skiprows=1)[:, 0] / 1000.0
-            if len(zc) != Z:
-                zc = np.arange(Z, dtype=float)
+            zc = level_heights_km(a.source, Z, log)
             sections = {"x": (np.arange(truth.shape[1]) + 0.5) * 0.25, "z": zc,
                         "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_n[m]})": truth,
                                    "autoencoder reconstruction of the truth": recon,
