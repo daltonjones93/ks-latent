@@ -281,3 +281,18 @@ Autoencoder floor 0.024.
 - **Environment conditioning is neutral** on skill and worse on rain FSS. At these leads the storm's own columns seem to carry what the model needs; the environment enters through them.
 - **Mirrors hurt** (+0.03 at 5 min, worse rain FSS), as on ens_A: mirrored storms live in reversed shear, which no test storm has, so they spend capacity on states that never occur. D9 is closed unless D8's held-out-environment test asks for it.
 - **Recipe for the full run:** d34 recipe + Stage C, no environment conditioning, no mirrors (jobs 8797 → 8798).
+
+## Stochastic propagators scored as ensembles (2026-11-05, Saidie jobs 8793 rescore, 8794 stochastic Stage C; ens_A test)
+CRPS / persistence MAE (a deterministic forecast's CRPS is its MAE), 8 samples per stochastic forecast.
+
+| Run | Skill 5 / 30 / 60 | CRPS 5 / 30 / 60 | Spread/error 60 | Cold-pool bias | Front 30 / 60 |
+|---|---|---|---|---|---|
+| deterministic baseline | 0.214 / 0.332 / 0.351 | 0.448 / 0.476 / 0.512 | — | −17.3% | 0.43 / 1.21 km |
+| deterministic + Stage C | 0.187 / 0.316 / 0.310 | 0.421 / 0.453 / 0.476 | — | −13.7% | 0.69 / 0.94 |
+| stochastic (D14c) | 0.257 / 0.383 / 0.369 | 0.344 / 0.331 / 0.344 | 0.99 | −10.1% | 0.71 / 1.94 |
+| **stochastic + Stage C (decoded CRPS)** | 0.228 / 0.360 / 0.347 | **0.297 / 0.309 / 0.324** | 0.93 | −11.0% | 1.01 / 1.92 |
+
+- **Stochastic + Stage C is the best probabilistic forecast:** CRPS 30–32% below deterministic Stage C at every lead, with calibrated spread (0.93). Stage C cut both its CRPS (−8–14%) and its mean error (to the deterministic baseline's at 60 min).
+- Deterministic Stage C still has the best ensemble-mean error and fronts.
+- **Caveat:** ensemble CRPS against a point forecast's MAE favours the ensemble by construction. The fair test for DA is the learned noise against the hand-set latent noise (0.05) on a deterministic model, in the twin.
+- Full-data stochastic branch queued: jobs 8819 → 8820.
