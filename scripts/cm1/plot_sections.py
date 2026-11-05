@@ -45,6 +45,9 @@ def main():
     ap.add_argument("--lead-min", type=float, default=60.0)
     ap.add_argument("--vars", nargs="+", default=["qliq", "qice"])
     ap.add_argument("--zmax-km", type=float, default=14.0)
+    ap.add_argument("--n-samples", type=int, default=8, help="samples of a stochastic propagator")
+    ap.add_argument("--one-sample", action="store_true",
+                    help="stochastic propagator: also show a single sample (sharpness) next to the sample mean")
     ap.add_argument("--out", required=True)
     ap.add_argument("--device", default="auto")
     a = ap.parse_args()
@@ -63,18 +66,25 @@ def main():
     dt = data.dt
     t0, n = int(round(a.t0_min * 60 / dt)), int(round(a.lead_min * 60 / dt))
     halo = cfg["stage_b"]["halo_sites"]
+    stoch = any(p.cfg.noise_channels for p in props)
     with torch.no_grad():
-        fc = sum(ae.decode(rollout_from(p, z, t0, n, halo)[-1]).mean(0) for p in props) / len(props)   # (C, NX)
+        lats = [rollout_from(p, z, t0, n, halo, a.n_samples if p.cfg.noise_channels else 1,
+                             gen=torch.Generator().manual_seed(0))[-1] for p in props]          # (S, P, c) each
+        fc = sum(ae.decode(l).mean(0) for l in lats) / len(props)                                 # (C, NX)
+        one = ae.decode(lats[0][:1])[0] if (stoch and a.one_sample) else None
         truth = data.full(0, t0 + n, device=dev)[0]
         recon = ae(truth[None])[0][0]
     Z = data.Z
     zk = BaseState.from_sounding().z / 1000.0
     x = (np.arange(data.NX) + 0.5) * 0.25
+    what = (f" (average of {len(props)} propagators)" if len(props) > 1 else
+            f" (stochastic: mean of {a.n_samples} samples)" if stoch else " (single propagator)")
     rows = [(f"truth, t = {(t0 + n) * dt / 3600:.1f} h ({a.member})", truth), ("autoencoder reconstruction of the truth", recon),
-            (f"forecast from t = {t0 * dt / 3600:.1f} h, lead {a.lead_min:.0f} min"
-             + (f" (average of {len(props)} propagators)" if len(props) > 1 else ""), fc)]
+            (f"forecast from t = {t0 * dt / 3600:.1f} h, lead {a.lead_min:.0f} min" + what, fc)]
+    if one is not None:
+        rows.append(("one sample of the stochastic forecast", one))
     plt.rcParams.update({"font.size": 9, "axes.spines.top": False, "axes.spines.right": False})
-    fig, ax = plt.subplots(3, len(a.vars), figsize=(7.2 * len(a.vars), 7.0), sharex=True, sharey=True,
+    fig, ax = plt.subplots(len(rows), len(a.vars), figsize=(7.2 * len(a.vars), 2.35 * len(rows)), sharex=True, sharey=True,
                            constrained_layout=True, squeeze=False)
     for j, v in enumerate(a.vars):
         lab, cmap, (lo, hi), squared = STYLE[v]
