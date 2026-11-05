@@ -78,3 +78,29 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 - **One-step skill vs persistence is 0.67.** That equals the model-free ceiling from the locality test (0.66–0.68), so the model has reached what 5-min data allow.
 - **More latent channels improve reconstruction, not forecasts.** Forecasts are limited by the dynamics at 5-min frames and by the 7 training members, not by autoencoder capacity. This is consistent with findings 3–4: the 1-min ensemble is the next step.
 - **Forecast error reaches the truth-member spread after about 25 min.** After that, the forecast is as far from the truth as another member is.
+
+## Cashew ensemble ens_A (2026-11-04)
+- **31 members** done on coe_cpu, 72–93 min each:
+  - mem000 is a validation copy of run_e1's sounding;
+  - mem001–030 use the original perturbation scheme;
+  - 6 h each at 1-min output, 361 frames.
+- **Output:** GrADS (no netcdf-fortran on Cashew), 2.19 GB per member, 64 GB in total, all on Cashew.
+- **Data stays on Cashew.** It is not copied back without the user's go-ahead. Only run summaries (figures, JSON, logs) come back.
+
+## Model trained on Cashew CPU (job 743446, `cluster/cashew_gpu/train_cm1_cpu.slurm`)
+- **Setup:** 32 cores, ~36 Stage-A steps/s, Stage A 9 min + Stage B 26 min. No GPU needed.
+- **Data:** train mem000–027, val mem028, test mem029–030; 1-min frames.
+- **Model:** propagator reach 3 sites (6 km) per step; k_max 20.
+
+| Lead | 1-min, 28 members | 5-min, 7 members (local_v1) | Persistence | Front error, 1-min | Front error, local_v1 |
+|---|---|---|---|---|---|
+| 1 min | 0.047 | — | 0.105 | 0.32 km | — |
+| 5 min | **0.090** | 0.141 | 0.43 | **0.43 km** | 1.08 km |
+| 15 min | 0.176 | 0.172 | 0.51 | **0.43 km** | 1.17 km |
+| 30 min | **0.230** | 0.251 | 0.59 | 1.42 km | 0.65 km |
+| 60 min | 0.319 | **0.271** | 0.75 | 2.50 km | 2.88 km |
+
+- **Reconstruction nMSE:** 0.030 all / 0.088 storm (local_v1: 0.036 / 0.100).
+- **Skill vs persistence at 5 min:** 0.79, up from 0.67.
+- **Error vs truth-member spread:** model error stays below the spread for ~35 min.
+- **Diagnosis:** 60 one-minute steps exceed the training horizon of k ≤ 20 steps, so the long-lead error builds up past what training controlled. Testing k_max 45 on the same autoencoder (job 743451).
