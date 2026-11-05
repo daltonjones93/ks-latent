@@ -105,10 +105,13 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - **1 km sites** improve reconstruction of w and condensate, with no clear forecast gain at 2× the sites.
   - **Caveats:**
     - single seed (D2 dropped), and differences ≤ 0.02 at 60 min are within run-to-run noise;
-    - the gust-front error at 45–60 min (~2–3.5 km) is dominated by jumps when new cells form ahead of the front, so a better front metric is needed.
+    - the gust-front error at 45–60 min (~2–3.5 km) was dominated by detector jumps. **Fixed 2026-11-05:**
+      - new metrics in `ks_latent/cm1/verify.py`: main-pool front, threshold-free displacement, FSS;
+      - all runs re-scored (job 8687): median displacement ≤ 0.5 km to 30 min and 0.8–1.7 km at 60 min, against 6 / 11.5 km for persistence;
+      - c = 32 has the smallest worst cases. See `cm1_notes.md`.
 - [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
-- [ ] **D6 (C)** Physics checks:
+- [ ] **D6 (C)** Physics checks (add: FSS of low-level condensate or surface rain; column-max condensate FSS barely discriminates):
   - mass divergence ∂(ρu)/∂x + ∂(ρw)/∂z of decoded states against the truth;
   - non-negativity and totals of condensate;
   - cold-pool strength and depth.

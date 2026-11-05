@@ -142,3 +142,32 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 - **Wider networks hurt beyond 15 min.** The model is data-limited.
 - **1 km sites:** no clear forecast gain.
 - **Front metric:** errors at 45–60 min are dominated by detector jumps when new cells form ahead of the front.
+
+## New front metrics (2026-11-05, `ks_latent/cm1/verify.py`)
+- **Main-pool front:** the leading edge of the main cold pool. Among pools with ≥ 25% of the largest pool's cold mass the easternmost is taken; pools narrower than 2 km are ignored and gaps narrower than 2 km merged.
+- **Displacement:** threshold-free, signed alignment shift of surface θ′ around the true front.
+- **FSS** of column-max condensate.
+- **On the 10 original truth runs:**
+  - threshold sensitivity (−0.5 / −1 / −2 K) 90th pct is 0.25 km, against 1.0 km for the easternmost-cell front;
+  - the largest jump is 22 km, against 31;
+  - jumps remain in ~3% of 5-min frames because squall lines advance discretely (new cells merge), so displacement is the headline error.
+
+## Re-scored D3/D4 runs (Saidie job 8687)
+**|displacement| median (90th pct), km:**
+
+| Run | 30 min | 60 min |
+|---|---|---|
+| persistence | 5.95 | 11.48 |
+| reference | 0.52 (1.10) | 0.80 (3.76) |
+| c = 32 | **0.37 (0.75)** | 1.05 (**2.56**) |
+| c = 32 + uniform k | 0.43 (0.86) | 1.21 (3.13) |
+| 1 km sites | 0.66 (1.24) | 1.41 (4.52) |
+| width 512 | 0.56 (1.53) | 1.72 (2.80) |
+
+- **c = 32 has the smallest tails.**
+- **Bias:** |bias| ≤ 0.3 km for all runs except the reference (−1.2 km at 60 min, a lag).
+- **FSS barely discriminates:**
+  - q > 0.3 at 4 km: 0.92–0.97 for models, 0.83–0.96 for persistence;
+  - q > 1 at 1 km: 0.89–0.97 for models, 0.80–0.95 for persistence.
+
+  Column-max condensate is dominated by the large anvil and stratiform region. **Follow-up:** FSS of low-level condensate or surface rain, where convective cells are.
