@@ -16,15 +16,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import netCDF4 as nc
 import numpy as np
+
+from ks_latent.cm1.io import BASE_I, load_grads_run, transform  # noqa: F401
+from ks_latent.cm1.io import load_netcdf_run as _load_netcdf_run
 
 ROOT = Path(__file__).resolve().parents[2]
 CM1 = ROOT / "cm1data" / "cm1r21.1"
 CACHE = ROOT / "artifacts" / "cm1"
 MEMBERS = [f"run_e{i}" for i in range(1, 11)]
 VARS = ["u", "w", "th", "qv", "prs", "qliq", "qice"]
-BASE_I = 1500  # far-field column at t=0 (bubble is at x=200 km, radius 10 km)
 
 
 def load_run(run: str) -> dict:
@@ -34,50 +35,9 @@ def load_run(run: str) -> dict:
     f = CACHE / f"{run}_cols.npz"
     if f.exists():
         return dict(np.load(f))
-    ds = nc.Dataset(CM1 / run / "cm1out.nc")
-    ds.set_auto_mask(False)
-    g = lambda k: ds[k][:, :, 0, :].astype(np.float64)
-    X = transform(g)
-    out = dict(
-        X=X,
-        t=ds["time"][:].astype(np.float64),
-        x=ds["xh"][:].astype(np.float64),
-        z=ds["zh"][:].astype(np.float64),
-        cref=ds["cref"][:, 0, :].astype(np.float32),
-        dbz=ds["dbz"][:, :, 0, :].astype(np.float32),
-    )
-    ds.close()
+    out = _load_netcdf_run(CM1 / run / "cm1out.nc")
     np.savez(f, **out)
     return out
 
 
-def transform(g) -> np.ndarray:
-    """Build the (T, V, Z, NX) column state from a field getter g(name) -> (T, Z, NX)."""
-    th, qv, prs = g("th"), g("qv"), g("prs")
-    base = lambda a: a[0, :, BASE_I][None, :, None]
-    qliq = g("qc") + g("qr")
-    qice = g("qi") + g("qs") + g("qg")
-    X = np.stack(
-        [
-            g("uinterp") - base(g("uinterp")),
-            g("winterp"),
-            th - base(th),
-            (qv - base(qv)) * 1e3,          # g/kg
-            (prs - base(prs)) / 100.0,      # hPa
-            np.sqrt(np.clip(qliq, 0, None) * 1e3),
-            np.sqrt(np.clip(qice, 0, None) * 1e3),
-        ],
-        axis=1,
-    ).astype(np.float32)
-    return X
 
-
-def load_grads_run(ctl) -> dict:
-    """Same output as load_run, from a CM1 GrADS run (output_format=1); not cached."""
-    from grads_io import read_grads
-    from pathlib import Path as _P
-    d = read_grads(ctl)
-    g = lambda k: d[k].astype(np.float64)
-    meta = read_grads(_P(ctl).parent / "cm1out_metadata.ctl")
-    return dict(X=transform(g), t=meta["mtime"].ravel().astype(np.float64), cref=d["cref"].astype(np.float32),
-                dbz=d["dbz"].astype(np.float32))

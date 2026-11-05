@@ -1,0 +1,296 @@
+"""Train and evaluate the CM1 column local field: Stage A (autoencoder), Stage B (propagator), test report.
+
+Data sources
+  --source local10        the 10 original members (cm1data/cm1r21.1/run_e*, 5-min frames)
+  --source grads:DIR      an ensemble made by cluster/cm1 (DIR/members/mem*/cm1out_s.ctl, GrADS)
+  --source netcdf:DIR     the same with NetCDF output (DIR/members/mem*/cm1out.nc)
+Members are split by whole member: the last --n-test are test, the --n-val before them validation.
+
+Profiles
+  smoke  3 members, 12 frames, tiny model, a few steps on CPU (< 1 min): the whole code path
+  local  the 10 original members on this Mac (MPS)
+  full   a cluster ensemble on a GPU (Saidie)
+
+The propagator's reach per step is set from the frame interval: the locality test
+(docs/cm1_notes.md) measured an information reach of ~8-12 km per 5-min frame, i.e.
+~25 m/s; reach_sites = ceil(25 m/s * dt / site width) + 1 (margin), and the forced halo
+equals it.
+
+Outputs (--out): config.json, normalizer.json, ae.pt, prop.pt, history_{a,b}.json,
+results.json (each artifact with a .meta.json), fig_forecast.png, fig_sections.png.
+"""
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import json
+import math
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+import torch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_member, member_from_cm1io,  # noqa: E402
+                                positive_channel_mask, save_member, split_members)
+from ks_latent.cm1.evaluate import forecast_report, reconstruction_report, summarize  # noqa: E402
+from ks_latent.cm1.io import load_grads_run, load_netcdf_run  # noqa: E402
+from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
+from ks_latent.cm1.train import StageAConfig, StageBConfig, encode_members, train_stage_a, train_stage_b  # noqa: E402
+from ks_latent.utils.device import get_device  # noqa: E402
+from ks_latent.utils.io import write_provenance  # noqa: E402
+from ks_latent.utils.seeding import set_seed  # noqa: E402
+
+CM1 = ROOT / "cm1data" / "cm1r21.1"
+INFO_SPEED = 25.0  # m/s, from the locality test and the spread-front speed
+
+
+@dataclasses.dataclass
+class RunConfig:
+    profile: str
+    source: str
+    n_val: int
+    n_test: int
+    seed: int
+    device: str
+    max_frames: int
+    ae: ColumnAEConfig
+    prop: StencilPropConfig
+    stage_a: StageAConfig
+    stage_b: StageBConfig
+    eval_lead_min: float
+    eval_every_min: float
+
+
+def load_source(source: str, cache: Path, max_frames: int, log) -> list:
+    cache.mkdir(parents=True, exist_ok=True)
+    if source == "local10":
+        items = [(f"run_e{i}", lambda r=f"run_e{i}": load_netcdf_run(CM1 / r / "cm1out.nc")) for i in range(1, 11)]
+    else:
+        kind, d = source.split(":", 1)
+        mdirs = sorted(Path(d).glob("members/mem*"))
+        if not mdirs:
+            raise FileNotFoundError(f"no members/mem* in {d}")
+        if kind == "grads":
+            items = [(p.name, lambda p=p: load_grads_run(p / "cm1out_s.ctl")) for p in mdirs]
+        elif kind == "netcdf":
+            items = [(p.name, lambda p=p: load_netcdf_run(p / "cm1out.nc")) for p in mdirs]
+        else:
+            raise ValueError(f"unknown source kind {kind!r}")
+        done = [p for p in mdirs if (p / "cm1.done").exists()]
+        if len(done) < len(mdirs):
+            log(f"  WARNING: {len(mdirs) - len(done)} members have no cm1.done (unfinished runs are skipped)")
+            items = [it for it, p in zip(items, mdirs) if (p / "cm1.done").exists()]
+    tag = source.replace("/", "_").replace(":", "_")
+    members = []
+    for name, loader in items:
+        f = cache / f"{tag}__{name}.npz"
+        if f.exists():
+            m = load_member(f)
+        else:
+            m = member_from_cm1io(loader(), name)
+            save_member(m, f)
+        if max_frames:
+            m = dataclasses.replace(m, X=m.X[:max_frames], cref=m.cref[:max_frames], t=m.t[:max_frames])
+        members.append(m)
+        log(f"  loaded {name}: {m.X.shape[0]} frames, dt {m.dt:.0f} s")
+    return members
+
+
+def build_config(a, dt: float | None) -> RunConfig:
+    smoke = a.profile == "smoke"
+    patch = a.patch
+    site_m = patch * 250.0
+    dt = dt or 300.0
+    reach = a.prop_reach or (math.ceil(INFO_SPEED * dt / site_m) + 1)
+    layers = 3
+    radius = max(1, math.ceil(reach / layers))
+    reach = layers * radius
+    ae = ColumnAEConfig(patch=patch, hidden=32 if smoke else a.hidden, latent_channels=a.latent_channels,
+                        n_mix=a.n_mix, mix_radius=1)
+    prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else a.hidden, layers=layers,
+                             radius=radius)
+    k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
+    sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
+                      val_every=max(1, a.steps_a // 20), seed=a.seed)
+    sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
+                      steps=a.steps_b, k_max=k_max, val_every=max(1, a.steps_b // 20), seed=a.seed)
+    if smoke:
+        sa.val_batches = 2
+        sa.warmup = sb.warmup = 1
+    return RunConfig(profile=a.profile, source=a.source, n_val=a.n_val, n_test=a.n_test, seed=a.seed,
+                     device=a.device, max_frames=a.max_frames, ae=ae, prop=prop, stage_a=sa, stage_b=sb,
+                     eval_lead_min=a.eval_lead_min, eval_every_min=a.eval_every_min)
+
+
+def plot(results: dict, out: Path, sections: dict | None):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({"font.size": 9, "axes.spines.top": False, "axes.spines.right": False})
+    fc = results["forecast"]
+    lead = np.array(fc["lead_s"]) / 60
+    col = {"model": "#2a6fdb", "pers": "#888888", "spread": "#d9822b"}
+    fig, ax = plt.subplots(1, 3, figsize=(12, 3.4), constrained_layout=True)
+    for a_, (k, kp, ylab) in zip(ax, [("nmse", "nmse_pers", "normalized MSE (all channels)"),
+                                      ("th_sfc_rmse", "th_sfc_rmse_pers", "surface θ′ RMSE (K)"),
+                                      ("front_err_km", "front_err_pers_km", "gust-front position error (km)")]):
+        a_.plot(lead, fc[k], "-o", ms=3, lw=2, color=col["model"], label="learned model")
+        a_.plot(lead, fc[kp], "--", lw=1.5, color=col["pers"], label="persistence")
+        if k == "nmse" and "nmse_spread" in fc:
+            a_.plot(lead, fc["nmse_spread"], ":", lw=2, color=col["spread"], label="truth-member spread")
+        a_.set_xlabel("lead time (min)"); a_.set_ylabel(ylab); a_.grid(alpha=0.25)
+    ax[0].legend(frameon=False, fontsize=8)
+    fig.suptitle(f"Held-out members {', '.join(results['split']['test'])}: forecasts from the encoded truth, "
+                 f"true state at the domain edges")
+    fig.savefig(out / "fig_forecast.png", dpi=130)
+    plt.close(fig)
+    if sections:
+        fig, ax = plt.subplots(3, 1, figsize=(10, 6.5), sharex=True, constrained_layout=True)
+        for a_, (lab, F) in zip(ax, sections["fields"].items()):
+            m = a_.pcolormesh(sections["x"], sections["z"], F, cmap="RdBu_r", vmin=-8, vmax=8, shading="auto",
+                              rasterized=True)
+            a_.set_title(lab); a_.set_ylabel("z (km)"); a_.set_ylim(0, 12)
+        ax[-1].set_xlabel("x (km)")
+        fig.colorbar(m, ax=ax, label="θ′ (K)", shrink=0.8)
+        fig.savefig(out / "fig_sections.png", dpi=130)
+        plt.close(fig)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--profile", choices=["smoke", "local", "full"], default="local")
+    ap.add_argument("--source", default="local10")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--cache", default=str(ROOT / "artifacts" / "cm1" / "members"))
+    ap.add_argument("--device", default="auto")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--n-val", type=int, default=1)
+    ap.add_argument("--n-test", type=int, default=2)
+    ap.add_argument("--max-frames", type=int, default=0)
+    ap.add_argument("--patch", type=int, default=8)
+    ap.add_argument("--hidden", type=int, default=256)
+    ap.add_argument("--latent-channels", type=int, default=16)
+    ap.add_argument("--n-mix", type=int, default=2)
+    ap.add_argument("--prop-reach", type=int, default=0, help="sites per step; 0 = from the frame interval")
+    ap.add_argument("--window-a", type=int, default=32)
+    ap.add_argument("--window-b", type=int, default=48)
+    ap.add_argument("--batch", type=int, default=32)
+    ap.add_argument("--steps-a", type=int, default=None)
+    ap.add_argument("--steps-b", type=int, default=None)
+    ap.add_argument("--k-max", type=int, default=0)
+    ap.add_argument("--eval-lead-min", type=float, default=60.0)
+    ap.add_argument("--eval-every-min", type=float, default=60.0)
+    ap.add_argument("--threads", type=int, default=2)
+    a = ap.parse_args()
+    defaults = {"smoke": (6, 6), "local": (4000, 4000), "full": (20000, 20000)}[a.profile]
+    a.steps_a = a.steps_a or defaults[0]
+    a.steps_b = a.steps_b or defaults[1]
+    if a.profile == "smoke":
+        a.max_frames = a.max_frames or 12
+        a.device = "cpu"
+        a.window_a, a.window_b = 12, 12
+        a.n_val, a.n_test = 1, 1
+        a.eval_lead_min, a.eval_every_min = 15, 15
+    torch.set_num_threads(a.threads)
+    out = Path(a.out or ROOT / "artifacts" / "cm1" / "runs" / f"{a.profile}_{time.strftime('%Y%m%d_%H%M%S')}")
+    out.mkdir(parents=True, exist_ok=True)
+    logf = open(out / "log.txt", "a")
+    def log(s):
+        print(s, flush=True); logf.write(s + "\n"); logf.flush()
+    t_start = time.time()
+    set_seed(a.seed)
+    dev = get_device(a.device)
+    log(f"[cm1] profile {a.profile}, source {a.source}, device {dev}, out {out}")
+
+    members = load_source(a.source, Path(a.cache), a.max_frames, log)
+    if a.profile == "smoke":
+        members = members[:3]
+    names = [m.name for m in members]
+    tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
+    pick = lambda ns: [m for m in members if m.name in ns]
+    norm = Normalizer.fit(pick(tr_n))
+    dt = members[0].dt
+    cfg = build_config(a, dt)
+    (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
+    (out / "normalizer.json").write_text(json.dumps(norm.to_dict(), indent=1))
+    log(f"[cm1] split train {tr_n} | val {va_n} | test {te_n}; dt {dt:.0f} s; scales "
+        + ", ".join(f"{v} {s:.3g}" for v, s in zip(VARS, norm.scale)))
+    log(f"[cm1] AE patch {cfg.ae.patch} ({cfg.ae.patch * 0.25:g} km sites), c {cfg.ae.latent_channels}, reach "
+        f"{cfg.ae.reach_sites}; propagator reach {cfg.prop.reach_sites} sites/step "
+        f"({cfg.prop.reach_sites * cfg.ae.patch * 0.25:g} km), k_max {cfg.stage_b.k_max}")
+    Z = members[0].X.shape[3]
+    cfg.ae.n_channels, cfg.ae.n_levels = len(VARS) * Z, Z
+    data = {k: ColumnData(pick(n), norm, dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
+    del members
+
+    # ---- Stage A ----
+    ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z)).to(dev)
+    log(f"[A] autoencoder: {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M parameters")
+    ta = time.time()
+    ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log)
+    torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae.pt")
+    write_provenance(out / "ae.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - ta)
+    (out / "history_a.json").write_text(json.dumps(ra, indent=1))
+
+    # ---- Stage B (always run) ----
+    z = {k: encode_members(ae, d) for k, d in data.items()}
+    act = {k: d.active for k, d in data.items()}
+    prop = StencilPropagator(cfg.prop).to(dev)
+    log(f"[B] propagator: {sum(p.numel() for p in prop.parameters()) / 1e6:.2f} M parameters")
+    tb = time.time()
+    rb = train_stage_b(prop, z["train"], z["val"], act["train"], act["val"], cfg.ae.patch, cfg.stage_b, log=log)
+    torch.save({"state_dict": prop.state_dict(), "cfg": dataclasses.asdict(cfg.prop)}, out / "prop.pt")
+    write_provenance(out / "prop.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - tb)
+    (out / "history_b.json").write_text(json.dumps(rb, indent=1))
+
+    # ---- test report ----
+    n_lead = max(1, int(round(cfg.eval_lead_min * 60 / dt)))
+    every = max(1, int(round(cfg.eval_every_min * 60 / dt)))
+    t0s = list(range(every, min(data["test"].T) - n_lead, every))
+    rec = reconstruction_report(ae, data["test"], norm)
+    fc = forecast_report(ae, prop, data["test"], z["test"], norm, t0s, n_lead, cfg.stage_b.halo_sites)
+    results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "dt_s": dt, "reconstruction": rec,
+               "forecast": fc, "stage_a_best_val": ra["best_val_recon"], "stage_b_best_val": rb["best_val_mse"]}
+    (out / "results.json").write_text(json.dumps(results, indent=1))
+    write_provenance(out / "results.json", config=cfg, seed=a.seed, device=str(dev),
+                     wall_time_s=time.time() - t_start)
+    log("[test] reconstruction RMSE (physical units), storm columns: "
+        + ", ".join(f"{k} {v:.3g}" for k, v in rec.get("rmse_phys_storm", rec["rmse_phys_all"]).items()))
+    log("[test] forecasts (mean over start times " + ", ".join(f"{t * dt / 3600:.1f} h" for t in t0s) + "):")
+    log(summarize(fc))
+
+    # a section: truth vs forecast theta' at the last lead from the first start time, first test member
+    sections = None
+    if t0s:
+        with torch.no_grad():
+            m, t0 = 0, t0s[0]
+            P = z["test"][m].shape[1]; h = cfg.stage_b.halo_sites
+            state = z["test"][m][t0:t0 + 1]
+            for j in range(n_lead):
+                state = prop(state)
+                zt = z["test"][m][t0 + j + 1:t0 + j + 2]
+                state = torch.cat([zt[:, :h], state[:, h:P - h], zt[:, P - h:]], dim=1)
+            ith = VARS.index("th")
+            sc = float(norm.scale[ith])
+            sl = slice(ith * Z, (ith + 1) * Z)
+            truth = data["test"].full(m, t0 + n_lead)[0, sl].cpu().numpy() * sc
+            pred = ae.decode(state)[0, sl].cpu().numpy() * sc
+            recon = ae(data["test"].full(m, t0 + n_lead))[0][0, sl].cpu().numpy() * sc
+            # model level heights = the heights in the input sounding (CM1 writes zh there)
+            zc = np.loadtxt(CM1 / "run" / "input_sounding", skiprows=1)[:, 0] / 1000.0
+            if len(zc) != Z:
+                zc = np.arange(Z, dtype=float)
+            sections = {"x": (np.arange(truth.shape[1]) + 0.5) * 0.25, "z": zc,
+                        "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_n[m]})": truth,
+                                   "autoencoder reconstruction of the truth": recon,
+                                   f"forecast from t = {t0 * dt / 3600:.1f} h, lead {n_lead * dt / 60:.0f} min": pred}}
+    plot(results, out, sections)
+    log(f"[cm1] done in {(time.time() - t_start) / 60:.1f} min; results in {out}")
+
+
+if __name__ == "__main__":
+    main()
