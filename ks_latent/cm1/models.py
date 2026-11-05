@@ -16,6 +16,12 @@ Encoder biases. The final 1x1 layer has no bias, for the reason found in
 the 1D KS local field (`autoencoder_local_field.py`): a free offset per
 channel drifts during training and nothing in the loss resists it.
 
+Per-variable ablation (`groups`). With `groups = V` every layer is a grouped convolution, so
+each variable's Z levels are encoded into their own c/V latent channels and decoded from them
+alone: V independent autoencoders side by side. Variables then interact only through the
+propagator. `groups = 1` (default) is the joint column encoder. Requires C, hidden and
+latent_channels divisible by `groups`; channels are variable-major, so the groups are variables.
+
 Non-negative outputs. The condensate channels (sqrt of mixing ratio) pass
 through a sharp softplus, `log(1 + exp(beta x)) / beta`, so decoded
 condensate is >= 0 and reaches ~0 (5e-6 at x = -1 for beta = 10) without
@@ -46,6 +52,7 @@ class ColumnAEConfig:
     mix_radius: int = 1
     padding_mode: str = "replicate"
     positive_beta: float = 10.0
+    groups: int = 1  # 1: joint column encoder; V: one encoder/decoder per variable (D7 ablation)
 
     @property
     def reach_sites(self) -> int:
@@ -53,11 +60,11 @@ class ColumnAEConfig:
 
 
 class _Mixer(nn.Module):
-    def __init__(self, H: int, r: int, n: int, padding_mode: str):
+    def __init__(self, H: int, r: int, n: int, padding_mode: str, groups: int = 1):
         super().__init__()
         if padding_mode == "circular":
             raise ValueError("circular padding is wrong for CM1 (open lateral boundaries)")
-        self.convs = nn.ModuleList(nn.Conv1d(H, H, 2 * r + 1, padding=r, padding_mode=padding_mode)
+        self.convs = nn.ModuleList(nn.Conv1d(H, H, 2 * r + 1, padding=r, padding_mode=padding_mode, groups=groups)
                                    for _ in range(n))
 
     def forward(self, h):
@@ -72,13 +79,15 @@ class ColumnFieldAE(nn.Module):
     def __init__(self, cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = None):
         super().__init__()
         self.cfg = cfg
-        C, H, c, p = cfg.n_channels, cfg.hidden, cfg.latent_channels, cfg.patch
-        self.enc_in = nn.Conv1d(C, H, p, stride=p)
-        self.enc_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode)
-        self.enc_out = nn.Conv1d(H, c, 1, bias=False)
-        self.dec_in = nn.Conv1d(c, H, 1)
-        self.dec_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode)
-        self.dec_out = nn.ConvTranspose1d(H, C, p, stride=p)
+        C, H, c, p, g = cfg.n_channels, cfg.hidden, cfg.latent_channels, cfg.patch, cfg.groups
+        if C % g or H % g or c % g:
+            raise ValueError(f"groups={g} must divide n_channels={C}, hidden={H} and latent_channels={c}")
+        self.enc_in = nn.Conv1d(C, H, p, stride=p, groups=g)
+        self.enc_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode, g)
+        self.enc_out = nn.Conv1d(H, c, 1, bias=False, groups=g)
+        self.dec_in = nn.Conv1d(c, H, 1, groups=g)
+        self.dec_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode, g)
+        self.dec_out = nn.ConvTranspose1d(H, C, p, stride=p, groups=g)
         pm = torch.zeros(C, dtype=torch.bool) if positive_mask is None else positive_mask.bool()
         if pm.shape != (C,):
             raise ValueError(f"positive_mask shape {tuple(pm.shape)} != ({C},)")

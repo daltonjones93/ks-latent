@@ -221,3 +221,23 @@ def test_rollout_length_sampling():
     assert all(_k_now(0.0, u, g) == 2 for _ in range(20))            # curriculum still caps it
     with pytest.raises(ValueError):
         _k_now(0.5, u)
+
+
+def test_grouped_encoder_keeps_variables_separate():
+    """groups = V: each variable's latent channels depend only on that variable's input levels, and its
+    decoded levels only on its own latent channels (exact, by gradient)."""
+    cfg = ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=V * 3, latent_channels=V * 2,
+                         n_mix=1, mix_radius=1, groups=V)
+    ae = ColumnFieldAE(cfg, positive_channel_mask(Z)).double().eval()
+    cpv = 2  # latent channels per variable
+    for v in (0, 3, 6):
+        u = torch.randn(1, V * Z, NX, dtype=torch.float64, requires_grad=True)
+        ae.encode(u)[0, :, v * cpv:(v + 1) * cpv].sum().backward()
+        used = (u.grad.abs().sum(dim=(0, 2)) > 0).reshape(V, Z).any(dim=1)
+        assert used.nonzero().ravel().tolist() == [v]
+        z = torch.randn(1, NX // PATCH, V * cpv, dtype=torch.float64, requires_grad=True)
+        ae.decode(z)[0, v * Z:(v + 1) * Z].sum().backward()
+        lat = (z.grad.abs().sum(dim=(0, 1)) > 0).reshape(V, cpv).any(dim=1)
+        assert lat.nonzero().ravel().tolist() == [v]
+    with pytest.raises(ValueError):
+        ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, hidden=16, latent_channels=V, groups=V))

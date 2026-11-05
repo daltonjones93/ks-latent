@@ -133,8 +133,8 @@ def build_config(a, dt: float | None) -> RunConfig:
     layers = 3
     radius = max(1, math.ceil(reach / layers))
     reach = layers * radius
-    ae = ColumnAEConfig(patch=patch, hidden=32 if smoke else a.hidden, latent_channels=a.latent_channels,
-                        n_mix=a.n_mix, mix_radius=1)
+    ae = ColumnAEConfig(patch=patch, hidden=(7 * 5 if a.encoder_groups > 1 else 32) if smoke else a.hidden,
+                        latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups)
     prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else a.hidden, layers=layers,
                              radius=radius)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
@@ -231,6 +231,8 @@ def main():
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--latent-channels", type=int, default=16)
     ap.add_argument("--n-mix", type=int, default=2)
+    ap.add_argument("--encoder-groups", type=int, default=1,
+                    help="1: joint column encoder; 7: one encoder/decoder per variable (ablation)")
     ap.add_argument("--prop-reach", type=int, default=0, help="sites per step; 0 = from the frame interval")
     ap.add_argument("--window-a", type=int, default=32)
     ap.add_argument("--window-b", type=int, default=48)
