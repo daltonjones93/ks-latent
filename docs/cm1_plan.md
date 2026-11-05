@@ -212,7 +212,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
     - test (10): ens_B mem003, 049, 016 (dry: low / mid / high shear), 054, 022, 017 (middle), 050, 030, 011 (moist), and 044 (the moist, high-shear corner);
     - val (4): mem025, 053, 055, 058;
     - train: the other 46.
-  - Runs, all with the `d34_c32_kuniform` recipe (c 32, k ≤ 45 uniform): S0 baseline; S1 + environment conditioning (D11); S2 + mirrors (D9); S3 both.
+  - Runs, all with the `d34_c32_kuniform` recipe (c 32, k ≤ 45 uniform): S0 baseline; **S0 + Stage C** (rollout fine-tuning, k ≤ 45, 15 000 steps, as job 8753 on ens_A); S1 + environment conditioning (D11); S2 + mirrors (D9); S3 both.
   - In parallel on the other GPU: round 2 on ens_A (Stage C k ≤ 45, job 8753; history propagators averaged, 8754–8757).
   - Then pick the recipe: the best of S0–S3, plus Stage C or history if round 2 shows a real gain. Averaging 4 propagators (D14a) is applied to the final model either way.
   - **Full run:** ens_A + ens_A2 + ens_B (121 storms). Test: ens_A mem029–030, ens_A2 mem001–010 (the G1 DA truths, so DA results stay paired) and the 10 ens_B test storms. Val: ens_A mem028, ens_A2 mem011 and the 4 ens_B val storms.
