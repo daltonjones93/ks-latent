@@ -7,6 +7,6 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 rsync -az --delete --exclude '__pycache__' --exclude '*.pyc' \
   --include 'ks_latent/***' --include 'scripts/' --include 'scripts/cm1/***' \
   --include 'cluster/***' --include 'tests/' --include 'tests/unit/' \
-  --include 'tests/unit/test_cm1.py' --include 'pyproject.toml' --exclude '*' \
+  --include 'tests/unit/test_cm1*.py' --include 'pyproject.toml' --exclude '*' \
   "$REPO/" "$REMOTE:~/latent_DA/"
 echo "code synced to $REMOTE:~/latent_DA"
