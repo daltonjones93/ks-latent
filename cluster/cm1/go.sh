@@ -44,9 +44,15 @@ FMT=2; [ "$NONETCDF" = 1 ] && FMT=1
 MAIL=(); [ -n "$EMAIL" ] && MAIL=(--mail-type=END,FAIL --mail-user="$EMAIL")
 DEP=()
 
-# ---- 2. build (skipped if cm1.exe exists) ----
+# jobs of ours already in the queue with this name (so re-runs never duplicate them)
+queued() { squeue -h -u "$USER" -n "$1" -o %i 2>/dev/null | head -1; }
+
+# ---- 2. build (skipped if cm1.exe exists or a build job is already queued) ----
 if [ -x build/run/cm1.exe ]; then
   say "build: build/run/cm1.exe exists, skipping"
+elif jb=$(queued cm1build) && [ -n "$jb" ]; then
+  say "build: job $jb already queued, reusing it"
+  DEP=(--dependency=afterok:$jb --kill-on-invalid-dep=yes)
 else
   jb=$(sbatch --parsable "$KIT_DIR/build.slurm" "$KIT_DIR" "$BUNDLE" | cut -d";" -f1)
   say "build: job $jb"
@@ -56,6 +62,9 @@ fi
 # ---- 3. smoke test (skipped if it already passed) ----
 if [ -f ens_smoke/members/mem000/cm1.done ]; then
   say "smoke test: already passed, skipping"
+elif js=$(queued cm1smoke) && [ -n "$js" ]; then
+  say "smoke test: job $js already queued, reusing it"
+  DEP=(--dependency=afterok:$js --kill-on-invalid-dep=yes)
 else
   js=$(sbatch --parsable ${DEP[@]+"${DEP[@]}"} "$KIT_DIR/smoke.slurm" "$KIT_DIR" "$BUNDLE" | cut -d";" -f1)
   say "smoke test: job $js (starts after the build)"
@@ -66,7 +75,7 @@ fi
 if [ ! -d "$ENS/members" ]; then
   python3 "$KIT_DIR/make_ensemble.py" --template template --exe build/run/cm1.exe --out "$ENS" \
       --n "$N" --seed "$SEED" --timax "$TIMAX" --tapfrq "$TAPFRQ" --output-format $FMT \
-      --reference-sounding template/input_sounding_member1 $EXTRA_ARGS
+      --reference-sounding template/input_sounding_member1 --exe-may-not-exist-yet $EXTRA_ARGS
 else
   say "ensemble: $ENS exists, resubmitting unfinished members only"
 fi

@@ -107,6 +107,8 @@ def main():
     ap.add_argument("--qv-offset", type=float, nargs=2, default=[0.0, 0.0])
     ap.add_argument("--qv-zmax", type=float, default=1000.0)
     ap.add_argument("--shear-scale", type=float, nargs=2, default=[1.0, 1.0])
+    ap.add_argument("--exe-may-not-exist-yet", action="store_true",
+                    help="link cm1.exe even if it is not built yet (go.sh: the build is a queued job)")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
     a = ap.parse_args()
 
@@ -115,7 +117,7 @@ def main():
     for f in ["namelist.input", "input_sounding"] + TABLES:
         if not os.path.exists(os.path.join(tmpl, f)):
             sys.exit("missing in template: %s" % f)
-    if not os.path.exists(exe):
+    if not os.path.exists(exe) and not a.exe_may_not_exist_yet:
         sys.exit("cm1.exe not found: %s" % exe)
     if os.path.exists(a.out) and os.listdir(a.out):
         sys.exit("output directory exists and is not empty: %s (refusing to overwrite)" % a.out)

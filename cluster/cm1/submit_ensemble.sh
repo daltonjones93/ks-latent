@@ -7,10 +7,17 @@
 set -euo pipefail
 KIT=$(cd "$(dirname "$0")" && pwd)
 ENS=$(cd "$1" && pwd); CPUS=${2:-8}; shift; [ $# -gt 0 ] && shift
-todo=()
-for d in "$ENS"/members/mem*; do [ -f "$d/cm1.done" ] || todo+=("$(basename "$d")"); done
+# skip members that are done, or already in a job that is still queued/running
+alive=" $(squeue -h -u "$USER" -o %i 2>/dev/null | tr '\n' ' ') "
+todo=(); inq=0
+for d in "$ENS"/members/mem*; do
+  [ -f "$d/cm1.done" ] && continue
+  if [ -f "$d/cm1.queued" ] && [[ "$alive" == *" $(cat "$d/cm1.queued") "* ]]; then inq=$((inq+1)); continue; fi
+  todo+=("$(basename "$d")")
+done
+[ "$inq" -gt 0 ] && echo "$inq members are already in queued/running jobs (not resubmitted)"
 n=${#todo[@]}
-[ "$n" -eq 0 ] && { echo "nothing to do: all members done"; exit 0; }
+[ "$n" -eq 0 ] && { echo "nothing to submit (all members done or already queued)"; exit 0; }
 njobs=$(( (n + CPUS - 1) / CPUS ))
 queued=$(squeue -h -u "$USER" 2>/dev/null | wc -l | tr -d ' ')
 if [ $((njobs + queued)) -gt 18 ]; then
@@ -20,5 +27,8 @@ mkdir -p logs
 echo "$n members -> $njobs jobs of up to $CPUS CPUs"
 for ((j = 0; j < njobs; j++)); do
   chunk=("${todo[@]:$((j * CPUS)):$CPUS}")
-  sbatch --cpus-per-task="${#chunk[@]}" ${@+"$@"} "$KIT/cm1_pack.slurm" "$KIT" "$ENS" "${chunk[@]}"
+  out=$(sbatch --parsable --cpus-per-task="${#chunk[@]}" ${@+"$@"} "$KIT/cm1_pack.slurm" "$KIT" "$ENS" "${chunk[@]}")
+  jid=${out%%;*}
+  echo "job $jid: ${chunk[*]}"
+  for m in "${chunk[@]}"; do echo "$jid" > "$ENS/members/$m/cm1.queued"; done
 done
