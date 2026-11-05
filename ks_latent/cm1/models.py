@@ -60,6 +60,8 @@ class ColumnAEConfig:
     groups: int = 1  # 1: joint column encoder; V: one encoder/decoder per variable (D7 ablation)
     vertical_channels: int = 0  # > 0: per-cell vertical convolution front end with this many channels (D14b)
     vertical_kernel: int = 5
+    env_raw_dim: int = 0        # > 0: environment features per member (env.py, 3*Z) given to the encoder (D11)
+    env_dim: int = 16           # their learned projection, broadcast along x as extra input channels
 
     @property
     def reach_sites(self) -> int:
@@ -89,6 +91,8 @@ class ColumnFieldAE(nn.Module):
         C, H, c, p, g = cfg.n_channels, cfg.hidden, cfg.latent_channels, cfg.patch, cfg.groups
         if C % g or H % g or c % g:
             raise ValueError(f"groups={g} must divide n_channels={C}, hidden={H} and latent_channels={c}")
+        self.env_proj = nn.Linear(cfg.env_raw_dim, cfg.env_dim) if cfg.env_raw_dim else None
+        E = cfg.env_dim if cfg.env_raw_dim else 0
         self.vert = None
         if cfg.vertical_channels:
             if g != 1:
@@ -98,9 +102,11 @@ class ColumnFieldAE(nn.Module):
                 raise ValueError("n_channels must be variables x n_levels for the vertical front end")
             k = cfg.vertical_kernel
             self.vert = nn.Conv2d(V, cfg.vertical_channels, (k, 1), padding=(k // 2, 0))   # along z only
-            self.enc_in = nn.Conv1d(cfg.vertical_channels * cfg.n_levels, H, p, stride=p)
+            self.enc_in = nn.Conv1d(cfg.vertical_channels * cfg.n_levels + E, H, p, stride=p)
         else:
-            self.enc_in = nn.Conv1d(C, H, p, stride=p, groups=g)
+            if E and g != 1:
+                raise ValueError("environment conditioning and groups > 1 are not combined")
+            self.enc_in = nn.Conv1d(C + E, H, p, stride=p, groups=g)
         self.enc_mix = _Mixer(H, cfg.mix_radius, cfg.n_mix, cfg.padding_mode, g)
         self.enc_out = nn.Conv1d(H, c, 1, bias=False, groups=g)
         self.dec_in = nn.Conv1d(c, H, 1, groups=g)
@@ -111,13 +117,19 @@ class ColumnFieldAE(nn.Module):
             raise ValueError(f"positive_mask shape {tuple(pm.shape)} != ({C},)")
         self.register_buffer("positive_mask", pm)
 
-    def encode(self, u: torch.Tensor) -> torch.Tensor:
+    def encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
+        """`env` (B, env_raw_dim): required when the model is environment-conditioned (D11)."""
+        if (env is None) != (self.env_proj is None):
+            raise ValueError("pass env exactly when the autoencoder is environment-conditioned")
         if u.shape[-1] % self.cfg.patch:
             raise ValueError(f"width {u.shape[-1]} is not a multiple of patch {self.cfg.patch}")
         if self.vert is not None:
             B, C, NX = u.shape
             Zl = self.cfg.n_levels
             u = F.gelu(self.vert(u.reshape(B, C // Zl, Zl, NX))).reshape(B, -1, NX)
+        if env is not None:
+            e = self.env_proj(env.to(u.dtype))[:, :, None].expand(-1, -1, u.shape[-1])
+            u = torch.cat([u, e], dim=1)
         h = F.gelu(self.enc_in(u))
         h = self.enc_mix(h)
         return self.enc_out(h).transpose(1, 2)  # (B, P, c)
@@ -131,8 +143,8 @@ class ColumnFieldAE(nn.Module):
             out = torch.where(self.positive_mask[None, :, None], pos, out)
         return out
 
-    def forward(self, u):
-        z = self.encode(u)
+    def forward(self, u, env: torch.Tensor | None = None):
+        z = self.encode(u, env)
         return self.decode(z), z
 
 

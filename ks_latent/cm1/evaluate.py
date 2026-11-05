@@ -66,7 +66,9 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
     for m in range(len(data.u)):
         for t in range(0, data.T[m], stride_t):
             u = data.full(m, t, device=dev)               # (1, C, NX)
-            e = (ae(u)[0] - u)[0].reshape(V, Z, -1).cpu() ** 2  # normalized
+            env = data.env_of([m])
+            env = None if env is None else env.to(dev)
+            e = (ae(u, env)[0] - u)[0].reshape(V, Z, -1).cpu() ** 2  # normalized
             act = data.cref[m][t] > 10
             se += e.mean(dim=1).sum(dim=1); n += e.shape[-1]
             se_act += e.mean(dim=1)[:, act].sum(dim=1); n_act += int(act.sum())
@@ -78,8 +80,9 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
         for m in range(len(data.u)):
             for t in range(data.T[m] // 3, data.T[m], max(1, data.T[m] // 6)):
                 u = data.full(m, t, device=dev)
+                env = data.env_of([m])
                 tr = (u[0].cpu() * chs[:, None]).reshape(V, Z, -1).numpy()
-                rc = (ae(u)[0][0].cpu() * chs[:, None]).reshape(V, Z, -1).numpy()
+                rc = (ae(u, None if env is None else env.to(dev))[0][0].cpu() * chs[:, None]).reshape(V, Z, -1).numpy()
                 dt_.append(divergence_ratio(tr, base)); dr_.append(divergence_ratio(rc, base))
                 mt_.append(float(condensate_mass(tr, base))); mr_.append(float(condensate_mass(rc, base)))
         phys = {"div_ratio_truth": float(np.mean(dt_)), "div_ratio_recon": float(np.mean(dr_)),

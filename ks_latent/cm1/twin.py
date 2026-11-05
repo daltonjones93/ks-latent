@@ -194,7 +194,7 @@ def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) 
 @torch.no_grad()
 def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
              Z0: torch.Tensor, norm: Normalizer, cfg: TwinConfig, assimilate: bool = True,
-             refl_head=None, static_ens=None, static_phys=None) -> dict:
+             refl_head=None, static_ens=None, static_phys=None, env_ens=None) -> dict:
     """`truth`: ColumnData holding the truth member only (index 0); `z_truth` its encoded latent
     trajectory (T, P, c) (used only for the boundary halo); `Z0` (N, P, c) initial ensemble at frame
     `cfg.t0`. Returns per-cycle prior/analysis scores."""
@@ -313,7 +313,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 pm = ae.positive_mask[None, :, None]
                 Ua = torch.where(pm, Ua.clamp(min=0), Ua)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
-                Z = ae.encode(Ua)
+                Z = ae.encode(Ua, env_ens)
                 rec["analysis_reencoded"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
         if k in cfg.forecast_from:
             rec["forecast"] = _forecast_scores(ae, prop, Z, z_truth, truth, t1, cfg, norm, refl_head, gen)

@@ -117,7 +117,7 @@ class ColumnData:
     """
 
     def __init__(self, members: list[CM1Member], norm: Normalizer, device: torch.device,
-                 active_dbz: float = 10.0):
+                 active_dbz: float = 10.0, env: dict | None = None):
         if not members:
             raise ValueError("no members")
         self.names = [m.name for m in members]
@@ -139,6 +139,18 @@ class ColumnData:
             self.active.append(torch.from_numpy(np.argwhere(m.cref > active_dbz)))
         self.T = [x.shape[0] for x in self.u]
         self.cref = [torch.from_numpy(m.cref) for m in members]
+        self.env = None                                     # (M, E) environment features (D11), or None
+        if env is not None:
+            missing = [m.name for m in members if m.name not in env]
+            if missing:
+                raise ValueError(f"no environment features for {missing[:5]}{'...' if len(missing) > 5 else ''}")
+            self.env = torch.stack([torch.as_tensor(env[m.name]) for m in members]).to(device)
+
+    def env_of(self, mem) -> torch.Tensor | None:
+        """Environment features of members `mem` (indices), on the data device; None if unconditioned."""
+        if self.env is None:
+            return None
+        return self.env[torch.as_tensor(mem, device=self.env.device).long()]
 
     def windows(self, B: int, width: int, n_frames: int, gen: torch.Generator, active_frac: float = 0.5):
         if width > self.NX:

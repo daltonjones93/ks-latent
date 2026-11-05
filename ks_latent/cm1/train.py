@@ -90,15 +90,19 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
         raise ValueError(f"window of {cfg.window_sites} sites leaves no interior after masking {mask_sites} per side")
     g = torch.Generator().manual_seed(cfg.seed)
     vg = torch.Generator().manual_seed(cfg.seed + 12345)
-    val = [data_va.windows(cfg.batch, W, 1, vg, cfg.active_frac)[0][:, 0].to(dev) for _ in range(cfg.val_batches)]
+    def draw(data, gen):
+        u, mem, _, _ = data.windows(cfg.batch, W, 1, gen, cfg.active_frac)
+        e = data.env_of(mem)
+        return u[:, 0].to(dev), (None if e is None else e.to(dev))
+    val = [draw(data_va, vg) for _ in range(cfg.val_batches)]
     opt = torch.optim.AdamW(ae.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     m = mask_sites * p
     hist, best, best_state, t0 = [], float("inf"), None, time.time()
     for step in range(cfg.steps):
         ae.train()
-        u = data_tr.windows(cfg.batch, W, 1, g, cfg.active_frac)[0][:, 0].to(dev)  # (B, C, W)
-        z = ae.encode(u)
+        u, env = draw(data_tr, g)                                                  # (B, C, W)
+        z = ae.encode(u, env)
         uh = ae.decode(z)
         l_rec = F.mse_loss(_interior(uh, m), _interior(u, m))
         zs = _interior(z, mask_sites, dim=1).reshape(-1, z.shape[-1])
@@ -113,7 +117,7 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             ae.eval()
             with torch.no_grad():
-                v = sum(F.mse_loss(_interior(ae(x)[0], m), _interior(x, m)).item() for x in val) / len(val)
+                v = sum(F.mse_loss(_interior(ae(x, e)[0], m), _interior(x, m)).item() for x, e in val) / len(val)
             rec = {"step": step + 1, "train_recon": l_rec.item(), "l_var": l_var.item(), "l_logdet": l_ld.item(),
                    "val_recon": v, "wall_s": time.time() - t0}
             hist.append(rec)
@@ -132,7 +136,11 @@ def encode_members(ae: ColumnFieldAE, data: ColumnData, batch: int = 16) -> list
     dev = next(ae.parameters()).device
     out = []
     for m in range(len(data.u)):
-        zs = [ae.encode(data.full(m, slice(t, t + batch), device=dev)) for t in range(0, data.T[m], batch)]
+        e = data.env_of([m])
+        zs = []
+        for t in range(0, data.T[m], batch):
+            x = data.full(m, slice(t, t + batch), device=dev)
+            zs.append(ae.encode(x, None if e is None else e.to(dev).expand(x.shape[0], -1)))
         out.append(torch.cat(zs))
     return out
 
@@ -286,15 +294,20 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     wch = wch / wch.mean()
     g = torch.Generator().manual_seed(cfg.seed)
     vg = torch.Generator().manual_seed(cfg.seed + 999)
-    val = [data_va.windows(cfg.batch, W, Hh + cfg.k_max, vg, cfg.active_frac)[0].to(dev) for _ in range(cfg.val_batches)]
+    def draw(data, F_, gen):
+        u, mem, _, _ = data.windows(cfg.batch, W, F_, gen, cfg.active_frac)
+        e = data.env_of(mem)
+        return u.to(dev), (None if e is None else e.to(dev))
+    val = [draw(data_va, Hh + cfg.k_max, vg) for _ in range(cfg.val_batches)]
     params = list(ae.parameters()) + list(prop.parameters())
     opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     kcfg = StageBConfig(k_max=cfg.k_max, k_ramp_frac=cfg.k_ramp_frac, k_sampling=cfg.k_sampling)
 
-    def rollout_err(u, k, weighted, gen):
+    def rollout_err(u, env, k, weighted, gen):
         B, F_ = u.shape[:2]
-        z = ae.encode(u.reshape(B * F_, C, W)).reshape(B, F_, Pw, -1)
+        e = None if env is None else env.repeat_interleave(F_, dim=0)
+        z = ae.encode(u.reshape(B * F_, C, W), e).reshape(B, F_, Pw, -1)
         pred = forced_halo_rollout(prop, z, k, h, gen=gen)                       # (B, k, Pw, c)
         dec = ae.decode(pred.reshape(B * k, Pw, -1)).reshape(B, k, C, W)
         e = (dec - u[:, Hh:Hh + k]) ** 2
@@ -307,8 +320,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     for step in range(cfg.steps):
         ae.train(); prop.train()
         k = _k_now(step / cfg.steps, kcfg, g)
-        u = data_tr.windows(cfg.batch, W, Hh + k, g, cfg.active_frac)[0].to(dev)  # (B, H+k, C, W)
-        l_roll, z = rollout_err(u, k, True, g)
+        u, env = draw(data_tr, Hh + k, g)                                          # (B, H+k, C, W)
+        l_roll, z = rollout_err(u, env, k, True, g)
         u0 = u[:, Hh - 1]
         l_rec = F.mse_loss(_interior(ae.decode(z[:, Hh - 1]), m), _interior(u0, m))
         zs = _interior(z[:, Hh - 1], m_sites, dim=1).reshape(-1, z.shape[-1])
@@ -322,7 +335,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             ae.eval(); prop.eval()
             with torch.no_grad():
-                v = sum(rollout_err(x, cfg.k_max, False, torch.Generator().manual_seed(3))[0].item() for x in val) / len(val)
+                v = sum(rollout_err(x, e, cfg.k_max, False, torch.Generator().manual_seed(3))[0].item()
+                        for x, e in val) / len(val)
             rec = {"step": step + 1, "k": k, "l_roll": l_roll.item(), "l_rec": l_rec.item(), "l_logdet": l_ld.item(),
                    "val_decoded_rollout_mse": v, "wall_s": time.time() - t0}
             hist.append(rec)

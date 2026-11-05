@@ -264,6 +264,8 @@ def main():
     ap.add_argument("--stage-c-lr", type=float, default=1e-4)
     ap.add_argument("--stage-c-batch", type=int, default=12)
     ap.add_argument("--w-sfc-th", type=float, default=0.0, help="Stage C extra weight on theta' in the lowest ~1 km")
+    ap.add_argument("--env-file", default="",
+                    help="environment features (scripts/cm1/build_env.py), '+'-separated files: condition the encoder (D11)")
     ap.add_argument("--average-props", nargs="*", default=[],
                     help="run dirs whose propagators share this autoencoder: evaluate the averaged forecast (D14a)")
     ap.add_argument("--eval-only", action="store_true", help="load ae.pt/prop.pt from --out, skip training")
@@ -315,7 +317,15 @@ def main():
         f"({cfg.prop.reach_sites * cfg.ae.patch * 0.25:g} km), k_max {cfg.stage_b.k_max}")
     data_dev = dev if a.data_device == "same" else torch.device(a.data_device)
     log(f"[cm1] data on {data_dev}, model on {dev}")
-    data = {k: ColumnData(pick(n), norm, data_dev) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
+    env = None
+    if a.env_file:
+        from ks_latent.cm1.env import load_env_files
+        env = load_env_files(a.env_file.split("+"))
+        cfg.ae.env_raw_dim = len(next(iter(env.values())))
+        log(f"[cm1] environment-conditioned encoder: {cfg.ae.env_raw_dim} features per member from {a.env_file}")
+        if not a.eval_only and not a.init_from:
+            (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
+    data = {k: ColumnData(pick(n), norm, data_dev, env=env) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
     del members
 
     if a.init_from:   # architecture of the run we start from
@@ -435,7 +445,8 @@ def main():
             sl = slice(ith * Z, (ith + 1) * Z)
             truth = data["test"].full(m, t0 + n_lead, device=dev)[0, sl].cpu().numpy() * sc
             pred = ae.decode(state).mean(0)[sl].cpu().numpy() * sc
-            recon = ae(data["test"].full(m, t0 + n_lead, device=dev))[0][0, sl].cpu().numpy() * sc
+            e0 = data["test"].env_of([m])
+            recon = ae(data["test"].full(m, t0 + n_lead, device=dev), None if e0 is None else e0.to(dev))[0][0, sl].cpu().numpy() * sc
             zc = level_heights_km(a.source, Z, log)
             sections = {"x": (np.arange(truth.shape[1]) + 0.5) * 0.25, "z": zc,
                         "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_n[m]})": truth,

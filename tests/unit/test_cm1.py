@@ -335,3 +335,26 @@ def test_stage_c_runs_and_updates_both_models():
     assert np.isfinite(r["best_val_decoded_rollout_mse"])
     assert any((ae.state_dict()[k] != a0[k]).any() for k in a0)
     assert any((prop.state_dict()[k] != p0[k]).any() for k in p0)
+
+
+def test_environment_features_and_conditioned_encoder(tmp_path):
+    from ks_latent.cm1.env import load_env_files, sounding_env
+    from ks_latent.cm1.physics import BASE_SOUNDING
+    f0 = sounding_env(BASE_SOUNDING)
+    assert f0.shape == (3 * 62,) and np.abs(f0).max() == 0                    # the reference itself: all zero
+    lines = BASE_SOUNDING.read_text().splitlines()
+    mod = [lines[0]] + [" ".join([l.split()[0], l.split()[1], str(float(l.split()[2]) + 1.0)] + l.split()[3:])
+                        for l in lines[1:] if l.strip()]
+    (tmp_path / "s").write_text("\n".join(mod))
+    f1 = sounding_env(tmp_path / "s")
+    assert np.allclose(f1[62:124], 1.0) and np.allclose(f1[:62], 0) and np.allclose(f1[124:], 0)   # qv + 1 g/kg
+    cfg = ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3, env_raw_dim=6)
+    ae = ColumnFieldAE(cfg, positive_channel_mask(Z)).double().eval()
+    u = torch.randn(1, V * Z, NX, dtype=torch.float64)
+    e0, e1 = torch.zeros(1, 6, dtype=torch.float64), torch.ones(1, 6, dtype=torch.float64)
+    assert (ae.encode(u, e0) - ae.encode(u, e1)).abs().max() > 1e-6
+    with pytest.raises(ValueError):
+        ae.encode(u)                                                           # conditioned: env required
+    zs, z = ae.encode(torch.roll(u, 2 * PATCH, dims=-1), e1), ae.encode(u, e1)
+    r, P = cfg.reach_sites, NX // PATCH
+    torch.testing.assert_close(zs[:, r + 2:P - r], z[:, r:P - r - 2], atol=1e-12, rtol=0)   # still equivariant in x
