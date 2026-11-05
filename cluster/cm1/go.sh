@@ -5,7 +5,8 @@
 # unfinished members are resubmitted.
 # Settings (environment variables, all optional):
 #   N=30 SEED=1 ENS=ens_A CPUS=8 TIMAX=21600 TAPFRQ=60 EMAIL=you@colostate.edu
-#   EXTRA_ARGS="--qv-offset -1.5 1.0 --shear-scale 0.6 1.4"   (Phase B environments)
+#   EXTRA_ARGS="--qv-offset -2.0 1.0 --shear-scale 0.6 1.4 --noise-seed member --noise-offset 2000"
+#   REFERENCE=0   no mem000 (the validation copy of member 1)
 set -euo pipefail
 KIT_DIR=$(cd "$(dirname "$0")" && pwd); BUNDLE=$(cd "$KIT_DIR/.." && pwd); cd "$BUNDLE"
 N=${N:-30}; SEED=${SEED:-1}; ENS=${ENS:-ens_A}; CPUS=${CPUS:-8}
@@ -72,10 +73,12 @@ else
 fi
 
 # ---- 4. ensemble members (generated once, on the login node: only writes small files) ----
+REF="--reference-sounding template/input_sounding_member1"
+[ "${REFERENCE:-1}" = 0 ] && REF=""
 if [ ! -d "$ENS/members" ]; then
   python3 "$KIT_DIR/make_ensemble.py" --template template --exe build/run/cm1.exe --out "$ENS" \
       --n "$N" --seed "$SEED" --timax "$TIMAX" --tapfrq "$TAPFRQ" --output-format $FMT \
-      --reference-sounding template/input_sounding_member1 --exe-may-not-exist-yet $EXTRA_ARGS
+      $REF --exe-may-not-exist-yet $EXTRA_ARGS
 else
   say "ensemble: $ENS exists, resubmitting unfinished members only"
 fi

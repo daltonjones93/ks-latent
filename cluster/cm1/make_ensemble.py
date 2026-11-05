@@ -20,7 +20,10 @@ Perturbations (all optional, recorded in the manifest):
   --shear-scale A B multiply the wind profile by a factor drawn in [A, B].
   --noise-seed member  give each member its own seed for CM1's random initial noise (namelist var1 =
                     member number; needs the seed_var1 source patch, see patches/apply_patches.py).
-                    mem000 keeps var1 = 0, i.e. the original fixed seed.
+                    mem000 keeps var1 = 0, i.e. the original fixed seed. --noise-offset N adds N, so
+                    different ensembles never share noise (e.g. 1000 for one, 2000 for the next).
+  --design corners  instead of random draws, cycle through the 4 corners of the --qv-offset x
+                    --shear-scale box (a pilot of the extremes).
 Every perturbed sounding is checked for supersaturation; the script stops with
 an error rather than write one.
 
@@ -114,6 +117,8 @@ def main():
                     help="link cm1.exe even if it is not built yet (go.sh: the build is a queued job)")
     ap.add_argument("--noise-seed", choices=["fixed", "member"], default="fixed",
                     help="fixed: CM1's one seed for all members; member: var1 = member number")
+    ap.add_argument("--noise-offset", type=int, default=0, help="added to var1 with --noise-seed member")
+    ap.add_argument("--design", choices=["random", "corners"], default="random")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
     a = ap.parse_args()
 
@@ -124,7 +129,7 @@ def main():
             sys.exit("missing in template: %s" % f)
     if not os.path.exists(exe) and not a.exe_may_not_exist_yet:
         sys.exit("cm1.exe not found: %s" % exe)
-    if a.noise_seed == "member":
+    if a.noise_seed == "member" and os.path.exists(exe):  # a queued build (go.sh) is always patched
         patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")  # build/run/cm1.exe -> build/PATCHES
         if not (os.path.exists(patches) and "seed_var1" in open(patches).read()):
             sys.exit("--noise-seed member needs a CM1 built with the seed_var1 patch (cluster/cm1/build_cm1.sh "
@@ -150,8 +155,12 @@ def main():
         members.append(("mem000", read_sounding(a.reference_sounding), {"reference": os.path.abspath(a.reference_sounding)}))
     for i in range(a.start, a.start + a.n):
         sfc, rows = list(sfc0), [list(r) for r in rows0]
-        dq = rng.uniform(*a.qv_offset)
-        ss = rng.uniform(*a.shear_scale)
+        if a.design == "corners":
+            c = (i - a.start) % 4
+            dq, ss = a.qv_offset[c % 2], a.shear_scale[c // 2]
+        else:
+            dq = rng.uniform(*a.qv_offset)
+            ss = rng.uniform(*a.shear_scale)
         dth_sfc = rng.gauss(0.0, a.theta_sigma)
         sfc[1] += dth_sfc
         dths = []
@@ -181,7 +190,7 @@ def main():
             shutil.copyfile(info["reference"], os.path.join(d, "input_sounding"))
         else:
             write_sounding(os.path.join(d, "input_sounding"), sfc, rows)
-        seed = int(name[3:]) if a.noise_seed == "member" else 0
+        seed = (a.noise_offset + int(name[3:])) if (a.noise_seed == "member" and name != "mem000") else 0
         with open(os.path.join(d, "namelist.input"), "w") as f:
             f.write(set_namelist(nml, "var1", "%.1f" % seed))
         info["noise_seed_var1"] = seed
