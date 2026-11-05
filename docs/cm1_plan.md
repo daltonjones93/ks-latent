@@ -14,24 +14,27 @@ Status as of 2026-11-05.
 - **Infrastructure.**
   - Cashew runs CM1 ensembles and CPU training with one command each.
   - Saidie is reachable without a password: account `chen-saidie`, partitions `general` (2 d) and `long-runs` (7 d), one node with 8 × H200, 224 CPUs and 1.8 TB RAM. Saidie and Cashew share no filesystem, but Saidie can ssh to Cashew.
-  - Nothing is installed on Saidie yet.
+  - Saidie is set up: code, environment and job scripts are in place, and the tests and smoke run pass on an H200 (section A).
 
 ---
 
-## A. Saidie setup
-- [ ] **A1 (C)** Fill in the Saidie job script.
-  - Changes: account `chen-saidie`, partition `general`, `--gres=gpu:h200:1`, and a login shell so `module` and Slurm are on the PATH.
-  - Done when: `bash -n` passes and the diff is committed.
-- [ ] **A2 (C)** Sync the code to `~/latent_DA` on Saidie (`cluster/saidie/sync_code.sh saidie`).
-  - Done when: `ls ~/latent_DA/ks_latent/cm1` on Saidie shows the package.
-- [ ] **A3 (C)** Create the Python environment (`python312` module, venv, torch built for the node's driver).
-  - deps: A2.
-  - Done when: a 1-min GPU job prints `cuda available: True` and the H200's name.
-- [ ] **A4 (C)** Run the CM1 tests and the smoke profile as a GPU job.
-  - deps: A3.
-  - Done when: 13 tests pass and the smoke run writes `results.json`.
-- [ ] **A5 (C)** Add a `cache:DIR` data source to `train_cm1.py`, reading the float16 member files directly. Saidie will have the cache, not the raw GrADS.
-  - Done when: a unit test passes and a local run on cached members works.
+## A. Saidie setup — done 2026-11-05
+- [x] **A1 (C)** Saidie job scripts in `cluster/saidie/`: `train_cm1.slurm`, `gpu_check.slurm` and `smoke.slurm`.
+  - Settings: account `chen-saidie`, partition `general`, `--gres=gpu:h200:1`, login shell (`#!/bin/bash -l`).
+  - **Saidie shows all 8 GPUs to every job.** Each script prints `CUDA_VISIBLE_DEVICES` and refuses to run if Slurm did not set it, so torch can only use the assigned GPU. In tests Slurm set it (GPU 2).
+- [x] **A2 (C)** Code synced to `~/latent_DA` on Saidie (`bash cluster/saidie/sync_code.sh saidie`, code only). Re-run it after code changes.
+- [x] **A3 (C)** Environment `~/venvs/cm1`: torch 2.11.0+cu128, numpy, matplotlib, pytest.
+  - **Driver 570.172 supports CUDA ≤ 12.8.** PyPI's default torch (CUDA 13.2) would not run, so `setup_env.sh` takes `TORCH_INDEX=https://download.pytorch.org/whl/cu128`.
+  - **Saidie's system Python has no `ensurepip`.** The script uses the `python312` module.
+  - GPU job 8677: `cuda available: True`, NVIDIA H200 (143 GB).
+- [x] **A4 (C)** GPU job 8679: 15 CM1 tests pass and the smoke profile runs on `cuda` (synthetic data, since no CM1 data is on Saidie yet), writing `results.json` and the checkpoints.
+  - Fixed along the way: the smoke profile had forced CPU even with `--device cuda`.
+- [x] **A5 (C)** New data sources in `train_cm1.py`:
+  - `cache:DIR[:PATTERN]` reads the float16 member files in natural member order (`mem2` before `mem10`), so the train/val/test split is the intended one;
+  - `synthetic` provides random fields for code-path tests where no data exist.
+
+  Unit tests pass. A run on the local cache reproduces `local_v1`'s split and scales exactly.
+  - On Saidie, train with `DATA="cache:$HOME/cm1_cache"` once the ens_A cache is copied there (C1/C2).
 
 ## B. More data on Cashew
 - [ ] **B1 (C)** Validate the Cashew build: `mem000` against the original `run_e1`, at matching 5-min times, as a job on Cashew.

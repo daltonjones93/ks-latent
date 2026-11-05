@@ -225,7 +225,7 @@ def main():
     a.steps_b = a.steps_b or defaults[1]
     if a.profile == "smoke":
         a.max_frames = a.max_frames or 12
-        a.device = "cpu"
+        a.device = "cpu" if a.device == "auto" else a.device  # smoke runs on CPU unless a device is asked for
         a.window_a, a.window_b = 12, 12
         a.n_val, a.n_test = 1, 1
         a.eval_lead_min, a.eval_every_min = 15, 15
