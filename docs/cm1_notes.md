@@ -104,3 +104,16 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 - **Skill vs persistence at 5 min:** 0.79, up from 0.67.
 - **Error vs truth-member spread:** model error stays below the spread for ~35 min.
 - **Diagnosis:** 60 one-minute steps exceed the training horizon of k ≤ 20 steps, so the long-lead error builds up past what training controlled. Testing k_max 45 on the same autoencoder (job 743451).
+
+## Longer training rollouts (job 743451): same autoencoder, propagator k_max 45 instead of 20 (53 min)
+
+| Lead (min) | 1 | 5 | 10 | 20 | 30 | 45 | 60 |
+|---|---|---|---|---|---|---|---|
+| nMSE, k ≤ 20 | 0.047 | 0.090 | 0.137 | 0.192 | 0.230 | 0.285 | 0.319 |
+| nMSE, k ≤ 45 | 0.053 | 0.105 | 0.142 | 0.207 | **0.217** | **0.243** | **0.249** |
+
+- **Truth-member spread** ≈ 0.25–0.27. With k ≤ 45 the forecast now stays below it for the full hour.
+- **Surface θ′ RMSE at 60 min:** 0.98 → 0.80 K.
+- **Front error at 45 / 60 min:** 3.5 / 2.5 km → 3.0 / 1.8 km.
+- **Trade-off:** error is 10–15% higher at 1–5 min leads and 22% lower at 60 min.
+- **Decision:** keep k_max 45 for forecasting and DA cycles longer than ~20 min. A curriculum that keeps some short rollouts, or a longer run, may recover the short leads.
