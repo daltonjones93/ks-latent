@@ -182,3 +182,12 @@ Scripts are in `scripts/cm1/`; outputs go to `artifacts/cm1/`.
 - **Spread** collapses without model-error noise (spread ~0.1 K vs error ~0.7 K). Noise std 0.05–0.1 in latent units restores 0.26–0.40 K; 0.2 is too much.
 - **Conclusion:** surface θ′ constrains the cold pool and front but not the storm aloft, so reflectivity observations are next (E4).
 - **Shifted tilings (Paper II) are unlikely to cure collapse.** Each tiling cycles independently and collapses on its own, and blending averages spreads down. A multi-model ensemble over the 6 trained propagators is the principled spread source to try (E3b).
+
+## D6 physics (2026-11-05), best model d34_c32_kuniform
+- **Mass divergence:** forecasts 0.23–0.25 against the truth's 0.21–0.22 (CM1's own value from interpolation and compressibility).
+- **Condensate mass error:** 2–12% over 1–60 min.
+- **Cold pool too weak:** forecast max C stays at 23–25 m/s while the truth's strengthens to 28 m/s.
+- **FSS of low-level rain** beats persistence strongly from 5 min on (0.70 vs 0.22 at 60 min).
+
+## D7 joint vs per-variable encoder
+Joint wins: w reconstruction error is 2× lower with the joint encoder, and forecast nMSE at 5 min is 0.092 vs 0.118. The per-variable encoder has 7× fewer parameters, which is part of the gap.

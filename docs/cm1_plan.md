@@ -118,19 +118,24 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
       - c = 32 has the smallest worst cases. See `cm1_notes.md`.
 - [ ] **D5 (C)** Learning curve at 1-min: train on 7 / 14 / 28 / 56 members, test on fixed held-out members.
   - deps: `ens_A2`. Done when: a plot, and whether forecast skill is still rising at 56 members.
-- [ ] **D6 (C)** Physics checks. **Code done 2026-11-05** (`ks_latent/cm1/physics.py`, in both reports; analytic tests: a streamfunction flow is non-divergent, plus uniform condensate and cold-pool layers):
-  - mass-divergence ratio (truth ≈ 0.20–0.23 on run_e1, from interpolated winds and compressibility);
-  - condensate mass budget;
-  - cold-pool intensity C (truth 16–30 m/s);
-  - FSS of low-level liquid.
+- [x] **D6 (C)** Physics checks — done 2026-11-05 (`ks_latent/cm1/physics.py`; analytic tests; Saidie re-score job 8690). Best model `d34_c32_kuniform`:
+  - **Mass continuity is respected.** The divergence ratio of forecasts is 0.23–0.25 against the truth's 0.21–0.22, and reconstructions 0.234 against 0.223. The 16-channel reference is worse (0.284).
+  - **Condensate mass** relative error is 1.8 / 3.4 / 5.7 / 11.8 / 7.5% at 1 / 5 / 15 / 30 / 60 min. That is better than persistence only at 60 min, because the domain total changes slowly.
+  - **Systematic bias: the cold pool does not strengthen.** Max C in the forecasts is 23–25 m/s while the truth's grows from 25 to 28 m/s, ending 17% too weak at 60 min. Track it through later training changes.
+  - **FSS of low-level liquid (q > 1 g/kg, 1 km) discriminates where column-max condensate did not:** 0.93 / 0.84 / 0.83 / 0.70 at 5 / 15 / 30 / 60 min, against persistence's 0.82 / 0.61 / 0.59 / 0.22.
 
-  **Re-score of 3 models queued (Saidie job 8690).** Original list:
+  Original list:
   - mass divergence ∂(ρu)/∂x + ∂(ρw)/∂z of decoded states against the truth;
   - non-negativity and totals of condensate;
   - cold-pool strength and depth.
 
   Done when: added to `evaluate.py`, with a test against an analytic field.
-- [ ] **D7 (C)** **Running: Saidie jobs 8688 (joint, c 28, width 252) and 8689 (`--encoder-groups 7`: one encoder per variable, same sizes).** Ablation: one encoder per variable against the joint column encoder.
+- [x] **D7 (C)** **Done 2026-11-05 (Saidie jobs 8688 and 8689; c 28, width 252, k ≤ 45 uniform). Joint encoding wins.**
+  - **Reconstruction, storm-column RMSE:** u 1.02 vs 1.72 m/s, w 0.42 vs 0.83 m/s, θ′ 0.55 vs 0.78 K. The per-variable encoder is worst on the coupled variables.
+  - **Forecast nMSE at 1 / 5 / 15 / 60 min:** 0.041 / 0.092 / 0.172 / 0.257 vs 0.071 / 0.118 / 0.192 / 0.273.
+  - **Main-pool front error at 30 min:** 0.88 vs 1.50 km.
+  - **Caveat:** the per-variable encoder has 7× fewer parameters (0.36 M vs 2.53 M), so part of the gap is capacity.
+  - Originally: ablation: one encoder per variable against the joint column encoder.
   - Done when: reconstruction and forecast tables. Do the variables need to be encoded jointly?
 - [ ] **D8 (C)** Generalization across environments: train on `ens_B` excluding one region of moisture × shear, test inside it.
   - deps: `ens_B`. Done when: error in held-out environments against in-distribution ones.
