@@ -253,3 +253,16 @@ Autoencoder floor 0.024.
 - **Latent LETKF beats the surrogate EnOI by 29%**, so the flow-dependent ensemble matters.
 - **The physical-archive EnOI is worse than no DA.** Its increments from a ±30-min climatological archive at alpha 0.5 are destructive. As it stands it is a strawman; tune alpha (and the archive window) before it goes in a paper, or drop it.
 - **Against the proposed G0 rules** (not yet signed off, so the run is not pre-registered): ≥ 10% gain with a CI excluding 0 ✓; front < 1 km ✓; ≥ 10% better than EnOI ✓. Calibration and rank histograms were not part of this run.
+
+## Model ideas, round 2 (2026-11-05, Saidie jobs 8753–8757; ens_A, single seed)
+| Run | Skill 5 / 30 / 60 min | θ′ at 60 min | Cold-pool max-C bias | Front 30 / 60 min | Rain FSS at 60 min |
+|---|---|---|---|---|---|
+| baseline d34_c32_kuniform | 0.214 / 0.332 / 0.351 | 0.83 K | −17.3% | 0.43 / 1.21 km | 0.696 |
+| D14a, average of 4 propagators | 0.193 / 0.315 / 0.330 | 0.78 | −19.6% | 0.47 / 1.06 | 0.704 |
+| **D12, Stage C, k ≤ 45, 15 000 steps** | **0.187 / 0.316 / 0.310** | **0.76** | **−13.7%** | 0.69 / 0.94 | **0.773** |
+| D13, 2-frame history | 0.207 / 0.347 / 0.345 | 0.80 | −18.6% | 0.47 / 0.72 | 0.701 |
+| D13, average of 4 history propagators | 0.192 / 0.319 / 0.332 | 0.77 | −19.7% | 0.47 / 0.94 | 0.643 |
+
+- **Stage C works once its rollouts match the base model's (k ≤ 45).** One fine-tuned model beats the 4-propagator average at 5 and 60 min (−12% at 60 min against the baseline) and ties it at 30. It also has the smallest cold-pool bias and much the best low-level rain FSS. The cost is a worse 30-min front (0.69 vs 0.43 km). Round 1's k ≤ 20 was the problem.
+- **History adds nothing once propagators are averaged** (0.192 / 0.319 / 0.332 vs 0.193 / 0.315 / 0.330), and the twin cannot use it yet. Dropped from the recipe.
+- **Averaging and Stage C don't combine directly:** Stage C also fine-tunes the autoencoder, so 4 Stage-C models have 4 latent spaces. Averaging decoded forecasts works for forecasts; a multi-model DA ensemble needs one shared latent space (fine-tune 4 propagators against one shared autoencoder in Stage C).
