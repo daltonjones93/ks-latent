@@ -14,6 +14,17 @@ DATA="cache:$HOME/cm1_cache+$HOME/cm1_cache_A2+$HOME/cm1_cache_B"
 BASE="--latent-channels 32 --k-max 45 --k-sampling uniform --val-members $VAL --test-members $TEST"
 R=$HOME/cm1_runs/full_v1
 dep=${1:+--dependency=afterany:$1}
+if [ -z "${STOCH_AFTER:-}" ]; then
 j1=$(sbatch --parsable ${dep:-} --mem=200G --export=ALL,DATA="$DATA",RUN=full_v1,EXTRA="$BASE" cluster/saidie/train_cm1.slurm)
 j2=$(sbatch --parsable --dependency=afterok:$j1 --mem=200G --export=ALL,DATA="$DATA",RUN=full_v1_stagec,EXTRA="$BASE --init-from $R --reuse-ae $R --stage-c-steps 15000 --stage-c-k 45 --w-sfc-th 2" cluster/saidie/train_cm1.slurm)
 echo "full_v1 $j1, full_v1_stagec $j2"
+fi
+# Stochastic branch (added 2026-11-05; stochastic + Stage C wins on CRPS by ~30% on ens_A): a CRPS propagator
+# on full_v1's autoencoder, then Stage C with decoded CRPS. Runs beside full_v1_stagec (2 GPUs at most).
+#   ssh saidie 'cd ~/latent_DA && STOCH_AFTER=<full_v1 job> bash -l cluster/saidie/full_run.sh'
+if [ -n "${STOCH_AFTER:-}" ]; then
+  RS=$HOME/cm1_runs/full_v1_crps
+  j3=$(sbatch --parsable --dependency=afterok:$STOCH_AFTER --mem=200G --export=ALL,DATA="$DATA",RUN=full_v1_crps,EXTRA="$BASE --reuse-ae $R --noise-channels 4 --crps-samples 4 --eval-samples 8" cluster/saidie/train_cm1.slurm)
+  j4=$(sbatch --parsable --dependency=afterok:$j3 --mem=200G --export=ALL,DATA="$DATA",RUN=full_v1_stagec_crps,EXTRA="$BASE --init-from $RS --reuse-ae $RS --stage-c-steps 15000 --stage-c-k 45 --w-sfc-th 2 --stage-c-crps 4 --stage-c-batch 6 --eval-samples 8" cluster/saidie/train_cm1.slurm)
+  echo "full_v1_crps $j3, full_v1_stagec_crps $j4"
+fi
