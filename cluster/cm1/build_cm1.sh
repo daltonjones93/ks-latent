@@ -16,7 +16,7 @@ rm -rf "$BUILD/src"; cp -R "$SRC" "$BUILD/src"; cd "$BUILD/src"
 rm -f ./*.o ./*.mod ./*.f90
 # our source patches (patches/apply_patches.py), applied to this copy only; recorded for make_ensemble.py
 python3 "$KIT/patches/apply_patches.py" "$BUILD/src"
-echo "seed_var1" > "$BUILD/PATCHES"
+echo "seed_var1 two_storms_var2" > "$BUILD/PATCHES"
 M=Makefile
 if [ "${NONETCDF:-0}" = 1 ]; then
     sed -i.bak -E 's/^(OUTPUTINC|OUTPUTLIB|LINKOPTS|OUTPUTOPT)/#\1/' $M
