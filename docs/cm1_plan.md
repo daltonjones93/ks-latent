@@ -338,6 +338,43 @@ Caveats to state up front:
 - [ ] **L4 (C)** **Link to the DA:** the number of positive exponents within one localization radius (from the covariant or local Lyapunov vectors) as a predicted minimum ensemble size, against the T1/T3 ensemble-size curves.
 - [~] **L5 (C)** **Code done 2026-11-06 (`ks_latent.cm1.lyapunov.spreading`, tested on a shift map); runs with L1 (Saidie 8898): storm and far-field sites.** **Perturbation spreading speed** (Paper I's light cone, `ks_latent/analysis/spreading.py`): how fast a local latent perturbation spreads, against the data-only reach (8–12 km per 5 min) and the CM1 twin pairs (L2).
 
+## I. Improvements to test (added 2026-11-06; not started)
+Ideas for better DA and a better model, each written as an experiment with a comparison and a stopping rule. All DA settings are tuned on the 6 validation storms first and only then scored on the 22 test storms, paired against the headline (deterministic Stage C, noise 0.1, 32 members, held boundaries, θ′ + reflectivity + radial velocity), as in the G0 addendum. Note: the best models in Papers I–II were local-field models like the current one; the windowed-attention result from the early KS work was for a *global* autoencoder, so an attention model here has to earn its place.
+
+### DA
+- [ ] **I1 (C)** **Ensemble size** (extends G6 to the full model): N = 8 / 16 / 32 / 64 / 128 members drawn at random from the 93 training storms, noise re-tuned per N on validation.
+  - Question: how much of the tiling gain (E3c, −4% at 4 × 32) is just more members? If 128 members alone gives ≥ 4%, tiling adds nothing beyond ensemble size.
+  - Done when: cycled nMSE and spread/error against N, paired. Cost: minutes per N on one GPU.
+- [ ] **I2 (C)** **Running in place / iterated LETKF:** 1 / 2 / 3 analysis iterations per cycle with the same observations (observation error inflated by √n_iter so the total weight is unchanged). Aimed at the nonlinear reflectivity operator.
+  - Done when: paired cycled nMSE and analysis nMSE for 1–3 iterations; adopt if ≥ 3% better with a CI excluding 0.
+- [ ] **I3 (C)** **Hybrid covariance:** latent anomalies = cycled anomalies blended with static archive anomalies (the surrogate-EnOI covariance), weight β = 0 / 0.1 / 0.25 / 0.5 on the static part. Rationale: surrogate EnOI alone is already decent (0.337 against latent 0.258 on validation).
+  - Done when: paired results against β; adopt the best β if ≥ 3% better.
+- [ ] **I4 (C)** **Boundaries without future information:** held (current), extrapolated by the ensemble's own forecast (edge sites evolve with the propagator, one-sided), and climatological. True boundaries are 10% better than held in the DA (G1b), so there is up to 10% to recover.
+  - Done when: paired results for each against held and true.
+- [ ] **I5 (C)** **Cheap tilings:** each member on its own lattice offset (members split over offsets 0/2/4/6), analysis in physical space (decoded columns, per cell), each member re-encoded on its own lattice. Same cost as the headline; diversity from the shifts. Depends on E3c's control (Cashew 749619): only worth doing if shifted tilings beat same-offset averaging.
+  - Done when: paired against the headline and against physical-space analysis on one lattice.
+- [ ] **I6 (C)** **Mixed ensemble:** the ensemble mean is advanced by the deterministic model and the perturbations by the stochastic model (each member = det(mean) + [stoch(member) − stoch(mean)]). Aims at the stochastic model's calibration without its 7% accuracy cost.
+  - Done when: paired cycled nMSE and spread/error against the headline and against stochastic-only (RTPS 0.5).
+
+### Model and training
+- [ ] **M1 (C)** **Local attention model:** horizontal windowed self-attention over neighbouring sites (radius r sites, a relative-position bias shared across sites, so translation equivariance is exact), plus vertical attention within each column (tokens = levels, all variables per token), in place of the convolutional encoder/propagator body. Same latent size (c = 32, 2 km sites) and same Stage A/B/C recipe.
+  - Tests first: exact shift equivariance, measured receptive field against the 6 km/step reach.
+  - Compare on the D16 ens_B screen (46 training storms, same split) against S0 + Stage C (0.237 / 0.383 / 0.370), then on the full data if it wins.
+  - Done when: skill / CRPS / physics table against the convolutional model; adopt only if better at 30 and 60 min by more than the seed noise (±0.01–0.02; run 2 seeds of each).
+- [ ] **M2 (C)** **Capacity with more data:** the D4 sweep was on 28 storms; on the full 93, try hidden 512 and 4 layers (reach kept at 3 sites/step). Done when: the same table; adopt if better beyond seed noise.
+- [ ] **M3 (C)** **DA-aware training:** the propagator is trained with input noise annealed to 0.02, but in DA it starts from analyses (latent noise 0.1, LETKF-shaped errors). Fine-tune (Stage B/C) with inputs perturbed like analyses: (a) noise annealed to 0.1; (b) perturbations sampled from saved analysis-minus-truth latent differences on training storms.
+  - Done when: forecast skill from analyses (G3 forecasts from cycles 11/17/23/29) and cycled nMSE, paired against the headline.
+- [ ] **M4 (C)** **Multi-model Stage C with one autoencoder:** fine-tune 4 propagators jointly with a single shared autoencoder (so their latents agree and the averaged forecast can be used in the DA), and Stage C rollouts up to 90 steps. D14a averaging was worth 5–10% in forecasts.
+  - Done when: forecast skill of the averaged model and DA with the 4-model ensemble (E3b-style), paired against the headline.
+- [ ] **M5 (C, stretch)** **Sharper samples:** a generative (flow or diffusion) propagator or decoder, against the smoothing of the deterministic forecast. Probably beyond Paper III; worth a small pilot only if M1–M4 leave the smoothing as the main error.
+
+### Selling locality
+- [ ] **S1 (C, priority)** **Non-local baseline** (= H1b): a global model of similar parameter count on the whole 400 km domain (a global encoder to one latent vector, or a U-Net over the full domain), trained on the same 93 storms. Compare forecast skill, sample efficiency (retrain on 7 / 14 / 28 storms, as D5), domain transfer (it cannot take an 800 km input), and DA (no physical distance to localize with; use SEC-style or no localization). Without this, "local is better" is an argument, not a result.
+- [ ] **S2 (C)** **Cost table** (= G9): wall time per forecast hour and per DA cycle, surrogate against CM1, same hardware where possible.
+
+### Data
+- [ ] **X1 (C, needs CM1 runs)** **A third environment axis:** an ensemble (ens_C, ~30 members) varying instability (mid-level temperature/lapse rate or CAPE) and/or the initiation mechanism (cold pool instead of a warm bubble), then held out as a whole in an H3-style test. The data are not too small for training (D5 saturation, pooled model matches specialized ones), but they are narrow: one storm type, one microphysics, two environment parameters. ~1 day on Cashew.
+
 ## F. Writing
 - [x] **F1 (C)** `docs/cm1_summary/cm1_summary.tex`: a short illustrated summary of what we have found so far.
 - [ ] **F2 (C)** Update the summary after each of B1, D2, D5, D8 and E3.
