@@ -66,6 +66,9 @@ def main():
     ap.add_argument("--rtps", type=float, default=0.9)
     ap.add_argument("--t0-min", type=float, default=60.0)
     ap.add_argument("--hours", type=float, default=3.0)
+    ap.add_argument("--control", action="store_true",
+                    help="also: K independent DA systems at offset 0 (same observations, own model noise) averaged, "
+                         "against K tilings with the same distinct model noise: separates seam removal from averaging")
     ap.add_argument("--device", default="auto")
     a = ap.parse_args()
     t_start = time.time()
@@ -112,13 +115,14 @@ def main():
         pt = {o: ColumnData([pad(mt, o, patch)], norm, dev) for o in a.offsets}
         zt = {o: encode_members(ae, pt[o])[0] for o in a.offsets}
         for sd in a.seeds:
-            def twin(o, members):
+            def twin(o, members, noise_seed=None):
                 tc = TwinConfig(t0=t0, n_cycles=n_cycles, steps_per_cycle=spc, halo=halo, obs_every_cells=8,
                                 sigma_obs=0.5, model_noise=a.model_noise, assim_theta=True,
                                 refl_every_cells=8 if refl_head is not None else 0, sigma_refl=5.0,
                                 vr_tilts=(0.5, 2.0, 5.0) if "vr" in a.obs_set else (), sigma_vr=2.0,
                                 letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary="persistence",
-                                forecast_from=(), seed=sd, col_offset=o, n_cols_phys=NXp, keep_fields=True)
+                                forecast_from=(), seed=sd, noise_seed=noise_seed, col_offset=o, n_cols_phys=NXp,
+                                keep_fields=True)
                 r = run_twin(ae, prop, pt[o], zt[o], Z0[o][members], norm, tc, refl_head=refl_head)
                 return {st: torch.stack([c[st + "_field"] for c in r["cycles"]]).float() for st in ("prior", "analysis")}
             allm = torch.arange(a.n_members)
@@ -136,12 +140,18 @@ def main():
                    f"tiles_x{a.n_members}": score([fx[o] for o in a.offsets]),
                    "tiles_eq": score([feq[o] for o in a.offsets]),
                    "per_offset": {o: score([fx[o]]) for o in a.offsets}}
+            if a.control:   # k = 0 is the single run itself (default noise seed)
+                ns = lambda k: None if k == 0 else 7919 * (sd + 1) + k
+                same = [fx[0]] + [twin(0, allm, ns(k)) for k in range(1, K)]
+                tiles = [fx[0]] + [twin(o, allm, ns(k)) for k, o in enumerate(a.offsets) if k > 0]
+                row["avg_same_offset"] = score(same)
+                row["tiles_distinct_noise"] = score(tiles)
             rows.append(row)
             print(f"[E3c] {tn} seed {sd}: prior nMSE single {row['single']['prior']:.4f}  "
                   f"{K}x{a.n_members} {row[f'tiles_x{a.n_members}']['prior']:.4f}  "
                   f"{K}x{a.n_members // K} {row['tiles_eq']['prior']:.4f}  [{time.time() - t_start:.0f}s]", flush=True)
     # per truth (seed-averaged), then mean +- CI over truths and paired differences against `single`
-    keys = ["single", f"tiles_x{a.n_members}", "tiles_eq"]
+    keys = ["single", f"tiles_x{a.n_members}", "tiles_eq"] + (["avg_same_offset", "tiles_distinct_noise"] if a.control else [])
     summ = {}
     print(f"\n[E3c] nMSE, mean +- 95% CI over {len(truths)} truths (second half of {n_cycles} cycles); paired vs single:")
     for st in ("prior", "analysis"):

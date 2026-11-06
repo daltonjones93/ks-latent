@@ -98,6 +98,7 @@ class TwinConfig:
     n_cols_phys: int = 0          # cells on the left; observations sit on the physical domain's columns (0: no padding)
     keep_fields: bool = False     # store each cycle's mean decoded prior/analysis on the physical columns (blending)
     seed: int = 0
+    noise_seed: int | None = None   # model-noise generator seed (None: `seed`); observations always use `seed`
 
 
 def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t: int, steps: int,
@@ -299,7 +300,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         keep[o + NXp:] = False
     Z = Z0.clone()
     U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
-    gen = torch.Generator().manual_seed(cfg.seed)
+    gen = torch.Generator().manual_seed(cfg.seed if cfg.noise_seed is None else cfg.noise_seed)
     hist = []
     for k in range(cfg.n_cycles):
         t = cfg.t0 + k * cfg.steps_per_cycle
