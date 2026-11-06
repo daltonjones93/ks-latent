@@ -13,6 +13,7 @@ Q2/Q3  For mature storm states: the best shift speed s and the residual r(T) of 
   python scripts/cm1/propagator_dynamics.py --run ~/cm1_runs/full_v1_stagec --source cache:A+A2+B --out ~/cm1_da/q_v1
 """
 import argparse
+import copy
 import json
 import sys
 import time
@@ -67,7 +68,7 @@ def main():
     data = {n: ColumnData([load_member(files[n])], norm, dev) for n in names}
     lat = {n: encode_members(ae, d)[0].double() for n, d in data.items()}
     dt_min = data[names[0]].dt / 60
-    prop_d = prop.double()
+    prop_d = copy.deepcopy(prop).double()        # a float64 copy for linearization; `prop` stays float32 for rollouts
     res = {"storms": names}
 
     # ---------------- Q1: quiescent dispersion relation ----------------
