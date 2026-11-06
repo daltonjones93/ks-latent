@@ -17,7 +17,7 @@ COMMON="--include-test --modes latent --n-members 32 --random-members --seeds 0 
 chain() {   # chain AFTER RUN LABEL noise...
   local dep=$1 run=$2 label=$3; shift 3
   local r j
-  r=$(sbatch --parsable --dependency=afterok:$dep --mem=180G --export=ALL,RUN=$run,DATA="$DATA" cluster/saidie/refl_head.slurm)
+  r=$(sbatch --parsable ${dep:+--dependency=afterok:$dep} --mem=180G --export=ALL,RUN=$run,DATA="$DATA" cluster/saidie/refl_head.slurm)
   echo "$run reflectivity head: job $r"
   j=$r
   for item in "$@"; do   # each study needs the head (afterok) and waits for the previous one (afterany): one GPU per chain
@@ -28,5 +28,5 @@ chain() {   # chain AFTER RUN LABEL noise...
     echo "$run noise $n boundary $b -> $out: job $j"
   done
 }
-chain "${DET_AFTER:-8798}" full_v1_stagec det 0.05 0.02 0.1 0.05:truth
-chain "${STOCH_AFTER:-8820}" full_v1_stagec_crps stoch 0 0.02
+chain "${DET_AFTER-8798}" full_v1_stagec det 0.05 0.02 0.1 0.05:truth
+chain "${STOCH_AFTER-8820}" full_v1_stagec_crps stoch 0 0.02
