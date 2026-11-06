@@ -520,3 +520,39 @@ def test_stage_c_with_energy_and_spectral_terms_runs():
     assert np.isfinite(r["best_val_decoded_rollout_mse"])
     with pytest.raises(ValueError):
         train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, steps=1, w_energy=1.0), log=lambda s: None)
+
+
+def _attn_prop(layers=2, r=1, zero=False, **kw):
+    torch.manual_seed(0)
+    p = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=16, layers=layers, radius=r, body="attention",
+                                            heads=4, **kw)).double()
+    if not zero:
+        with torch.no_grad():
+            p.head.weight.normal_(0, 0.3)
+    return p.eval()
+
+
+def test_attention_propagator_identity_reach_and_equivariance():
+    """M1a: identity at init (zero head), reach exactly layers x radius, translation-equivariant away from the
+    edges, and windowed forced-halo rollouts equal full-domain ones (what Stage B training relies on)."""
+    z = torch.randn(2, 30, 3, dtype=torch.float64)
+    torch.testing.assert_close(_attn_prop(zero=True)(z), z, atol=0, rtol=0)
+    p = _attn_prop(layers=2, r=1)
+    assert p.cfg.reach_sites == 2
+    z2 = z.clone(); z2[:, 15] += 1.0
+    changed = ((p(z2) - p(z)).abs().sum(dim=(0, 2)) > 0).nonzero().ravel()
+    assert changed.min() == 15 - 2 and changed.max() == 15 + 2
+    s = 3                                                           # shift by s sites: equal away from the edges
+    a, b = p(z), p(torch.roll(z, s, dims=1))
+    torch.testing.assert_close(b[:, 8 + s:22 + s], a[:, 8:22], atol=1e-12, rtol=0)
+    P, k = 40, 4
+    traj = [torch.randn(1, P, 3, dtype=torch.float64)]
+    for _ in range(k):
+        traj.append(p(traj[-1]))
+    traj = torch.stack(traj, dim=1)
+    win = traj[:, :, 10:26]
+    torch.testing.assert_close(forced_halo_rollout(p, win, k, halo=2), win[:, 1:], atol=1e-12, rtol=0)
+    ps = _attn_prop(noise_channels=2)                               # stochastic variant: samples differ
+    assert not torch.equal(ps(z, gen=torch.Generator().manual_seed(0)), ps(z, gen=torch.Generator().manual_seed(1)))
+    with pytest.raises(ValueError):
+        StencilPropagator(StencilPropConfig(latent_channels=3, body="transformer"))

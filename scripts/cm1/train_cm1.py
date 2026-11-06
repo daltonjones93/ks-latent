@@ -140,7 +140,8 @@ def build_config(a, dt: float | None) -> RunConfig:
     ae = ColumnAEConfig(patch=patch, hidden=(7 * 5 if a.encoder_groups > 1 else 32) if smoke else a.hidden,
                         latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups,
                         vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel)
-    prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else a.hidden, layers=layers,
+    prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else (a.prop_hidden or a.hidden), layers=layers,
+                             body=a.prop_body, heads=a.prop_heads,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
@@ -272,6 +273,10 @@ def main():
                     help="Stage C with a stochastic propagator: fair CRPS over this many decoded rollouts")
     ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM2: weight of the energy score in Stage C")
     ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
+    ap.add_argument("--prop-body", choices=["conv", "attention"], default="conv",
+                    help="propagator body: stencil convolutions, or windowed self-attention (M1a)")
+    ap.add_argument("--prop-heads", type=int, default=4)
+    ap.add_argument("--prop-hidden", type=int, default=0, help="propagator width (0: --hidden, which also sets the autoencoder's)")
     ap.add_argument("--noise-channels", type=int, default=0, help="stochastic propagator noise channels (D14c)")
     ap.add_argument("--crps-samples", type=int, default=0, help="train the stochastic propagator with fair CRPS")
     ap.add_argument("--eval-samples", type=int, default=8, help="samples averaged when evaluating a stochastic propagator")

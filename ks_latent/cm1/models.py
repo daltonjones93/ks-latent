@@ -157,10 +157,40 @@ class StencilPropConfig:
     padding_mode: str = "replicate"
     n_hist: int = 1          # frames of history the step sees (D13); 1 = Markovian
     noise_channels: int = 0  # random input channels per site (D14c stochastic propagator); 0 = deterministic
+    body: str = "conv"       # "conv" (stencil convolutions) or "attention" (M1a: windowed self-attention)
+    heads: int = 4           # attention heads (body = "attention")
 
     @property
     def reach_sites(self) -> int:
         return self.layers * self.radius
+
+
+class _WindowAttention(nn.Module):
+    """Pre-norm block: multi-head self-attention over sites within `radius` of each other (open domain: the
+    window is truncated at the edges), with a learned relative-position bias per head and offset, shared by
+    every site (so the block is translation-equivariant away from the edges), then a 2x MLP."""
+
+    def __init__(self, H: int, heads: int, radius: int):
+        super().__init__()
+        if H % heads:
+            raise ValueError(f"hidden {H} not divisible by {heads} heads")
+        self.h, self.r = heads, radius
+        self.n1, self.n2 = nn.LayerNorm(H), nn.LayerNorm(H)
+        self.qkv, self.proj = nn.Linear(H, 3 * H), nn.Linear(H, H)
+        self.rel = nn.Parameter(torch.zeros(heads, 2 * radius + 1))
+        self.mlp = nn.Sequential(nn.Linear(H, 2 * H), nn.GELU(), nn.Linear(2 * H, H))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:            # (B, P, H)
+        B, P, H = x.shape
+        q, k, v = self.qkv(self.n1(x)).reshape(B, P, 3, self.h, H // self.h).permute(2, 0, 3, 1, 4)
+        i = torch.arange(P, device=x.device)
+        off = i[None, :] - i[:, None]                                  # (P, P): key - query
+        inside = off.abs() <= self.r
+        bias = self.rel[:, (off.clamp(-self.r, self.r) + self.r)]       # (heads, P, P)
+        bias = bias.masked_fill(~inside[None], float("-inf"))
+        a = torch.softmax(q @ k.transpose(-1, -2) / (H // self.h) ** 0.5 + bias[None], dim=-1)
+        x = x + self.proj((a @ v).transpose(1, 2).reshape(B, P, H))
+        return x + self.mlp(self.n2(x))
 
 
 class StencilPropagator(nn.Module):
@@ -180,10 +210,19 @@ class StencilPropagator(nn.Module):
             raise ValueError("n_hist >= 1 and noise_channels >= 0 required")
         self.cfg = cfg
         c, H, r = cfg.latent_channels, cfg.hidden, cfg.radius
-        dims = [c * cfg.n_hist + cfg.noise_channels] + [H] * (cfg.layers - 1)
-        self.convs = nn.ModuleList(nn.Conv1d(a, H, 2 * r + 1, padding=r, padding_mode=cfg.padding_mode)
-                                   for a in dims)
-        self.head = nn.Conv1d(H, c, 1)
+        n_in = c * cfg.n_hist + cfg.noise_channels
+        if cfg.body == "conv":
+            dims = [n_in] + [H] * (cfg.layers - 1)
+            self.convs = nn.ModuleList(nn.Conv1d(a, H, 2 * r + 1, padding=r, padding_mode=cfg.padding_mode)
+                                       for a in dims)
+            self.head = nn.Conv1d(H, c, 1)
+        elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
+            self.embed = nn.Linear(n_in, H)
+            self.blocks = nn.ModuleList(_WindowAttention(H, cfg.heads, r) for _ in range(cfg.layers))
+            self.norm = nn.LayerNorm(H)
+            self.head = nn.Linear(H, c)
+        else:
+            raise ValueError(f"unknown propagator body {cfg.body!r}")
         nn.init.zeros_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
@@ -204,6 +243,11 @@ class StencilPropagator(nn.Module):
                 eps = torch.randn((x.shape[0], self.cfg.noise_channels, x.shape[2]), generator=gen,
                                   device="cpu").to(x.device, x.dtype)
             x = torch.cat([x, eps], dim=1)
+        if self.cfg.body == "attention":
+            h = self.embed(x.transpose(1, 2))                                  # (B, P, H)
+            for blk in self.blocks:
+                h = blk(h)
+            return last + self.head(self.norm(h))
         h = x
         for conv in self.convs:
             h = F.gelu(conv(h))
