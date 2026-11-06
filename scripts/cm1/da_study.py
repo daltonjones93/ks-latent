@@ -88,6 +88,9 @@ def main():
     ap.add_argument("--truth-prefix", default="", help="add the first --n-truths members whose name starts with this")
     ap.add_argument("--n-truths", type=int, default=10)
     ap.add_argument("--include-test", action="store_true", help="also use the run's own test members as truths")
+    ap.add_argument("--tuning", action="store_true",
+                    help="tune DA settings on the run's VALIDATION storms (used only for checkpoint selection, never "
+                         "trained on), so the test storms never influence a setting; all truths must be validation storms")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--modes", nargs="+", default=list(MODES), choices=list(MODES))
     ap.add_argument("--obs-set", default="th+refl+vr")
@@ -142,9 +145,16 @@ def main():
         truths += sorted([n for n in files if n.startswith(a.truth_prefix)], key=_natural_key)[: a.n_truths]
     if a.include_test:
         truths += split["test"]
-    bad = [t for t in truths if t in seen]
-    if bad or not truths:
-        raise ValueError(f"truths must be members the model never saw (got {bad or 'none'})")
+    if a.tuning:
+        truths = truths or list(split["val"])
+        bad = [t for t in truths if t not in split["val"]]
+        if bad or not truths:
+            raise ValueError(f"--tuning truths must be validation storms (got {bad or 'none'})")
+        print(f"[study] TUNING on validation storms {truths}: not for reporting as test results")
+    else:
+        bad = [t for t in truths if t in seen]
+        if bad or not truths:
+            raise ValueError(f"truths must be members the model never saw (got {bad or 'none'})")
     stoch = getattr(prop, "cfg", None) is not None and prop.cfg.noise_channels > 0
     print(f"[study] {run.name}: {len(truths)} truths, seeds {a.seeds}, modes {a.modes}, {len(ens_names)} members, "
           f"model noise {a.model_noise}, {'stochastic' if stoch else 'deterministic'} propagator")

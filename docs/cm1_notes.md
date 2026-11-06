@@ -420,3 +420,6 @@ DA, prior nMSE ratio 2 storms / 1 storm (3 pairs × 2 seeds):
 - **G0 claim 6 met as worded, but weakly.** Localized ratio ≤ 1.1 at every N; at N = 8 the unlocalized ratio is larger (1.12 vs 1.03), but the CIs overlap, so it is not a significant difference. The unlocalized ratio falls with N as expected (more members can cover two storms).
 - The localized ratio rises slightly with N (1.03 → 1.07, tight CI at N = 32): a fixed junction artifact becomes a larger share as the DA error falls. Consistent with the forecast pilot, and another reason for T2.
 - Localization matters even for one storm: the unlocalized 1-storm error is 12–19% higher at every N.
+
+## G0 addendum (2026-11-06, before the runs it governs): settings are tuned on the validation storms
+The latent noise level for the headline DA, and alpha for the two EnOI baselines (claim 3), are chosen on the full run's 6 validation storms (ens_A mem028, ens_A2 mem011, ens_B mem025/053/055/058; used only for checkpoint selection, never trained on), 3 seeds, same setup as the headline, by lowest cycled nMSE. The 22 test storms do not enter any choice. Candidates: noise 0.05 / 0.1 / 0.15; alpha 0.1 / 0.25 / 0.5 / 1.0. (`da_study.py --tuning`.)
