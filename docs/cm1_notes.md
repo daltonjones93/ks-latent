@@ -310,3 +310,24 @@ Edge halo (3 sites = 6 km each side) set to the true state every step ("truth", 
 - **The true boundaries are not doing the work.** Holding them fixed costs 1–2% in skill and 3–5% in CRPS at 60 min. The storm metrics (cold pool, fronts, rain FSS) are identical to three decimals, so the small loss is confined to near the edges (outgoing gravity waves), not the storm.
 - The ranking is unchanged (Stage C still best), and the CPU re-score with true boundaries reproduces the GPU numbers exactly.
 - For the paper, report the held-boundary numbers as the main ones (no future information at all). Still to check: the DA twin's halo, which also comes from the truth.
+
+## G0 pre-registration — DRAFT, awaiting Dalton's sign-off (2026-11-05)
+Fixed before the headline runs. Every outcome is reported, including failures; a missed threshold is written up as such, not tuned away.
+
+**Headline setup.**
+- Model: the full run (ens_A + ens_A2 + ens_B, 93 training storms) with Stage C. Deterministic or stochastic is decided by G1b (lower paired cycled nMSE over the 22 test storms; if the difference's CI includes 0, the deterministic model, as the simpler one). Decided and recorded before any run below.
+- Truths: the full run's 22 test storms (ens_A mem029–030, ens_A2 mem001–010, 10 ens_B spread over moisture × shear), 3 observation-noise seeds each.
+- Observations: surface θ′ (σ 0.5 K), composite reflectivity (σ 5 dBZ), radial velocity at 3 tilts (σ 2 m/s), every 2 km, every 5 min. 36 cycles from t = 60 min; scores are second-half means.
+- Ensemble: 32 training storms drawn at random (seed 0). Localization 5 km, RTPS 0.9.
+- Boundaries held at the truth at t0 (no future information; H0).
+- Statistics: mean ± 95% CI over truths (seed-averaged within a truth), and paired differences per truth.
+
+**Claims and thresholds.**
+1. **DA works.** Cycled forecast nMSE ≥ 10% below no DA, with the paired 95% CI excluding 0, and lower than no DA on ≥ 80% of truths. Median |front displacement| < 1 km.
+2. **Calibrated.** Prior spread / error at the θ′ observations in 0.7–1.3, and the rank histogram not U-shaped (χ² test against flat, p > 0.01, reported with the histogram).
+3. **Better than static and observation-only methods.** ≥ 10% lower cycled nMSE than each of: surrogate EnOI, physical-archive EnOI (both with alpha tuned on one truth outside the 22), and observation-only interpolation (G2c).
+4. **Generalizes.** In the held-out environment region (H3/G5: dry, strongly sheared ens_B storms that no training or validation storm comes from), the DA's relative gain over no DA is ≥ half of its in-distribution gain, and forecast skill vs persistence at 30 min is within 25% of its in-distribution value.
+5. **Forecasts (H).** With held boundaries: skill vs persistence (nMSE ratio) < 0.5 at 30 min and < 1 at 60 min, and lower than advection extrapolation (H1a) at 30 and 60 min.
+6. **Transfer (T).** With 5 km localization, two storms side by side give an error ratio (2 storms / mean of 1-storm) ≤ 1.1 at every ensemble size; at N = 8 the ratio without localization is larger than with it.
+
+**Exploratory, no threshold:** latent against physical-space analysis; learned against hand-set model error (G1b, beyond the model choice above); four storms (T3).
