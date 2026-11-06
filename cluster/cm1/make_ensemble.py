@@ -24,6 +24,10 @@ Perturbations (all optional, recorded in the manifest):
                     different ensembles never share noise (e.g. 1000 for one, 2000 for the next).
   --design corners  instead of random draws, cycle through the 4 corners of the --qv-offset x
                     --shear-scale box (a pilot of the extremes).
+  --nx N            domain width in cells (namelist nx; default: the template's).
+  --two-storms SEP  two identical initiating thermals SEP metres apart, symmetric about the domain centre
+                    (namelist var2; needs the two_storms_var2 source patch). E.g. --nx 3200 --two-storms
+                    400000: storms at 200 and 600 km, each owning a 400 km half like a single 400 km run.
 Every perturbed sounding is checked for supersaturation; the script stops with
 an error rather than write one.
 
@@ -120,6 +124,8 @@ def main():
     ap.add_argument("--noise-offset", type=int, default=0, help="added to var1 with --noise-seed member")
     ap.add_argument("--design", choices=["random", "corners"], default="random")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
+    ap.add_argument("--nx", type=int, default=0, help="domain width in cells (0: the template's)")
+    ap.add_argument("--two-storms", type=float, default=0.0, help="separation (m) of two initiating thermals (var2)")
     a = ap.parse_args()
 
     tmpl = os.path.abspath(a.template)
@@ -134,6 +140,12 @@ def main():
         if not (os.path.exists(patches) and "seed_var1" in open(patches).read()):
             sys.exit("--noise-seed member needs a CM1 built with the seed_var1 patch (cluster/cm1/build_cm1.sh "
                      "applies it; %s not found or lacks it). Rebuild: delete the build directory and re-run." % patches)
+    if a.two_storms:   # an unpatched cm1.exe ignores var2 and silently makes ONE storm at the centre
+        patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")
+        if not (os.path.exists(patches) and "two_storms_var2" in open(patches).read()):
+            sys.exit("--two-storms needs a CM1 built with the two_storms_var2 patch (%s not found or lacks it)" % patches)
+        if not a.nx:
+            sys.exit("--two-storms: give --nx too (two storms need a wider domain)")
     if os.path.exists(a.out) and os.listdir(a.out):
         sys.exit("output directory exists and is not empty: %s (refusing to overwrite)" % a.out)
 
@@ -146,6 +158,10 @@ def main():
     if not a.no_trim_output:
         for k, v in TRIM.items():
             nml = set_namelist(nml, k, v)
+    if a.nx:
+        nml = set_namelist(nml, "nx", a.nx)
+    if a.two_storms:
+        nml = set_namelist(nml, "var2", "%.1f" % a.two_storms)
 
     sfc0, rows0 = read_sounding(os.path.join(tmpl, "input_sounding"))
     base_rh = max_rh(sfc0, rows0)
