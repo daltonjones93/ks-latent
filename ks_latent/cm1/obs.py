@@ -46,7 +46,10 @@ class SurfaceTheta:
 class RadialVelocity:
     def __init__(self, norm: Normalizer, z_levels_m: np.ndarray, n_columns: int, radar_x_km: float = 330.0,
                  tilts_deg=(0.5, 2.0, 5.0), every_cells: int = 8, max_range_km: float = 150.0,
-                 min_range_km: float = 5.0, dx_km: float = 0.25):
+                 min_range_km: float = 5.0, dx_km: float = 0.25, col_offset: int = 0):
+        """`n_columns` and `radar_x_km` refer to the physical domain; with `col_offset` o the model domain
+        is that domain padded by o cells on the left (shifted tilings), so the observed columns are the
+        same physical ones at local index c + o, and `x_km` is in the model domain's coordinate."""
         z = np.asarray(z_levels_m, np.float64)
         Zl = z.size
         cols_all = np.arange(every_cells // 2, n_columns, every_cells)
@@ -67,9 +70,9 @@ class RadialVelocity:
         if not rows:
             raise ValueError("no radial-velocity observations within range")
         R = np.array(rows)
-        self.columns, self.k0, self.frac = R[:, 0].astype(int), R[:, 1].astype(int), R[:, 2]
+        self.columns, self.k0, self.frac = R[:, 0].astype(int) + col_offset, R[:, 1].astype(int), R[:, 2]
         self.sign, self.cos, self.sin = R[:, 3], R[:, 4], R[:, 5]
-        self.x_km, self.height_m = R[:, 6], R[:, 7]
+        self.x_km, self.height_m = R[:, 6] + col_offset * dx_km, R[:, 7]
         self.iu, self.iw = VARS.index("u") * Zl, VARS.index("w") * Zl
         self.su, self.sw = float(norm.scale[VARS.index("u")]), float(norm.scale[VARS.index("w")])
 

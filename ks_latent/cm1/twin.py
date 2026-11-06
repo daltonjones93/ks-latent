@@ -90,6 +90,9 @@ class TwinConfig:
     forecast_frames: int = 60
     boundary: str = "truth"       # halo: the true state every step, or "persistence": held at the truth at t0 (H0)
     exclude_km: tuple = ()        # ((x0, x1), ...) km left out of the nMSE scores (T1: the junction of joined storms)
+    col_offset: int = 0           # shifted tilings (E3c): the model domain is the physical one padded by this many
+    n_cols_phys: int = 0          # cells on the left; observations sit on the physical domain's columns (0: no padding)
+    keep_fields: bool = False     # store each cycle's mean decoded prior/analysis on the physical columns (blending)
     seed: int = 0
 
 
@@ -132,6 +135,13 @@ def _keep(cfg, NX: int, dev) -> torch.Tensor:
     return k
 
 
+def _stash(rec: dict, stage: str, cfg, o: int, NXp: int) -> None:
+    """Move the mean decoded field out of the scores; keep it (physical columns, CPU float16) if asked."""
+    f = rec[stage].pop("_mean_dec")
+    if cfg.keep_fields:
+        rec[stage + "_field"] = f[:, o:o + NXp].to("cpu", torch.float16)
+
+
 def _hold(cfg) -> int | None:
     if cfg.boundary == "truth":
         return None
@@ -165,7 +175,7 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
     th_mem = (dec[:, ith, obs_cols] * s_th).double().cpu().numpy()       # (N, m)
     front = main_pool_front_km(th_true)
     kc = slice(None) if keep is None else keep
-    out = {"nmse_mean_dec": float(((mean_dec - u_true) ** 2)[:, kc].mean()),
+    out = {"_mean_dec": mean_dec, "nmse_mean_dec": float(((mean_dec - u_true) ** 2)[:, kc].mean()),
            "nmse_dec_mean": float(((dec_mean - u_true) ** 2)[:, kc].mean()),
            "rmse_phys_mean_dec": per_var(mean_dec),
            "th_obs_rmse": float(np.sqrt(np.mean((th_mem.mean(0) - th_true[obs_cols]) ** 2))),
@@ -249,7 +259,10 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     dev = Z0.device
     rng = np.random.default_rng(cfg.seed)
     NX, Zl = truth.NX, truth.Z
-    obs_cols = np.arange(cfg.obs_every_cells // 2, NX, cfg.obs_every_cells)
+    o, NXp = cfg.col_offset, (cfg.n_cols_phys or NX)
+    if o < 0 or o + NXp > NX:
+        raise ValueError(f"physical columns [{o}, {o + NXp}) outside the model domain of {NX}")
+    obs_cols = np.arange(cfg.obs_every_cells // 2, NXp, cfg.obs_every_cells) + o
     ith = VARS.index("th") * Zl
     s_th = float(norm.scale[VARS.index("th")])
     x_obs = (obs_cols + 0.5) * 0.25
@@ -260,7 +273,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     sfc_extra = [v for v in cfg.surface_vars if v != "th"]
     if not set(cfg.surface_vars) <= {"th", "u", "prs", "qv"}:
         raise ValueError(f"surface_vars must be from th, u, prs, qv: {cfg.surface_vars}")
-    refl_cols = np.arange(cfg.refl_every_cells // 2, NX, cfg.refl_every_cells) if cfg.refl_every_cells else obs_cols
+    refl_cols = (np.arange(cfg.refl_every_cells // 2, NXp, cfg.refl_every_cells) + o) if cfg.refl_every_cells else obs_cols
     x_refl = (refl_cols + 0.5) * 0.25
     vr_op = None
     if cfg.vr_tilts:
@@ -269,12 +282,15 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         zl = BaseState.from_sounding().z
         if zl.size != Zl:
             raise ValueError("radial velocity needs the 62-level CM1 grid")
-        vr_op = RadialVelocity(norm, zl, NX, radar_x_km=cfg.radar_x_km, tilts_deg=cfg.vr_tilts,
-                               every_cells=cfg.vr_every_cells)
+        vr_op = RadialVelocity(norm, zl, NXp, radar_x_km=cfg.radar_x_km, tilts_deg=cfg.vr_tilts,
+                               every_cells=cfg.vr_every_cells, col_offset=o)
     T_last = cfg.t0 + cfg.n_cycles * cfg.steps_per_cycle
     if T_last >= truth.T[0]:
         raise ValueError(f"truth has {truth.T[0]} frames; the experiment needs {T_last + 1}")
     keep = _keep(cfg, NX, dev)
+    if o or NXp != NX:   # padded tilings: score the physical columns only
+        keep[:o] = False
+        keep[o + NXp:] = False
     Z = Z0.clone()
     U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
     gen = torch.Generator().manual_seed(cfg.seed)
@@ -306,6 +322,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         sk = dict(refl_head=refl_head, refl_cols=refl_cols, cref_true=cref_true, y_refl=y_refl,
                   vr_op=vr_op, vr_true=vr_true, keep=keep)
         rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=dec_prior, **sk)}
+        _stash(rec, "prior", cfg, o, NXp)
         if assimilate:
             dec = ae.decode(Z) if dec_prior is None else dec_prior
             Ys, ys, rs, xs = [], [], [], []
@@ -330,11 +347,13 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()
                 Ua = torch.where(ae.positive_mask[None, :, None], Ua.clamp(min=0), Ua)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
+                _stash(rec, "analysis", cfg, o, NXp)
                 U_mean = Ua.mean(0)
             elif cfg.analysis_space == "latent":
                 Za = letkf_analysis_torch(Z.double().cpu().numpy(), Yall, yall, rall, x_site, xall, cfg.letkf, device=dev)
                 Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+                _stash(rec, "analysis", cfg, o, NXp)
             else:  # per-cell LETKF on the decoded columns, then back into the latent space
                 x_cell = (np.arange(NX) + 0.5) * 0.25
                 Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf, device=dev)
@@ -342,8 +361,10 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 pm = ae.positive_mask[None, :, None]
                 Ua = torch.where(pm, Ua.clamp(min=0), Ua)
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
+                _stash(rec, "analysis", cfg, o, NXp)
                 Z = ae.encode(Ua, env_ens)
                 rec["analysis_reencoded"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+                rec["analysis_reencoded"].pop("_mean_dec")
         if k in cfg.forecast_from:
             rec["forecast"] = _forecast_scores(ae, prop, Z, z_truth, truth, t1, cfg, norm, refl_head, gen)
         hist.append(rec)

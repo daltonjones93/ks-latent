@@ -212,3 +212,45 @@ def test_exclude_km_scores_only_the_kept_columns(setup):
     assert int((~k).sum()) == 80
     with pytest.raises(ValueError):
         run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, exclude_km=((0.0, 1e6),)))
+
+
+def test_padded_tiling_observes_the_same_physical_columns(setup):
+    """E3c: a tiling padded by o cells observes the same physical columns (same values, same noise) and
+    keeps fields on them only; o = 0 with no padding is unchanged."""
+    from ks_latent.cm1.data import CM1Member
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    base = dict(t0=3, n_cycles=2, steps_per_cycle=2, halo=1, letkf=LETKFConfig(loc_km=10.0, rtps=0.3), keep_fields=True)
+    a = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base))
+    b = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, col_offset=0, n_cols_phys=NX))
+    assert a["cycles"][-1]["analysis"]["nmse_mean_dec"] == b["cycles"][-1]["analysis"]["nmse_mean_dec"]
+    assert a["cycles"][0]["prior_field"].shape == (7 * Zl, NX)
+    o = 3
+    m = synthetic_members(6, T=30, NX=NX, Z=Zl)[0]                 # the fixture's truth member
+    pad = lambda x, ax: np.concatenate([np.repeat(np.take(x, [0], ax), o, ax), x,
+                                        np.repeat(np.take(x, [-1], ax), 8 - o, ax)], ax)
+    pm = CM1Member(name="pad", X=pad(m.X, 1), cref=pad(m.cref, 1), t=m.t)
+    pt = ColumnData([pm], nrm, torch.device("cpu"))
+    u, up = truth.full(0), pt.full(0)
+    cols = np.arange(4, NX, 8)
+    torch.testing.assert_close(up[:, 2 * Zl, cols + o], u[:, 2 * Zl, cols])   # same theta' at the obs
+    zp = encode_members(ae, pt)[0]
+    Zp = zp[3][None].expand(Z0.shape[0], -1, -1) + 0.1 * torch.randn(Z0.shape[0], *zp.shape[1:])
+    r = run_twin(ae, prop, pt, zp, Zp, nrm, TwinConfig(**base, col_offset=o, n_cols_phys=NX))
+    assert r["cycles"][0]["prior_field"].shape == (7 * Zl, NX)
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, col_offset=4, n_cols_phys=NX))
+
+
+def test_radial_velocity_col_offset_matches_unpadded():
+    from ks_latent.cm1.obs import RadialVelocity
+    from ks_latent.cm1.physics import BaseState
+    zl = BaseState.from_sounding().z
+    nrm = Normalizer(scale=np.ones(7), vars=("u", "w", "th", "qv", "prs", "qliq", "qice"))
+    a = RadialVelocity(nrm, zl, 1600, radar_x_km=330.0)
+    b = RadialVelocity(nrm, zl, 1600, radar_x_km=330.0, col_offset=6)
+    np.testing.assert_array_equal(b.columns, a.columns + 6)
+    np.testing.assert_allclose(b.x_km, a.x_km + 1.5)
+    np.testing.assert_allclose(b.height_m, a.height_m)
+    u = torch.randn(1, 7 * zl.size, 1600)
+    up = torch.cat([u[..., :6], u, u[..., :2]], dim=-1)
+    np.testing.assert_allclose(b._from_columns(up), a._from_columns(u))
