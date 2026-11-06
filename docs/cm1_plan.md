@@ -319,6 +319,24 @@ The CM1 analogue of Paper I's L-transfer. CM1 is not extensive chaos, so there i
 - [ ] **T3 (C)** **Four storms** (1600 km), if T1/T2 hold: the ensemble-size-per-storm curve with 1 / 2 / 4 storms.
 - [ ] **T4 (C)** **Transfer to unseen environments** = H3 / D8 (moisture × shear region held out).
 
+## L. Lyapunov spectrum of the latent model as an estimate of CM1's (added 2026-11-06)
+Can the trained propagator stand in for CM1's missing tangent model? Paper I's `ks_latent/analysis/lyapunov.py` takes any lattice model: `benettin` only needs a step that advances a state and a batch of tangent vectors (`torch.func.jvp` through the CM1 propagator). The latent state is 200 sites × 32 channels = 6 400 dimensions (~6 200 without the held boundary sites), so the full spectrum is feasible (float64 QR on CPU, minutes).
+
+Caveats to state up front:
+- **No attractor:** a squall line evolves over 6 h with open boundaries, so these are *finite-time* exponents over a window (e.g. the mature stage, 1–3 h), per minute, and they change as the storm evolves.
+- **The latent manifold only:** scales below the 2 km sites, and CM1's acoustic and fast gravity modes, are not represented. The estimate is of the leading (convective-scale) part: λ1, the number of positive exponents, the Kaplan–Yorke dimension of the resolved dynamics, not the full CM1 spectrum.
+- **No CM1 tangent model to compare with:** the ground truth comes from CM1 twin runs (L2).
+
+- [ ] **L1 (C)** **Latent finite-time spectrum.** Deterministic `full_v1_stagec`, boundary sites held (an autonomous map on the interior). Two linearizations, both reported:
+  - (a) along the propagator's own trajectory (the surrogate's dynamics);
+  - (b) along the *encoded CM1 trajectory* (the surrogate's tangent map evaluated on the true states: the better estimate of CM1's own tangent dynamics, since a free surrogate run drifts).
+  - Windows 60–120 and 120–180 min; 10 ens_A2 / ens_B test storms for error bars. Report λ1 (per min), error doubling time ln 2 / λ1, number of positive exponents, D_KY, and convergence with window length.
+  - Validate the code first on a synthetic lattice map with a known spectrum (Paper I's tests already cover Benettin itself).
+- [ ] **L2 (C, needs CM1 runs on Cashew)** **CM1 ground truth from twin runs.** A third patch (var3: an extra, tiny random θ perturbation of amplitude var3 K with its own seed, on top of the member's usual noise; var3 = 0 unchanged) and ~8 control/perturbed pairs (amplitude ~10⁻³ K) in the ens_A environment. Track the pair difference in the model's normalized norm: its growth rate in the mature stage, while still small (doubling ~15 min means 10⁻³ K is still tiny at 60 min), gives CM1's λ1 and doubling time, and its saturation gives the predictability limit. Compare with L1 and with the same experiment run in the surrogate (encode both, roll both). ~27 CPU-hours.
+- [ ] **L3 (C, after T2)** **Extensivity across storms:** L1 on the two-storm runs. The number of positive exponents and D_KY should roughly double from one storm to two, the CM1 analogue of Paper I's D_KY ∝ L.
+- [ ] **L4 (C)** **Link to the DA:** the number of positive exponents within one localization radius (from the covariant or local Lyapunov vectors) as a predicted minimum ensemble size, against the T1/T3 ensemble-size curves.
+- [ ] **L5 (C, cheap)** **Perturbation spreading speed** (Paper I's light cone, `ks_latent/analysis/spreading.py`): how fast a local latent perturbation spreads, against the data-only reach (8–12 km per 5 min) and the CM1 twin pairs (L2).
+
 ## F. Writing
 - [x] **F1 (C)** `docs/cm1_summary/cm1_summary.tex`: a short illustrated summary of what we have found so far.
 - [ ] **F2 (C)** Update the summary after each of B1, D2, D5, D8 and E3.
