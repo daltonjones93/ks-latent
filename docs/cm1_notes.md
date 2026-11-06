@@ -372,3 +372,4 @@ Skill 5 / 30 / 60 min (true boundaries; held boundaries cost 1–3% at 60 min in
 
 - **One model on all the data matches each specialised model on its own storms**: pooling neither helps nor hurts, consistent with D5's saturation at ~28 storms per environment. The extra storms buy coverage, not accuracy within an environment.
 - The stochastic Stage C model has 20–30% lower CRPS, spread/error 0.91–0.99 and the smallest cold-pool bias in every ensemble.
+- **Follow-up (exploratory; Saidie 8876–8877), stochastic model with RTPS re-tuned:** RTPS 0.5 gives 0.298 ± 0.024 (paired +0.021 ± 0.007 vs deterministic 0.05; lower on 18% of storms) with spread/error **1.04** — calibrated with no noise level to tune — and fronts 0.36 km; RTPS 0 gives 0.320 (spread/error 0.86). The remaining ~7% error cost matches the stochastic propagator's weaker mean forecasts. Trade-off to report: hand-set noise is more accurate (0.273 at 0.1), learned noise is calibrated out of the box.
