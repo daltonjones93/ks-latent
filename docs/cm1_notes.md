@@ -342,3 +342,21 @@ Fixed before the headline runs. Every outcome is reported, including failures; a
 
 - The ens_A pattern holds on all the data: Stage C helps both models; the stochastic one has ~30% lower CRPS, calibrated spread and the smallest cold-pool bias, the deterministic one the lowest mean error and best fronts.
 - The test set mixes ensembles, so these are not comparable with the ens_A-only or ens_B-only tables; per-ensemble scores (true and held boundaries) are running on Cashew (job 746827, `cluster/eval_full_subsets.sh`).
+
+## G1b: learned against hand-set model error, in the DA (2026-11-05, Saidie 8860–8866)
+Full run + Stage C, 22 test storms × 3 seeds, θ′ + reflectivity + radial velocity, 32 random members, loc 5 km, RTPS 0.9, boundaries held at t0 (the G0 headline setup). No DA: 0.469 ± 0.061.
+
+| Model, added latent noise | Cycled nMSE | Paired vs det 0.05 | Wins vs det 0.05 | Spread/error (θ′ obs) | Front | Forecast 5 / 30 / 60 min |
+|---|---|---|---|---|---|---|
+| deterministic, 0.05 | 0.277 ± 0.023 | — | — | 0.43 | 0.37 km | 0.272 / 0.314 / 0.337 |
+| deterministic, 0.02 | 0.292 ± 0.024 | +0.015 ± 0.004 | 5% | 0.27 | 0.45 | 0.282 / 0.322 / 0.352 |
+| deterministic, 0.1 | 0.273 ± 0.022 | −0.004 ± 0.004 | 64% | **0.71** | 0.38 | 0.270 / 0.316 / 0.337 |
+| stochastic, 0 (learned only) | 0.312 ± 0.022 | +0.035 ± 0.007 | 5% | 1.18 | 0.40 | 0.299 / 0.340 / 0.370 |
+| stochastic, 0.02 | 0.312 ± 0.022 | +0.035 ± 0.008 | 9% | 1.19 | 0.42 | 0.298 / 0.339 / 0.368 |
+| deterministic, 0.05, **true** boundaries | 0.250 ± 0.023 | −0.027 ± 0.003 | 100% | 0.46 | 0.37 | 0.250 / 0.287 / 0.305 |
+
+- **DA works on the headline setup:** 0.277 vs 0.469 with no DA (−41%, paired −0.192 ± 0.054), better on all 22 storms, front 0.37 km. G0 claim 1 met.
+- **The learned model error loses in the DA** by 0.035 (12%), on 91–95% of storms, despite the stochastic model's calibrated free forecasts. In cycling it is now over-dispersive (spread/error 1.18): RTPS 0.9, tuned for the deterministic model, relaxes the analysis spread back towards a prior spread that the learned noise has already made large. RTPS was not re-tuned for it, so this comparison is not yet fair to it. Exploratory follow-up: stochastic with RTPS 0 and 0.5.
+- **G0 model choice (pre-registered rule: lower paired cycled nMSE; deterministic if the CI includes 0): deterministic.** The stochastic model is worse with a CI excluding 0.
+- **Hand-set noise:** 0.1 and 0.05 are tied on error (−0.004 ± 0.004); 0.1 is much better calibrated (0.71 vs 0.43). 0.02 is worse on both.
+- **Boundaries matter more in DA than in forecasts:** true boundaries lower the cycled error by 10% (0.250), against 1–2% for 60-min forecasts. Over 3 h of cycling the held halo drifts from the truth. Held boundaries stay the headline, as pre-registered.
