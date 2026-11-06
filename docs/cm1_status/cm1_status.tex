@@ -1,0 +1,173 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{graphicx,booktabs,amsmath,amssymb,hyperref,caption,placeins,enumitem,tcolorbox}
+\usepackage[T1]{fontenc}
+\captionsetup{font=small,labelfont=bf}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black}
+\setlist{itemsep=1pt,topsep=2pt}
+\newcommand{\nmse}{\mathrm{nMSE}}
+\newcommand{\fig}[3][\textwidth]{\begin{figure}[htbp]\centering\IfFileExists{figs/#2.png}{\includegraphics[width=#1]{figs/#2.png}}{\fbox{\parbox{0.9\textwidth}{\centering figure #2 not yet made}}}\caption{#3}\label{fig:#2}\end{figure}}
+
+\title{Paper III status: equation-free latent data assimilation\\for a cloud-resolving squall line}
+\author{Dalton Jones \and Claude}
+\date{6 November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{tcolorbox}[colback=blue!3,colframe=blue!40!black,title=Headline results (all on storms the model never saw)]
+\begin{itemize}
+\item \textbf{One local latent model emulates CM1's full state.} It covers 7 variables $\times$ 62 levels, about $1.1\times10^5$ numbers per frame, with 2\,km sites and 1-minute steps, trained on 93 two-dimensional squall lines from three ensembles. Its forecast error is \textbf{0.36 of persistence's from 30\,min out to 2\,h}, and its error at 2\,h (0.358) is lower than persistence's at 5\,min (0.397). Advection extrapolation is \emph{worse} than persistence (1.2). Holding the domain boundaries fixed, so that no future information is used, costs only 1--3\%.
+\item \textbf{Localized latent DA works without the model's equations.} The observations are surface $\theta'$, radar reflectivity and Doppler radial velocity every 2\,km and every 5\,min. Over 22 unseen storms $\times$ 3 observation seeds, the cycled forecast nMSE is \textbf{0.273 $\pm$ 0.022 against 0.469 $\pm$ 0.061 with no DA ($-42$\%)}. DA wins on \textbf{22 of 22} storms, gust-front error is 0.38\,km, and spread/error is 0.71 (calibrated). Forecasts started from the analyses are 31\% better than no DA at 60\,min.
+\item \textbf{It generalizes to environments it never saw.} A dry, strongly sheared corner of the ensemble was held out of training. There, 30-min forecast skill is within 3\% of in-distribution, and DA cuts the error by \textbf{59\%} (48\% in distribution).
+\item \textbf{A stochastic version learns its own model error.} Its CRPS is 30\% lower and its spread/error is 0.9--1.0 out to 2\,h. In DA it is calibrated out of the box (spread/error 1.04) but 7\% less accurate than tuned hand-set noise.
+\item \textbf{Pre-registered claims (fixed before the headline runs):} DA works \checkmark, forecasts \checkmark, generalization \checkmark, calibration \checkmark\ on spread (rank histogram pending), transfer \checkmark\ but weakly, beating static and observation-only baselines \emph{running}.
+\item \textbf{Publishable? Yes, in our judgement, as Paper III.} See Section~\ref{sec:verdict}. The main missing piece is the baseline comparison (claim 3); everything else is strengthening.
+\end{itemize}
+\end{tcolorbox}
+
+\section{Setup}
+\textbf{Data.} Two-dimensional ($x$--$z$) squall lines come from CM1 r21.1. The domain is 400\,km wide with $\Delta x=250$\,m and 62 stretched levels, with open lateral boundaries and a grid moving at 12.5\,m\,s$^{-1}$. Physics is Morrison two-moment microphysics with no Coriolis, surface fluxes or friction. Runs last 6\,h with 1-minute output. There are three ensembles of 121 storms in all (Fig.~\ref{fig:fig_environments}):
+\begin{itemize}
+\item \textbf{ens\_A} (31) and \textbf{ens\_A2} (30): the control sounding, each member with its own random initial noise (our seed patch to CM1);
+\item \textbf{ens\_B} (60): boundary-layer moisture offsets of $-2.0$ to $+0.2$\,g\,kg$^{-1}$ and wind-shear factors of 0.63--1.40, so the environments vary widely.
+\end{itemize}
+
+\textbf{Model.}
+\begin{itemize}
+\item \textbf{State.} Each column is 7 variables ($u'$, $w$, $\theta'$, $q_v'$, $p'$, $\sqrt{q_\mathrm{liq}}$, $\sqrt{q_\mathrm{ice}}$) on 62 levels, taken as perturbations from the far-field initial column.
+\item \textbf{Encoder and decoder.} A convolutional encoder maps each 8-cell (2\,km) patch to a 32-channel latent site, so the latent state is a \emph{field} of 200 sites, not a vector. The decoder mirrors it.
+\item \textbf{Propagator.} A residual stencil network advances the latent field one minute, with a reach of 3 sites (6\,km) per step and the true state forced at the boundary.
+\item \textbf{Training.} Stage A trains the autoencoder, Stage B the propagator on latent rollouts up to 45 steps, and \textbf{Stage C} fine-tunes both jointly on decoded 45-step rollouts.
+\end{itemize}
+
+\textbf{DA.} A per-site latent LETKF uses Gaspari--Cohn localization (5\,km), RTPS 0.9 and 32 ensemble members drawn from training storms. The observation operators work on decoded columns:
+\begin{itemize}
+\item surface $\theta'$;
+\item a learned composite-reflectivity head;
+\item Doppler radial velocity from a radar at 330\,km, at 3 tilts with 4/3-Earth beams.
+\end{itemize}
+
+\fig{fig_storm_structure}{One unseen test storm at 2\,h: the seven model variables and its reflectivity history. The cold pool ($\theta'<0$ near the surface), the updraft, the rain shaft and the anvil are all part of the 434-channel column state.}
+\fig{fig_environments}{Squall lines from different environments. The moving grid keeps the system nearly stationary, which is why persistence is a strong baseline and advection extrapolation is not.}
+
+\section{What we have learned}
+\subsection{Data alone}
+\begin{itemize}
+\item \textbf{Locality.} Information travels 8--12\,km per 5\,min, so a short stencil suffices.
+\item \textbf{Output interval.} 5-minute output is too coarse, and 1-minute output resolves the column cycle.
+\item \textbf{Number of storms.} Skill stops improving after about 28 storms in one environment. Pooling all three ensembles matches each specialized model on its own storms (Table~\ref{tab:ens}), so extra storms buy coverage of environments, not accuracy within one.
+\end{itemize}
+
+\subsection{Model choices (screens on ens\_A and ens\_B)}
+Single seed; noise is $\pm$0.01--0.02. Values are skill (nMSE / persistence nMSE) at 5 / 30 / 60\,min.
+\begin{itemize}
+\item \textbf{Stage C with 45-step rollouts is the best single change.} On ens\_A it moves the baseline from 0.214 / 0.332 / 0.351 to \textbf{0.187 / 0.316 / 0.310}. On ens\_B it moves 0.265 / 0.400 / 0.385 to 0.237 / 0.383 / 0.370. It also has the smallest cold-pool bias and the best rain FSS. With rollouts limited to 20 steps it only helped at 5\,min.
+\item \textbf{Averaging 4 propagators} gives 5--10\%. A 2-frame history adds nothing once propagators are averaged.
+\item \textbf{Environment conditioning is neutral, and mirror augmentation hurts:} mirrored storms sit in reversed shear, which no real storm has.
+\item \textbf{A stochastic propagator trained on CRPS} has a worse mean error but 30\% lower CRPS, calibrated spread, and half the cold-pool bias.
+\end{itemize}
+
+\begin{table}[htbp]\centering\small
+\caption{The full-data model (Stage C) against specialized models, on each ensemble's unseen test storms (skill at 5 / 30 / 60\,min, true boundaries).}\label{tab:ens}
+\begin{tabular}{lll}\toprule
+Test storms & specialized model & full run (93 storms)\\\midrule
+ens\_A (2) & ens\_A only: 0.187 / 0.316 / 0.310 & 0.183 / 0.320 / 0.316\\
+ens\_B (10) & ens\_B only: 0.237 / 0.383 / 0.370 & 0.239 / 0.376 / 0.366\\
+ens\_A2 (10) & --- & 0.202 / 0.367 / 0.334\\\bottomrule
+\end{tabular}\end{table}
+
+\subsection{Forecasting}
+\begin{itemize}
+\item \textbf{The boundaries are not doing the work.} Holding the 6\,km boundary strips at their initial state, instead of the truth, costs 1--3\% at 60\,min. Cold pool, fronts and rain are unchanged to three decimals.
+\item \textbf{Skill holds to 2\,h} (Fig.~\ref{fig:fig_skill}): 0.220 / 0.357 / 0.361 / 0.352 / 0.350 at 5 / 30 / 60 / 90 / 120\,min, over 22 storms $\times$ 8 start times. The stochastic model has CRPS skill 0.34--0.39 and spread/error 0.86--0.91 throughout.
+\item \textbf{By variable} (Fig.~\ref{fig:fig_skill_by_variable}), $\theta'$, $p'$, $u'$ and $q_v'$ are the most predictable (0.2--0.3 of persistence's error), ice is close behind, and liquid water (0.4) and $w$ (0.5) are the hardest: they live in the small, short-lived convective cells. Fig.~\ref{fig:fig_forecast_sections} and Fig.~\ref{fig:fig_hovmoller} show the structure: the forecast keeps the cold pool, the gust front and the main rain shaft for 2\,h, but smooths small convective cells. That smoothing is expected of a deterministic forecast of a chaotic system.
+\end{itemize}
+\fig{fig_forecast_sections}{Forecasts from $t=1$\,h for five variables, with boundaries held at the start. Columns: truth at 1.5\,h, forecasts at 30 and 60\,min, truth at 2\,h.}
+\fig{fig_hovmoller}{Two-hour forecast as $x$--$t$ diagrams: the cold pool (surface $\theta'$) and precipitation (column-maximum condensate) against the truth and persistence.}
+\fig{fig_skill}{(a) Skill relative to persistence to 2\,h on 22 unseen storms $\times$ 8 start times, with the stochastic model and advection extrapolation. (b) Absolute error growth. (c) Probabilistic skill and calibration of the stochastic model.}
+\fig[0.6\textwidth]{fig_skill_by_variable}{Skill per variable on 6 unseen storms, 2 start times each. At 1--2\,min persistence is nearly perfect, so the ratio starts above 1: that is the autoencoder's reconstruction error.}
+
+\subsection{Latent space}
+Fig.~\ref{fig:fig_latent} shows what the latent space looks like:
+\begin{itemize}
+\item \textbf{Physics.} The leading principal components of the 32-channel site vectors separate quiescent air, the cold pool, updrafts and precipitation, so the latent field is organized by physical regime.
+\item \textbf{Environment.} Storm sites from different environments occupy overlapping but shifted regions, consistent with the generalization result.
+\item \textbf{Dimension.} The variance spectrum has no gap: the local state is genuinely multidimensional, not a few modes.
+\item \textbf{Space and time.} The leading component, mapped over $x$ and $t$, tracks the storm, as a local \emph{field} should.
+\end{itemize}
+\fig{fig_latent}{Latent geometry from the 22 unseen test storms. Top: site vectors projected on the two leading principal components, coloured by surface $\theta'$, column-maximum $w$ and condensate. Bottom: storm sites by ensemble; the variance spectrum; and the leading component as an $x$--$t$ field for one storm.}
+
+\subsection{Data assimilation}
+The setup follows the pre-registered protocol: 22 unseen storms $\times$ 3 observation seeds, boundaries held fixed, and the noise level chosen on validation storms.
+\begin{itemize}
+\item \textbf{Headline:} 0.273 $\pm$ 0.022 against 0.469 $\pm$ 0.061 with no DA. The paired difference is $-0.196\pm0.054$, DA wins on 22 of 22 storms, and front error is 0.38\,km. 60-minute forecasts from the analyses: 0.337 against 0.487 with no DA. Figures~\ref{fig:fig_da_example}--\ref{fig:fig_da_results}.
+\item \textbf{Model error} (Fig.~\ref{fig:fig_da_results}b). Hand-set latent noise of 0.1 is best and calibrated (spread/error 0.71); 0.05 ties on error but is overconfident (0.43). The stochastic model's learned noise gives perfect calibration (1.04, with RTPS 0.5) at a 7\% cost in error.
+\item \textbf{Boundaries matter more in DA than in forecasts.} With true boundaries the error is 10\% lower, because over 3\,h of cycling a fixed boundary drifts from the truth. We report fixed boundaries.
+\item \textbf{Unseen environments} (Fig.~\ref{fig:fig_da_results}c). In the held-out region the error drops from 0.551 to 0.224 ($-59$\%); in distribution, from 0.508 to 0.265 ($-48$\%). DA helps most where the model alone is weakest.
+\item \textbf{Transfer pilot} (Fig.~\ref{fig:fig_da_results}d). Two storms were joined side by side in an 800\,km domain, with no retraining.
+  \begin{itemize}
+  \item Forecast error ratio, 2 storms / 1: 1.00 / 1.02 / 1.04 at 5 / 30 / 60\,min.
+  \item Localized DA ratio: 1.03--1.07. Without localization: 1.05--1.12.
+  \item Promising but weak: the seam between the joined storms cannot be told apart from genuine non-locality. Real two-storm CM1 runs are under way.
+  \end{itemize}
+\end{itemize}
+\fig{fig_da_example}{One storm after 2\,h of 5-minute cycling. Left: truth. Middle: ensemble-mean forecast without DA. Right: the latent DA's 5-minute forecast.}
+\fig{fig_da_results}{(a) Per-storm cycled nMSE, DA against no DA, for the 22 unseen storms (blue ens\_A, orange ens\_A2, green ens\_B). (b) Error against calibration for hand-set and learned model error; the shaded band is the pre-registered calibration range. (c) Held-out environments. (d) Transfer pilot: error ratio for 2 storms over 1, with and without localization.}
+
+\section{What is running now}
+\begin{itemize}
+\item \textbf{Claim 3: baselines} (Saidie). The latent DA is compared with:
+  \begin{itemize}
+  \item surrogate EnOI (static covariance instead of a cycled ensemble);
+  \item physical-archive EnOI (no model at all);
+  \item an observation-only analysis (no model, no memory).
+  \end{itemize}
+  Settings are tuned on the validation storms first. Earlier, untuned runs on 12 storms already showed latent DA 29\% better than surrogate EnOI.
+\item \textbf{Shifted tilings} (E3c, Saidie). Four offsets of the 2\,km patch lattice, each a full DA, are averaged to remove patch seams, as in Paper~II. This is compared at equal cost.
+\item \textbf{Lyapunov spectrum of the latent model} (L1 and L5, Cashew). This gives the finite-time spectrum of the 6\,200-dimensional latent map along the encoded CM1 trajectory, as an estimate of the leading part of CM1's spectrum (no tangent-linear CM1 exists), and the spreading speed of perturbations.
+\item \textbf{CM1 twin runs} (L2, Cashew). Eight pairs of runs differ by 0.001\,K, using a new hash-based perturbation patch; the control reproduces bit for bit. These provide ground truth for the leading exponent and the predictability limit, and therefore how much of our forecast error is intrinsic (L2c). In the smoke test, errors grew tenfold in 8 minutes during initiation.
+\item \textbf{Real two-storm CM1 runs} (T2, Cashew). Eight members in an 800\,km domain with two thermals 400\,km apart (a new CM1 patch, smoke-tested). These are for the transfer claim and for extensivity (L3: twice the storms should give twice the positive exponents).
+\end{itemize}
+
+\section{What we hope to show}
+Paper~III's argument, in order:
+\begin{enumerate}
+\item A local latent field learned from a few dozen cloud-resolving simulations emulates the full multivariate storm for hours. Locality is what makes this sample-efficient: every 2\,km site and every minute is a training example.
+\item The same locality lets a standard localized ensemble filter run in latent space, without the model's equations, and it assimilates realistic radar and surface observations with large, calibrated gains.
+\item It works in environments it never saw.
+\item It beats static and observation-only alternatives (claim 3, running).
+\item Like Paper~I, it transfers to larger domains with more storms without retraining (T2), and its Lyapunov spectrum is extensive in the number of storms (L1--L3). That would tie Paper~III to Papers~I--II.
+\end{enumerate}
+
+\section{Is it publishable?}\label{sec:verdict}
+\textbf{Yes, in our judgement.} The core results are large, consistent across 22 unseen storms and three seeds, pre-registered, and robust to removing all future boundary information:
+\begin{itemize}
+\item hours of forecast skill on the full CM1 state;
+\item a 42\% DA gain on every storm;
+\item generalization to an unseen environment.
+\end{itemize}
+Equation-free localized DA on a cloud-resolving model with radar observations is, to our knowledge, not yet in the literature; a literature check (H5, G12) is still due.
+
+Weaknesses a referee will raise:
+\begin{itemize}
+\item two-dimensional, idealized squall lines;
+\item perfect-model twin experiments, where the truth comes from the same CM1 configuration;
+\item synthetic observations;
+\item one microphysics scheme.
+\end{itemize}
+Our answers are the held-out environments, the fixed boundaries and the pre-registration; the remaining gap (3D, real data) is the CM1 squall-line goal of the project.
+
+To be ready for submission we need:
+\begin{enumerate}
+\item claim 3 (running);
+\item the rank-histogram half of the calibration claim;
+\item either real two-storm runs that confirm transfer, or the transfer claim cut back;
+\item the literature check;
+\item a non-local model baseline (H1b), to show what locality buys;
+\item writing.
+\end{enumerate}
+Suitable venues are \emph{Monthly Weather Review}, \emph{JAMES} or \emph{QJRMS} for the DA story, or \emph{Artificial Intelligence for the Earth Systems} with more weight on the emulator.
+
+\end{document}
