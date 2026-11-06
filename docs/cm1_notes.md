@@ -479,3 +479,28 @@ Extremes at 60 min (truth / reconstruction / deterministic / stochastic sample):
 - **Consequence:** SM1 (more channels, 1 km sites) can only help the < 4 km band; SM2–SM4 (sample-based objectives, generative propagator) are the lever for sharp, accurate forecasts.
 - **Tuning grid extended (2026-11-06, validation storms only, before any claim-3 run on the test storms):** both EnOI baselines got worse from alpha 0.1 to 0.25 (surrogate 0.337 → 0.353, physical archive 0.566 → 0.606), so their optimum is probably below the original grid. Added alpha 0.05 and 0.02 for the EnOI baselines (Saidie 8918, 8919; the alpha 1.0 run, 8903, cancelled) and 0.05 for the observation-only baseline (8920). Observation-only at 0.1: analysis nMSE 0.299 (latent DA's analysis on the same storms: 0.246).
 - **Control (Cashew 749619, 22 storms × 3 seeds, identical observations):** 4 independent 32-member DA systems on the SAME lattice (own model noise), averaged: 0.2596 (−0.0113 ± 0.0017, −4.2%, lower on 100% of storms); 4 SHIFTED lattices with the same distinct noise: 0.2575 (−0.0134 ± 0.0018, −4.9%). **The seam effect itself (shifted minus same lattice) is −0.0021 ± 0.0007 (−0.8%), shifted lower on 91% of storms.** So almost all of the tiling gain is averaging several independent ensembles (less sampling noise), not seam removal; the seams are real but small. Implication: the cheap route to the 4% is a larger ensemble (I1), not tilings; I5 (cheap tilings) is not worth building.
+
+## T2: transfer to real two-storm CM1 runs (2026-11-06, Cashew 749808; 8 two-storm truths, 800 km, two lines 400 km apart; model full_v1_stagec trained on single 400 km storms, no retraining)
+References: 8 single-storm ens_A2 test storms (same control environment). Unpaired (different truths), boundaries held at the start.
+
+Forecasts, skill (nMSE / persistence) at 5 / 30 / 60 min, and the error ratio two-storm / single:
+
+| Start | Two-storm | Single | Error ratio |
+|---|---|---|---|
+| 1 h | 0.245 / 0.356 / 0.378 | 0.275 / 0.364 / 0.372 | 0.98 / 0.99 / 1.01 |
+| 2 h | 0.281 / 0.396 / 0.409 | 0.211 / 0.385 / 0.384 | 0.97 / 1.00 / 1.04 |
+| 3 h | 0.231 / 0.367 / 0.358 | 0.189 / 0.337 / 0.301 | 1.17 / 1.03 / 1.14 |
+| 4 h | 0.235 / 0.413 / 0.448 | 0.169 / 0.424 / 0.343 | 1.09 / 0.83 / 1.15 |
+
+DA (θ′ + reflectivity, noise 0.1, 36 cycles from 1 h, so the scored second half, 2.5–4 h, includes the interaction phase), cycled nMSE ± 95% CI:
+
+| N | Localization | Two-storm | Single | Ratio |
+|---|---|---|---|---|
+| 8 | 5 km | 0.392 ± 0.031 | 0.395 ± 0.030 | **0.99** |
+| 32 | 5 km | 0.336 ± 0.023 | 0.337 ± 0.024 | **1.00** |
+| 8 | none | 0.477 ± 0.062 | 0.440 ± 0.078 | 1.08 |
+| 32 | none | 0.417 ± 0.061 | 0.401 ± 0.031 | 1.04 |
+
+- **Forecasts transfer before the storms interact** (starts at 1–2 h: error ratio 0.97–1.04). From 3 h, when outflows and gravity waves from the two lines meet, two-storm errors are 10–15% higher at 60 min, but skill stays 0.36–0.45 against persistence: the model handles interacting storms it never saw, with a modest penalty.
+- **Localized DA transfers perfectly** (ratio 0.99 / 1.00 at N = 8 / 32), including the interaction phase; without localization it is worse in absolute terms (0.42–0.48 against 0.34–0.39) and degrades with two storms (1.04–1.08), most at small N. The ensemble needed per storm does not grow with the number of storms when localized: the CM1 analogue of Paper I's result, now on real CM1 solutions, not the T1 pilot's joined seam.
+- **G0 claim 6 met** (localized ratio ≤ 1.1 at every N; at N = 8 the unlocalized ratio is larger, 1.08 against 0.99), and more convincingly than in T1. Caveats: unpaired, 8 storms each (the ratio's CI is roughly ±10%), one seed, two ensemble sizes; θ′ + reflectivity only (the radar geometry was set up for 400 km).
