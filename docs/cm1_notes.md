@@ -435,3 +435,17 @@ The latent noise level for the headline DA, and alpha for the two EnOI baselines
 
 - A small, very consistent gain at 4× the cost; at equal cost the smaller per-tiling ensembles lose more than the seams cost.
 - Not yet attributable to seams: averaging 4 independent DA systems also averages sampling noise. Control running (Cashew 749619, `da_tiling.py --control`): 4 systems at offset 0 with distinct model noise, against 4 tilings with the same distinct noise, all on identical observations.
+
+## L1 / L5: finite-time Lyapunov spectrum of the latent model, and perturbation spreading (2026-11-06, Cashew 749449)
+full_v1_stagec (deterministic), 6 unseen storms (3 ens_A2, 3 ens_B), full 6 208-dimensional spectrum, boundary sites held, 16-min warm-up. Mean ± sd over storms:
+
+| Window | Linearization | λ1 (per min) | Doubling | Positive exponents | D_KY |
+|---|---|---|---|---|---|
+| 60–120 min | along the encoded CM1 trajectory | 0.0052 ± 0.0043 | ~130 min | 4 ± 3 | 9 ± 6 |
+| 60–120 min | along the surrogate's own run | 0.0009 ± 0.0020 | ~13 h | 1 ± 1 | 2 ± 1 |
+| 120–180 min | along the encoded CM1 trajectory | 0.0103 ± 0.0077 | ~67 min | 5 ± 2 | 12 ± 6 |
+| 120–180 min | along the surrogate's own run | −0.0010 ± 0.0054 | — | 1 ± 1 | 2 ± 3 |
+
+- **The surrogate is far less chaotic than CM1.** Along its own trajectory it is nearly neutral (0–2 positive exponents, doubling of hours); evaluated on the true states its tangent map is more unstable (4–5 positive, D_KY ~10, doubling ~1–2 h), which grows as the storm matures. CM1's own small perturbations doubled in ~2–3 min during initiation (L2 smoke); the full L2 comparison (749729) will give CM1's rates in the same windows.
+- Consistent with the MSE objective (SM): a model trained to forecast the conditional mean is dissipative and damps the small-scale instabilities, and its own trajectory drifts towards smooth states where the tangent map is even more stable.
+- **Spreading (L5):** a one-site perturbation spreads at 3.2–3.3 km/min (threshold 1e-3; 2.8–3.9 across thresholds), the same in the storm and in the quiescent far field. That is faster than the data-only reach (1.6–2.4 km/min) and about half the network's maximum (6 km/min), and the lack of a storm/far-field difference says it reflects the network's linear coupling (gravity-wave-like), not convective dynamics.
