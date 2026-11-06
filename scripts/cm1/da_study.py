@@ -248,8 +248,9 @@ def main():
         fd = agg["modes"][m]["prior"].get("front_abs_disp_km_median", {"mean": float("nan")})
         print(f"   {m:16s} {p['mean']:.3f} +- {p['ci95']:.3f}  (vs no DA {d['mean']:+.3f} +- {d['ci95']:.3f})  "
               f"analysis {an['mean']:.3f}  front |disp| {fd['mean']:.2f} km")
-    print(f"[study] latent beats no DA on {100 * agg['frac_truths_latent_beats_noDA']:.0f}% of truths; "
-          f"done in {(time.time() - t_start) / 60:.1f} min -> {out}")
+    fr = agg["frac_truths_latent_beats_noDA"]
+    print(f"[study] " + (f"latent beats no DA on {100 * fr:.0f}% of truths; " if fr is not None else "")
+          + f"done in {(time.time() - t_start) / 60:.1f} min -> {out}")
 
 
 if __name__ == "__main__":
