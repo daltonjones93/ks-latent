@@ -425,3 +425,13 @@ DA, prior nMSE ratio 2 storms / 1 storm (3 pairs × 2 seeds):
 The latent noise level for the headline DA, and alpha for the two EnOI baselines (claim 3), are chosen on the full run's 6 validation storms (ens_A mem028, ens_A2 mem011, ens_B mem025/053/055/058; used only for checkpoint selection, never trained on), 3 seeds, same setup as the headline, by lowest cycled nMSE. The 22 test storms do not enter any choice. Candidates: noise 0.05 / 0.1 / 0.15; alpha 0.1 / 0.25 / 0.5 / 1.0. (`da_study.py --tuning`.)
 - **G0 addendum 2 (2026-11-06, before the claim-3 runs):** the observation-only baseline (G2c) has no forecast model, so before the observations its estimate is just the archive mean. For it, claim 3 compares **analysis nMSE** (each method's estimate right after the current observations), not the cycled forecast nMSE. The two EnOI baselines are compared on cycled forecast nMSE, as worded. The observation-only baseline's alpha is tuned on the validation storms like the EnOI ones (0.1 / 0.25 / 0.5 / 1.0).
 - **Validation tuning, noise level (2026-11-06, Saidie 8886–8888; 6 validation storms × 3 seeds):** cycled nMSE 0.260 ± 0.026 (0.05), **0.258 ± 0.023 (0.1)**, 0.275 ± 0.025 (0.15); spread/error 0.42 / 0.71 / 0.95. By the G0 addendum's rule (lowest cycled nMSE on validation), the headline noise level is **0.1**. Headline numbers on the 22 test storms at 0.1: 0.273 ± 0.022 vs no DA 0.469 ± 0.061, spread/error 0.71 (claim 2's spread criterion within 0.7–1.3; its rank-histogram test still to compute).
+
+## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
+| | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
+|---|---|---|---|---|
+| single tiling, 32 members | 0.271 ± 0.021 | — | — | 0.257 |
+| 4 tilings (offsets 0/2/4/6 cells) × 32 members | **0.261 ± 0.021** | −0.010 ± 0.002 (−4%) | 95% | 0.245 (−4.6%) |
+| 4 tilings × 8 members (equal cost) | 0.286 ± 0.024 | +0.015 ± 0.006 | 9% | 0.275 |
+
+- A small, very consistent gain at 4× the cost; at equal cost the smaller per-tiling ensembles lose more than the seams cost.
+- Not yet attributable to seams: averaging 4 independent DA systems also averages sampling noise. Control running (Cashew 749619, `da_tiling.py --control`): 4 systems at offset 0 with distinct model noise, against 4 tilings with the same distinct noise, all on identical observations.
