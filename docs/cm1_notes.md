@@ -504,3 +504,16 @@ DA (θ′ + reflectivity, noise 0.1, 36 cycles from 1 h, so the scored second ha
 - **Forecasts transfer before the storms interact** (starts at 1–2 h: error ratio 0.97–1.04). From 3 h, when outflows and gravity waves from the two lines meet, two-storm errors are 10–15% higher at 60 min, but skill stays 0.36–0.45 against persistence: the model handles interacting storms it never saw, with a modest penalty.
 - **Localized DA transfers perfectly** (ratio 0.99 / 1.00 at N = 8 / 32), including the interaction phase; without localization it is worse in absolute terms (0.42–0.48 against 0.34–0.39) and degrades with two storms (1.04–1.08), most at small N. The ensemble needed per storm does not grow with the number of storms when localized: the CM1 analogue of Paper I's result, now on real CM1 solutions, not the T1 pilot's joined seam.
 - **G0 claim 6 met** (localized ratio ≤ 1.1 at every N; at N = 8 the unlocalized ratio is larger, 1.08 against 0.99), and more convincingly than in T1. Caveats: unpaired, 8 storms each (the ratio's CI is roughly ±10%), one seed, two ensemble sizes; θ′ + reflectivity only (the radar geometry was set up for 400 km).
+
+## SM2a and SM4, first results (2026-11-06, Saidie 8912, 8917; 22 test storms)
+| Run | Skill 5 / 30 / 60 | CRPS 5 / 30 / 60 | Spread/error 60 | Cold-pool bias | Front 30 / 60 |
+|---|---|---|---|---|---|
+| deterministic Stage C (full_v1_stagec) | 0.213 / 0.365 / 0.344 | 0.475 / 0.498 / 0.517 | — | −17.4% | 0.62 / 1.39 km |
+| stochastic Stage C (CRPS) | 0.267 / 0.404 / 0.385 | 0.342 / 0.344 / 0.360 | 0.93 | −9.9% | 0.87 / 2.02 |
+| SM2a: stochastic Stage C, CRPS + energy score | 0.260 / 0.405 / 0.384 | 0.344 / 0.348 / 0.362 | 0.93 | −11.5% | 1.04 / 2.33 |
+| SM4: flow-matching propagator (pilot; held boundaries, own eval) | 0.247 / 0.478 / 0.491 | 0.383 / 0.460 / 0.509 | 0.84 | | |
+
+(SM4's own comparison, same cases, held boundaries: deterministic 0.215 / 0.371 / 0.354 and stochastic 0.267 / 0.410 / 0.395, CRPS 0.348 / 0.363 / 0.388.)
+- **SM2a: the energy score changes nothing** measurable (skill and CRPS within 0.01 of the CRPS-only model; fronts slightly worse).
+- **SM4, the flow pilot, is worse** than the stochastic model at 30–60 min (CRPS 0.46 / 0.51 against 0.36 / 0.39) and under-dispersed (spread/error 0.59–0.84). It is trained on one-step pairs only, with no multi-step rollout training and no Stage C, so its errors compound over a rollout, whereas the stochastic model had the k-curriculum and Stage C. A fair flow model needs rollout training (backpropagating through sampled multi-step rollouts, or a Stage-C-like fine-tuning on decoded samples). Whether its samples are sharper (SM0 diagnostics) is still to check.
+- Claim-3 baselines tuned on validation (rule: lowest cycled nMSE; observation-only by analysis nMSE): surrogate EnOI alpha 0.02 (0.321; still falling slowly at the grid edge: 0.337 / 0.329 / 0.321 at 0.1 / 0.05 / 0.02, far from the latent DA's 0.258), physical-archive EnOI alpha 0.05 (0.565; worse than no DA at every alpha), observation-only alpha 0.5 (analysis 0.284; latent DA analysis 0.246). Test-storm runs: Saidie 8947–8949.
