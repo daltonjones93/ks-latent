@@ -314,6 +314,9 @@ Each task below answers a specific objection a referee would raise. They come in
   - Run the best DA settings on ≥ 10 truths × 3 observation-noise seeds.
   - Report mean ± 95% CI, and paired differences (DA − no DA) per truth.
   - Done when: the tables and figures of E4/E4b have error bars.
+- [ ] **G1b (C)** **Learned against hand-set model error** (added 2026-11-05). Deterministic Stage C model with latent noise 0.02 / 0.05 / 0.1, against the stochastic Stage C model (learned noise) with 0 / 0.02, on the full run's 22 test storms × 3 seeds, 32 random training members, `th+refl+vr`. `cluster/saidie/noise_study.sh` (jobs 8838–8844, after the full-run training); compare with `scripts/cm1/compare_studies.py` (paired per truth).
+  - Why: in G1 the ensemble's spread at the θ′ observations is only 0.5 of its error (spread/error 0.505 ± 0.03), so the hand-set noise leaves the ensemble twice too confident; the stochastic model's own forecasts are calibrated (0.93).
+  - Done when: cycled nMSE, spread/error and 5 / 30 / 60-min forecast nMSE for all five, with paired differences against noise 0.05.
 - [ ] **G2 (C)** **(a) and (b) run in job 8717: latent 0.236 vs physical-space 0.245 vs surrogate EnOI 0.331; the physical-archive EnOI (alpha 0.5) is worse than no DA (0.732) and needs tuning before it is a fair baseline. (c) still to do.** **Conventional (equation-free) baselines with the same observations and members.**
   - (a) **EnOI:** a static physical-space covariance from the training members' states at the same time, with the same localization. It answers "what does a forecast model add?".
   - (b) **Physical-space LETKF on the decoded surrogate ensemble:** the same forecasts, but analysed in physical space instead of latent space. It isolates what the latent update itself buys: dimension, locality, and staying on the decoder's manifold. Paper II found a cost from returning to the decoder range, so this needs checking here.
