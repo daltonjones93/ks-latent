@@ -94,16 +94,16 @@ def main():
     # ---- storm structure ----
     if "structure" not in a.skip:
         u = d.full(0, T2)[0]
-        fig, axs = plt.subplots(4, 2, figsize=(7.5, 7.0), sharex=True, sharey=True, constrained_layout=True)
+        fig, axs = plt.subplots(4, 2, figsize=(7.5, 7.0), sharex=True, constrained_layout=True)
         for ax, v in zip(axs.flat, ["u", "w", "th", "qv", "prs", "qliq", "qice"]):
-            mm = section(ax, phys(u, norm, Z, v), x, zk, v, title=STYLE[v][0])
+            mm = section(ax, phys(u, norm, Z, v), x, zk, v, title=STYLE[v][0])   # sets 0-14 km
             fig.colorbar(mm, ax=ax, shrink=0.85)
         ax = axs.flat[-1]
         cr = m.cref[:T2 + 1]
         mm = ax.pcolormesh(x, np.arange(cr.shape[0]) * dt_min, cr, cmap="turbo", vmin=0, vmax=60, shading="auto", rasterized=True)
         ax.set_ylim(0, 120); ax.set_title("composite reflectivity (dBZ), x–t, 0–2 h"); ax.set_ylabel("t (min)")
         fig.colorbar(mm, ax=ax, shrink=0.85)
-        for ax in axs[:, 0]:
+        for ax in list(axs[:, 0]) + [axs[0, 1], axs[1, 1], axs[2, 1]]:
             ax.set_ylabel("z (km)")
         for ax in axs[-1]:
             ax.set_xlabel("x (km)")
@@ -308,7 +308,7 @@ def main():
         for ax in axs[-1]:
             ax.set_xlabel("x (km)")
         nf = free["cycles"][k]["prior"]["nmse_mean_dec"]; nd = da["cycles"][k]["prior"]["nmse_mean_dec"]
-        fig.suptitle(f"{a.storm} at t = {fr * dt_min / 60:.1f} h after 2 h of 5-min cycles (θ′ + reflectivity + radial velocity): "
+        fig.suptitle(f"{a.storm}, t = {fr * dt_min / 60:.1f} h, after 2 h of 5-min cycles (θ′ + reflectivity + radial velocity)\n"
                      f"nMSE {nf:.2f} without DA, {nd:.2f} with")
         fig.savefig(out / "fig_da_example.png"); plt.close(fig); done.append("da_example")
 
@@ -323,7 +323,7 @@ def main():
         ax.scatter(nod, dav, c=ens, s=12)
         lim = (0, max(nod.max(), dav.max()) * 1.05); ax.plot(lim, lim, color="0.5", lw=1, ls=":")
         ax.set_xlim(lim); ax.set_ylim(lim); ax.set_xlabel("no DA, nMSE"); ax.set_ylabel("latent DA, nMSE")
-        ax.set_title(f"(a) 22 unseen storms: −{100 * (1 - dav.mean() / nod.mean()):.0f}%")
+        ax.set_title(f"(a) 22 storms: −{100 * (1 - dav.mean() / nod.mean()):.0f}%")
         ax = axs[1]
         for name, lab, mk in (("noise_det_0.02", "det 0.02", "o"), ("noise_det_0.05", "det 0.05", "o"), ("noise_det_0.1", "det 0.1", "*"),
                               ("noise_stoch_0", "stoch, RTPS 0.9", "s"), ("noise_stoch_0_rtps0.5", "stoch, RTPS 0.5", "s"),
@@ -332,7 +332,7 @@ def main():
             ax.scatter(np.mean([v["sperr"] for v in rr.values()]), np.mean([v["prior"] for v in rr.values()]), marker=mk,
                        s=30 if mk == "*" else 14, label=lab)
         ax.axvspan(0.7, 1.3, color="0.9", zorder=0)
-        ax.set_xlabel("spread / error at θ′ obs"); ax.set_ylabel("cycled nMSE"); ax.set_title("(b) model error: hand-set vs learned")
+        ax.set_xlabel("spread / error at θ′ obs"); ax.set_ylabel("cycled nMSE"); ax.set_title("(b) model error")
         ax.legend(frameon=False, fontsize=5.5)
         ax = axs[2]
         vals = []
@@ -343,7 +343,7 @@ def main():
         ax.bar(xx - 0.18, [v[0] for v in vals], 0.36, label="no DA", color="0.6")
         ax.bar(xx + 0.18, [v[1] for v in vals], 0.36, label="latent DA", color="C0")
         ax.set_xticks(xx); ax.set_xticklabels(["in-distribution", "held-out\nenvironment"])
-        ax.set_ylabel("cycled nMSE"); ax.set_title("(c) unseen environments (H3)"); ax.legend(frameon=False, fontsize=6)
+        ax.set_ylabel("cycled nMSE"); ax.set_title("(c) held-out env. (H3)"); ax.legend(frameon=False, fontsize=6)
         ax = axs[3]
         t1 = json.loads((D / "t1_pilot" / "t1.json").read_text())
         for loc, lab in ((5.0, "localized (5 km)"), (10000.0, "no localization")):
@@ -352,7 +352,7 @@ def main():
             sd = [np.std([row["ratio_prior"] for row in t1["da"] if row["N"] == N and row["loc_km"] == loc]) for N in Ns]
             ax.errorbar(Ns, mn, yerr=sd, marker="o", ms=3, capsize=2, label=lab)
         ax.axhline(1, color="0.5", lw=1, ls=":"); ax.set_xscale("log", base=2)
-        ax.set_xlabel("ensemble size"); ax.set_ylabel("error ratio, 2 storms / 1"); ax.set_title("(d) transfer pilot (T1)")
+        ax.set_xlabel("ensemble size"); ax.set_ylabel("error ratio, 2 storms / 1"); ax.set_title("(d) transfer (T1)")
         ax.legend(frameon=False, fontsize=6)
         fig.savefig(out / "fig_da_results.png"); plt.close(fig); done.append("da_results")
     print("made:", done, "->", out)
