@@ -296,3 +296,17 @@ CRPS / persistence MAE (a deterministic forecast's CRPS is its MAE), 8 samples p
 - Deterministic Stage C still has the best ensemble-mean error and fronts.
 - **Caveat:** ensemble CRPS against a point forecast's MAE favours the ensemble by construction. The fair test for DA is the learned noise against the hand-set latent noise (0.05) on a deterministic model, in the twin.
 - Full-data stochastic branch queued: jobs 8819 → 8820.
+
+## H0 boundary check (2026-11-05, Cashew CPU job 746659; ens_A test)
+Edge halo (3 sites = 6 km each side) set to the true state every step ("truth", as in every forecast score so far) against held at its state at the forecast start ("persistence": nothing after t0 is known).
+
+| Run | Boundary | Skill 5 / 30 / 60 | CRPS 5 / 30 / 60 | θ′ 60 | Cold-pool bias | Front 30 / 60 | Rain FSS 60 |
+|---|---|---|---|---|---|---|---|
+| d34_c32_kuniform | truth | 0.214 / 0.332 / 0.351 | 0.448 / 0.476 / 0.512 | 0.83 K | −17.3% | 0.43 / 1.21 km | 0.696 |
+| | held | 0.216 / 0.338 / 0.358 | 0.454 / 0.493 / 0.535 | 0.86 | −17.3% | 0.43 / 1.21 | 0.696 |
+| d12_stagec_k45 | truth | 0.187 / 0.316 / 0.310 | 0.421 / 0.453 / 0.476 | 0.76 | −13.7% | 0.69 / 0.95 | 0.774 |
+| | held | 0.188 / 0.321 / 0.316 | 0.427 / 0.469 / 0.497 | 0.79 | −13.7% | 0.69 / 0.95 | 0.774 |
+
+- **The true boundaries are not doing the work.** Holding them fixed costs 1–2% in skill and 3–5% in CRPS at 60 min. The storm metrics (cold pool, fronts, rain FSS) are identical to three decimals, so the small loss is confined to near the edges (outgoing gravity waves), not the storm.
+- The ranking is unchanged (Stage C still best), and the CPU re-score with true boundaries reproduces the GPU numbers exactly.
+- For the paper, report the held-boundary numbers as the main ones (no future information at all). Still to check: the DA twin's halo, which also comes from the truth.
