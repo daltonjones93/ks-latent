@@ -89,6 +89,7 @@ class TwinConfig:
     forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
     forecast_frames: int = 60
     boundary: str = "truth"       # halo: the true state every step, or "persistence": held at the truth at t0 (H0)
+    exclude_km: tuple = ()        # ((x0, x1), ...) km left out of the nMSE scores (T1: the junction of joined storms)
     seed: int = 0
 
 
@@ -120,6 +121,17 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
     return Z
 
 
+def _keep(cfg, NX: int, dev) -> torch.Tensor:
+    """(NX,) bool: columns outside every `cfg.exclude_km` interval (cell centres, 250 m cells)."""
+    x = (torch.arange(NX, device=dev) + 0.5) * 0.25
+    k = torch.ones(NX, dtype=torch.bool, device=dev)
+    for x0, x1 in cfg.exclude_km:
+        k &= ~((x >= x0) & (x < x1))
+    if not k.any():
+        raise ValueError(f"exclude_km {cfg.exclude_km} leaves no columns to score")
+    return k
+
+
 def _hold(cfg) -> int | None:
     if cfg.boundary == "truth":
         return None
@@ -131,9 +143,10 @@ def _hold(cfg) -> int | None:
 @torch.no_grad()
 def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: np.ndarray, y: np.ndarray | None,
             norm: Normalizer, Z_levels: int, refl_head=None, refl_cols=None, cref_true=None,
-            y_refl=None, vr_op=None, vr_true=None, dec: torch.Tensor | None = None) -> dict:
+            y_refl=None, vr_op=None, vr_true=None, dec: torch.Tensor | None = None,
+            keep: torch.Tensor | None = None) -> dict:
     """Scores of ensemble `Z` (or of decoded members `dec`, for physical-space analyses) against the
-    true normalized columns `u_true` (C, NX)."""
+    true normalized columns `u_true` (C, NX). `keep` (NX,) bool: the columns the nMSE scores use."""
     if dec is None:
         dec = ae.decode(Z)                                   # (N, C, NX)
         dec_mean = ae.decode(Z.mean(0, keepdim=True))[0]
@@ -151,8 +164,9 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
     th_mean = (mean_dec[ith] * s_th).double().cpu().numpy()
     th_mem = (dec[:, ith, obs_cols] * s_th).double().cpu().numpy()       # (N, m)
     front = main_pool_front_km(th_true)
-    out = {"nmse_mean_dec": float(((mean_dec - u_true) ** 2).mean()),
-           "nmse_dec_mean": float(((dec_mean - u_true) ** 2).mean()),
+    kc = slice(None) if keep is None else keep
+    out = {"nmse_mean_dec": float(((mean_dec - u_true) ** 2)[:, kc].mean()),
+           "nmse_dec_mean": float(((dec_mean - u_true) ** 2)[:, kc].mean()),
            "rmse_phys_mean_dec": per_var(mean_dec),
            "th_obs_rmse": float(np.sqrt(np.mean((th_mem.mean(0) - th_true[obs_cols]) ** 2))),
            "th_obs_spread": float(np.sqrt(np.mean(th_mem.var(0, ddof=1)))),
@@ -193,7 +207,7 @@ def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) 
         th_t = (u_true[ith] * s_th).double().cpu().numpy()
         th_m = (md[ith] * s_th).double().cpu().numpy()
         f = main_pool_front_km(th_t)
-        rec = {"lead_frames": j + 1, "nmse_mean_dec": float(((md - u_true) ** 2).mean()),
+        rec = {"lead_frames": j + 1, "nmse_mean_dec": float(((md - u_true) ** 2)[:, _keep(cfg, truth.NX, dev)].mean()),
                "front_disp_km": displacement_km(th_m, th_t, center_km=f)}
         if refl_head is not None:
             cref_t = truth.cref[0][t + j + 1].clamp(min=0).double().numpy()
@@ -260,6 +274,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     T_last = cfg.t0 + cfg.n_cycles * cfg.steps_per_cycle
     if T_last >= truth.T[0]:
         raise ValueError(f"truth has {truth.T[0]} frames; the experiment needs {T_last + 1}")
+    keep = _keep(cfg, NX, dev)
     Z = Z0.clone()
     U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
     gen = torch.Generator().manual_seed(cfg.seed)
@@ -289,7 +304,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
             vr_true = vr_op.truth_values(u_true)
             y_vr = vr_true + rng.normal(0.0, cfg.sigma_vr, vr_true.size)
         sk = dict(refl_head=refl_head, refl_cols=refl_cols, cref_true=cref_true, y_refl=y_refl,
-                  vr_op=vr_op, vr_true=vr_true)
+                  vr_op=vr_op, vr_true=vr_true, keep=keep)
         rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=dec_prior, **sk)}
         if assimilate:
             dec = ae.decode(Z) if dec_prior is None else dec_prior
@@ -341,7 +356,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                        "n_models": len(prop) if isinstance(prop, (list, tuple)) else 1,
                        "surface_vars": list(cfg.surface_vars), "forecast_model": cfg.forecast_model,
                        "ensemble_mode": cfg.ensemble_mode, "analysis_space": cfg.analysis_space,
-                       "boundary": cfg.boundary,
+                       "boundary": cfg.boundary, "exclude_km": [list(e) for e in cfg.exclude_km],
                        "n_members": int(Z0.shape[0]), "n_obs": int(obs_cols.size), "assimilate": assimilate},
             "cycles": hist}
 

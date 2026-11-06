@@ -196,3 +196,19 @@ def test_held_boundary_uses_no_future_truth(setup):
     assert r["config"]["boundary"] == "persistence"
     with pytest.raises(ValueError):
         run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, boundary="zero"))
+
+
+def test_exclude_km_scores_only_the_kept_columns(setup):
+    """T1: nMSE over the kept columns; excluding nothing equals the default; excluding everything raises."""
+    from ks_latent.cm1.twin import _keep
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    base = dict(t0=3, n_cycles=2, steps_per_cycle=2, halo=1, letkf=LETKFConfig(loc_km=10.0, rtps=0.3))
+    a = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base))
+    b = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, exclude_km=((10.0, 30.0),)))
+    c = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, exclude_km=((20.0, 20.0),)))
+    na, nb, nc = (r["cycles"][-1]["prior"]["nmse_mean_dec"] for r in (a, b, c))
+    assert na == nc and na != nb
+    k = _keep(TwinConfig(**base, exclude_km=((0.0, 10.0), (50.0, 60.0))), NX, torch.device("cpu"))
+    assert int((~k).sum()) == 80
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, exclude_km=((0.0, 1e6),)))
