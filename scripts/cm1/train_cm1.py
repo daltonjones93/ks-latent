@@ -254,6 +254,9 @@ def main():
     ap.add_argument("--eval-lead-min", type=float, default=60.0)
     ap.add_argument("--eval-boundary", choices=["truth", "persistence"], default="truth",
                     help="forecast boundary halo: the true state every step, or held at the start state (H0)")
+    ap.add_argument("--eval-subset", default="",
+                    help="'+'-separated name prefixes: evaluate only the test members starting with one of them "
+                         "(e.g. ens_B_ or mem for ens_A); the split, and so the normalizer, is unchanged")
     ap.add_argument("--results-tag", default="",
                     help="write results_<tag>.json (and no figures) instead of results.json, e.g. for H0/H2 re-scores")
     ap.add_argument("--eval-every-min", type=float, default=60.0)
@@ -313,13 +316,22 @@ def main():
             raise ValueError(f"bad explicit split: missing {missing}, overlap {sorted(set(va_n) & set(te_n))}, "
                              f"{len(va_n)} val, {len(te_n)} test (both lists are needed)")
         tr_n = [n for n in names if n not in set(va_n + te_n)]
+        if not tr_n:
+            raise ValueError(f"explicit split leaves no training members ({len(names)} members: {names})")
     else:
         tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
     if a.max_train and a.max_train < len(tr_n):
         rs = np.random.default_rng(1000 + a.seed)
         tr_n = sorted(rs.choice(tr_n, a.max_train, replace=False).tolist(), key=_natural_key)
     pick = lambda ns: [m for m in members if m.name in ns]
-    norm = Normalizer.fit(pick(tr_n))
+    if a.eval_only and (out / "normalizer.json").exists():   # exactly the scaling the model was trained with
+        norm = Normalizer.from_dict(json.loads((out / "normalizer.json").read_text()))
+        fit = Normalizer.fit(pick(tr_n))
+        if not np.allclose(fit.scale, norm.scale, rtol=1e-6) or tuple(fit.vars) != tuple(norm.vars):
+            raise ValueError(f"the split given refits a different normalizer ({fit.scale} vs saved {norm.scale}): "
+                             "pass the run's own --val-members / --test-members")
+    else:
+        norm = Normalizer.fit(pick(tr_n))
     dt = members[0].dt
     cfg = build_config(a, dt)
     Z = members[0].X.shape[3]
@@ -354,7 +366,15 @@ def main():
             for m in mir:
                 env[m.name] = mirror_env(env[mirror_member(m).name])
         log(f"[cm1] D9 mirrors: {len(mir)} mirrored training members added ({len(tr_n)} in training)")
-    data = {k: ColumnData(pick(n), norm, data_dev, env=env) for k, n in (("train", tr_n), ("val", va_n), ("test", te_n))}
+    te_eval = te_n
+    if a.eval_subset:
+        pre = tuple(p for p in a.eval_subset.split("+") if p)
+        te_eval = [n for n in te_n if n.startswith(pre)]
+        if not te_eval:
+            raise ValueError(f"no test member starts with {pre}: {te_n}")
+        log(f"[cm1] evaluating on {len(te_eval)} of {len(te_n)} test members: {te_eval}")
+    parts = (("test", te_eval),) if a.eval_only else (("train", tr_n), ("val", va_n), ("test", te_eval))
+    data = {k: ColumnData(pick(n), norm, data_dev, env=env) for k, n in parts}   # eval-only needs the test set only
     del members
 
     if a.init_from:   # architecture of the run we start from
@@ -447,7 +467,7 @@ def main():
         log(f"[test] averaging the decoded forecasts of {len(props)} propagators")
     fc = forecast_report(ae, props if len(props) > 1 else prop, data["test"], z["test"], norm, t0s, n_lead,
                          cfg.stage_b.halo_sites, n_samples=a.eval_samples, boundary=a.eval_boundary)
-    results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "dt_s": dt, "reconstruction": rec,
+    results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "eval_test": te_eval, "dt_s": dt, "reconstruction": rec,
                "forecast": fc, "stage_a_best_val": ra["best_val_recon"], "stage_b_best_val": rb["best_val_mse"]}
     res_name = f"results_{a.results_tag}.json" if a.results_tag else "results.json"
     (out / res_name).write_text(json.dumps(results, indent=1))
@@ -481,7 +501,7 @@ def main():
             recon = ae(data["test"].full(m, t0 + n_lead, device=dev), None if e0 is None else e0.to(dev))[0][0, sl].cpu().numpy() * sc
             zc = level_heights_km(a.source, Z, log)
             sections = {"x": (np.arange(truth.shape[1]) + 0.5) * 0.25, "z": zc,
-                        "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_n[m]})": truth,
+                        "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_eval[m]})": truth,
                                    "autoencoder reconstruction of the truth": recon,
                                    f"forecast from t = {t0 * dt / 3600:.1f} h, lead {n_lead * dt / 60:.0f} min": pred}}
     if not a.results_tag:
