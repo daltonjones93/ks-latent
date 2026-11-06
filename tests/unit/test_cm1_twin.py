@@ -158,3 +158,23 @@ def test_enoi_phys_uses_no_latent_and_assimilates(setup):
     assert all(a < p for a, p in zip(ana, pri))
     with pytest.raises(ValueError):
         run_twin(ae, prop, truth, z_truth, Zs, nrm, cfg)
+
+
+def test_stochastic_propagator_is_reproducible_in_the_twin(setup):
+    """The learned model error of a stochastic propagator is drawn from the twin's seeded generator:
+    the same seed gives the same run, another seed another run, and the ensemble keeps spread with no
+    added model noise."""
+    ae, _, truth, z_truth, Z0, nrm = setup
+    torch.manual_seed(1)
+    sp = StencilPropagator(StencilPropConfig(latent_channels=4, hidden=8, layers=1, radius=1, noise_channels=2)).eval()
+    with torch.no_grad():
+        sp.head.weight.normal_(0, 0.1)        # zero-init head would ignore the noise
+    cfg = lambda s: TwinConfig(t0=3, n_cycles=3, steps_per_cycle=2, halo=1, model_noise=0.0, seed=s,
+                               letkf=LETKFConfig(loc_km=10.0, rtps=0.3))
+    a, b, c = (run_twin(ae, sp, truth, z_truth, Z0, nrm, cfg(s)) for s in (0, 0, 1))
+    na, nb, nc = (r["cycles"][-1]["prior"]["nmse_mean_dec"] for r in (a, b, c))
+    assert na == nb and na != nc
+    g1, g2 = torch.Generator().manual_seed(5), torch.Generator().manual_seed(5)
+    Z1 = _forecast(sp, Z0[:1].repeat(4, 1, 1), z_truth, 3, 3, 1, 0.0, g1)
+    Z2 = _forecast(sp, Z0[:1].repeat(4, 1, 1), z_truth, 3, 3, 1, 0.0, g2)
+    assert torch.equal(Z1, Z2) and Z1.std(0).mean() > 0

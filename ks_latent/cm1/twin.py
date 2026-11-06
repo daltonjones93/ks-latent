@@ -94,18 +94,19 @@ class TwinConfig:
 def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t: int, steps: int,
               halo: int, model_noise: float = 0.0, gen: torch.Generator | None = None) -> torch.Tensor:
     """Advance the latent ensemble `Z` (N, P, c) from frame t by `steps` frames, truth at the edges,
-    optionally with additive model-error noise of std `model_noise` per step."""
+    optionally with additive model-error noise of std `model_noise` per step. A stochastic propagator
+    (noise_channels > 0) adds its own learned model error; both draw from `gen`."""
     P = Z.shape[1]
     props = prop if isinstance(prop, (list, tuple)) else [prop]
     for j in range(steps):
         if props[0] is None:          # persistence
             pass
         elif len(props) == 1:
-            Z = props[0](Z)
+            Z = props[0](Z, gen=gen)          # a stochastic propagator draws its noise from `gen` (reproducible)
         else:
             Zn = torch.empty_like(Z)
             for k, pk in enumerate(props):
-                Zn[k::len(props)] = pk(Z[k::len(props)])
+                Zn[k::len(props)] = pk(Z[k::len(props)], gen=gen)
             Z = Zn
         if model_noise > 0:
             Z = Z + model_noise * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)

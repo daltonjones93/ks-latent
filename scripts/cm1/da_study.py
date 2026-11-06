@@ -102,6 +102,9 @@ def main():
     ap.add_argument("--sigma-vr", type=float, default=2.0)
     ap.add_argument("--radar-x-km", type=float, default=330.0)
     ap.add_argument("--n-members", type=int, default=0)
+    ap.add_argument("--random-members", action="store_true",
+                    help="draw the --n-members ensemble members at random (seed 0) from the training members, "
+                         "rather than the first ones in name order (which favours one ensemble)")
     ap.add_argument("--t0-min", type=float, default=60.0)
     ap.add_argument("--hours", type=float, default=3.0)
     ap.add_argument("--cycle-min", type=float, default=5.0)
@@ -126,7 +129,11 @@ def main():
         refl_head = ReflectivityHead(ReflHeadConfig(**ck["cfg"])).to(dev)
         refl_head.load_state_dict(ck["state_dict"]); refl_head.eval()
     files = member_files(a.source)
-    ens_names = split["train"][: a.n_members or None]
+    if a.random_members and a.n_members:
+        ens_names = sorted(np.random.default_rng(0).choice(split["train"], a.n_members, replace=False).tolist(),
+                           key=_natural_key)
+    else:
+        ens_names = split["train"][: a.n_members or None]
     seen = set(split["train"]) | set(split["val"])
     truths = list(a.truths)
     if a.truth_prefix:
@@ -136,7 +143,9 @@ def main():
     bad = [t for t in truths if t in seen]
     if bad or not truths:
         raise ValueError(f"truths must be members the model never saw (got {bad or 'none'})")
-    print(f"[study] {run.name}: {len(truths)} truths, seeds {a.seeds}, modes {a.modes}, {len(ens_names)} members")
+    stoch = getattr(prop, "cfg", None) is not None and prop.cfg.noise_channels > 0
+    print(f"[study] {run.name}: {len(truths)} truths, seeds {a.seeds}, modes {a.modes}, {len(ens_names)} members, "
+          f"model noise {a.model_noise}, {'stochastic' if stoch else 'deterministic'} propagator")
     others = ColumnData([load_member(files[n]) for n in ens_names], norm, dev)
     dt = others.dt
     t0, spc = int(round(a.t0_min * 60 / dt)), int(round(a.cycle_min * 60 / dt))
