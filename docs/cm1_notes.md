@@ -373,3 +373,21 @@ Skill 5 / 30 / 60 min (true boundaries; held boundaries cost 1–3% at 60 min in
 - **One model on all the data matches each specialised model on its own storms**: pooling neither helps nor hurts, consistent with D5's saturation at ~28 storms per environment. The extra storms buy coverage, not accuracy within an environment.
 - The stochastic Stage C model has 20–30% lower CRPS, spread/error 0.91–0.99 and the smallest cold-pool bias in every ensemble.
 - **Follow-up (exploratory; Saidie 8876–8877), stochastic model with RTPS re-tuned:** RTPS 0.5 gives 0.298 ± 0.024 (paired +0.021 ± 0.007 vs deterministic 0.05; lower on 18% of storms) with spread/error **1.04** — calibrated with no noise level to tune — and fronts 0.36 km; RTPS 0 gives 0.320 (spread/error 0.86). The remaining ~7% error cost matches the stochastic propagator's weaker mean forecasts. Trade-off to report: hand-set noise is more accurate (0.273 at 0.1), learned noise is calibrated out of the box.
+
+## H2 (2 h leads) and H1a (advection extrapolation) (2026-11-05, Cashew 746832, 746836)
+Full run + Stage C, all 22 test storms × 8 start times (176 cases), boundaries held at t0. Skill = nMSE / persistence nMSE.
+
+| Lead (min) | 5 | 30 | 60 | 90 | 120 |
+|---|---|---|---|---|---|
+| deterministic Stage C, skill | 0.220 | 0.357 | 0.361 | 0.352 | 0.350 |
+| deterministic Stage C, nMSE | 0.088 | 0.211 | 0.269 | 0.316 | 0.358 |
+| persistence, nMSE | 0.397 | 0.593 | 0.745 | 0.898 | 1.023 |
+| stochastic Stage C, skill | 0.272 | 0.399 | 0.406 | 0.392 | 0.379 |
+| stochastic Stage C, CRPS skill | 0.344 | 0.355 | 0.385 | 0.390 | 0.387 |
+| stochastic Stage C, spread/error | 0.86 | 0.91 | 0.91 | 0.89 | 0.89 |
+| advection extrapolation, global shift | 0.960 | 1.212 | 1.249 | 1.227 | 1.214 |
+| advection extrapolation, per-level shifts | 0.957 | 1.198 | 1.256 | 1.234 | 1.212 |
+
+- **Skill does not run out within 2 h:** relative to persistence it settles at ~0.35 from 30 min on, and the model's error at 2 h (0.358) is below persistence's at 5 min (0.397). The stochastic model stays calibrated (0.89) out to 2 h.
+- **Advection extrapolation is worse than persistence** beyond 5 min (skill 1.2–1.25, both variants). In the moving grid the storm is nearly stationary; the fitted shifts (mean −3 to −3.6 cells per 5 min) follow the part that moves fastest (the cold pool spreading rearward) and displace everything else. So persistence is the stronger simple baseline here, and the surrogate beats both by ~3×.
+- **G0 claim 5 met:** skill 0.357 at 30 min (< 0.5) and 0.361 at 60 min (< 1), below advection at both.
