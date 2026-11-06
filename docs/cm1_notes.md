@@ -360,3 +360,15 @@ Full run + Stage C, 22 test storms × 3 seeds, θ′ + reflectivity + radial vel
 - **G0 model choice (pre-registered rule: lower paired cycled nMSE; deterministic if the CI includes 0): deterministic.** The stochastic model is worse with a CI excluding 0.
 - **Hand-set noise:** 0.1 and 0.05 are tied on error (−0.004 ± 0.004); 0.1 is much better calibrated (0.71 vs 0.43). 0.02 is worse on both.
 - **Boundaries matter more in DA than in forecasts:** true boundaries lower the cycled error by 10% (0.250), against 1–2% for 60-min forecasts. Over 3 h of cycling the held halo drifts from the truth. Held boundaries stay the headline, as pre-registered.
+
+## Full run scored per ensemble (2026-11-05, Cashew 746827, `cluster/eval_full_subsets.sh`)
+Skill 5 / 30 / 60 min (true boundaries; held boundaries cost 1–3% at 60 min in every ensemble, storm metrics unchanged):
+
+| Test storms | Specialised model | Full run + Stage C |
+|---|---|---|
+| ens_A mem029–030 | ens_A-only Stage C (d12_stagec_k45): 0.187 / 0.316 / 0.310 | 0.183 / 0.320 / 0.316 |
+| ens_B, 10 storms | ens_B-only Stage C (D16 screen): 0.237 / 0.383 / 0.370 | 0.239 / 0.376 / 0.366 |
+| ens_A2, 10 storms | — | 0.202 / 0.367 / 0.334 |
+
+- **One model on all the data matches each specialised model on its own storms**: pooling neither helps nor hurts, consistent with D5's saturation at ~28 storms per environment. The extra storms buy coverage, not accuracy within an environment.
+- The stochastic Stage C model has 20–30% lower CRPS, spread/error 0.91–0.99 and the smallest cold-pool bias in every ensemble.
