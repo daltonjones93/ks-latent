@@ -28,6 +28,10 @@ Perturbations (all optional, recorded in the manifest):
   --two-storms SEP  two identical initiating thermals SEP metres apart, symmetric about the domain centre
                     (namelist var2; needs the two_storms_var2 source patch). E.g. --nx 3200 --two-storms
                     400000: storms at 200 and 600 km, each owning a 400 km half like a single 400 km run.
+  --tiny-pert AMP   an extra tiny theta field, uniform in [-AMP, AMP] K, from a hash (not CM1's random stream;
+                    namelist var3; needs the tiny_pert_var3 patch). With the same --seed, --n and noise settings,
+                    an ensemble made with --tiny-pert is the twin of one made without (plan L2). Its seed (var4)
+                    is the member number, so every pair gets its own tiny field.
 Every perturbed sounding is checked for supersaturation; the script stops with
 an error rather than write one.
 
@@ -126,6 +130,7 @@ def main():
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
     ap.add_argument("--nx", type=int, default=0, help="domain width in cells (0: the template's)")
     ap.add_argument("--two-storms", type=float, default=0.0, help="separation (m) of two initiating thermals (var2)")
+    ap.add_argument("--tiny-pert", type=float, default=0.0, help="amplitude (K) of an extra tiny theta field (var3)")
     a = ap.parse_args()
 
     tmpl = os.path.abspath(a.template)
@@ -146,6 +151,10 @@ def main():
             sys.exit("--two-storms needs a CM1 built with the two_storms_var2 patch (%s not found or lacks it)" % patches)
         if not a.nx:
             sys.exit("--two-storms: give --nx too (two storms need a wider domain)")
+    if a.tiny_pert:   # an unpatched cm1.exe ignores var3: the "twin" would be identical to its control
+        patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")
+        if not (os.path.exists(patches) and "tiny_pert_var3" in open(patches).read()):
+            sys.exit("--tiny-pert needs a CM1 built with the tiny_pert_var3 patch (%s not found or lacks it)" % patches)
     if os.path.exists(a.out) and os.listdir(a.out):
         sys.exit("output directory exists and is not empty: %s (refusing to overwrite)" % a.out)
 
@@ -207,8 +216,12 @@ def main():
         else:
             write_sounding(os.path.join(d, "input_sounding"), sfc, rows)
         seed = (a.noise_offset + int(name[3:])) if (a.noise_seed == "member" and name != "mem000") else 0
+        text = set_namelist(nml, "var1", "%.1f" % seed)
+        if a.tiny_pert:   # %g: %.1f would write 0.001 as 0.0
+            text = set_namelist(set_namelist(text, "var3", "%g" % a.tiny_pert), "var4", "%.1f" % int(name[3:]))
         with open(os.path.join(d, "namelist.input"), "w") as f:
-            f.write(set_namelist(nml, "var1", "%.1f" % seed))
+            f.write(text)
+        info["tiny_pert_var3"] = a.tiny_pert
         info["noise_seed_var1"] = seed
         os.symlink(exe, os.path.join(d, "cm1.exe"))
         for t in TABLES:

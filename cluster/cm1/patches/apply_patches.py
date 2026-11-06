@@ -23,6 +23,19 @@ two_storms_var2 (init3d.F, iinit = 8 only): two squall lines in one domain.
   independent draws. CM1 stops if the thermals overlap (|var2| < 2*bhrad) or leave the domain.
   var2 = 0 leaves CM1 bit-for-bit unchanged (the bubble code path and the random stream are untouched).
 
+tiny_pert_var3 (init3d.F, any iinit): a tiny extra theta perturbation for twin runs (error growth).
+  With var3 non-zero, a field uniform in [-var3, var3] K is added to the initial theta perturbation tha
+  at every grid point of the domain (k = 1..nk, all heights, like irandp's +-0.25 K noise). It is added
+  once, after all iinit options and after the irandp noise, i.e. on the same array (tha) and the same
+  path as the irandp noise: the pressure balance below it and getset's boundary conditions / MPI halo
+  exchange then see it exactly as they see that noise. Its values do NOT come from random_number (that
+  would shift CM1's stream for everything drawn later) but from an integer hash (lowbias32, C. Wellons,
+  chained over seed, i, j, k) of the GLOBAL grid indices, so the field is reproducible and the same for
+  every MPI decomposition. var4 is its seed (integer; var4 = 0 -> a fixed default seed). Twin pair:
+  control var3 = 0, perturbed var3 = 1e-3, everything else (var1, var4, ...) identical: both runs get
+  exactly the same usual noise and differ only by the tiny field. var3 = 0 leaves CM1 bit-for-bit
+  unchanged (the whole code path is skipped).
+
 Usage: python3 apply_patches.py SRC_DIR
 """
 import sys
@@ -79,9 +92,60 @@ STORM_PATCH = STORM_HEAD + f"""
           endif
 """
 
+# --- tiny_pert_var3 ----------------------------------------------------------------------------------
+# Anchor: the start of the elliptic-solver section, right after the irandp block has closed (outside
+# every iinit option and outside irandp, so it runs exactly once for any iinit / irandp / testcase).
+# The patch goes in FRONT of the anchor. Exact mod-2**32 arithmetic in integer(8) (constants split into
+# 16-bit halves, so no product exceeds 2**48): no reliance on signed overflow. Loop variables are local
+# to a BLOCK so init3d's own i, j, k are untouched. Ghost points outside the physical domain are left to
+# getset's bcs; halo points inside it get the owner's value (same global indices).
+TINY_MARK = "! latent_DA patch tiny_pert_var3"
+TINY_ANCHOR = "!----------------------------------------------\n!  arrays for elliptic solver\n"
+TINY_PATCH = f"""      {TINY_MARK}: non-zero var3 adds a tiny theta field, uniform in
+      ! [-var3,var3] K at every grid point, from an integer hash of the global grid indices and the
+      ! seed var4 (0: fixed default), not from random_number, so the usual noise is unchanged
+      ! (var3 = 0: unchanged CM1)
+      IF( var3.ne.0.0 )THEN
+        BLOCK
+          integer(8) :: hsh,hkey(4)
+          integer :: ip,jp,kp,ig,jg,m
+          hkey(1) = 1013904223_8
+          if( nint(var4).ne.0 ) hkey(1) = int(nint(var4),8)
+          do kp=1,nk
+          do jp=jb,je
+          do ip=ib,ie
+            ig = ip + myi1 - 1
+            jg = jp + myj1 - 1
+            IF( ig.ge.1 .and. ig.le.nx .and. jg.ge.1 .and. jg.le.ny )THEN
+              hkey(2) = int(ig,8)
+              hkey(3) = int(jg,8)
+              hkey(4) = int(kp,8)
+              hsh = 0_8
+              do m=1,4
+                ! lowbias32: x^=x>>16; x*=0x7feb352d; x^=x>>15; x*=0x846ca68b; x^=x>>16
+                hsh = iand( ieor(hsh,hkey(m)), 4294967295_8 )
+                hsh = ieor( hsh, ishft(hsh,-16) )
+                hsh = iand( hsh*13613_8 + ishft(iand(hsh*32747_8,65535_8),16), 4294967295_8 )
+                hsh = ieor( hsh, ishft(hsh,-15) )
+                hsh = iand( hsh*42635_8 + ishft(iand(hsh*33900_8,65535_8),16), 4294967295_8 )
+                hsh = ieor( hsh, ishft(hsh,-16) )
+              enddo
+              tha(ip,jp,kp) = tha(ip,jp,kp)    &
+                  + var3*real( 2.0d0*(dble(hsh)+0.5d0)/4294967296.0d0 - 1.0d0 )
+            ENDIF
+          enddo
+          enddo
+          enddo
+        END BLOCK
+        if(dowr) write(outfile,*) '  latent_DA: tiny perturbation amplitude ', var3, ' seed ', var4
+      ENDIF
+
+""" + TINY_ANCHOR
+
 PATCHES = [  # (name, file, marker, anchor, replacement)
     ("seed_var1", "init3d.F", SEED_MARK, SEED_ANCHOR, SEED_PATCH),
     ("two_storms_var2", "init3d.F", STORM_MARK, STORM_ANCHOR, STORM_PATCH),
+    ("tiny_pert_var3", "init3d.F", TINY_MARK, TINY_ANCHOR, TINY_PATCH),
 ]
 
 
