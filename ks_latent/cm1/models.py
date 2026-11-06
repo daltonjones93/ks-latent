@@ -241,12 +241,21 @@ def forced_halo_rollout(prop: StencilPropagator, z_true: torch.Tensor, k: int, h
 
 
 def rollout_from(prop: StencilPropagator, z_traj: torch.Tensor, t0: int, n: int, halo: int,
-                 n_samples: int = 1, gen: torch.Generator | None = None) -> torch.Tensor:
-    """Free forecast from frame `t0` of one latent trajectory `z_traj` (T, P, c), true halo at each step,
-    history from the true trajectory. Returns `(n, n_samples, P, c)`."""
+                 n_samples: int = 1, gen: torch.Generator | None = None, boundary: str = "truth") -> torch.Tensor:
+    """Free forecast from frame `t0` of one latent trajectory `z_traj` (T, P, c), history from the true
+    trajectory. Returns `(n, n_samples, P, c)`. The `halo` sites at each end are the boundary condition:
+    `boundary="truth"` sets them to the true state at every step (a limited-area model with perfect
+    lateral boundaries); `"persistence"` holds them at their state at t0, so nothing after t0 is known -
+    the check that the truth at the edges is not what makes the forecasts good."""
     H = prop.cfg.n_hist
     if t0 - H + 1 < 0 or t0 + n >= z_traj.shape[0]:
         raise ValueError("forecast window outside the trajectory")
-    win = z_traj[t0 - H + 1:t0 + n + 1][None].expand(n_samples, -1, -1, -1)
+    if boundary == "truth":
+        win = z_traj[t0 - H + 1:t0 + n + 1]
+    elif boundary == "persistence":
+        win = torch.cat([z_traj[t0 - H + 1:t0 + 1], z_traj[t0:t0 + 1].expand(n, -1, -1)], dim=0)
+    else:
+        raise ValueError(f"unknown boundary {boundary!r}")
+    win = win[None].expand(n_samples, -1, -1, -1)
     return forced_halo_rollout(prop, win, n, halo, gen=gen).transpose(0, 1)
 

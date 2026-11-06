@@ -100,7 +100,8 @@ def reconstruction_report(ae: ColumnFieldAE, data: ColumnData, norm: Normalizer,
 
 @torch.no_grad()
 def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Tensor],
-                    norm: Normalizer, t0s: list[int], n_lead: int, halo: int, n_samples: int = 1) -> dict:
+                    norm: Normalizer, t0s: list[int], n_lead: int, halo: int, n_samples: int = 1,
+                    boundary: str = "truth") -> dict:
     """`prop` may be one propagator or a list sharing the autoencoder (D14a: their decoded forecasts are
     averaged); a stochastic propagator is run `n_samples` times and its decoded samples averaged."""
     props = prop if isinstance(prop, (list, tuple)) else [prop]
@@ -137,7 +138,8 @@ def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Ten
             ens_all = []
             for p_ in props:
                 ns = n_samples if p_.cfg.noise_channels else 1
-                lat = rollout_from(p_, z[m], t0, n_lead, halo, ns, gen=torch.Generator().manual_seed(m))
+                lat = rollout_from(p_, z[m], t0, n_lead, halo, ns, gen=torch.Generator().manual_seed(m),
+                                   boundary=boundary)
                 dec = torch.stack([ae.decode(lat[j]) for j in range(n_lead)])                # (L, ns, C, NX)
                 pred = pred + dec.mean(1) / len(props)
                 ens_all.append(dec)
@@ -166,7 +168,7 @@ def forecast_report(ae: ColumnFieldAE, prop, data: ColumnData, z: list[torch.Ten
             cases.append({"fc": _np_fields(pred), "pers": _np_fields(pers), "ob": _np_fields(tr)})
             if base is not None:
                 phys_cases.append({"fc": _phys(pred), "pers": _phys(pers), "ob": _phys(tr)})
-    out = {"t0s": t0s, "n_lead": n_lead, "lead_s": [(j + 1) * data.dt for j in range(n_lead)], "halo_sites": halo}
+    out = {"t0s": t0s, "n_lead": n_lead, "boundary": boundary, "lead_s": [(j + 1) * data.dt for j in range(n_lead)], "halo_sites": halo}
     out.update(_front_and_fss(cases, n_lead))
     out.update(_physics_stats(phys_cases))
     for k, v in rows.items():

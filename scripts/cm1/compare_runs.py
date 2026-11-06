@@ -5,6 +5,7 @@ runs with different normalizers) at 5 / 30 / 60 min, surface theta' RMSE at 60 m
 bias at 60 min (forecast / truth - 1), median |front displacement| at 30 / 60 min (km), low-level-rain
 FSS (q > 1 g/kg, 1 km window) at 60 min, and reconstruction nMSE (storm columns).
   python scripts/cm1/compare_runs.py artifacts/cm1/runs/saidie_d34_c32_kuniform artifacts/cm1/runs/saidie_d12_stagec ...
+A results_<tag>.json file (a train_cm1.py --results-tag re-score) can be given instead of a run directory.
 """
 import json
 import sys
@@ -12,7 +13,11 @@ from pathlib import Path
 
 
 def row(d: Path) -> dict:
-    r = json.loads((d / "results.json").read_text())
+    """`d`: a run directory (its results.json) or a results_<tag>.json file inside one."""
+    f = d if d.suffix == ".json" else d / "results.json"
+    r = json.loads(f.read_text())
+    if d.suffix == ".json":
+        d = Path(f"{d.parent.name}:{d.stem.removeprefix('results_')}")
     fc, rec = r["forecast"], r["reconstruction"]
     lead = [round(s / 60) for s in fc["lead_s"]]
     j = {m: lead.index(m) for m in (5, 30, 60) if m in lead}

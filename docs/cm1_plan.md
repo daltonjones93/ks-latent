@@ -288,6 +288,23 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - deps: E1b, E3. Done when: same table as E3, plus the nonlinearity index.
 - [ ] **E5 (D+C)** Decide the Paper III framing from E3–E4: what is claimed, against which baselines.
 
+## H. Forecasting as a result of its own (added 2026-11-05)
+Paper III's second headline, alongside the DA: a local latent surrogate emulates a cloud-resolving model's full multivariate state (7 variables × 62 levels, 434 channels) for an hour, from a few dozen simulations, and stays physically consistent. Locality is what makes this possible: every 2 km site at every minute is a training sample, ~2 million local samples from 28 storms. Frame it as the condition that makes equation-free DA possible, so the paper does not read as two halves. Each task answers a referee's question.
+
+- [ ] **H0 (C)** **Boundary check: do this first; every forecast number depends on it.**
+  - The evaluation sets the 3-site (6 km) halo at each domain edge to the true state at every step, and the propagator's reach is 3 sites (6 km) per 1-min step, so in principle edge information can cross the domain within the hour. A real forecast does not know the future boundary state.
+  - Re-score with the halo held at its state at the start time (`--eval-boundary persistence`, `rollout_from(boundary=...)`, tested; writes `results_h0_persistence.json`). The far field is quiet, so expect a small change; a large one means the truth boundaries are doing the work.
+  - The DA twin also takes its halo from the truth (`twin._forecast`): check that too, with a fixed boundary.
+  - Done when: skill / CRPS / physics with true against held boundaries, for `d34_c32_kuniform` and `d12_stagec_k45` (ens_A) and the full-run models.
+- [ ] **H1 (C)** **Baselines stronger than persistence.**
+  - (a) Advection extrapolation: each field translated by its own best-fit shift at t0 (the nowcasting standard, Lagrangian persistence).
+  - (b) A non-local model of similar size on the whole domain (a global encoder, or a 1D U-Net over the full 400 km), trained on the same storms. It shows what locality buys.
+  - Done when: both in the skill / CRPS table at 5 / 30 / 60 min.
+- [ ] **H2 (C)** **Where skill runs out.** Leads to 2 h (`--eval-lead-min 120 --results-tag h2_lead120`): when does skill vs persistence reach 1, and when does the stochastic model's spread saturate?
+- [ ] **H3 (C)** **Generalization to unseen environments** (= D8 / G5, with D10's split): train with a moisture × shear region of ens_B held out, test inside it. The test that separates "learned convection" from "fits these storms".
+- [ ] **H4 (C)** **All seven variables:** skill, CRPS and spectra (variance retained by scale) per variable at 5 / 30 / 60 min, condensate included; 3 seeds for error bars on the main models.
+- [ ] **H5 (D)** **Literature check** on ML emulation of storm-scale and cloud-resolving models before claiming anything is new (and the locality / sample-efficiency argument in particular).
+
 ## F. Writing
 - [x] **F1 (C)** `docs/cm1_summary/cm1_summary.tex`: a short illustrated summary of what we have found so far.
 - [ ] **F2 (C)** Update the summary after each of B1, D2, D5, D8 and E3.

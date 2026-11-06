@@ -252,6 +252,10 @@ def main():
     ap.add_argument("--k-sampling", choices=["max", "uniform"], default="max",
                     help="rollout length per batch: always the curriculum maximum, or uniform in [2, max]")
     ap.add_argument("--eval-lead-min", type=float, default=60.0)
+    ap.add_argument("--eval-boundary", choices=["truth", "persistence"], default="truth",
+                    help="forecast boundary halo: the true state every step, or held at the start state (H0)")
+    ap.add_argument("--results-tag", default="",
+                    help="write results_<tag>.json (and no figures) instead of results.json, e.g. for H0/H2 re-scores")
     ap.add_argument("--eval-every-min", type=float, default=60.0)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--reuse-ae", default=None, help="run dir whose ae.pt to reuse (skips Stage A; Stage B still runs)")
@@ -442,12 +446,14 @@ def main():
     if len(props) > 1:
         log(f"[test] averaging the decoded forecasts of {len(props)} propagators")
     fc = forecast_report(ae, props if len(props) > 1 else prop, data["test"], z["test"], norm, t0s, n_lead,
-                         cfg.stage_b.halo_sites, n_samples=a.eval_samples)
+                         cfg.stage_b.halo_sites, n_samples=a.eval_samples, boundary=a.eval_boundary)
     results = {"split": {"train": tr_n, "val": va_n, "test": te_n}, "dt_s": dt, "reconstruction": rec,
                "forecast": fc, "stage_a_best_val": ra["best_val_recon"], "stage_b_best_val": rb["best_val_mse"]}
-    (out / "results.json").write_text(json.dumps(results, indent=1))
-    write_provenance(out / "results.json", config=cfg, seed=a.seed, device=str(dev),
-                     wall_time_s=time.time() - t_start)
+    res_name = f"results_{a.results_tag}.json" if a.results_tag else "results.json"
+    (out / res_name).write_text(json.dumps(results, indent=1))
+    write_provenance(out / res_name, config=cfg, seed=a.seed, device=str(dev),
+                     wall_time_s=time.time() - t_start, extra={"eval_boundary": a.eval_boundary,
+                                                               "eval_lead_min": a.eval_lead_min})
     log("[test] reconstruction RMSE (physical units), storm columns: "
         + ", ".join(f"{k} {v:.3g}" for k, v in rec.get("rmse_phys_storm", rec["rmse_phys_all"]).items()))
     log("[test] forecasts (mean over start times " + ", ".join(f"{t * dt / 3600:.1f} h" for t in t0s) + "):")
@@ -478,7 +484,8 @@ def main():
                         "fields": {f"truth, t = {(t0 + n_lead) * dt / 3600:.1f} h ({te_n[m]})": truth,
                                    "autoencoder reconstruction of the truth": recon,
                                    f"forecast from t = {t0 * dt / 3600:.1f} h, lead {n_lead * dt / 60:.0f} min": pred}}
-    plot(results, out, sections)
+    if not a.results_tag:
+        plot(results, out, sections)
     log(f"[cm1] done in {(time.time() - t_start) / 60:.1f} min; results in {out}")
 
 

@@ -457,3 +457,22 @@ def test_stage_c_crps_trains_a_stochastic_propagator_and_reports_probabilistic_s
     det = forecast_report(ae, StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1)),
                           va, z, nrm, t0s=[0], n_lead=3, halo=1)
     assert "spread_err" not in det and len(det["crps"]) == 3        # deterministic: CRPS = MAE, no spread
+
+
+def test_rollout_boundary_persistence_uses_nothing_after_t0():
+    """H0: with boundary='persistence' the forecast depends on the trajectory only up to t0."""
+    from ks_latent.cm1.models import rollout_from
+    torch.manual_seed(0)
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=2, radius=1))
+    with torch.no_grad():
+        prop.head.weight.normal_(0, 0.2)
+    z = torch.randn(12, 16, 3)
+    z2 = z.clone(); z2[5:] += 1.0                                     # change the future only
+    a = rollout_from(prop, z, 4, 6, 2, boundary="persistence")
+    b = rollout_from(prop, z2, 4, 6, 2, boundary="persistence")
+    torch.testing.assert_close(a, b)
+    c = rollout_from(prop, z2, 4, 6, 2)                               # the true boundary does see it
+    assert not torch.allclose(a, c)
+    torch.testing.assert_close(a[:, 0, :2], z[4, :2].expand(6, -1, -1))   # halo held at the t0 state
+    with pytest.raises(ValueError):
+        rollout_from(prop, z, 4, 6, 2, boundary="zero")
