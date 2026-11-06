@@ -331,3 +331,14 @@ Fixed before the headline runs. Every outcome is reported, including failures; a
 6. **Transfer (T).** With 5 km localization, two storms side by side give an error ratio (2 storms / mean of 1-storm) ≤ 1.1 at every ensemble size; at N = 8 the ratio without localization is larger than with it.
 
 **Exploratory, no threshold:** latent against physical-space analysis; learned against hand-set model error (G1b, beyond the model choice above); four storms (T3).
+
+## Full run on all three ensembles (2026-11-05, Saidie 8797/8798/8819/8820; 93 training storms; 22 test storms from all three ensembles, true boundaries)
+| Run | Skill 5 / 30 / 60 | CRPS 5 / 30 / 60 | Spread/error 60 | θ′ 60 | Cold-pool bias | Front 30 / 60 | Rain FSS 60 |
+|---|---|---|---|---|---|---|---|
+| full_v1 | 0.237 / 0.382 / 0.364 | 0.495 / 0.511 / 0.527 | — | 0.80 K | −20.5% | 0.76 / 1.65 km | 0.638 |
+| full_v1 + Stage C | **0.213 / 0.365 / 0.344** | 0.475 / 0.498 / 0.517 | — | **0.73** | −17.4% | **0.62 / 1.39** | **0.590** |
+| full_v1 stochastic | 0.287 / 0.415 / 0.384 | 0.384 / 0.368 / 0.376 | 0.91 | 0.78 | −15.2% | 0.91 / 1.61 | 0.544 |
+| full_v1 stochastic + Stage C | 0.267 / 0.404 / 0.385 | **0.342 / 0.344 / 0.360** | 0.93 | 0.80 | **−9.9%** | 0.87 / 2.02 | 0.571 |
+
+- The ens_A pattern holds on all the data: Stage C helps both models; the stochastic one has ~30% lower CRPS, calibrated spread and the smallest cold-pool bias, the deterministic one the lowest mean error and best fronts.
+- The test set mixes ensembles, so these are not comparable with the ens_A-only or ens_B-only tables; per-ensemble scores (true and held boundaries) are running on Cashew (job 746827, `cluster/eval_full_subsets.sh`).

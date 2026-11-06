@@ -172,7 +172,7 @@ Each task is a job script with 1 GPU per run and at most ~4 GPUs at once, since 
   - With `ens_B`'s spread of shears, they may help generalization. Train D8's held-out-environment split with and without mirrors.
   - deps: D8. Done when: held-out-environment errors with and without mirrors, with a verdict.
 
-- [ ] **D10 (C)** **Environment-based split** for ens_B: `--holdout-env` reads each member's moisture offset and shear scale from the ensemble's `manifest.csv` and keeps a region entirely out of training and validation. Members are otherwise split by name, which would leak held-out environments into training. Needed before D8 and G5.
+- [x] **D10 (C)** **Done 2026-11-05 (`--holdout-env`, `--manifest`; used by H3).** **Environment-based split** for ens_B: `--holdout-env` reads each member's moisture offset and shear scale from the ensemble's `manifest.csv` and keeps a region entirely out of training and validation. Members are otherwise split by name, which would leak held-out environments into training. Needed before D8 and G5.
 - [x] **D11 (C)** **Tested on ens_B (D16 S1): neutral on skill, worse rain FSS; not in the recipe.** **Environment conditioning. Code done 2026-11-05.**
   - `ks_latent/cm1/env.py`: features from each member's input sounding minus the reference, (θ, qv, u) on 62 levels, scaled 1 K / 1 g/kg / 5 m/s.
   - The encoder projects them (186 → 16) and broadcasts them as input channels, threaded through Stages A/C, the reports and the twin. `--env-file`, `scripts/cm1/build_env.py`.
@@ -296,12 +296,12 @@ Paper III's second headline, alongside the DA: a local latent surrogate emulates
   - Re-score with the halo held at its state at the start time (`--eval-boundary persistence`, `rollout_from(boundary=...)`, tested; writes `results_h0_persistence.json`). The far field is quiet, so expect a small change; a large one means the truth boundaries are doing the work.
   - The DA twin also takes its halo from the truth (`twin._forecast`): check that too, with a fixed boundary.
   - Done when: skill / CRPS / physics with true against held boundaries, for `d34_c32_kuniform` and `d12_stagec_k45` (ens_A) and the full-run models.
-- [ ] **H1 (C)** **Baselines stronger than persistence.**
+- [ ] **H1 (C)** **(a) code done (`ks_latent/cm1/baselines.py`, `scripts/cm1/advection_baseline.py`, tested; global and per-level shifts), queued on Cashew (746836) on H2's cases. (b) not started.** **Baselines stronger than persistence.**
   - (a) Advection extrapolation: each field translated by its own best-fit shift at t0 (the nowcasting standard, Lagrangian persistence).
   - (b) A non-local model of similar size on the whole domain (a global encoder, or a 1D U-Net over the full 400 km), trained on the same storms. It shows what locality buys.
   - Done when: both in the skill / CRPS table at 5 / 30 / 60 min.
-- [ ] **H2 (C)** **Where skill runs out.** Leads to 2 h (`--eval-lead-min 120 --results-tag h2_lead120`): when does skill vs persistence reach 1, and when does the stochastic model's spread saturate?
-- [ ] **H3 (C)** **Generalization to unseen environments** (= D8 / G5, with D10's split): train with a moisture × shear region of ens_B held out, test inside it. The test that separates "learned convection" from "fits these storms".
+- [ ] **H2 (C)** **Queued on Cashew CPU (746832, `cluster/eval_h2.sh`): full-run Stage C models, 2 h leads, held boundaries.** **Where skill runs out.** Leads to 2 h (`--eval-lead-min 120 --results-tag h2_lead120`): when does skill vs persistence reach 1, and when does the stochastic model's spread saturate?
+- [ ] **H3 (C)** **D10 split done (`--holdout-env`, `--manifest`, tested). Queued on Saidie (`cluster/saidie/h3_run.sh`, jobs 8868–8873): held-out corner qv < −1.2 g/kg and shear ≥ 1.1 (10 ens_B storms), training + Stage C + forecast scores + DA inside vs outside the region.** **Generalization to unseen environments** (= D8 / G5, with D10's split): train with a moisture × shear region of ens_B held out, test inside it. The test that separates "learned convection" from "fits these storms".
 - [ ] **H4 (C)** **All seven variables:** skill, CRPS and spectra (variance retained by scale) per variable at 5 / 30 / 60 min, condensate included; 3 seeds for error bars on the main models.
 - [ ] **H5 (D)** **Literature check** on ML emulation of storm-scale and cloud-resolving models before claiming anything is new (and the locality / sample-efficiency argument in particular).
 
