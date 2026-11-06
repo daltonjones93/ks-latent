@@ -449,3 +449,31 @@ full_v1_stagec (deterministic), 6 unseen storms (3 ens_A2, 3 ens_B), full 6 208-
 - **The surrogate is far less chaotic than CM1.** Along its own trajectory it is nearly neutral (0–2 positive exponents, doubling of hours); evaluated on the true states its tangent map is more unstable (4–5 positive, D_KY ~10, doubling ~1–2 h), which grows as the storm matures. CM1's own small perturbations doubled in ~2–3 min during initiation (L2 smoke); the full L2 comparison (749729) will give CM1's rates in the same windows.
 - Consistent with the MSE objective (SM): a model trained to forecast the conditional mean is dissipative and damps the small-scale instabilities, and its own trajectory drifts towards smooth states where the tangent map is even more stable.
 - **Spreading (L5):** a one-site perturbation spreads at 3.2–3.3 km/min (threshold 1e-3; 2.8–3.9 across thresholds), the same in the storm and in the quiescent far field. That is faster than the data-only reach (1.6–2.4 km/min) and about half the network's maximum (6 km/min), and the lack of a storm/far-field difference says it reflects the network's linear coupling (gravity-wave-like), not convective dynamics.
+
+## L2 / SM5: CM1 error growth from twin runs, against the surrogate (2026-11-06, Cashew 749729; figure `artifacts/cm1/figs/fig_l2_growth.png`)
+8 control/perturbed pairs (1e-3 K tiny field at t = 0, ens_A environment, 4 h) + 2 pairs at 1e-4 K. Normalized RMS difference (model units, all channels, whole domain).
+
+| t (min) | 0 | 10 | 20 | 30 | 45 | 60 | 90 | 120 | 180 |
+|---|---|---|---|---|---|---|---|---|---|
+| twin difference (RMS) | 1.5e-4 | 3.0e-4 | 3.9e-3 | 3.0e-2 | 0.11 | 0.24 | 0.56 | 0.65 | 0.83 |
+| independent storms (saturation) | 0.05 | 0.07 | 0.38 | 0.49 | 0.47 | 0.55 | 0.76 | 0.78 | 0.96 |
+
+- **CM1 growth rates** (while < 10% of saturation): 0.13 /min at 5–15 min (doubling 5.4 min), **0.21 /min at 15–30 min (3.4 min)**, 0.08 /min at 30–60 min (8.4 min); later windows are saturated. The 1e-4 K pairs agree after the initial transient (0.18 and 0.08 /min) and lag by ~10 min, as a 10× smaller perturbation should. Tiny errors grow by ~3 orders of magnitude in the first hour and saturate by ~2–3 h.
+- **The deterministic surrogate does not amplify a tiny latent perturbation at all** (5e-4 → 1e-3 → 5e-4 over 3 h): 20–60× slower than CM1 even counting L1's along-the-truth exponents. **The stochastic surrogate's sample pairs** start large (0.19 after one step) and follow the independent-storm saturation curve from ~30 min: it represents the uncertainty of forecasting from an encoded state, not the growth of tiny errors.
+- **L2c, a rough intrinsic floor:** half the twin nMSE approximates the error of the best possible deterministic forecast. At 120 / 180 min of storm life that is ~0.22 / ~0.35, against our forecasts' 0.27 (60-min lead from 1 h) and 0.36 (120-min lead). So our forecasts are roughly at the floor set by CM1's own chaos, *if* growth from 1 h on resembles growth from t = 0. It may not: the twins start at initiation, the most sensitive phase, and our forecasts start from the much larger autoencoder error at 1 h. **L2b** (perturb at a 60-min restart) is needed before claiming it.
+
+## SM0: where the smoothing comes from (2026-11-06, Cashew 749738; 10 test storms × 2 starts; figure `artifacts/cm1/figs/fig_sm0_spectra.png`)
+Variance retained by wavelength band (< 4 / 4–16 / > 16 km) as a fraction of the truth's, ranges over w, θ′, u′, condensate at low and mid levels:
+
+| | 5 min | 30 min | 60 min |
+|---|---|---|---|
+| reconstruction | 0.27–0.84 / 0.67–0.99 / ~1 | same | same |
+| deterministic forecast | 0.10–0.21 / 0.46–0.69 / 0.86–1.00 | 0.00–0.11 / 0.07–0.22 / 0.61–0.95 | 0.00–0.09 / 0.02–0.15 / 0.53–0.90 |
+| stochastic sample | 0.18–0.63 / 0.82–1.34 / ~1 | 0.17–0.48 / 0.53–1.54 / 0.83–1.22 | 0.23–0.45 / 0.58–1.14 / 0.54–1.13 |
+| stochastic mean (8) | as smooth as the deterministic forecast | | |
+
+Extremes at 60 min (truth / reconstruction / deterministic / stochastic sample): w 99.9% 10.95 / 10.94 / 4.90 / 10.01 m/s; condensate 99.9% 6.01 / 5.77 / 3.80 / 5.62 g/kg; minimum surface θ′ −8.25 / −8.05 / −7.36 / −8.30 K.
+
+- **The smoothing is the propagator's objective, not the representation.** The reconstruction keeps the 4–16 km band (0.7–1.0) and the extremes (w 10.94 against 10.95); the deterministic forecast loses most of the < 16 km variance within 30 min and halves the w extremes. The < 4 km band is partly lost already in the reconstruction (θ′ 0.27–0.31, condensate 0.36–0.53), so the representation sets a floor there.
+- **The stochastic samples keep realistic structure and intensity:** the 4–16 km band near or above the truth's, w extremes 10.0 m/s, the cold pool exactly (−8.30 K). Their average is as smooth as the deterministic forecast, as it should be.
+- **Consequence:** SM1 (more channels, 1 km sites) can only help the < 4 km band; SM2–SM4 (sample-based objectives, generative propagator) are the lever for sharp, accurate forecasts.
