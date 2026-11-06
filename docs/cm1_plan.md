@@ -331,7 +331,7 @@ Working title: **equation-free ensemble data assimilation of a squall line with 
 Each task below answers a specific objection a referee would raise. They come in priority order: **tier 1** is essential, **tier 2** strengthens the paper a lot, **tier 3** is a stretch goal or polish.
 
 ### G0. Pre-register the claims (before the final runs; ground rule from CLAUDE.md)
-- [~] **G0 (D+C)** **Updated draft in `cm1_notes.md` ("G0 pre-registration — DRAFT", 2026-11-05), awaiting Dalton's sign-off; it supersedes the proposal below.** Write the paper's decision rules into `docs/cm1_notes.md` *before* running G1–G5. Original proposal:
+- [x] **G0 (D+C)** **Approved by Dalton 2026-11-05: `cm1_notes.md`, "G0 pre-registration — APPROVED"; it supersedes the proposal below.** Write the paper's decision rules into `docs/cm1_notes.md` *before* running G1–G5. Original proposal:
   - **DA works:** θ′ + reflectivity beats no DA by ≥ 10% in all-variable forecast nMSE, averaged over truths, with a 95% confidence interval excluding 0. Front median |displacement| < 1 km.
   - **Calibrated:** spread/error at the observations is in 0.7–1.3, and rank histograms are not U-shaped (a χ² test, stated).
   - **Better than a static method:** latent LETKF beats EnOI (G2) by ≥ 10%.

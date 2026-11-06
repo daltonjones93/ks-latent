@@ -311,7 +311,7 @@ Edge halo (3 sites = 6 km each side) set to the true state every step ("truth", 
 - The ranking is unchanged (Stage C still best), and the CPU re-score with true boundaries reproduces the GPU numbers exactly.
 - For the paper, report the held-boundary numbers as the main ones (no future information at all). Still to check: the DA twin's halo, which also comes from the truth.
 
-## G0 pre-registration — DRAFT, awaiting Dalton's sign-off (2026-11-05)
+## G0 pre-registration — APPROVED by Dalton, 2026-11-05 (before any headline run)
 Fixed before the headline runs. Every outcome is reported, including failures; a missed threshold is written up as such, not tuned away.
 
 **Headline setup.**
