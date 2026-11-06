@@ -101,6 +101,8 @@ def main():
     ap.add_argument("--vr-tilts", type=float, nargs="+", default=[0.5, 2.0, 5.0])
     ap.add_argument("--sigma-vr", type=float, default=2.0)
     ap.add_argument("--radar-x-km", type=float, default=330.0)
+    ap.add_argument("--boundary", choices=["truth", "persistence"], default="truth",
+                    help="twin halo: the truth every step, or held at the truth at t0 (H0: no future information)")
     ap.add_argument("--n-members", type=int, default=0)
     ap.add_argument("--random-members", action="store_true",
                     help="draw the --n-members ensemble members at random (seed 0) from the training members, "
@@ -164,7 +166,7 @@ def main():
                 refl_every_cells=int(round(a.refl_km / 0.25)) if "refl" in a.obs_set else 0, sigma_refl=a.sigma_refl,
                 vr_tilts=tuple(a.vr_tilts) if "vr" in a.obs_set else (), sigma_vr=a.sigma_vr, radar_x_km=a.radar_x_km,
                 forecast_from=tuple(a.forecast_from), forecast_frames=int(round(a.forecast_minutes * 60 / dt)),
-                letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps))
+                letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary=a.boundary)
     rows = {}      # truth -> {"free": compact, "floor": x, mode: [compact per seed], "fc_" + mode: [curve per seed]}
     for tn in truths:
         truth = ColumnData([load_member(files[tn])], norm, dev)

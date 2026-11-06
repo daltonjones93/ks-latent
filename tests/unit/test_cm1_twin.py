@@ -178,3 +178,21 @@ def test_stochastic_propagator_is_reproducible_in_the_twin(setup):
     Z1 = _forecast(sp, Z0[:1].repeat(4, 1, 1), z_truth, 3, 3, 1, 0.0, g1)
     Z2 = _forecast(sp, Z0[:1].repeat(4, 1, 1), z_truth, 3, 3, 1, 0.0, g2)
     assert torch.equal(Z1, Z2) and Z1.std(0).mean() > 0
+
+
+def test_held_boundary_uses_no_future_truth(setup):
+    """H0 for the twin: with boundary='persistence' the halo is the truth at t0 throughout, so changing
+    the truth's later latent states changes nothing."""
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    z2 = z_truth.clone(); z2[4:] += 1.0
+    a = _forecast(prop, Z0, z_truth, 3, 4, halo=2, hold=3)
+    b = _forecast(prop, Z0, z2, 3, 4, halo=2, hold=3)
+    torch.testing.assert_close(a, b)
+    torch.testing.assert_close(a[:, :2], z_truth[3, :2].expand(a.shape[0], -1, -1))
+    assert not torch.allclose(_forecast(prop, Z0, z2, 3, 4, halo=2), a)
+    cfg = TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, halo=1, boundary="persistence",
+                     letkf=LETKFConfig(loc_km=10.0, rtps=0.3))
+    r = run_twin(ae, prop, truth, z_truth, Z0, nrm, cfg)
+    assert r["config"]["boundary"] == "persistence"
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, boundary="zero"))

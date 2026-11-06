@@ -88,14 +88,18 @@ class TwinConfig:
     analysis_space: str = "latent"         # or "physical"
     forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
     forecast_frames: int = 60
+    boundary: str = "truth"       # halo: the true state every step, or "persistence": held at the truth at t0 (H0)
     seed: int = 0
 
 
 def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t: int, steps: int,
-              halo: int, model_noise: float = 0.0, gen: torch.Generator | None = None) -> torch.Tensor:
+              halo: int, model_noise: float = 0.0, gen: torch.Generator | None = None,
+              hold: int | None = None) -> torch.Tensor:
     """Advance the latent ensemble `Z` (N, P, c) from frame t by `steps` frames, truth at the edges,
     optionally with additive model-error noise of std `model_noise` per step. A stochastic propagator
-    (noise_channels > 0) adds its own learned model error; both draw from `gen`."""
+    (noise_channels > 0) adds its own learned model error; both draw from `gen`. The `halo` sites at each
+    end are set to the truth at every step, or, with `hold` = a frame index, to the truth at that frame
+    throughout (no future boundary information)."""
     P = Z.shape[1]
     props = prop if isinstance(prop, (list, tuple)) else [prop]
     for j in range(steps):
@@ -111,9 +115,17 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
         if model_noise > 0:
             Z = Z + model_noise * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
         if halo > 0:
-            zt = z_truth[t + j + 1].expand(Z.shape[0], -1, -1)
+            zt = z_truth[t + j + 1 if hold is None else hold].expand(Z.shape[0], -1, -1)
             Z = torch.cat([zt[:, :halo], Z[:, halo:P - halo], zt[:, P - halo:]], dim=1)
     return Z
+
+
+def _hold(cfg) -> int | None:
+    if cfg.boundary == "truth":
+        return None
+    if cfg.boundary == "persistence":
+        return cfg.t0
+    raise ValueError(f"unknown boundary {cfg.boundary!r}")
 
 
 @torch.no_grad()
@@ -174,7 +186,7 @@ def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) 
     for j in range(cfg.forecast_frames):
         if t + j + 1 >= truth.T[0]:
             break
-        Zf = _forecast(prop, Zf, z_truth, t + j, 1, cfg.halo, cfg.model_noise, gen)
+        Zf = _forecast(prop, Zf, z_truth, t + j, 1, cfg.halo, cfg.model_noise, gen, hold=_hold(cfg))
         u_true = truth.full(0, t + j + 1, device=dev)[0]
         dec = ae.decode(Zf)
         md = dec.mean(0)
@@ -257,14 +269,15 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         t1 = t + cfg.steps_per_cycle
         dec_prior = None
         if cfg.ensemble_mode == "enoi":
-            mean = _forecast(prop, Z.mean(0, keepdim=True), z_truth, t, cfg.steps_per_cycle, cfg.halo, 0.0, gen)
+            mean = _forecast(prop, Z.mean(0, keepdim=True), z_truth, t, cfg.steps_per_cycle, cfg.halo, 0.0, gen,
+                             hold=_hold(cfg))
             S = static_ens(t1).to(dev, Z.dtype)
             Z = mean + (S - S.mean(0, keepdim=True))
         elif cfg.ensemble_mode == "enoi_phys":
             A = static_phys(t1).to(dev, U_mean.dtype)
             dec_prior = U_mean[None] + (A - A.mean(0, keepdim=True))
         else:
-            Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen)
+            Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen, hold=_hold(cfg))
         u_true = truth.full(0, t1, device=dev)[0]
         y = (u_true[ith, obs_cols] * s_th).double().cpu().numpy() + rng.normal(0.0, cfg.sigma_obs, obs_cols.size)
         cref_true = truth.cref[0][t1].clamp(min=0).double().numpy()
@@ -328,6 +341,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                        "n_models": len(prop) if isinstance(prop, (list, tuple)) else 1,
                        "surface_vars": list(cfg.surface_vars), "forecast_model": cfg.forecast_model,
                        "ensemble_mode": cfg.ensemble_mode, "analysis_space": cfg.analysis_space,
+                       "boundary": cfg.boundary,
                        "n_members": int(Z0.shape[0]), "n_obs": int(obs_cols.size), "assimilate": assimilate},
             "cycles": hist}
 
