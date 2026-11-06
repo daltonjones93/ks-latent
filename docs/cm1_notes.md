@@ -391,3 +391,32 @@ Full run + Stage C, all 22 test storms × 8 start times (176 cases), boundaries 
 - **Skill does not run out within 2 h:** relative to persistence it settles at ~0.35 from 30 min on, and the model's error at 2 h (0.358) is below persistence's at 5 min (0.397). The stochastic model stays calibrated (0.89) out to 2 h.
 - **Advection extrapolation is worse than persistence** beyond 5 min (skill 1.2–1.25, both variants). In the moving grid the storm is nearly stationary; the fitted shifts (mean −3 to −3.6 cells per 5 min) follow the part that moves fastest (the cold pool spreading rearward) and displace everything else. So persistence is the stronger simple baseline here, and the surrogate beats both by ~3×.
 - **G0 claim 5 met:** skill 0.357 at 30 min (< 0.5) and 0.361 at 60 min (< 1), below advection at both.
+
+## H3 / G5: unseen environments (2026-11-05, Saidie 8868–8873)
+Full-run recipe with the dry, strongly sheared corner of ens_B (qv offset < −1.2 g/kg, shear ≥ 1.1; 10 storms) out of training and validation. Held boundaries.
+
+| | Skill 5 / 30 / 60 | CRPS 5 / 30 / 60 | θ′ 60 | Cold-pool bias | Front 30 / 60 | Rain FSS 60 |
+|---|---|---|---|---|---|---|
+| in-distribution ens_B test storms (8) | 0.246 / 0.392 / 0.388 | 0.529 / 0.550 / 0.581 | 0.82 K | −18.1% | 0.73 / 1.80 km | 0.454 |
+| held-out region (10) | 0.261 / 0.405 / 0.420 | 0.547 / 0.573 / 0.605 | 0.86 | −19.8% | 0.96 / 3.50 | 0.394 |
+
+DA (G0 setup, noise 0.05): held-out region 0.224 ± 0.018 vs no DA 0.551 ± 0.084 (−59%, paired −0.326 ± 0.079, 10/10 storms, front 0.42 km); in-distribution 0.265 ± 0.042 vs 0.508 ± 0.141 (−48%, 8/8 storms, front 0.47 km).
+
+- **G0 claim 4 met.** Forecast skill at 30 min in the unseen region is within 3% of in-distribution (threshold 25%); at 60 min 8% worse, and the 60-min front error roughly doubles (3.5 vs 1.8 km), the clearest sign of extrapolation. The DA's relative gain is larger in the unseen region (59%) than in distribution (48%): where the model alone is weaker, the observations correct it more, and the localized analysis does not depend on having seen the environment.
+
+## T1: transfer pilot, two storms side by side (2026-11-05, Saidie 8867)
+Full run + Stage C (trained on single 400 km storms), 3 pairs of same-environment test storms joined into 800 km, ±20 km around the junction left out of every score (and the same columns in the single runs). Held boundaries.
+
+Forecast, nMSE ratio joined / mean of singles: 1.000 at 5 min, 1.014–1.022 at 30, 1.032–1.050 at 60. The joined state is discontinuous at the junction (two unrelated far fields meet), and what the model does there spreads past the ±20 km band within the hour; the pilot cannot separate that artifact from genuine non-locality. Real two-storm runs (T2) would.
+
+DA, prior nMSE ratio 2 storms / 1 storm (3 pairs × 2 seeds):
+
+| N | loc 5 km | no localization (10 000 km) |
+|---|---|---|
+| 8 | 1.034 ± 0.060 (1-storm 0.384) | 1.122 ± 0.097 (1-storm 0.429) |
+| 16 | 1.053 ± 0.031 (0.362) | 1.091 ± 0.074 (0.424) |
+| 32 | 1.065 ± 0.014 (0.348) | 1.049 ± 0.109 (0.415) |
+
+- **G0 claim 6 met as worded, but weakly.** Localized ratio ≤ 1.1 at every N; at N = 8 the unlocalized ratio is larger (1.12 vs 1.03), but the CIs overlap, so it is not a significant difference. The unlocalized ratio falls with N as expected (more members can cover two storms).
+- The localized ratio rises slightly with N (1.03 → 1.07, tight CI at N = 32): a fixed junction artifact becomes a larger share as the DA error falls. Consistent with the forecast pilot, and another reason for T2.
+- Localization matters even for one storm: the unlocalized 1-storm error is 12–19% higher at every N.
