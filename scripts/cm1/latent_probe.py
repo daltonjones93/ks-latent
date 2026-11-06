@@ -37,7 +37,7 @@ from ks_latent.cm1.data import ColumnData, member_from_cm1io  # noqa: E402
 from ks_latent.cm1.io import load_grads_run, read_grads  # noqa: E402
 from ks_latent.cm1.models import rollout_from  # noqa: E402
 from ks_latent.cm1.physics import BaseState  # noqa: E402
-from ks_latent.cm1.probe import (auc, brier_skill, event_candidates, fit_logistic, fit_ridge, kmeans, onsets,  # noqa: E402
+from ks_latent.cm1.probe import (auc, brier_skill, event_candidates, fit_logistic, fit_ridge, kmeans, near_active, onsets,  # noqa: E402
                                  pca_fit, predict_logistic, predict_ridge, r2, site_reduce, site_targets,
                                  window_features)
 from ks_latent.cm1.train import encode_members  # noqa: E402
@@ -95,6 +95,8 @@ def main():
     ap.add_argument("--n-test", type=int, default=0, help="use only the first n test storms (0: all; for a quick check)")
     ap.add_argument("--extra", nargs="*", default=[], help="extra test storms, e.g. ens_T2_mem001 ... (raw only)")
     ap.add_argument("--max-train-samples", type=int, default=150000)
+    ap.add_argument("--near-sites", type=int, default=10,
+                    help="P3/P4 'near' candidates: the event is active within +- this many sites (20 km) - the hard question")
     ap.add_argument("--surrogate-every", type=int, default=3, help="start-time spacing (frames) for the surrogate baseline")
     ap.add_argument("--device", default="cpu")
     a = ap.parse_args()
@@ -222,12 +224,17 @@ def main():
             f"qs {comp['qs_aloft'][k]:5.2f} qg {comp['qg_aloft'][k]:5.2f} th {comp['th_sfc_min'][k]:6.2f}   stay 5 min {trans[k, k]:.2f}")
 
     # ---------------- P3 / P4: event prediction ----------------
-    def cand(names, ev, tau):
+    def cand(names, ev, tau, near=None):
+        """Quiet candidates; with near = True only those with the event active within +-near_sites now
+        (the hard question: the storm is close, does it start HERE within tau?)."""
         v, thr, ab = EVENTS[ev]
         out = []
         for n in names:
-            ts, ps, ys = event_candidates(D[n]["tgt"][v], thr, tau, QUIET, ab)
+            S = D[n]["tgt"][v]
+            ts, ps, ys = event_candidates(S, thr, tau, QUIET, ab)
             ok = ts >= 5
+            if near:
+                ok &= near_active(S, thr, a.near_sites, ab)[ts, ps]
             out.append((n, ts[ok], ps[ok], ys[ok]))
         return out
     def subsample(cs, maxn):
@@ -257,13 +264,14 @@ def main():
         return np.concatenate(Xs)
     P3, models = {}, {}
     kinds = ("latent", "latent+motion", "pca", "summary", "latent_site_only", "latent_site+motion")
-    for ev in EVENTS:
+    for ev, near in [(e, nr) for e in EVENTS for nr in (True, False)]:
+        evk = ev if near else ev + "_all_quiet"
         for tau in LEADS:
-            ctr, keep = subsample(cand(train_names, ev, tau), a.max_train_samples)
-            cte = cand(test_names, ev, tau)
+            ctr, keep = subsample(cand(train_names, ev, tau, near), a.max_train_samples)
+            cte = cand(test_names, ev, tau, near)
             ytr = np.concatenate([c[3] for c in ctr]); yte = np.concatenate([c[3] for c in cte])
             if ytr.sum() < 30 or yte.sum() < 10:
-                log(f"   [P3] {ev} tau {tau}: too few events ({int(ytr.sum())} train, {int(yte.sum())} test)")
+                log(f"   [P3] {evk} tau {tau}: too few events ({int(ytr.sum())} train, {int(yte.sum())} test)")
                 continue
             base = float(yte.mean())
             row = {"n_test": int(yte.size), "events_test": int(yte.sum()), "base_rate": base}
@@ -274,10 +282,10 @@ def main():
                 odds = p / np.maximum(1 - p, 1e-12) * keep
                 pc = odds / (1 + odds)
                 row[kind] = {"auc": auc(yte, p), "bss": brier_skill(yte, pc, base)}
-                if kind == "latent+motion":
+                if kind == "latent+motion" and near:
                     models[(ev, tau)] = m
-            P3.setdefault(ev, {})[str(tau)] = row
-            log(f"   [P3] {ev:10s} tau {tau:2d}: base {base:.3f}  AUC " + "  ".join(f"{k} {row[k]['auc']:.3f}" for k in kinds)
+            P3.setdefault(evk, {})[str(tau)] = row
+            log(f"   [P3] {evk:20s} tau {tau:2d}: base {base:.3f}  AUC " + "  ".join(f"{k} {row[k]['auc']:.3f}" for k in kinds)
                 + f"  [{time.time() - t_start:.0f}s]")
     # surrogate baseline: roll the latent from each start, decode, and keep the running extreme over leads 1..tau
     # of each event's decoded quantity; one rollout per start serves every event and lead
@@ -307,7 +315,7 @@ def main():
             if ev not in P3 or str(tau) not in P3[ev]:
                 continue
             sc, yy = [], []
-            for n, ts, ps, ys in cand(test_names, ev, tau):
+            for n, ts, ps, ys in cand(test_names, ev, tau, True):
                 starts, cache = sur[n]
                 pos = {int(t0): i for i, t0 in enumerate(starts)}
                 k = np.array([t in pos for t in ts])
@@ -324,7 +332,7 @@ def main():
             m = models.get((ev, tau))
             if m is None or not a.extra:
                 continue
-            cx = cand(list(a.extra), ev, tau)
+            cx = cand(list(a.extra), ev, tau, True)
             y = np.concatenate([c[3] for c in cx])
             if y.sum() >= 10:
                 P3[ev][str(tau)]["extra_latent+motion_auc"] = auc(y, predict_logistic(m, build(cx, "latent+motion", tau)))
@@ -345,7 +353,8 @@ def main():
                 ps = np.full(win.size, p)
                 trajs_e.append(predict_logistic(m, build([(n, ts, ps, None)], "latent+motion", tau)))
                 # matched control: a quiet site at the same time whose physical summary is nearest, no rain within 30 min
-                cands = [q for q in range(D[n]["P"]) if q != p and (S[t - QUIET:t + 31, q] < thr).all()]
+                nearby = near_active(S, thr, a.near_sites, ab)[t]
+                cands = [q for q in range(D[n]["P"]) if q != p and nearby[q] and (S[t - QUIET:t + 31, q] < thr).all()]
                 if cands:
                     sm = D[n]["sum"][t - 10]
                     q = cands[int(np.argmin(((sm[cands] - sm[p]) ** 2).sum(-1)))]
@@ -414,9 +423,10 @@ def main():
     def pooled(n, key):
         d = D[n]; F = d[key]; act = d["sum"][..., 1] > 0.05                  # condensate-bearing sites
         T = d["T"]
-        mean_all = F.mean(1); std_all = F.std(1)
+        mean_all = F.mean(1); std_all = F.std(1); mx = F.max(1); mn = F.min(1)
         m_act = np.array([F[t][act[t]].mean(0) if act[t].any() else np.zeros(F.shape[-1]) for t in range(T)])
-        return np.concatenate([mean_all, std_all, m_act], 1)
+        n_act = act.sum(1, keepdims=True).astype(np.float32)
+        return np.concatenate([mean_all, std_all, mx, mn, m_act, n_act], 1)
     def storm_targets(n):
         g = D[n]["tgt"]
         return {"total_rain": g["rain_rate"].sum(1), "th_min": g["th_sfc_min"].min(1), "w_max": g["w_max"].max(1)}

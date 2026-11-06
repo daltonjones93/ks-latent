@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from ks_latent.cm1.probe import (auc, brier_skill, event_candidates, fit_logistic, fit_ridge, kmeans, onsets,
+from ks_latent.cm1.probe import (near_active, auc, brier_skill, event_candidates, fit_logistic, fit_ridge, kmeans, onsets,
                                  predict_logistic, predict_ridge, r2, site_reduce, window_features)
 
 
@@ -54,3 +54,9 @@ def test_kmeans_recovers_clusters():
     X = np.concatenate([rng.normal(c, 0.1, size=(100, 2)) for c in ((0, 0), (3, 0), (0, 3))])
     C, lab = kmeans(X, 3)
     assert len(set(lab[:100])) == 1 and len(set(lab[100:200])) == 1 and len(set(lab)) == 3
+
+
+def test_near_active():
+    s = np.zeros((2, 10)); s[1, 5] = 1.0
+    n = near_active(s, 0.5, half=2)
+    assert not n[0].any() and n[1].tolist() == [False, False, False, True, True, True, True, True, False, False]

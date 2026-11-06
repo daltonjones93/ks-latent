@@ -62,6 +62,15 @@ def event_candidates(series: np.ndarray, thr: float, tau: int, quiet: int, above
     return np.concatenate(ts), np.concatenate(ps), np.concatenate(ys)
 
 
+def near_active(series: np.ndarray, thr: float, half: int, above: bool = True) -> np.ndarray:
+    """(T, P) bool: some site within +-half sites is active (the event is happening nearby)."""
+    act = series >= thr if above else series <= thr
+    T, P = act.shape
+    c = np.concatenate([np.zeros((T, 1), int), np.cumsum(act.astype(int), axis=1)], axis=1)   # c[:, p] = count in [0, p)
+    lo = np.clip(np.arange(P) - half, 0, P); hi = np.clip(np.arange(P) + half + 1, 0, P)
+    return (c[:, hi] - c[:, lo]) > 0
+
+
 def onsets(series: np.ndarray, thr: float, quiet: int, above: bool = True) -> list[tuple[int, int]]:
     """(t, p) of onsets: active at t after `quiet` inactive frames."""
     act = series >= thr if above else series <= thr
