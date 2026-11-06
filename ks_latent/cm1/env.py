@@ -72,3 +72,32 @@ def load_env_files(paths) -> dict:
                 raise ValueError(f"member {k} in two environment files")
             env[k] = np.asarray(v, np.float32)
     return env
+
+
+def read_manifest(path, prefix: str = "") -> dict:
+    """{prefix + member: {column: float}} from an ensemble's manifest.csv (cluster/cm1/make_ensemble.py),
+    e.g. ens_B's dtheta_sfc, qv_offset_gkg, shear_scale, max_rh."""
+    lines = [l.strip().split(",") for l in Path(path).read_text().splitlines() if l.strip()]
+    head = lines[0]
+    if head[0] != "member":
+        raise ValueError(f"{path}: expected a 'member' column first, got {head}")
+    return {prefix + r[0]: {k: float(v) for k, v in zip(head[1:], r[1:])} for r in lines[1:]}
+
+
+def parse_box(spec: str) -> list[tuple[str, float, float]]:
+    """'qv_offset_gkg:-inf:-1.2+shear_scale:1.1:inf' -> [(column, lo, hi), ...]: a member is inside when
+    lo <= value < hi for every column (D10)."""
+    box = []
+    for part in spec.split("+"):
+        k, lo, hi = part.split(":")
+        box.append((k, float(lo), float(hi)))
+    if not box:
+        raise ValueError("empty environment box")
+    return box
+
+
+def members_in_box(manifest: dict, box) -> list[str]:
+    for k, _, _ in box:
+        if any(k not in row for row in manifest.values()):
+            raise ValueError(f"column {k!r} not in the manifest")
+    return sorted(n for n, row in manifest.items() if all(lo <= row[k] < hi for k, lo, hi in box))

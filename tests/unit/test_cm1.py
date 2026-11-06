@@ -476,3 +476,16 @@ def test_rollout_boundary_persistence_uses_nothing_after_t0():
     torch.testing.assert_close(a[:, 0, :2], z[4, :2].expand(6, -1, -1))   # halo held at the t0 state
     with pytest.raises(ValueError):
         rollout_from(prop, z, 4, 6, 2, boundary="zero")
+
+
+def test_environment_box_holdout(tmp_path):
+    """D10: members inside the box are found from the manifest; bounds are lo <= v < hi on every column."""
+    from ks_latent.cm1.env import members_in_box, parse_box, read_manifest
+    f = tmp_path / "manifest.csv"
+    f.write_text("member,qv_offset_gkg,shear_scale\nmem001,-1.5,1.2\nmem002,-1.5,0.9\nmem003,0.1,1.3\nmem004,-1.2,1.1\n")
+    man = read_manifest(f, "ens_B_")
+    assert man["ens_B_mem002"] == {"qv_offset_gkg": -1.5, "shear_scale": 0.9}
+    box = parse_box("qv_offset_gkg:-inf:-1.2+shear_scale:1.1:inf")
+    assert members_in_box(man, box) == ["ens_B_mem001"]           # mem004 sits on the open upper qv bound
+    with pytest.raises(ValueError):
+        members_in_box(man, parse_box("max_rh:0:1"))

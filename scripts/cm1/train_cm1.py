@@ -233,6 +233,11 @@ def main():
     ap.add_argument("--test-members", default="", help="'+'-separated member names for test (overrides --n-test)")
     ap.add_argument("--mirror", action="store_true",
                     help="D9: add the x-mirrored copy of every training member (reverse x, negate u')")
+    ap.add_argument("--holdout-env", default="",
+                    help="D10: environment box, e.g. 'qv_offset_gkg:-inf:-1.2+shear_scale:1.1:inf'; storms inside it are "
+                         "kept out of training and validation and added to the test set (needs --manifest)")
+    ap.add_argument("--manifest", default="",
+                    help="'+'-separated PREFIX=PATH of ensemble manifest.csv files, e.g. ens_B_=~/cm1_env/ens_B_manifest.csv")
     ap.add_argument("--max-train", type=int, default=0,
                     help="use only this many training members (seeded random subset; val/test unchanged)")
     ap.add_argument("--max-frames", type=int, default=0)
@@ -320,6 +325,25 @@ def main():
             raise ValueError(f"explicit split leaves no training members ({len(names)} members: {names})")
     else:
         tr_n, va_n, te_n = split_members(names, a.n_val, a.n_test)
+    if a.holdout_env:   # D10: a whole region of environment space out of training and validation
+        from ks_latent.cm1.env import members_in_box, parse_box, read_manifest
+        if not a.manifest:
+            raise ValueError("--holdout-env needs --manifest")
+        man = {}
+        for item in a.manifest.split("+"):
+            pre, _, path = item.partition("=")
+            man.update(read_manifest(Path(path).expanduser(), pre))
+        region = [n for n in members_in_box(man, parse_box(a.holdout_env)) if n in names]
+        if not region:
+            raise ValueError(f"no loaded storm lies in the box {a.holdout_env}")
+        moved = [n for n in va_n if n in region]
+        tr_n = [n for n in tr_n if n not in region]
+        va_n = [n for n in va_n if n not in region]
+        te_n = te_n + [n for n in region if n not in te_n]
+        if not va_n or not tr_n:
+            raise ValueError("the held-out region leaves no training or validation storms")
+        log(f"[cm1] D10 held-out environment {a.holdout_env}: {len(region)} storms {region} out of training/validation"
+            + (f" (moved from validation: {moved})" if moved else ""))
     if a.max_train and a.max_train < len(tr_n):
         rs = np.random.default_rng(1000 + a.seed)
         tr_n = sorted(rs.choice(tr_n, a.max_train, replace=False).tolist(), key=_natural_key)
