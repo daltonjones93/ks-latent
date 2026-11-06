@@ -305,6 +305,16 @@ Paper III's second headline, alongside the DA: a local latent surrogate emulates
 - [ ] **H4 (C)** **All seven variables:** skill, CRPS and spectra (variance retained by scale) per variable at 5 / 30 / 60 min, condensate included; 3 seeds for error bars on the main models.
 - [ ] **H5 (D)** **Literature check** on ML emulation of storm-scale and cloud-resolving models before claiming anything is new (and the locality / sample-efficiency argument in particular).
 
+## T. Transfer: more storms, bigger domains, no retraining (added 2026-11-05)
+The CM1 analogue of Paper I's L-transfer. CM1 is not extensive chaos, so there is no Lyapunov spectrum to match, but the model is local and translation-equivariant, so the same two claims can be tested with storms in place of domain length: (1) a model trained on one squall line in 400 km forecasts two lines in 800 km without retraining, each as well as alone; (2) with localization, the ensemble size DA needs for a fixed skill does not grow with the number of storms ("ensemble size per storm" in place of D_KY per unit length), while without localization it does.
+
+- [ ] **T1 (C)** **Pilot, no new simulations** (`scripts/cm1/transfer_pilot.py`): two test storms of the same environment (ens_A test + ens_A2) side by side, 3200 cells = 800 km. The domain edges are quiescent, so this is approximately a two-storm state until the outflows meet; scores near the junction are not meaningful and are excluded.
+  - (a) Forecast: skill of the combined forecast against the mean of the two single-storm forecasts, held boundaries.
+  - (b) DA: latent LETKF with 5 km localization against effectively none (very wide localization), N = 8 / 16 / 32 members (each member two training storms side by side), 1 storm against 2. The claim holds if the localized error ratio (2 storms / 1 storm) stays ~1 at every N while the unlocalized one grows, most at small N.
+- [ ] **T2 (C, needs CM1 runs on Cashew)** **Real two-storm CM1 runs**: patch CM1's initiation (`iinit = 8`) for a second line (`cluster/cm1/patches`), nx = 3200, 6–10 members, ~3 h each (~30 node-hours). Repeat T1 on real storms, including the junction region (the storms' outflows really interact).
+- [ ] **T3 (C)** **Four storms** (1600 km), if T1/T2 hold: the ensemble-size-per-storm curve with 1 / 2 / 4 storms.
+- [ ] **T4 (C)** **Transfer to unseen environments** = H3 / D8 (moisture × shear region held out).
+
 ## F. Writing
 - [x] **F1 (C)** `docs/cm1_summary/cm1_summary.tex`: a short illustrated summary of what we have found so far.
 - [ ] **F2 (C)** Update the summary after each of B1, D2, D5, D8 and E3.
