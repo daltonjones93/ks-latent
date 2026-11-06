@@ -200,6 +200,29 @@ def crps_elements(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return skill - 0.5 * spread
 
 
+def energy_score(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Fair energy score of a sample ensemble. `samples` (S, ..., C, W), `target` (..., C, W); each field is
+    the last two dims (channels x columns), everything in between is batch.
+    ES = mean_s ||X_s - y|| - 1/(2 S (S-1)) sum_{s != s'} ||X_s - X_s'||, with RMS-normalized field norms,
+    averaged over the batch. Unlike the pointwise CRPS it rewards the right joint (spatial) structure."""
+    S = samples.shape[0]
+    if S < 2:
+        raise ValueError("the energy score needs at least 2 samples")
+    rms = lambda x: x.pow(2).mean(dim=(-2, -1)).add(1e-12).sqrt()
+    skill = torch.stack([rms(samples[s] - target) for s in range(S)]).mean(0)
+    spread = sum(rms(samples[s] - samples[r]) for s in range(S) for r in range(s + 1, S)) * 2 / (S * (S - 1))
+    return (skill - 0.5 * spread).mean()
+
+
+def spectral_loss(samples: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Mean squared difference of log horizontal power spectra (rfft over the last dim, mean removed) between
+    every sample and the target, per channel; averaged. Only meaningful on samples (on a deterministic
+    forecast it trades accuracy for sharpness)."""
+    ps = lambda x: torch.fft.rfft(x - x.mean(dim=-1, keepdim=True), dim=-1).abs().pow(2)
+    lt = torch.log(ps(target) + 1e-6)
+    return torch.stack([(torch.log(ps(samples[s]) + 1e-6) - lt).pow(2).mean() for s in range(samples.shape[0])]).mean()
+
+
 def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[torch.Tensor],
                   act_tr: list[torch.Tensor], act_va: list[torch.Tensor], patch: int, cfg: StageBConfig,
                   log=print) -> dict:
@@ -281,6 +304,8 @@ class StageCConfig:
     w_sfc_th: float = 0.0       # extra weight on theta' below `sfc_levels` levels (cold pool, G10)
     sfc_levels: int = 10        # ~ the lowest 1 km of the 62-level grid
     crps_samples: int = 0       # > 1: stochastic propagator, decoded-space fair CRPS over this many rollouts
+    w_energy: float = 0.0       # SM2: + w * energy score of the decoded samples (spatial structure); needs samples
+    w_spectral: float = 0.0     # SM3: + w * log-spectrum mismatch of each sample; needs samples
     active_frac: float = 0.5
     val_every: int = 250
     val_batches: int = 4
@@ -306,6 +331,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     W, m = Pw * p, m_sites * p
     C, Zl = data_tr.C, data_tr.Z
     Ms = cfg.crps_samples
+    if (cfg.w_energy or cfg.w_spectral) and Ms < 2:
+        raise ValueError("w_energy / w_spectral need crps_samples >= 2 (they score samples)")
     if Ms and (Ms < 2 or not prop.cfg.noise_channels):
         raise ValueError("Stage C CRPS needs crps_samples >= 2 and a stochastic propagator (noise_channels > 0)")
     wch = torch.ones(C, device=dev)
@@ -337,7 +364,12 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         e = crps_elements(dec, tgt) if S > 1 else (dec[0] - tgt) ** 2             # CRPS (stochastic) or MSE
         if weighted:
             e = e * wch[None, None, :, None]
-        return e.mean(), z
+        loss = e.mean()
+        if S > 1 and cfg.w_energy:
+            loss = loss + cfg.w_energy * energy_score(dec, tgt)
+        if S > 1 and cfg.w_spectral:
+            loss = loss + cfg.w_spectral * spectral_loss(dec, tgt)
+        return loss, z
 
     hist, best, best_state, t0 = [], float("inf"), None, time.time()
     for step in range(cfg.steps):

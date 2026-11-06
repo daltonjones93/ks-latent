@@ -489,3 +489,34 @@ def test_environment_box_holdout(tmp_path):
     assert members_in_box(man, box) == ["ens_B_mem001"]           # mem004 sits on the open upper qv bound
     with pytest.raises(ValueError):
         members_in_box(man, parse_box("max_rh:0:1"))
+
+
+def test_energy_score_and_spectral_loss():
+    from ks_latent.cm1.train import energy_score, spectral_loss
+    g = torch.Generator().manual_seed(0)
+    y = torch.randn(3, 4, 5, 32, generator=g)
+    same = y[None].repeat(4, 1, 1, 1, 1)
+    assert energy_score(same, y).abs() < 1e-5                       # perfect, zero-spread ensemble
+    assert spectral_loss(same, y) < 1e-10
+    noisy = same + 0.5 * torch.randn(same.shape, generator=g)
+    assert energy_score(noisy, y) > 0 and spectral_loss(noisy, y) > 0
+    shifted = same + 1.0                                            # a biased ensemble scores worse
+    assert energy_score(shifted, y) > energy_score(same, y)
+    with pytest.raises(ValueError):
+        energy_score(y[None], y)
+
+
+def test_stage_c_with_energy_and_spectral_terms_runs():
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", T=10, seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z))
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1, noise_channels=2))
+    r = train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, batch=2, steps=3, k_max=3, val_every=3,
+                                                     warmup=1, crps_samples=3, w_energy=1.0, w_spectral=0.1), log=lambda s: None)
+    assert np.isfinite(r["best_val_decoded_rollout_mse"])
+    with pytest.raises(ValueError):
+        train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, steps=1, w_energy=1.0), log=lambda s: None)

@@ -270,6 +270,8 @@ def main():
     ap.add_argument("--n-hist", type=int, default=1, help="propagator history frames (D13)")
     ap.add_argument("--stage-c-crps", type=int, default=0,
                     help="Stage C with a stochastic propagator: fair CRPS over this many decoded rollouts")
+    ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM2: weight of the energy score in Stage C")
+    ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
     ap.add_argument("--noise-channels", type=int, default=0, help="stochastic propagator noise channels (D14c)")
     ap.add_argument("--crps-samples", type=int, default=0, help="train the stochastic propagator with fair CRPS")
     ap.add_argument("--eval-samples", type=int, default=8, help="samples averaged when evaluating a stochastic propagator")
@@ -428,7 +430,7 @@ def main():
             sc = StageCConfig(window_sites=max(cfg.stage_b.window_sites, 4 * cfg.stage_b.halo_sites + 8),
                               halo_sites=cfg.stage_b.halo_sites, batch=a.stage_c_batch, steps=a.stage_c_steps,
                               lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th, seed=a.seed,
-                              crps_samples=a.stage_c_crps,
+                              crps_samples=a.stage_c_crps, w_energy=a.stage_c_energy, w_spectral=a.stage_c_spectral,
                               val_every=max(1, a.stage_c_steps // 16))
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
