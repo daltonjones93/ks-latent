@@ -44,8 +44,9 @@ from ks_latent.utils.io import write_provenance  # noqa: E402
 
 MODES = {"latent": {}, "physical": {"analysis_space": "physical"},
          "enoi_surrogate": {"ensemble_mode": "enoi"},
-         "enoi_phys": {"ensemble_mode": "enoi_phys", "forecast_model": "persistence", "model_noise": 0.0}}
-ENOI_MODES = ("enoi_surrogate", "enoi_phys")    # static-archive ensembles: covariance scaled by --enoi-alpha, no RTPS
+         "enoi_phys": {"ensemble_mode": "enoi_phys", "forecast_model": "persistence", "model_noise": 0.0},
+         "obs_only": {"ensemble_mode": "oi_clim", "forecast_model": "persistence", "model_noise": 0.0}}
+ENOI_MODES = ("enoi_surrogate", "enoi_phys", "obs_only")    # static-archive ensembles: covariance scaled by --enoi-alpha, no RTPS
 METRICS = ("nmse_mean_dec", "th_obs_rmse", "th_obs_spread", "front_abs_disp_km_median", "refl_echo_rmse",
            "vr_obs_rmse")
 

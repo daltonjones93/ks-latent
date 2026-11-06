@@ -40,6 +40,10 @@ Baselines (G2/G2b), all equation-free and with the same observations:
     columns at the same frame about their mean (`static_phys(t)`, (N, C, NX) normalized); the LETKF runs
     cell by cell. (Latent EnOI with a persistence background is not offered: with a stale background
     the large innovations push latents where the decoder extrapolates badly, a strawman.)
+  - `ensemble_mode="oi_clim"`: observation-only analysis (G2c), no model and no memory: every cycle the
+    background is the training archive at that frame itself (its mean, the "average storm", with its
+    anomalies as the covariance), updated cell by cell with the current observations as in "enoi_phys".
+    Its prior is not a forecast, so it is compared on the analysis.
   - `analysis_space="physical"`: the LETKF runs cell by cell on the decoded columns (C channels per
     250 m cell), and the analysis is re-encoded for the next forecast, so the filter leaves the decoder's
     range and is projected back. Condensate is clipped at 0 before re-encoding.
@@ -84,7 +88,7 @@ class TwinConfig:
     surface_vars: tuple = ("th",)
     sigma_surface: tuple = (("th", 0.5), ("u", 1.0), ("prs", 0.2), ("qv", 0.5))  # K, m/s, hPa, g/kg
     forecast_model: str = "surrogate"      # or "persistence"
-    ensemble_mode: str = "cycled"          # "cycled", "enoi" (latent static anomalies), "enoi_phys" (no ML)
+    ensemble_mode: str = "cycled"          # "cycled", "enoi" (latent static anomalies), "enoi_phys" (no ML), "oi_clim"
     analysis_space: str = "latent"         # or "physical"
     forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
     forecast_frames: int = 60
@@ -245,8 +249,10 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
             pk.eval()
             if pk.cfg.n_hist > 1:
                 raise ValueError("the twin steps frame by frame and cannot feed a history propagator (n_hist > 1) yet")
-    if cfg.ensemble_mode == "enoi_phys" and static_phys is None:
-        raise ValueError("ensemble_mode='enoi_phys' needs static_phys(frame) -> (N, C, NX)")
+    if cfg.ensemble_mode in ("enoi_phys", "oi_clim") and static_phys is None:
+        raise ValueError(f"ensemble_mode={cfg.ensemble_mode!r} needs static_phys(frame) -> (N, C, NX)")
+    if cfg.ensemble_mode not in ("cycled", "enoi", "enoi_phys", "oi_clim"):
+        raise ValueError(f"unknown ensemble_mode {cfg.ensemble_mode!r}")
     if cfg.ensemble_mode == "enoi" and static_ens is None:
         raise ValueError("ensemble_mode='enoi' needs static_ens(frame) -> (N, P, c)")
     if cfg.analysis_space not in ("latent", "physical"):
@@ -307,6 +313,8 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         elif cfg.ensemble_mode == "enoi_phys":
             A = static_phys(t1).to(dev, U_mean.dtype)
             dec_prior = U_mean[None] + (A - A.mean(0, keepdim=True))
+        elif cfg.ensemble_mode == "oi_clim":      # the archive itself: average storm + its anomalies
+            dec_prior = static_phys(t1).to(dev)
         else:
             Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen, hold=_hold(cfg))
         u_true = truth.full(0, t1, device=dev)[0]
@@ -341,7 +349,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 Ys.append(vr_op._from_columns(dec).double().cpu().numpy()); ys.append(y_vr)
                 rs.append(np.full(y_vr.size, cfg.sigma_vr ** 2)); xs.append(vr_op.x_km)
             Yall, yall, rall, xall = np.concatenate(Ys, 1), np.concatenate(ys), np.concatenate(rs), np.concatenate(xs)
-            if cfg.ensemble_mode == "enoi_phys":   # physical background, physical analysis, no latent at all
+            if cfg.ensemble_mode in ("enoi_phys", "oi_clim"):   # physical background and analysis, no latent
                 x_cell = (np.arange(NX) + 0.5) * 0.25
                 Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf, device=dev)
                 Ua = torch.as_tensor(Ua, dtype=dec.dtype, device=dev).permute(0, 2, 1).contiguous()

@@ -254,3 +254,20 @@ def test_radial_velocity_col_offset_matches_unpadded():
     u = torch.randn(1, 7 * zl.size, 1600)
     up = torch.cat([u[..., :6], u, u[..., :2]], dim=-1)
     np.testing.assert_allclose(b._from_columns(up), a._from_columns(u))
+
+
+def test_observation_only_mode_has_no_memory(setup):
+    """G2c: the background is the archive at each frame (no model, no memory), so the prior does not depend
+    on the initial ensemble and the analysis improves on it at the observations."""
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    others = ColumnData(synthetic_members(6, T=30, NX=NX, Z=Zl)[1:], nrm, torch.device("cpu"))
+    static_phys = lambda t: torch.stack([others.full(m, t)[0] for m in range(len(others.u))])
+    cfg = TwinConfig(t0=3, n_cycles=3, steps_per_cycle=2, halo=1, ensemble_mode="oi_clim",
+                     forecast_model="persistence", model_noise=0.0, letkf=LETKFConfig(loc_km=10.0, rtps=0.0))
+    a = run_twin(ae, prop, truth, z_truth, Z0, nrm, cfg, static_phys=static_phys)
+    b = run_twin(ae, prop, truth, z_truth, Z0 + 1.0, nrm, cfg, static_phys=static_phys)
+    assert a["cycles"][-1]["prior"]["nmse_mean_dec"] == b["cycles"][-1]["prior"]["nmse_mean_dec"]
+    c = a["cycles"][-1]
+    assert c["analysis"]["th_obs_rmse"] < c["prior"]["th_obs_rmse"]
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Z0, nrm, cfg)
