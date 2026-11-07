@@ -36,7 +36,7 @@ SITE_KM = 2.0
 def term_names(c: int, iu: torch.Tensor) -> dict:
     lin = [[f"{op}z{j}" for j in range(c)] for op in ("", "d1 ", "d2 ")]
     return {"A": lin, "Q1": [f"z{int(i)}*z{int(j)}" for i, j in zip(iu[0], iu[1])],
-            "Q2": [f"z{i}*d1z{j}" for i in range(c) for j in range(c)]}
+            "Q2": [f"z{i}*d1z{j}" for i in range(c) for j in range(c)], "G": [f"<z{j}>" for j in range(c)]}
 
 
 def top_terms(law, n: int) -> list:
@@ -48,7 +48,7 @@ def top_terms(law, n: int) -> list:
         for i in range(law.c):
             for j in range(law.c):
                 rows.append((abs(A[o, i, j]), f"dz{i}/dt += {A[o, i, j]:+.4f} {names['A'][o][j]}"))
-    for k in ("Q1", "Q2"):
+    for k in ("Q1", "Q2", "G"):
         if k in co:
             Q = co[k].detach().cpu().numpy()
             for i in range(Q.shape[0]):
@@ -121,6 +121,8 @@ def main():
     res["n_coefficients"] = sum(v.numel() for v in law.coefficient_tensors().values())
     res["terms_above"] = {f"{t:g}": law.n_terms(t) for t in (1e-4, 1e-3, 1e-2, 1e-1)}
     res["top_terms"] = top_terms(law, 25)
+    if law.global_mean:   # size of the domain-mean coupling against the local linear coupling
+        res["global_vs_local_A0_norm"] = float(law.G.norm() / law.A[0].norm().clamp(min=1e-12))
     res["dispersion"] = dispersion(law, [4, 8, 16, 32, 64, 128])
     # pruning path
     every = int(round(60 * 60 / test.dt))

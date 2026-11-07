@@ -146,3 +146,18 @@ def test_law_rejects_history_and_noise():
         _law_prop(n_hist=2)
     with pytest.raises(ValueError):
         _law_prop(noise_channels=2)
+
+
+def test_global_mean_term_couples_every_site_and_is_penalized_and_pruned():
+    p = _law_prop(c=2, law_global=True, law_l1=1.0, law_residual_hidden=0, law_quadratic=False,
+                  law_integrator="euler").double()    # one Euler stage: the far-site effect is exactly G d<z>
+    z = torch.randn(1, 30, 2, dtype=torch.float64)
+    torch.testing.assert_close(p(z), z)                        # identity at init
+    with torch.no_grad():
+        p.law.G[:] = torch.tensor([[0.5, 0.0], [0.0, -0.2]])
+    assert abs(p.penalty().item() - 0.7) < 1e-6
+    z2 = z.clone(); z2[0, 29, 0] += 3.0                         # change a far site
+    d = (p(z2) - p(z))[0, 0, 0].item()                          # site 0 feels it through the mean only
+    assert abs(d - 0.5 * 3.0 / 30) < 1e-3
+    kept = p.law.prune(0.3)
+    assert p.law._mask("G").sum() == 1 and kept == 3        # + the always-kept diagonal of A0 (2 entries)

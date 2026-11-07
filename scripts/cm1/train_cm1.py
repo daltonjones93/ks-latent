@@ -144,6 +144,7 @@ def build_config(a, dt: float | None) -> RunConfig:
                              body=a.prop_body, heads=a.prop_heads, law_quadratic=not a.law_no_quadratic,
                              law_residual_hidden=a.law_residual_hidden, law_integrator=a.law_integrator,
                              law_substeps=a.law_substeps, law_l1=a.law_l1, law_res_weight=a.law_res_weight,
+                             law_global=a.law_global,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
@@ -284,6 +285,8 @@ def main():
     ap.add_argument("--law-res-weight", type=float, default=0.0, help="FPc: weight of the residual's tendency share")
     ap.add_argument("--law-residual-hidden", type=int, default=64, help="FPc: residual MLP width (0: none)")
     ap.add_argument("--law-no-quadratic", action="store_true", help="FPc: linear law (+ residual) only")
+    ap.add_argument("--law-global", action="store_true",
+                    help="FPc: + G <z> (channel means over the sites the step sees); train with --window-b = domain width")
     ap.add_argument("--law-integrator", choices=["euler", "heun"], default="heun")
     ap.add_argument("--law-substeps", type=int, default=1)
     ap.add_argument("--nested-frac", type=float, default=0.0,

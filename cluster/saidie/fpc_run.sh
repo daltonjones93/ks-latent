@@ -34,6 +34,7 @@ python -m pytest -q tests/unit/test_cm1_law.py -p no:cacheprovider
 python scripts/cm1/law_report.py --run $R/$1 --source $DATA --device cuda")
   echo "report $1: $prev"
 }
+if [ -z "${GLOBAL_ONLY:-}" ]; then
 sub fpc_law_reuse "--reuse-ae $R/full_v1 $LAW --law-l1 1e-5" afterany
 sub fpc_law_reuse_stagec "--init-from $R/fpc_law_reuse --reuse-ae $R/fpc_law_reuse $C"
 report fpc_law_reuse_stagec
@@ -43,3 +44,14 @@ report fpc_law_l1e4_stagec
 sub fpc_nested "$LAW --law-l1 1e-5 --nested-frac 0.5" afterany
 sub fpc_nested_stagec "--init-from $R/fpc_nested --reuse-ae $R/fpc_nested $C --nested-frac 0.5"
 report fpc_nested_stagec
+fi
+# 4. hybrid local + global: + G <z> (channel means over the domain). Trained on whole-domain windows (200 sites)
+#    so the mean in training is the domain mean used in evaluation; with a whole-domain local control (no G), so the
+#    comparison is not confounded by the window width. GLOBAL_ONLY=1 submits only these.
+WD="--window-b 200 --stage-c-batch 6"
+sub fpc_law_full "--reuse-ae $R/full_v1 $LAW --law-l1 1e-5 --window-b 200" afterany
+sub fpc_law_full_stagec "--init-from $R/fpc_law_full --reuse-ae $R/fpc_law_full $C $WD"
+report fpc_law_full_stagec
+sub fpc_law_global "--reuse-ae $R/full_v1 $LAW --law-l1 1e-5 --law-global --window-b 200" afterany
+sub fpc_law_global_stagec "--init-from $R/fpc_law_global --reuse-ae $R/fpc_law_global $C $WD"
+report fpc_law_global_stagec

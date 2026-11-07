@@ -272,6 +272,7 @@ class StencilPropConfig:
     law_substeps: int = 1
     law_l1: float = 0.0               # L1 weight on A0 (off-diagonal), A1, A2 and Q (sparsity and sparse coupling)
     law_res_weight: float = 0.0       # weight of the residual's share of the tendency
+    law_global: bool = False          # + G <z>: each channel's mean over all sites the step sees (hybrid local/global)
 
     @property
     def reach_sites(self) -> int:
@@ -327,7 +328,7 @@ class LatentLaw(nn.Module):
     with `substeps` explicit Euler or Heun steps; reach = stages x substeps sites per frame."""
 
     def __init__(self, c: int, quadratic: bool = True, residual_hidden: int = 64, integrator: str = "heun",
-                 substeps: int = 1):
+                 substeps: int = 1, global_mean: bool = False):
         super().__init__()
         if integrator not in ("euler", "heun") or substeps < 1:
             raise ValueError("integrator must be 'euler' or 'heun' and substeps >= 1")
@@ -345,7 +346,12 @@ class LatentLaw(nn.Module):
             self.R = nn.Sequential(nn.Linear(3 * c, residual_hidden), nn.GELU(), nn.Linear(residual_hidden, c))
             nn.init.zeros_(self.R[-1].weight)
             nn.init.zeros_(self.R[-1].bias)
-        self.register_buffer("masks", torch.ones(0))              # filled by `prune`: keep-masks of A, Q1, Q2
+        self.global_mean = global_mean
+        if global_mean:   # hybrid: G <z>, <z> the mean over every site the step sees (the whole domain in evaluation;
+            # train on whole-domain windows so training and evaluation see the same mean). Not local: the reach
+            # below is the local part's.
+            self.G = nn.Parameter(torch.zeros(c, c))
+        self.register_buffer("masks", torch.ones(0))              # filled by `prune`: keep-masks of A, Q1, Q2, G
         self._res, self._tot = [], []
 
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
@@ -358,6 +364,8 @@ class LatentLaw(nn.Module):
         out = {"A": self.A}
         if self.quadratic:
             out.update(Q1=self.Q1, Q2=self.Q2)
+        if self.global_mean:
+            out["G"] = self.G
         return out
 
     def tendency(self, z: torch.Tensor) -> torch.Tensor:
@@ -371,6 +379,9 @@ class LatentLaw(nn.Module):
             zz = (z[..., :, None] * z[..., None, :])[..., self.iu[0], self.iu[1]]
             zd = (z[..., :, None] * d1[..., None, :]).flatten(-2)
             f = f + zz @ Q1.T + zd @ Q2.T
+        if self.global_mean:
+            G = self.G * self._mask("G") if self.masks.numel() else self.G
+            f = f + z.mean(dim=-2, keepdim=True) @ G.T
         if self.R is not None:
             r = self.R(torch.cat([z, d1, d2], dim=-1))
             if self.training:
@@ -400,6 +411,8 @@ class LatentLaw(nn.Module):
             p = p + l1 * (off.abs().sum() + self.A[1:].abs().sum())
             if self.quadratic:
                 p = p + l1 * (self.Q1.abs().sum() + self.Q2.abs().sum())
+            if self.global_mean:
+                p = p + l1 * self.G.abs().sum()
         if res_weight and self._res:
             p = p + res_weight * torch.stack(self._res).mean() / (torch.stack(self._tot).mean() + 1e-8)
         self._res, self._tot = [], []
@@ -458,7 +471,8 @@ class StencilPropagator(nn.Module):
         elif cfg.body == "law":         # FPc: explicit latent PDE (Markovian, deterministic)
             if cfg.n_hist != 1 or cfg.noise_channels:
                 raise ValueError("body 'law' is Markovian and deterministic: n_hist = 1, noise_channels = 0")
-            self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps)
+            self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps,
+                                 cfg.law_global)
             return
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
