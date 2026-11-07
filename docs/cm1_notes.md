@@ -723,3 +723,47 @@ ens_A mem001, mem002 re-run with 10-s output for 3 h. **Every 6th 10-s frame equ
 - θ's latent heating: −1560 on the new term plus −405 on the old proxy; the ratio to q_v's coefficient, about −2000 to −2500 K, against the known −Lv/(cp π) ≈ −2500 to −3500 K: still ~20-30% short.
 - A flag: q_t also selects the new term (+0.48; physically condensation leaves q_t unchanged), so it is partly standing in for something else that happens in cloud (precipitation formation or evaporation); the q_t law is not yet clean.
 - η's law unchanged (−0.80 ∂B/∂x, +1.07 anelastic, 28.5 m²/s).
+
+## FP1b: 2D latent fields trained with a short-horizon decoded forecast (2026-11-07, Saidie 8997, 220 min; 22 test storms)
+Same sweep as FP1 with the local latent stepper trained jointly (decoded k-step forecast, k ramped 1 → 5 min). Forecast skill = decoded nMSE / persistence's (1-3 h starts); the column model full_v1_stagec under its own protocol: 0.213 / 0.365 / 0.344 at 5 / 30 / 60 min.
+
+| Config | num/pt | nMSE | Probe θ_il / q_t / η | Skill 1 / 5 / 15 / 30 / 60 min |
+|---|---|---|---|---|
+| 1:1:1 jet | 1 | 0.060 | 0.35 0.60 0.28 | 0.82 / 0.35 / 0.64 / 2.4 / 5.6 |
+| 2:1:1 jet | 2 | 0.022 | 0.69 0.76 0.47 | 0.33 / 0.23 / 2.7 / 98 / 814 |
+| 3:1:1 jet | 3 | 0.011 | 0.81 0.89 0.50 | 0.21 / 0.19 / 0.61 / 2.4 / 163 |
+| 4:1:1 jet | 4 | 0.008 | 0.89 0.93 0.53 | 0.18 / 0.19 / 0.66 / 37 / 1e5 |
+| 6:1:1 jet | 6 | 0.005 | 0.90 0.95 0.68 | 0.14 / 0.18 / 1.5 / 93 / 2e6 |
+| 2:1:1 point | 2 | 0.063 | 0.81 0.93 0.37 | 0.92 / 0.39 / 0.66 / 1.15 / 1.31 |
+| 4:1:1 point | 4 | 0.016 | 0.95 0.99 0.47 | 0.27 / 0.22 / 0.66 / 3.4 / 2e3 |
+| 2:2:1 jet | 1 | 0.021 | 0.73 0.77 0.42 | 0.32 / 0.21 / 0.52 / 0.74 / 1.64 |
+| 4:2:1 jet | 2 | 0.0075 | 0.88 0.91 0.57 | 0.16 / 0.17 / 0.51 / 0.74 / 2.09 |
+| 8:2:1 jet | 4 | 0.0038 | 0.93 0.97 0.67 | 0.11 / 0.14 / 0.83 / 5.2 / 114 |
+| 4:4:2 jet | 0.5 | 0.012 | 0.88 0.93 0.49 | 0.20 / 0.14 / 0.40 / 0.62 / 0.73 |
+| 8:4:2 jet | 1 | 0.009 | 0.92 0.97 0.64 | 0.18 / 0.14 / 0.59 / 2.0 / 21 |
+
+- **Within the training horizon the field models are very good:** 5-min skill 0.14-0.19 for most configs, better than the column model's 0.213.
+- **Beyond it they are unstable:** every config is worse than persistence by 30 min, most diverge (skill 10²-10⁶ at 60 min). Short-horizon training (k ≤ 5) does not constrain the long rollout; the column model needed Stage C (k 45) for the same reason. More numbers per point → better short forecasts and faster blow-up.
+- Coarser latent grids are the most stable (4:4:2, 0.5 num/pt: 0.62 / 0.73 at 30 / 60 min).
+- Training with propagation raises the probes of conserved variables (θ_il 0.35-0.90 and q_t 0.60-0.95 rise with m; η stays hard, ≤ 0.68), but no m saturation is visible in the short-range skill (5-min: 0.35 / 0.23 / 0.19 / 0.19 / 0.18 for m = 1-6 at full resolution; it flattens from m = 3).
+- **Closing note:** this track (FP2) was dropped for FPc. The lessons that carry over: the 5-min plateau from m ≈ 3-4 fields, and that long-horizon decoded training is needed before any rollout claim.
+
+## SM4c: fixing SM4b's 60-min overshoot (2026-11-07, Saidie 8998; 20 SM0 cases, 22 test storms for CRPS)
+All arms start from sm4b_flow_stagec. Ratios are a single sample's band variance (or extreme) over the truth's; CRPS is the absolute CRPS at 5 / 30 / 60 / 90 min. Changes are against T1.0 (SM4b rescored to 90 min).
+
+| Arm | 4-16 km, mean of fields 60 / 90 | Condensate 4-16 km 60 / 90 | < 4 km at 30 | w 99.9 60 / 90 | Cond 99.9 60 / 90 | θ_sfc min 60 / 90 | CRPS change 5 / 30 / 60 |
+|---|---|---|---|---|---|---|---|
+| T1.0 (SM4b) | 1.53 / 1.30 | 2.20 / 1.90 | 0.73 | 1.14 / 1.10 | 1.24 / 1.13 | 1.08 / 1.12 | 0 |
+| T0.85 | 1.20 / 1.06 | 1.67 / 1.26 | 0.56 | 1.14 / 0.98 | 1.19 / 1.00 | 0.99 / 1.02 | +1.0 / +1.2 / +2.0% |
+| T0.7 | 1.06 / 0.85 | 1.64 / 1.06 | 0.41 | 0.97 / 0.98 | 1.10 / 1.00 | 0.93 / 0.94 | +3.5 / +4.6 / +7.0% |
+| T0.5 | 0.76 / 0.76 | 1.24 / 1.07 | 0.28 | 0.90 / 0.85 | 1.03 / 0.98 | 0.85 / 0.85 | +9.5 / +12 / +17% |
+| E8 (8 Euler steps) | 1.74 / 1.67 | 2.09 / 2.72 | 0.85 | 1.32 / 1.21 | 1.33 / 1.17 | 1.12 / 1.18 | +0.9 / +3.0 / +4.5% |
+| k90 (Stage C to 90 min) | 1.38 / 1.17 | 1.87 / 1.39 | 0.67 | 1.16 / 1.09 | 1.25 / 1.10 | 1.03 / 1.01 | +0.7 / −0.9 / −0.8% |
+| es (CRPS + energy score) | 1.68 / 1.53 | 2.26 / 2.39 | 0.97 | 1.18 / 1.10 | 1.22 / 1.10 | 1.13 / 1.13 | −1.0 / −0.8 / +0.1% |
+
+Pre-registered success (all at 60 and 90 min unless stated): 4-16 km 0.8-1.2; condensate's ≤ 1.3; the three extremes within 10%; CRPS ≤ 2% worse at 5-60; < 4 km ≥ 0.6 at 30. **No arm passes** (k90 + es still running).
+- **Temperature trades sharpness for skill and cannot fix it alone.** T0.85 brings the mean 4-16 km variance into range and the extremes nearly (w 1.14 at 60), at +2% CRPS, but the < 4 km variance drops to 0.56 and condensate stays 1.7×. Lower temperatures cost CRPS fast (T0.7 +7%).
+- **Not integration error:** 8 Euler steps make the overshoot worse (1.74 / 1.67). The coarse 4-step sampler was damping a learned step distribution that is itself too wide.
+- **Training horizon matters a little:** k90 is the only arm that improves both sharpness (1.53 → 1.38 at 60) and CRPS (−0.9% at 30-60). It is not enough on its own.
+- **The energy score does not help:** es adds small-scale variance (< 4 km 0.97) and leaves the mesoscale overshoot unchanged.
+- **The excess sits in condensate:** with variance in range for w, θ and u (T0.85), condensate's 4-16 km variance is still 1.6-1.7×. The flow makes too many mid-sized cloud and rain features. Likely next: k90 at T ≈ 0.85, or the mean-anchored hybrid (idea 5); a condensate-specific fix is a candidate if neither works.
