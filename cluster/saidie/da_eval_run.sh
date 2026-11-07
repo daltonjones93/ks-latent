@@ -9,7 +9,7 @@ cd "$HOME/latent_DA"
 RUN=${1:?run} LABEL=${2:?label} NOISES=${3:-"0.02 0.05 0.1 0.15 0.2 0.3"}
 DATA="cache:$HOME/cm1_cache+$HOME/cm1_cache_A2+$HOME/cm1_cache_B"
 TUNE="--tuning --modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence"
-dep=${AFTER:+--dependency=afterok:$AFTER}
+dep=${AFTER:+--dependency=${DEPTYPE:-afterok}:$AFTER}
 r=$(sbatch --parsable ${dep:-} --time=01:00:00 --export=ALL,RUN=$RUN,DATA="$DATA" cluster/saidie/refl_head.slurm)
 echo "$RUN reflectivity head: $r"
 j=$r
