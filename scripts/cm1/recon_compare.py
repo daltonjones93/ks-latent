@@ -122,7 +122,9 @@ def main():
         res["models"][k] = r
     res["extremes_truth"] = {e: float(np.mean([x[e] for x in ext["truth"]])) for e in ext["truth"][0]}
     (out / "recon_compare.json").write_text(json.dumps(res, indent=1))
-    write_provenance(out / "recon_compare.json", config=vars(a), seed=0, device=str(dev),
+    import dataclasses
+    args_dc = dataclasses.make_dataclass("ReconCompareArgs", [(k, object) for k in vars(a)])(**vars(a))
+    write_provenance(out / "recon_compare.json", config=args_dc, seed=0, device=str(dev),
                      wall_time_s=time.time() - t_start)
     et = res["extremes_truth"]
     print(f"\n[recon] {len(te)} test storms; PCA-{max(a.pca_k)} explains {100 * info['explained_total']:.1f}% "
