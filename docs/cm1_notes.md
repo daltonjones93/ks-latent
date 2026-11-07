@@ -636,3 +636,14 @@ DA rows: 22 test storms × 3 seeds, θ′ + reflectivity + radial velocity, late
 - So attention still transfers (claim 6 holds: ratios ≤ 1.1), but somewhat less well than the conv model, mostly at 60 min after the storms interact (ratio ~1.25 against ~1.15), consistent with state-dependent neighbour weights generalizing worse to configurations not seen in training. Within the ±10% unpaired uncertainty for DA. L1 / L5 spectra and spreading pending (Cashew 750297).
 
 **Summary.** The original small conv propagator on the learned 32-channel autoencoder remains the model: bigger or attention propagators help only at 5 min, which DA does not need; a richer autoencoder hurts DA; a linear (PCA) latent is much worse at everything. The nonlinear autoencoder and locality are both load-bearing.
+
+## SM4b: flow-matching propagator with rollout training (2026-11-07, Saidie 8995)
+Pointwise velocity network (reach 3 sites/min), 4 Euler steps, one-step flow-matching pretraining, then the stochastic model's Stage C (decoded 45-step rollouts, 4 samples, fair CRPS, autoencoder updated jointly). Test storms, held boundaries, leads 5 / 30 / 60 min:
+
+| Model | Skill (nMSE / persistence) | CRPS / persistence MAE | Spread / error |
+|---|---|---|---|
+| flow, SM4b | 0.245 / 0.425 / 0.403 | 0.346 / 0.375 / 0.395 | 0.82 / 0.91 / 0.93 |
+| deterministic Stage C | 0.215 / 0.371 / 0.354 | 0.481 / 0.515 / 0.543 | — |
+| stochastic Stage C (CRPS) | 0.267 / 0.410 / 0.395 | 0.348 / 0.363 / 0.388 | 0.86 / 0.91 / 0.92 |
+
+Rollout training turned the pilot (worse, under-dispersed) into a model within 5% of the stochastic one in CRPS at every lead, with the same calibration. The SM4b success rule also asks for sharper samples; SM0/SM5 on its samples are not run yet.
