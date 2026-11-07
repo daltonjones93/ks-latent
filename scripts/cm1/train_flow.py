@@ -7,8 +7,15 @@ the loss leaves out the windows' outer `reach_sites`. Writes flow.pt, config.jso
 results.json (same layout as train_cm1.py's, so compare_runs.py reads it) to --out.
   python scripts/cm1/train_flow.py --run ~/cm1_runs/full_v1_stagec --stoch ~/cm1_runs/full_v1_stagec_crps \
       --source cache:A+B+C --out ~/cm1_runs/sm4_flow
+
+SM4b (rollout training): `--flow-radius 0` (reach = the context's 3 sites, as the stencil propagator, so the
+model fits the forced halo) and `--stage-c-steps N`: after the one-step flow-matching pretraining, Stage C
+(`train_stage_c`, the recipe that made the stochastic model work) fine-tunes the flow model and the
+autoencoder jointly on decoded k-step rollouts of S samples with the fair CRPS. The deterministic comparison
+keeps the base run's own (unmodified) autoencoder.
 """
 import argparse
+import copy
 import dataclasses
 import json
 import sys
@@ -23,9 +30,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import ColumnData, load_member  # noqa: E402
-from ks_latent.cm1.evaluate import forecast_report  # noqa: E402
+from ks_latent.cm1.evaluate import forecast_report, reconstruction_report  # noqa: E402
 from ks_latent.cm1.flow import FlowPropagator, FlowPropConfig  # noqa: E402
-from ks_latent.cm1.train import encode_members, latent_windows  # noqa: E402
+from ks_latent.cm1.train import StageCConfig, encode_members, latent_windows, train_stage_c  # noqa: E402
 from ks_latent.training.crop import warmup_cosine  # noqa: E402
 from ks_latent.utils.device import get_device  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
@@ -43,6 +50,14 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--n-flow", type=int, default=8)
+    ap.add_argument("--flow-radius", type=int, default=1, help="velocity-network radius; 0 = pointwise (SM4b)")
+    ap.add_argument("--stage-c-steps", type=int, default=0, help="SM4b: decoded-rollout CRPS fine-tuning steps")
+    ap.add_argument("--stage-c-k", type=int, default=45)
+    ap.add_argument("--stage-c-window", type=int, default=48, help="Stage C window (sites), >= 4 * halo + 8")
+    ap.add_argument("--stage-c-crps", type=int, default=4, help="samples per window in Stage C")
+    ap.add_argument("--stage-c-batch", type=int, default=6)
+    ap.add_argument("--stage-c-lr", type=float, default=1e-4)
+    ap.add_argument("--w-sfc-th", type=float, default=2.0)
     ap.add_argument("--eval-samples", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="auto")
@@ -53,6 +68,7 @@ def main():
     torch.manual_seed(a.seed)
     run = Path(a.run).expanduser()
     ae, prop_det, norm, cfg, split = load_run(run, dev)
+    ae0 = copy.deepcopy(ae)          # the base run's autoencoder, for the deterministic comparison
     for p_ in ae.parameters():
         p_.requires_grad_(False)
     halo = cfg["stage_b"]["halo_sites"]
@@ -64,7 +80,7 @@ def main():
     inc = torch.cat([(zz[1:] - zz[:-1]).reshape(-1, zz.shape[-1]) for zz in z["train"]])
     scale = inc.std(dim=0).clamp(min=1e-6).tolist()
     fcfg = FlowPropConfig(latent_channels=z["train"][0].shape[-1], hidden=a.hidden, flow_hidden=a.hidden,
-                          n_flow=a.n_flow, delta_scale=scale)
+                          n_flow=a.n_flow, flow_radius=a.flow_radius, delta_scale=scale)
     flow = FlowPropagator(fcfg).to(dev)
     log(f"[SM4] flow propagator: {sum(p.numel() for p in flow.parameters()) / 1e6:.2f} M parameters, reach "
         f"{fcfg.reach_sites} sites/step, {a.n_flow} Euler steps; {len(z['train'])} training storms")
@@ -94,6 +110,20 @@ def main():
             log(f"  [SM4] step {step + 1}/{a.steps} loss {loss.item():.4f} val {v:.4f} [{time.time() - t_start:.0f}s]")
     flow.load_state_dict(best_state)
     flow.eval()
+    rc = None
+    if a.stage_c_steps:
+        if fcfg.reach_sites > halo:
+            raise ValueError(f"flow reach {fcfg.reach_sites} > the forced halo {halo}: use --flow-radius 0")
+        for p_ in ae.parameters():
+            p_.requires_grad_(True)
+        sc = StageCConfig(window_sites=max(a.stage_c_window, 4 * halo + 8), halo_sites=halo, batch=a.stage_c_batch,
+                          steps=a.stage_c_steps, lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th,
+                          seed=a.seed, crps_samples=a.stage_c_crps, val_every=max(1, a.stage_c_steps // 16))
+        log(f"[SM4b] Stage C (decoded-rollout CRPS) on the flow model and autoencoder: {sc}")
+        rc = train_stage_c(ae, flow, data["train"], data["val"], sc, log=log)
+        ae.eval(); flow.eval()
+        torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(ae.cfg)}, out / "ae.pt")
+        (out / "history_c.json").write_text(json.dumps(rc, indent=1))
     torch.save({"state_dict": flow.state_dict(), "cfg": dataclasses.asdict(fcfg), "base_run": str(run)}, out / "flow.pt")
     (out / "config.json").write_text(json.dumps({"flow": dataclasses.asdict(fcfg), "base_run": str(run), "args": vars(a)}, indent=1))
     (out / "history.json").write_text(json.dumps(hist, indent=1))
@@ -101,6 +131,7 @@ def main():
     # ---- evaluation on the test storms, held boundaries; same cases for every model ----
     test = ColumnData([load_member(files[n]) for n in split["test"]], norm, dev)
     zt = encode_members(ae, test)
+    zt0 = zt if rc is None else encode_members(ae0, test)
     dt = test.dt
     n_lead, every = int(round(60 * 60 / dt)), int(round(60 * 60 / dt))
     if every + n_lead >= min(test.T):   # short runs (smoke): shrink the evaluation to fit
@@ -110,7 +141,7 @@ def main():
     rows = {}
     with torch.no_grad():
         rows["flow"] = forecast_report(ae, flow, test, zt, norm, t0s, n_lead, halo, n_samples=a.eval_samples, boundary="persistence")
-        rows["deterministic"] = forecast_report(ae, prop_det, test, zt, norm, t0s, n_lead, halo, boundary="persistence")
+        rows["deterministic"] = forecast_report(ae0, prop_det, test, zt0, norm, t0s, n_lead, halo, boundary="persistence")
         if a.stoch:
             ae_s, prop_s, norm_s, _, _ = load_run(Path(a.stoch).expanduser(), dev)
             rows["stochastic"] = forecast_report(ae_s, prop_s, test, encode_members(ae_s, test), norm_s, t0s, n_lead, halo,
@@ -126,7 +157,8 @@ def main():
         print(f"   {k:13s} " + " ".join("%.3f" % sk[i] for i in idx) + "  |  " + " ".join("%.3f" % cr[i] for i in idx)
               + "  |  " + (" ".join("%.2f" % se[i] for i in idx) if se else "  -"))
     results = {"split": split, "dt_s": dt, "forecast": rows["flow"], "comparison": rows,
-               "reconstruction": json.loads((run / "results.json").read_text())["reconstruction"]}
+               "reconstruction": (json.loads((run / "results.json").read_text())["reconstruction"] if rc is None
+                                  else reconstruction_report(ae, test, norm))}
     (out / "results.json").write_text(json.dumps(results, indent=1))
     write_provenance(out / "results.json", config=fcfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - t_start,
                      extra={"args": vars(a)})

@@ -11,6 +11,10 @@ the velocity network mixes neighbouring sites of x (reach `flow_layers * flow_ra
 sample's spatial structure is built locally; the total reach per physical step is
 `layers * radius + n_flow * flow_layers * flow_radius` sites (reported as `reach_sites`).
 
+With `flow_radius` 0 the velocity network is pointwise in x, so the reach is the context network's alone
+(`layers * radius`, 3 sites as for the stencil propagator) and the flow model fits Stage C's forced halo
+(SM4b): neighbouring sites are coupled through the condition, and over successive physical steps.
+
 Interface: like a stochastic `StencilPropagator` (`forward(z, eps=None, gen=None)`, `cfg.noise_channels > 0`,
 `cfg.n_hist == 1`), so `rollout_from`, `forecast_report` and the DA twin use it unchanged.
 """
