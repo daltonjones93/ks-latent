@@ -699,3 +699,20 @@ Config m : stride x : stride z : decoder; "num/pt" = latent numbers per data gri
 - **More fields on a coarser grid beat fewer at full resolution** at equal size (1 num/pt: 0.051 at 1:1:1, 0.014 at 2:2:1, 0.0045 at 8:4:2).
 - **At the column model's size it loses:** 2:8:4 (0.062 num/pt) 0.047 against the column autoencoder's 0.022; matching it takes ~2x the numbers (4:8:4, 0.027). Flattening the column into channels compresses the vertical better than a field with z as a coordinate.
 - Probes: η is poorly read pointwise from φ in every model (0.31-0.66): with the jet decoder vorticity lives in φ's derivatives, not its values. Reconstruction alone does not single out conserved variables (θ_il and q_t are no better read than θ and q_v).
+
+## FP3: does 1-min output limit the tendency fits? (2026-11-07, Cashew 750300-750305)
+ens_A mem001, mem002 re-run with 10-s output for 3 h. **Every 6th 10-s frame equals the original 1-min output exactly** (max difference 0.0 for θ, q_v, u, w, q_r in both storms): same storms, bit for bit. FP0 on them (mem001 fits, mem002 held out; 37 pairs from 60-170 min) at dt = 10 / 20 / 30 / 60 s:
+
+| Variable | Transport skill 10 / 20 / 30 / 60 s | + sources 10 / 60 s | Residual R² 10 / 60 s |
+|---|---|---|---|
+| θ | 0.716 / 0.708 / 0.690 / 0.617 | 0.927 / 0.884 | 0.74 / 0.69 |
+| q_v | 0.758 / 0.756 / 0.746 / 0.698 | 0.944 / 0.923 | 0.77 / 0.74 |
+| θ_il | 0.691 / 0.687 / 0.677 / 0.634 | 0.915 / 0.884 | 0.72 / 0.68 |
+| q_t | 0.808 / 0.807 / 0.803 / 0.779 | 0.947 / 0.925 | 0.72 / 0.66 |
+| η | 0.941 / 0.935 / 0.925 / 0.871 | 0.979 / 0.943 | 0.65 / 0.56 |
+| q_p | 0.536 / 0.529 / 0.515 / 0.455 | 0.858 / 0.798 | 0.69 / 0.63 |
+
+- Finer output helps modestly, almost all of it between 60 and 30 s (transport +0.03-0.08, with sources +0.02-0.04); 10 s adds little beyond 30 s. **1-min output is adequate for FP2; 30 s would be a small gain.**
+- Coefficients are stable across dt: η's dB/dx −0.80 to −0.82, anelastic term 0.87-1.04, eddy viscosity 34-37 m²/s; fall speed 6.3-6.6 m/s.
+- **The condensation coefficient is not a time-resolution problem:** q_v's stays 0.26-0.31 at every dt (known +1). It is the proxy. FP0b replaces it with the Lagrangian change of q_sat along trajectories that stay in cloud (saturated air keeps q_v = q_sat, so the known coefficient is exactly +1); queued, Cashew 750310 (8 storms, 60 s) and 750311 (10 s).
+- The unexplained part of the Lagrangian residual (residual R² 0.65-0.77 at 10 s) is not mainly time resolution either.

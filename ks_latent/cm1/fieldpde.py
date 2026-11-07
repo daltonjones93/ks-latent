@@ -72,11 +72,13 @@ def moist_fields(raw: dict, z: np.ndarray, base_i: int, rho0: np.ndarray, base_p
     B = G * ((th - th_b) / th_b + 0.608 * (qv - qv_b) - ql - qice)
     T = th * pi
     cloud = (qc + qi) > 1e-5
-    dqsdz = ddz(qsat_liquid(T, p), z)
+    qsat = qsat_liquid(T, p)
+    dqsdz = ddz(qsat, z)
     dlnrho = np.gradient(np.log(rho0), z)[None, :, None]
     out = dict(u=u, w=w, theta=th, qv=qv, pi=pi, B=B,
                theta_il=th - (LV * ql + LS * qice) / (CP * pi), qt=qv + ql + qice,
                qp=qr + qs + qg, qcl=qc + qi, eta=ddz(u, z) - ddx(w),
+               qsat=qsat, cloud=cloud.astype(np.float64),
                cond=w * cloud * dqsdz, heat_cond=LV / (CP * pi) * w * cloud * dqsdz,
                w_dlnrho=w * dlnrho)
     return out

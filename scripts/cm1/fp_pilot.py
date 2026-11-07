@@ -33,7 +33,7 @@ from ks_latent.cm1.io import BASE_I, read_grads  # noqa: E402
 from ks_latent.cm1.physics import BaseState  # noqa: E402
 
 TARGETS = ("theta", "qv", "theta_il", "qt", "eta", "qp", "qcl")
-COMMON = ("dBdx", "dz_qp", "cond", "qcl", "qp", "qcl_qp")   # no Lv/(cp pi)-scaled duplicates: near-collinear
+COMMON = ("dBdx", "dz_qp", "cond", "dqsat_dt", "qcl", "qp", "qcl_qp")   # no Lv/(cp pi)-scaled duplicates: near-collinear
 OWN = ("lap", "self", "self_w_dlnrho")
 TERMS = COMMON + OWN
 RAW_VARS = ("th", "prs", "qv", "qc", "qr", "qi", "qs", "qg", "uinterp", "winterp")
@@ -80,6 +80,12 @@ def member_rows(run: Path, a, rng) -> dict:
         com = {"dBdx": ddx(f["B"]), "dz_qp": ddz(f["qp"], z), "cond": f["cond"], "qcl": f["qcl"], "qp": f["qp"],
                "qcl_qp": f["qcl"] * f["qp"]}
         com = {n: traj(v)[kk, ii] for n, v in com.items()}
+        # FP0b: condensation as the Lagrangian change of q_sat along trajectories that stay in cloud (cloudy at the
+        # departure point at t and at the arrival point at t + dt); saturated air keeps q_v = q_sat, so
+        # D q_v / D t = D q_sat / D t there (known coefficient +1 for q_v, -Lv / (cp pi) for theta). The Eulerian
+        # proxy `cond` = w dq_sat/dz misses the horizontal and time changes of q_sat in a tilted, evolving cloud.
+        stay = (semi_lagrangian(f["cloud"][0], dep, order=1) > 0.5) & (f["cloud"][1] > 0.5)
+        com["dqsat_dt"] = (stay * (f["qsat"][1] - semi_lagrangian(f["qsat"][0], dep)) / dt)[kk, ii]
         for v in TARGETS:
             phi = f[v]
             sl = semi_lagrangian(phi[0], dep)
