@@ -9,8 +9,12 @@ frozen latents, warm-started from Stage 1's, k ramped to 12, input noise 0.1 -> 
 
 Adaptations, and only these: the field is a whole CM1 frame, 1600 columns x 434 channels flattened site-major /
 channel-minor (`KSAutoencoderViT`'s `n_channels`), so each 8-column patch token carries 8 x 434 numbers (200
-tokens); the latent has d = 128 entries (KS: 44); the propagator's width is 3 d (Section 55: 141 for 44); batches
-are 64 windows of 3 frames so the covariance-based losses see 192 > d samples; step budgets instead of epochs.
+tokens); the latent has d = 2800 entries (248x compression; KS: 44; user direction: 128 was far too small); mean pooling would
+cap the latent's rank at d_model = 108, so the encoder uses the codebase's `token_mlp` pooling (per-token FFN to 15
+numbers, flatten the 200 tokens, MLP to d) -- still one global vector; the propagator is 2048 wide (Section 55's
+3.2 d would be ~0.4 B parameters); the covariance-based losses (L_var, log-det, signed coherence) are computed on a
+random contiguous block of 128 indices per step (192 samples per batch cannot give a full-rank 2800 x 2800
+covariance); batches of 64 windows of 3 frames; step budgets instead of epochs.
 Known mismatch kept for minimality: the overlapping tokenizer wraps 4 columns around the domain edges (KS is
 periodic; CM1's quiet far field makes this mostly harmless). Same split and normalizer as full_v1.
 
@@ -64,7 +68,15 @@ def main():
     ap.add_argument("--ref-run")
     ap.add_argument("--source")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--d-latent", type=int, default=128)
+    ap.add_argument("--d-latent", type=int, default=2800, help="2800: 694 400 / 2800 = 248x compression")
+    ap.add_argument("--pool", default="token_mlp", help="'mean' (Section 55) caps the latent's rank at d_model = 108; "
+                    "'token_mlp' (per-token FFN -> flatten -> MLP) gives a full-rank global latent of any size")
+    ap.add_argument("--token-mlp-reduction", type=int, default=7, help="per-token compression d_model // r (108 // 7 = 15)")
+    ap.add_argument("--token-mlp-hidden", type=int, default=2800)
+    ap.add_argument("--prop-hidden", type=int, default=2048, help="Section 55 used ~3.2 d; 3.2 x 2800 would be ~0.4 B parameters")
+    ap.add_argument("--cov-block", type=int, default=128,
+                    help="covariance-based losses on a random contiguous block of this many latent indices per step "
+                         "(a batch's 192 samples cannot give a full-rank 2800 x 2800 covariance)")
     ap.add_argument("--steps1", type=int, default=20000)
     ap.add_argument("--steps2", type=int, default=20000)
     ap.add_argument("--batch", type=int, default=64)
@@ -84,7 +96,7 @@ def main():
         by = {m.name: m for m in mem}
         get = lambda n: by[n]
         a.steps1 = a.steps2 = 20
-        a.batch, a.d_latent = 8, 8
+        a.batch, a.d_latent, a.token_mlp_hidden, a.prop_hidden, a.cov_block = 8, 40, 40, 32, 16
     else:
         from da_twin import member_files
         ref = Path(a.ref_run).expanduser()
@@ -97,9 +109,10 @@ def main():
     d_va = ColumnData([get(n) for n in va], norm, torch.device("cpu"))
     C, W, d = d_tr.C, d_tr.NX, a.d_latent
     vcfg = ViTAutoencoderConfig(NX=W * C, n_channels=C, patch_size=8, token_window=16, d_model=108 if a.profile == "full" else 16,
-                                n_heads=4, n_blocks=3, attn_window=4, pos_encoding="linear", pool="mean", d_latent=d)
+                                n_heads=4, n_blocks=3, attn_window=4, pos_encoding="linear", pool=a.pool, d_latent=d,
+                                token_mlp_reduction=a.token_mlp_reduction, token_mlp_hidden=a.token_mlp_hidden)
     ae = KSAutoencoderViT(vcfg).to(dev)
-    pcfg = PropagatorConfig(d_latent=d, hidden=3 * d, n_blocks=3, mode="markovian", backbone="mlp")
+    pcfg = PropagatorConfig(d_latent=d, hidden=a.prop_hidden, n_blocks=3, mode="markovian", backbone="mlp")
     aux = build_propagator(pcfg).to(dev)
     log(f"[S55] {len(tr)} train / {len(va)} val / {len(te)} test storms; frame {W} x {C} = {W * C} numbers -> latent {d} "
         f"({W * C / d:.0f}x); autoencoder {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M, propagator "
@@ -119,6 +132,9 @@ def main():
         z1 = aux.step_one(z[:, 0]); z2 = aux.step_one(z1)
         pred = F.mse_loss(ae.decode(torch.cat([z1, z2])), torch.cat([x[:, 1], x[:, 2]]))
         zs = z.reshape(-1, d)
+        if a.cov_block and a.cov_block < d:          # a random contiguous block of indices (keeps index neighbours)
+            i0 = int(torch.randint(0, d - a.cov_block + 1, (1,), generator=g))
+            zs = zs[:, i0:i0 + a.cov_block]
         _, l_var = decorr_var_loss(zs)
         return rec, pred, l_var, spatial_coherence_loss(zs, bandwidth=3.0, signed=True), logdet_barrier_loss(zs, eps=1e-3)
 
@@ -232,7 +248,7 @@ def main():
     zall = torch.cat(Zte).numpy()
     try:
         from ks_latent.analysis.diagnostics import same_time_coupling_diagnostic_signed
-        d8 = same_time_coupling_diagnostic_signed(zall[::3], n_null=200, seed=0)
+        d8 = same_time_coupling_diagnostic_signed(zall[::2], n_null=200, seed=0)
         res["D8_signed_bandedness"] = float(d8.bandedness_observed)
         res["D8_p_value"] = float(d8.bandedness_p_value)
     except Exception as e:  # diagnostic only; report why it is missing
