@@ -561,3 +561,37 @@ DA (θ′ + reflectivity, noise 0.1, 36 cycles from 1 h, so the scored second ha
 **Q3, a regeneration period.** The residual of "repeats after T min up to a shift" rises smoothly with T for both, with no dip at any T from 1 to 30 min: no regeneration period is visible at the whole-domain level, in the model or in CM1. The model's residual is lower than CM1's at every T (0.62 against 0.73 at 10 min): it is more persistent, consistent with its weaker chaos. A period, if present, would need a local (storm-window) version of the test.
 - **SM2b (Saidie 8913 → 8914): 8 noise channels instead of 4, then Stage C with CRPS + energy score:** skill 0.259 / 0.408 / 0.384, CRPS 0.343 / 0.349 / 0.363, spread/error 0.98 (against 0.93), cold-pool bias −12.7%, fronts 0.82 / 1.84 km, rain FSS 0.594 (against 0.571). Same accuracy, slightly better calibration, fronts and rain; the stochastic family's mean-accuracy gap (~12% behind deterministic Stage C at 60 min) is untouched by objective tweaks so far.
 - **SM2 small scales (Cashew 750266; SM0 diagnostics and SM5 growth on SM2a / SM2b):** single samples keep more fine-scale variance (< 4 km band, mean over w, θ′, u, condensate at two levels, fraction of the truth's, 5 / 30 / 60 min): original stochastic 0.31 / 0.29 / 0.31, SM2a 0.41 / 0.40 / 0.44, SM2b 0.39 / 0.42 / 0.54; the 4–16 km band stays near 1 (SM2b overshoots, 1.34 at 60 min). w 99.9% at 30 min (truth 11.5 m/s): 8.6 / 9.6 / 9.8. SM2b overdoes condensate (6.6 against 6.0 g/kg) and the cold pool (−8.75 against −8.25 K) at 60 min. Ensemble means as smooth as before. Sample-pair spread starts at ~0.2 after one step and saturates within an hour for all three: none reproduces CM1's growth from tiny errors. So sample-based objectives make samples more realistic at small scales at the same accuracy and calibration, without improving the predictability of those scales; the < 4 km band is approaching what the autoencoder represents (θ′ ~0.3), so further gains need SM1.
+
+## Claim 3: latent DA against static and observation-only methods (2026-11-07, Cashew 750274–750276; 22 test storms × 3 seeds, settings tuned on validation, G0 setup)
+| Method | Cycled forecast nMSE | Analysis nMSE | Front |disp| | Latent DA − method (paired) | Latent better on |
+|---|---|---|---|---|---|
+| no DA | 0.469 ± 0.061 | — | — | | |
+| **latent LETKF (headline, noise 0.1)** | **0.273 ± 0.022** | **0.260** | 0.38 km | | |
+| surrogate EnOI (alpha 0.02) | 0.356 ± 0.027 | 0.357 | 1.09 km | −0.083 ± 0.012 (−23%) | 22 / 22 |
+| physical-archive EnOI (alpha 0.05) | 0.578 ± 0.041 (worse than no DA) | 0.564 | 1.53 km | −0.305 ± 0.031 (−53%) | 22 / 22 |
+| observation-only analysis (alpha 0.5) | 0.443 (prior = archive mean) | 0.311 | 7.55 km | analysis: −0.051 ± 0.022 (−16%) | 20 / 22 |
+
+**G0 claim 3 met** (≥ 10% better than each, CIs excluding 0). The cycled ensemble beats the same model with a static covariance by 23%; without a model (physical archive) EnOI is worse than doing nothing; the observations alone reconstruct the state at the analysis time 16% worse and put the gust front 7.5 km off.
+
+## Overnight model results (2026-11-06/07, Saidie; 22 test storms, true boundaries)
+**SM2c / SM3** (stochastic Stage C variants; reference: stochastic Stage C, CRPS 0.342 / 0.344 / 0.360):
+- SM2c (30 000 steps): CRPS 0.336 / 0.349 / 0.366, skill 0.249 / 0.410 / 0.390, spread/error 0.97, fronts 0.79 / 1.77 km: no meaningful change.
+- SM3 (+ spectral term on samples): CRPS 0.386 / 0.372 / 0.383, spread/error 0.81: **worse**; not adopted.
+- So the stochastic family's ~12% mean-accuracy gap to deterministic Stage C is untouched by objective tweaks (energy score, noise channels, longer training, spectral term).
+
+**SM1** (representation; deterministic, + Stage C; reference full_v1_stagec 0.213 / 0.365 / 0.344, reconstruction nMSE 0.074):
+- 64 channels: reconstruction 0.047 (−36%), forecast 0.215 / 0.372 / 0.357.
+- 1 km sites: reconstruction 0.051 (−31%), forecast 0.210 / 0.381 / 0.359, fronts 0.65 / 1.40.
+- A richer representation reconstructs much better but does not forecast better at 30–60 min (slightly worse): forecast error is set by the dynamics and predictability, not by the representation. It could still lower the DA's floor (untested).
+
+**M1a** (attention propagator on full_v1's autoencoder, + Stage C):
+
+| Run | Skill 5 / 30 / 60 | Rain FSS 60 | Cold-pool bias |
+|---|---|---|---|
+| conv, seed 0 (full_v1_stagec) | 0.213 / 0.365 / 0.344 | 0.590 | −17.4% |
+| conv, seed 1 | 0.212 / 0.368 / 0.342 | 0.577 | −18.0% |
+| attention, 128 wide (matched parameters), seeds 0 / 1 | 0.206 / 0.377 / 0.363, 0.206 / 0.378 / 0.356 | 0.567 / 0.591 | −16.5 / −16.8% |
+| attention, 256 wide (1.6 M parameters) | **0.188** / 0.369 / 0.348 | **0.639** | −15.3% |
+
+- Seed spread of the conv model is tiny (±0.003). At matched size attention is better at 5 min but worse at 30–60 min by more than that: **not adopted** under the pre-registered rule.
+- At 256 wide it is 12% better at 5 min, equal at 30–60 min, with better rain FSS and a weaker cold-pool bias. Under the rule (30 and 60 min) it is not adopted for forecasting, **but the DA cycles every 5 min, where it is clearly better, so it is worth a DA test.**
