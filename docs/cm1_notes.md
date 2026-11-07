@@ -716,3 +716,10 @@ ens_A mem001, mem002 re-run with 10-s output for 3 h. **Every 6th 10-s frame equ
 - Coefficients are stable across dt: η's dB/dx −0.80 to −0.82, anelastic term 0.87-1.04, eddy viscosity 34-37 m²/s; fall speed 6.3-6.6 m/s.
 - **The condensation coefficient is not a time-resolution problem:** q_v's stays 0.26-0.31 at every dt (known +1). It is the proxy. FP0b replaces it with the Lagrangian change of q_sat along trajectories that stay in cloud (saturated air keeps q_v = q_sat, so the known coefficient is exactly +1); queued, Cashew 750310 (8 storms, 60 s) and 750311 (10 s).
 - The unexplained part of the Lagrangian residual (residual R² 0.65-0.77 at 10 s) is not mainly time resolution either.
+
+**FP0b: Lagrangian condensation term (Cashew 750310, same 8 storms and protocol as FP0; 750311 on the 10-s storms).** New regressor: the change of q_sat along trajectories that stay in cloud.
+- q_v's condensation coefficient **+0.77** (known +1; was 0.22 with the Eulerian proxy), at 10 s +0.67 (+0.06 from the old proxy, still selected). **The fourth pre-registered check now passes (within ±0.3 of +1)**: all four FP0 checks pass.
+- q_v with sources 0.937 → 0.961, residual R² 0.71 → 0.82 (10 s: 0.85); θ 0.867 → 0.887, residual R² 0.70 → 0.75 (10 s: 0.81).
+- θ's latent heating: −1560 on the new term plus −405 on the old proxy; the ratio to q_v's coefficient, about −2000 to −2500 K, against the known −Lv/(cp π) ≈ −2500 to −3500 K: still ~20-30% short.
+- A flag: q_t also selects the new term (+0.48; physically condensation leaves q_t unchanged), so it is partly standing in for something else that happens in cloud (precipitation formation or evaporation); the q_t law is not yet clean.
+- η's law unchanged (−0.80 ∂B/∂x, +1.07 anelastic, 28.5 m²/s).
