@@ -26,7 +26,7 @@ import torch
 import torch.nn.functional as F
 
 from ks_latent.cm1.data import VARS, ColumnData
-from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator, forced_halo_rollout
+from ks_latent.cm1.models import ColumnFieldAE, PCAColumnAE, StencilPropagator, _patchify, forced_halo_rollout
 from ks_latent.training.crop import warmup_cosine
 from ks_latent.training.losses import decorr_var_loss, logdet_barrier_loss
 
@@ -78,6 +78,43 @@ class StageBConfig:
 
 def _interior(x: torch.Tensor, m: int, dim: int = -1) -> torch.Tensor:
     return x.narrow(dim, m, x.shape[dim] - 2 * m) if m > 0 else x
+
+
+def site_blocks(data: ColumnData, patch: int, device, stride_t: int = 2, frames: int = 16, active_dbz: float = 10.0):
+    """Yield `(x, active)`: site blocks `(N, C*patch)` of every member (every `stride_t`-th frame) and whether
+    each block holds a storm column (composite reflectivity > `active_dbz`)."""
+    for m in range(len(data.u)):
+        ts = list(range(0, data.T[m], stride_t))
+        for i in range(0, len(ts), frames):
+            tt = ts[i:i + frames]
+            u = data.full(m, torch.tensor(tt), device=device)                       # (F, C, NX)
+            x = _patchify(u, patch)
+            act = (data.cref[m][tt] > active_dbz).reshape(len(tt), x.shape[1], patch).any(-1)
+            yield x.reshape(-1, x.shape[-1]), act.reshape(-1)
+
+
+@torch.no_grad()
+def fit_pca_stage(ae: PCAColumnAE, data_tr: ColumnData, data_va: ColumnData, log=print) -> dict:
+    """Stage A for the PCA baseline: fit on training site blocks; report validation reconstruction MSE
+    (normalized units, all columns and storm columns)."""
+    dev = next(ae.parameters()).device
+    t0 = time.time()
+    info = ae.fit(site_blocks(data_tr, ae.cfg.patch, dev))
+    se = se_a = 0.0; n = n_a = 0
+    for x, act in site_blocks(data_va, ae.cfg.patch, dev):
+        z = (x - ae.mean) @ ae.components.T / ae.scale
+        xr = (z * ae.scale) @ ae.components + ae.mean
+        C = ae.cfg.n_channels
+        xr = xr.reshape(len(x), C, -1)
+        xr = torch.where(ae.positive_mask[None, :, None], xr.clamp(min=0), xr).reshape(len(x), -1)
+        e = ((xr - x) ** 2).mean(1)
+        se += float(e.sum()); n += len(e)
+        se_a += float(e[act.to(dev)].sum()); n_a += int(act.sum())
+    out = {**info, "best_val_recon": se / n, "val_recon_storm": se_a / max(n_a, 1), "wall_s": time.time() - t0}
+    log(f"[A] PCA-{ae.cfg.latent_channels} on {info['n_blocks']} site blocks ({info['n_active_blocks']} with storm "
+        f"columns): explains {100 * info['explained_total']:.1f}% of the (storm-weighted) variance; validation "
+        f"reconstruction MSE {out['best_val_recon']:.4f}, storm blocks {out['val_recon_storm']:.4f} [{out['wall_s']:.0f}s]")
+    return out
 
 
 def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, cfg: StageAConfig,

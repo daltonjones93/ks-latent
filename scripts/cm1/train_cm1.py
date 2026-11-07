@@ -45,8 +45,8 @@ from ks_latent.cm1.data import (VARS, ColumnData, Normalizer, load_cached_member
 from ks_latent.cm1.evaluate import (forecast_report, reconstruction_report, summarize, summarize_fronts,  # noqa: E402
                                     summarize_physics)
 from ks_latent.cm1.io import load_grads_run, load_netcdf_run  # noqa: E402
-from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
-from ks_latent.cm1.train import StageAConfig, StageBConfig, encode_members, train_stage_a, train_stage_b  # noqa: E402
+from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder  # noqa: E402
+from ks_latent.cm1.train import StageAConfig, StageBConfig, encode_members, fit_pca_stage, train_stage_a, train_stage_b  # noqa: E402
 from ks_latent.utils.device import get_device  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
 from ks_latent.utils.seeding import set_seed  # noqa: E402
@@ -139,7 +139,7 @@ def build_config(a, dt: float | None) -> RunConfig:
     reach = layers * radius
     ae = ColumnAEConfig(patch=patch, hidden=(7 * 5 if a.encoder_groups > 1 else 32) if smoke else a.hidden,
                         latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups,
-                        vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel)
+                        vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel, kind=a.ae_kind)
     prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else (a.prop_hidden or a.hidden), layers=layers,
                              body=a.prop_body, heads=a.prop_heads,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
@@ -246,6 +246,8 @@ def main():
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--latent-channels", type=int, default=16)
     ap.add_argument("--n-mix", type=int, default=2)
+    ap.add_argument("--ae-kind", choices=["conv", "pca"], default="conv",
+                    help="pca: fixed local PCA of each site's column block instead of the autoencoder (I-PCA)")
     ap.add_argument("--encoder-groups", type=int, default=1,
                     help="1: joint column encoder; 7: one encoder/decoder per variable (ablation)")
     ap.add_argument("--prop-reach", type=int, default=0, help="sites per step; 0 = from the frame interval")
@@ -420,7 +422,7 @@ def main():
         cfg.stage_a, cfg.stage_b = StageAConfig(**saved["stage_a"]), StageBConfig(**saved["stage_b"])
         log(f"[cm1] eval only: architecture from the run's saved config (c {cfg.ae.latent_channels}, patch "
             f"{cfg.ae.patch}, hidden {cfg.ae.hidden}, halo {cfg.stage_b.halo_sites})")
-    ae = ColumnFieldAE(cfg.ae, positive_channel_mask(Z, norm.vars)).to(dev)
+    ae = build_autoencoder(cfg.ae, positive_channel_mask(Z, norm.vars)).to(dev)
     prop = StencilPropagator(cfg.prop).to(dev)
     if a.eval_only or a.init_from:
         src = out if a.eval_only else Path(a.init_from)
@@ -459,6 +461,8 @@ def main():
             ra = json.loads((src / "history_a.json").read_text())
             ra["reused_from"] = str(src)
             log(f"[A] reusing the autoencoder of {src}")
+        elif cfg.ae.kind == "pca":
+            ra = fit_pca_stage(ae, data["train"], data["val"], log=log)
         else:
             log(f"[A] autoencoder: {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M parameters")
             ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log)

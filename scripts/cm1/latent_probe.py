@@ -37,7 +37,7 @@ from ks_latent.cm1.data import ColumnData, member_from_cm1io  # noqa: E402
 from ks_latent.cm1.io import load_grads_run, read_grads  # noqa: E402
 from ks_latent.cm1.models import rollout_from  # noqa: E402
 from ks_latent.cm1.physics import BaseState  # noqa: E402
-from ks_latent.cm1.probe import (auc, brier_skill, event_candidates, fit_logistic, fit_ridge, kmeans, near_active, onsets,  # noqa: E402
+from ks_latent.cm1.probe import (auc, brier_skill, event_candidates, fit_logistic, fit_mlp, fit_ridge, kmeans, near_active, onsets, predict_mlp,  # noqa: E402
                                  pca_fit, predict_logistic, predict_ridge, r2, site_reduce, site_targets,
                                  window_features)
 from ks_latent.cm1.train import encode_members  # noqa: E402
@@ -99,6 +99,8 @@ def main():
                     help="P3/P4 'near' candidates: the event is active within +- this many sites (20 km) - the hard question")
     ap.add_argument("--surrogate-every", type=int, default=3, help="start-time spacing (frames) for the surrogate baseline")
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--mlp", action="store_true",
+                    help="I-PCA (2): also fit small MLP probes (P1; P3 near-storm events for latent / latent+motion / pca)")
     a = ap.parse_args()
     t_start = time.time()
     out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
@@ -179,6 +181,8 @@ def main():
                 ytr, yte = f(np.clip(ytr, 0, None)), f(np.clip(yte, 0, None))
             m = fit_ridge(Xtr, ytr, l2=1e-3)
             P1.setdefault(tname, {})[fname] = r2(yte, predict_ridge(m, Xte))
+            if a.mlp and fname != "summary_window2":
+                P1[tname][fname + "_mlp"] = r2(yte, predict_mlp(fit_mlp(Xtr, ytr, "reg"), Xte))
     # rain vs cloud water among liquid-bearing low-level sites (the model input is total liquid only)
     def rain_vs_cloud(sm, key, half):
         X, y = [], []
@@ -193,6 +197,8 @@ def main():
         Xte, yte = rain_vs_cloud(samples(test_names, 20000), key, half)
         if ytr.size > 100 and 0 < ytr.mean() < 1 and yte.size > 50:
             P1.setdefault("rain_vs_cloud_auc", {})[fname] = auc(yte, predict_logistic(fit_logistic(Xtr, ytr), Xte))
+            if a.mlp and fname != "summary_window2":
+                P1["rain_vs_cloud_auc"][fname + "_mlp"] = auc(yte, predict_mlp(fit_mlp(Xtr, ytr, "clf"), Xte))
     res["P1_r2"] = P1
     log("[P1] test R^2 (AUC for rain_vs_cloud):")
     for tname, row in P1.items():
@@ -284,8 +290,13 @@ def main():
                 row[kind] = {"auc": auc(yte, p), "bss": brier_skill(yte, pc, base)}
                 if kind == "latent+motion" and near:
                     models[(ev, tau)] = m
+                if a.mlp and near and kind in ("latent", "latent+motion", "pca"):
+                    pm = predict_mlp(fit_mlp(build(ctr, kind, tau), ytr, "clf"), build(cte, kind, tau))
+                    om = pm / np.maximum(1 - pm, 1e-12) * keep
+                    row[kind + "_mlp"] = {"auc": auc(yte, pm), "bss": brier_skill(yte, om / (1 + om), base)}
             P3.setdefault(evk, {})[str(tau)] = row
-            log(f"   [P3] {evk:20s} tau {tau:2d}: base {base:.3f}  AUC " + "  ".join(f"{k} {row[k]['auc']:.3f}" for k in kinds)
+            log(f"   [P3] {evk:20s} tau {tau:2d}: base {base:.3f}  AUC " + "  ".join(f"{k} {row[k]['auc']:.3f}" for k in row
+                                                                                if isinstance(row[k], dict))
                 + f"  [{time.time() - t_start:.0f}s]")
     # surrogate baseline: roll the latent from each start, decode, and keep the running extreme over leads 1..tau
     # of each event's decoded quantity; one rollout per start serves every event and lead

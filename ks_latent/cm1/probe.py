@@ -136,6 +136,64 @@ def predict_logistic(m: dict, X: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-z))
 
 
+def fit_mlp(X: np.ndarray, y: np.ndarray, task: str, hidden: int = 128, layers: int = 2, epochs: int = 60,
+            lr: float = 1e-3, weight_decay: float = 1e-4, batch: int = 1024, val_frac: float = 0.1,
+            patience: int = 6, seed: int = 0) -> dict:
+    """Small MLP probe (I-PCA (2)): standardized inputs, `layers` hidden GELU layers, Adam, early stopping on a
+    random `val_frac` of the training samples. `task` "reg" (MSE on the standardized target) or "clf"
+    (logistic). The fair nonlinear counterpart of `fit_ridge` / `fit_logistic`: information that is in the
+    features but not linearly readable shows up here."""
+    if task not in ("reg", "clf"):
+        raise ValueError(f"task {task!r}")
+    mu, sd = standardize_fit(X)
+    Xs = torch.as_tensor((X - mu) / sd, dtype=torch.float32)
+    yf = np.asarray(y, dtype=np.float64)
+    ym, ys = (yf.mean(), yf.std() if yf.std() > 1e-12 else 1.0) if task == "reg" else (0.0, 1.0)
+    yt = torch.as_tensor((yf - ym) / ys, dtype=torch.float32)
+    g = torch.Generator().manual_seed(seed)
+    torch.manual_seed(seed)
+    perm = torch.randperm(len(Xs), generator=g)
+    nv = max(1, int(val_frac * len(Xs)))
+    iv, it = perm[:nv], perm[nv:]
+    mods, d = [], X.shape[1]
+    for _ in range(layers):
+        mods += [torch.nn.Linear(d, hidden), torch.nn.GELU()]; d = hidden
+    net = torch.nn.Sequential(*mods, torch.nn.Linear(d, 1))
+    if task == "clf":
+        pos = float(yt[it].mean().clamp(1e-6, 1 - 1e-6))
+        with torch.no_grad():
+            net[-1].bias.fill_(np.log(pos / (1 - pos)))
+    lossf = torch.nn.functional.mse_loss if task == "reg" else torch.nn.functional.binary_cross_entropy_with_logits
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=weight_decay)
+    best, best_state, bad = float("inf"), None, 0
+    for _ in range(epochs):
+        net.train()
+        for j in range(0, len(it), batch):
+            b = it[j:j + batch]
+            opt.zero_grad()
+            lossf(net(Xs[b])[:, 0], yt[b]).backward()
+            opt.step()
+        it = it[torch.randperm(len(it), generator=g)]
+        net.eval()
+        with torch.no_grad():
+            v = float(lossf(net(Xs[iv])[:, 0], yt[iv]))
+        if v < best - 1e-6:
+            best, bad = v, 0
+            best_state = {k: t.clone() for k, t in net.state_dict().items()}
+        else:
+            bad += 1
+            if bad >= patience:
+                break
+    net.load_state_dict(best_state)
+    return {"mu": mu, "sd": sd, "net": net.eval(), "task": task, "ym": ym, "ys": ys, "val_loss": best}
+
+
+def predict_mlp(m: dict, X: np.ndarray) -> np.ndarray:
+    with torch.no_grad():
+        o = m["net"](torch.as_tensor((X - m["mu"]) / m["sd"], dtype=torch.float32))[:, 0].double().numpy()
+    return 1.0 / (1.0 + np.exp(-o)) if m["task"] == "clf" else o * m["ys"] + m["ym"]
+
+
 def fit_ridge(X: np.ndarray, y: np.ndarray, l2: float = 1e-2) -> dict:
     mu, sd = standardize_fit(X)
     Z = (X - mu) / sd

@@ -60,3 +60,18 @@ def test_near_active():
     s = np.zeros((2, 10)); s[1, 5] = 1.0
     n = near_active(s, 0.5, half=2)
     assert not n[0].any() and n[1].tolist() == [False, False, False, True, True, True, True, True, False, False]
+
+
+def test_mlp_probe_reads_what_a_linear_probe_cannot():
+    from ks_latent.cm1.probe import fit_mlp, predict_mlp
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(6000, 4)); Xt = rng.normal(size=(2000, 4))
+    y, yt = X[:, 0] * X[:, 1], Xt[:, 0] * Xt[:, 1]                        # no linear signal at all
+    assert r2(yt, predict_ridge(fit_ridge(X, y), Xt)) < 0.05
+    assert r2(yt, predict_mlp(fit_mlp(X, y, "reg"), Xt)) > 0.8
+    c, ct = y > 0, yt > 0
+    assert auc(ct, predict_logistic(fit_logistic(X, c), Xt)) < 0.6
+    p = predict_mlp(fit_mlp(X, c, "clf"), Xt)
+    assert auc(ct, p) > 0.9 and p.min() >= 0 and p.max() <= 1
+    m1, m2 = fit_mlp(X, y, "reg", epochs=3), fit_mlp(X, y, "reg", epochs=3)            # seeded: reproducible
+    np.testing.assert_array_equal(predict_mlp(m1, Xt), predict_mlp(m2, Xt))

@@ -62,10 +62,11 @@ class ColumnAEConfig:
     vertical_kernel: int = 5
     env_raw_dim: int = 0        # > 0: environment features per member (env.py, 3*Z) given to the encoder (D11)
     env_dim: int = 16           # their learned projection, broadcast along x as extra input channels
+    kind: str = "conv"          # "conv": ColumnFieldAE; "pca": PCAColumnAE (fixed linear baseline, I-PCA)
 
     @property
     def reach_sites(self) -> int:
-        return self.n_mix * self.mix_radius
+        return 0 if self.kind == "pca" else self.n_mix * self.mix_radius
 
 
 class _Mixer(nn.Module):
@@ -146,6 +147,110 @@ class ColumnFieldAE(nn.Module):
     def forward(self, u, env: torch.Tensor | None = None):
         z = self.encode(u, env)
         return self.decode(z), z
+
+
+def _patchify(u: torch.Tensor, p: int) -> torch.Tensor:
+    """`(B, C, NX)` -> `(B, P, C*p)`: one vector per site, channel-major (all `p` cells of channel 0 first)."""
+    B, C, NX = u.shape
+    if NX % p:
+        raise ValueError(f"width {NX} is not a multiple of patch {p}")
+    return u.reshape(B, C, NX // p, p).permute(0, 2, 1, 3).reshape(B, NX // p, C * p)
+
+
+def _unpatchify(x: torch.Tensor, C: int, p: int) -> torch.Tensor:
+    B, P, _ = x.shape
+    return x.reshape(B, P, C, p).permute(0, 2, 1, 3).reshape(B, C, P * p)
+
+
+class PCAColumnAE(nn.Module):
+    """Fixed linear local latent (plan item I-PCA): each 2 km site's `C x patch` column block is projected
+    on the leading `latent_channels` principal components of training site blocks.
+
+        z = (x - mean) V^T / s,      x_hat = z s V + mean   (then condensate clamped at 0)
+
+    `V` (c, C*patch) orthonormal rows, `s` one global scale making the mean variance of the c coordinates
+    1, so the propagator sees O(1) inputs. A single scale (not per-component whitening) keeps squared
+    latent distance proportional to squared error on the reconstructed block, as in the autoencoder's
+    training. Same interface as `ColumnFieldAE`; no trainable parameters (Stage C then trains only the
+    propagator). Strictly local: a site's latent depends on its own block only (reach 0). The clamp of
+    condensate at 0 is the only nonlinearity, matching the autoencoder's positivity guarantee.
+    """
+
+    def __init__(self, cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = None):
+        super().__init__()
+        if cfg.kind != "pca":
+            raise ValueError("PCAColumnAE needs cfg.kind == 'pca'")
+        if cfg.env_raw_dim:
+            raise ValueError("the PCA baseline is not environment-conditioned")
+        self.cfg = cfg
+        D = cfg.n_channels * cfg.patch
+        self.register_buffer("mean", torch.zeros(D))
+        self.register_buffer("components", torch.zeros(cfg.latent_channels, D))
+        self.register_buffer("scale", torch.ones(()))
+        self.register_buffer("explained", torch.zeros(cfg.latent_channels))   # variance fraction per component
+        pm = torch.zeros(cfg.n_channels, dtype=torch.bool) if positive_mask is None else positive_mask.bool()
+        self.register_buffer("positive_mask", pm)
+        self._device_anchor = nn.Parameter(torch.zeros(()), requires_grad=False)   # next(parameters()) -> device
+
+    @torch.no_grad()
+    def fit(self, blocks_iter, active_weight: float = 0.5) -> dict:
+        """Fit from an iterable of `(x, active)`: `x` (N, C*patch) site blocks, `active` (N,) bool (block
+        contains storm columns). The second moment is `(1 - w) E_all + w E_active`, mirroring the 50%
+        storm-centred window sampling the autoencoder is trained with (`active_frac` 0.5)."""
+        D = self.mean.numel()
+        dev = self.mean.device
+        S = {k: torch.zeros(D, dtype=torch.float64, device=dev) for k in ("all", "act")}
+        Q = {k: torch.zeros(D, D, dtype=torch.float64, device=dev) for k in ("all", "act")}
+        n = {"all": 0, "act": 0}
+        for x, act in blocks_iter:
+            x = x.to(dev, self.mean.dtype)
+            for k, xs in (("all", x), ("act", x[act.to(dev)])):
+                if len(xs):
+                    S[k] += xs.sum(0).double(); Q[k] += (xs.T @ xs).double(); n[k] += len(xs)
+        if not n["all"]:
+            raise ValueError("no site blocks to fit the PCA on")
+        w = active_weight if n["act"] else 0.0
+        mean = (1 - w) * S["all"] / n["all"] + (w * S["act"] / n["act"] if w else 0)
+        second = (1 - w) * Q["all"] / n["all"] + (w * Q["act"] / n["act"] if w else 0)
+        cov = second - torch.outer(mean, mean)
+        cov = 0.5 * (cov + cov.T)
+        ev, vec = torch.linalg.eigh(cov)
+        ev, vec = ev.flip(0), vec.flip(1)
+        c = self.cfg.latent_channels
+        if ev[c - 1] <= 0:
+            raise ValueError(f"covariance has only {int((ev > 0).sum())} positive eigenvalues (< {c})")
+        self.mean.copy_(mean)
+        self.components.copy_(vec[:, :c].T)
+        self.scale.copy_(ev[:c].mean().sqrt())
+        self.explained.copy_(ev[:c] / ev.clamp(min=0).sum())
+        return {"n_blocks": n["all"], "n_active_blocks": n["act"], "explained_total": float(self.explained.sum()),
+                "eigenvalues": ev[: 2 * c].tolist()}
+
+    def encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
+        if env is not None:
+            raise ValueError("the PCA baseline is not environment-conditioned")
+        x = _patchify(u, self.cfg.patch)
+        return (x - self.mean) @ self.components.T / self.scale                     # (B, P, c)
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        x = (z * self.scale) @ self.components + self.mean
+        out = _unpatchify(x, self.cfg.n_channels, self.cfg.patch)
+        if self.positive_mask.any():
+            out = torch.where(self.positive_mask[None, :, None], out.clamp(min=0), out)
+        return out
+
+    def forward(self, u, env: torch.Tensor | None = None):
+        z = self.encode(u, env)
+        return self.decode(z), z
+
+
+def build_autoencoder(cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = None) -> nn.Module:
+    """The autoencoder named by `cfg.kind` (every loader goes through here)."""
+    if cfg.kind == "conv":
+        return ColumnFieldAE(cfg, positive_mask)
+    if cfg.kind == "pca":
+        return PCAColumnAE(cfg, positive_mask)
+    raise ValueError(f"unknown autoencoder kind {cfg.kind!r}")
 
 
 @dataclass

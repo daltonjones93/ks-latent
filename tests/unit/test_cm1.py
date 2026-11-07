@@ -556,3 +556,60 @@ def test_attention_propagator_identity_reach_and_equivariance():
     assert not torch.equal(ps(z, gen=torch.Generator().manual_seed(0)), ps(z, gen=torch.Generator().manual_seed(1)))
     with pytest.raises(ValueError):
         StencilPropagator(StencilPropConfig(latent_channels=3, body="transformer"))
+
+
+def _pca_cfg(c=5):
+    return ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, latent_channels=c, kind="pca")
+
+
+def test_pca_autoencoder_exact_on_low_rank_blocks_local_and_equivariant():
+    from ks_latent.cm1.models import PCAColumnAE, _patchify, _unpatchify, build_autoencoder
+    torch.manual_seed(0)
+    D, r, P = V * Z * PATCH, 4, NX // PATCH
+    basis = torch.linalg.qr(torch.randn(D, r, dtype=torch.float64))[0].T          # (r, D) orthonormal
+    mean = torch.randn(D, dtype=torch.float64)
+    coef = torch.randn(16 * P, r, dtype=torch.float64) * torch.tensor([5.0, 3.0, 2.0, 1.0], dtype=torch.float64)
+    blocks = coef @ basis + mean
+    ae = build_autoencoder(_pca_cfg(r)).double()                                   # no positivity clamp here
+    assert isinstance(ae, PCAColumnAE) and ae.cfg.reach_sites == 0
+    half = 8 * P
+    info = ae.fit([(blocks[:half], torch.zeros(half, dtype=torch.bool)), (blocks[half:], torch.zeros(half, dtype=torch.bool))])
+    assert info["explained_total"] == pytest.approx(1.0, abs=1e-9)
+    torch.testing.assert_close(ae.components @ ae.components.T, torch.eye(r, dtype=torch.float64))
+    u = _unpatchify(blocks[:2 * P].reshape(2, P, D), V * Z, PATCH)                 # (2, C, NX)
+    torch.testing.assert_close(_patchify(u, PATCH), blocks[:2 * P].reshape(2, P, D))
+    uh, z = ae(u)
+    assert z.shape == (2, P, r)
+    torch.testing.assert_close(uh, u)                                              # rank-r data: exact
+    zall = ae.encode(_unpatchify(blocks.reshape(-1, P, D), V * Z, PATCH)).reshape(-1, r)
+    assert float(zall.var(0, unbiased=False).mean()) == pytest.approx(1.0, rel=1e-6)   # one global scale
+    u2 = u.clone(); u2[0, :, 5 * PATCH:6 * PATCH] += 1.0                            # change site 5 only
+    dz = (ae.encode(u2) - z)[0].abs().sum(-1)
+    assert dz[5] > 0 and float(dz[torch.arange(P) != 5].max()) == 0.0
+    torch.testing.assert_close(ae.encode(torch.roll(u, 3 * PATCH, -1)), torch.roll(z, 3, 1))   # whole-site shifts
+
+
+def test_pca_stage_fit_clamps_condensate_and_trains_only_the_propagator_in_stage_c():
+    from ks_latent.cm1.models import build_autoencoder
+    from ks_latent.cm1.train import StageCConfig, fit_pca_stage, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", T=10, seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = build_autoencoder(_pca_cfg(3), positive_channel_mask(Z))
+    r = fit_pca_stage(ae, tr, va, log=lambda s: None)
+    assert 0 < r["explained_total"] < 1 and np.isfinite(r["best_val_recon"]) and r["n_active_blocks"] > 0
+    uh = ae.decode(torch.randn(2, NX // PATCH, 3) * 5)
+    assert float(uh[:, positive_channel_mask(Z)].min()) >= 0.0
+    rec = reconstruction_report(ae, va, nrm)
+    assert np.isfinite(rec["nmse_all"])
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1))
+    a0 = {k: v.clone() for k, v in ae.state_dict().items()}
+    p0 = {k: v.clone() for k, v in prop.state_dict().items()}
+    train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=1, batch=2, steps=4, k_max=3,
+                                                 val_every=2, warmup=1), log=lambda s: None)
+    assert all(torch.equal(ae.state_dict()[k], a0[k]) for k in a0)                  # PCA is fixed
+    assert any((prop.state_dict()[k] != p0[k]).any() for k in p0)
+    ae2 = build_autoencoder(ColumnAEConfig(**__import__("dataclasses").asdict(ae.cfg)), positive_channel_mask(Z))
+    ae2.load_state_dict(ae.state_dict())                                           # checkpoint round trip
+    torch.testing.assert_close(ae2.encode(tr.full(0, 0)), ae.encode(tr.full(0, 0)))

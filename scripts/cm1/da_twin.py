@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer, load_member, positive_channel_mask  # noqa: E402
 from ks_latent.cm1.letkf import LETKFConfig  # noqa: E402
-from ks_latent.cm1.models import ColumnAEConfig, ColumnFieldAE, StencilPropagator, StencilPropConfig  # noqa: E402
+from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import TwinConfig, run_twin, summarize_twin  # noqa: E402
 from ks_latent.utils.device import get_device  # noqa: E402
@@ -52,7 +52,7 @@ def load_run(run: Path, dev):
     cfg = json.loads((run / "config.json").read_text())
     norm = Normalizer.from_dict(json.loads((run / "normalizer.json").read_text()))
     acfg, pcfg = ColumnAEConfig(**cfg["ae"]), StencilPropConfig(**cfg["prop"])
-    ae = ColumnFieldAE(acfg, positive_channel_mask(acfg.n_levels, norm.vars)).to(dev)
+    ae = build_autoencoder(acfg, positive_channel_mask(acfg.n_levels, norm.vars)).to(dev)
     prop = StencilPropagator(pcfg).to(dev)
     ae.load_state_dict(torch.load(run / "ae.pt", map_location=dev)["state_dict"])
     prop.load_state_dict(torch.load(run / "prop.pt", map_location=dev)["state_dict"])
