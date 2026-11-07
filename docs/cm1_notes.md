@@ -677,3 +677,25 @@ Also: sources explain only 56–71% of the Lagrangian residual even with every t
 - Ensemble means as smooth as the other models' (0.10–0.18 of the < 4 km variance).
 - Sample-pair spread from the encoded truth at 1 / 5 / 15 / 30 / 60 / 90 min: 0.18 / 0.33 / 0.45 / 0.60 / 0.69 / 0.80 (stochastic 0.19 / 0.37 / 0.52 / 0.56 / 0.78 / 0.86): the same immediate jump and saturation, no CM1-like growth from small differences.
 - **Verdict under its rule (CRPS within 5% with sharper samples): met.** SM4b's samples are the most realistic of any model at 5–30 min (2–2.5× the fine-scale variance of the stochastic model, extremes at the truth's level) at equal CRPS and calibration; at 60 min they overshoot (mesoscale condensate variance, cold pool). Cost: ~4× per step.
+
+## FP1: 2D latent-field autoencoders, reconstruction only (2026-11-07, Saidie 8996, 77 min; 22 test storms)
+Config m : stride x : stride z : decoder; "num/pt" = latent numbers per data grid point (column autoencoder full_v1: 0.065, nMSE 0.022 / storm 0.071, divergence ratio 0.236, truth 0.224). Probe = pointwise MLP R² of a hand-built field from φ at the same point.
+
+| Config | num/pt | nMSE | Storm | Div. ratio | Probe θ_il / q_t / η / B |
+|---|---|---|---|---|---|
+| 1:1:1 jet / point | 1 | 0.051 / 0.102 | 0.144 / 0.273 | 0.69 / 1.09 | 0.40 0.54 0.31 0.73 / 0.75 0.89 0.33 0.86 |
+| 2:1:1 jet / point | 2 | 0.014 / 0.050 | 0.042 / 0.133 | 0.37 / 1.03 | |
+| 4:1:1 jet / point | 4 | 0.0019 / 0.0091 | 0.006 / 0.029 | 0.28 / 0.54 | 0.86 0.92 0.41 0.84 / 0.97 0.99 0.45 0.96 |
+| 6:1:1 jet / point | 6 | 0.0003 / 0.0009 | 0.001 / 0.003 | 0.24 / 0.24 | |
+| 2:2:1 jet | 1 | 0.014 | 0.041 | 0.46 | |
+| 8:2:1 jet | 4 | 0.0008 | 0.002 | 0.28 | |
+| 8:4:2 jet | 1 | 0.0045 | 0.014 | 0.49 | |
+| 8:8:4 jet | 0.25 | 0.019 | 0.062 | 0.74 | |
+| 4:8:4 jet | 0.125 | 0.027 | 0.089 | 0.81 | |
+| 2:8:4 jet | 0.062 | 0.047 | 0.148 | 0.80 | |
+
+- **Derivatives carry variables:** at equal m the jet decoder's error is 2-5x lower, and it keeps the anelastic mass balance (divergence ratio near the truth's 0.22 from m = 4; a pointwise decoder is far off until m = 6).
+- **No saturation near the physics count (~4):** error keeps falling with m; reconstruction alone cannot count independent fields (FP1b with propagation is the test).
+- **More fields on a coarser grid beat fewer at full resolution** at equal size (1 num/pt: 0.051 at 1:1:1, 0.014 at 2:2:1, 0.0045 at 8:4:2).
+- **At the column model's size it loses:** 2:8:4 (0.062 num/pt) 0.047 against the column autoencoder's 0.022; matching it takes ~2x the numbers (4:8:4, 0.027). Flattening the column into channels compresses the vertical better than a field with z as a coordinate.
+- Probes: η is poorly read pointwise from φ in every model (0.31-0.66): with the jet decoder vorticity lives in φ's derivatives, not its values. Reconstruction alone does not single out conserved variables (θ_il and q_t are no better read than θ and q_v).
