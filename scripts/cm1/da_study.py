@@ -15,7 +15,10 @@ accumulate, nMSE > 1.)
 plus the no-DA ensemble (surrogate, no analysis) and the autoencoder floor. Scores are second-half
 means; across truths it reports mean +- 95% CI (normal approximation, 1.96 sd / sqrt(n); n = truths,
 seeds averaged within a truth) and paired differences against no DA and against `latent`. With
---forecast-from, free forecasts from the analyses after those cycles are scored per lead (G3).
+--forecast-from, free forecasts from the analyses after those cycles are scored per lead (G3), with persistence
+of the analysis and reflectivity >= 35 dBZ FSS. G2b baselines (same LETKF and observations, other forecast
+models): `persist` (members do not evolve; spread from --model-noise) and `analog` (local nearest-neighbour
+forecasts from the training storms' latent archive, `ks_latent.cm1.analog`).
 
   python scripts/cm1/da_study.py --run ~/cm1_runs/d34_c32_kuniform --source cache:~/cm1_cache+~/cm1_cache_A2 \\
       --truth-prefix ens_A2_ --n-truths 10 --seeds 0 1 2 --out ~/cm1_da/g1_v1
@@ -45,7 +48,9 @@ from ks_latent.utils.io import write_provenance  # noqa: E402
 MODES = {"latent": {}, "physical": {"analysis_space": "physical"},
          "enoi_surrogate": {"ensemble_mode": "enoi"},
          "enoi_phys": {"ensemble_mode": "enoi_phys", "forecast_model": "persistence", "model_noise": 0.0},
-         "obs_only": {"ensemble_mode": "oi_clim", "forecast_model": "persistence", "model_noise": 0.0}}
+         "obs_only": {"ensemble_mode": "oi_clim", "forecast_model": "persistence", "model_noise": 0.0},
+         "persist": {"forecast_model": "persistence"},     # G2b: same LETKF, members do not evolve (needs noise)
+         "analog": {"forecast_model": "analog"}}           # G2b: same LETKF, local analog forecasts (ks_latent.cm1.analog)
 ENOI_MODES = ("enoi_surrogate", "enoi_phys", "obs_only")    # static-archive ensembles: covariance scaled by --enoi-alpha, no RTPS
 METRICS = ("nmse_mean_dec", "th_obs_rmse", "th_obs_spread", "front_abs_disp_km_median", "refl_echo_rmse",
            "vr_obs_rmse")
@@ -57,6 +62,9 @@ def compact(s: dict) -> dict:
         if stage in s:
             d = {k: s[stage][k] for k in METRICS if k in s[stage]}
             d.update({f"rmse_{v}": x for v, x in s[stage]["rmse_phys"].items()})
+            for k in ("rank_hist", "rank_hist_pert", "ranks_cycles", "ranks_pert_cycles"):   # claim 2
+                if stage == "prior" and k in s[stage]:
+                    d[k] = s[stage][k]
             out[stage] = d
     return out
 
@@ -76,7 +84,7 @@ def forecast_curve(r: dict) -> dict:
         return {}
     L = min(len(f) for f in fcs)
     keys = [k for k in fcs[0][0] if k != "lead_frames"]
-    return {k: np.nanmean([[abs(f[j][k]) if k == "front_disp_km" else f[j][k] for j in range(L)] for f in fcs], 0).tolist()
+    return {k: np.nanmean([[abs(f[j][k]) if k.startswith("front_disp_km") else f[j][k] for j in range(L)] for f in fcs], 0).tolist()
             for k in keys}
 
 
@@ -121,6 +129,10 @@ def main():
                     help="EnOI static ensemble: training members at frames within +- this of the analysis time")
     ap.add_argument("--enoi-step-min", type=float, default=10.0)
     ap.add_argument("--enoi-alpha", type=float, default=0.5, help="EnOI covariance scaling (alpha < 1)")
+    ap.add_argument("--analog-k", type=int, default=10, help="G2b analog: neighbours")
+    ap.add_argument("--analog-radius", type=int, default=1, help="G2b analog: patch half-width in sites")
+    ap.add_argument("--analog-mean", action="store_true", help="G2b analog: mean of the k increments (default: one drawn)")
+    ap.add_argument("--analog-members", type=int, default=0, help="G2b analog: archive from the first n training storms (0: all)")
     ap.add_argument("--device", default="auto")
     a = ap.parse_args()
     t_start = time.time()
@@ -178,6 +190,17 @@ def main():
                 vr_tilts=tuple(a.vr_tilts) if "vr" in a.obs_set else (), sigma_vr=a.sigma_vr, radar_x_km=a.radar_x_km,
                 forecast_from=tuple(a.forecast_from), forecast_frames=int(round(a.forecast_minutes * 60 / dt)),
                 letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary=a.boundary)
+    analog = None
+    if "analog" in a.modes:   # archive: every training storm the surrogate was trained on (same data budget)
+        from ks_latent.cm1.analog import AnalogConfig, AnalogPropagator
+        names = split["train"][: a.analog_members or None]
+        zl = []
+        for n in names:
+            zl += [z.cpu() for z in encode_members(ae, ColumnData([load_member(files[n])], norm, dev))]
+        analog = AnalogPropagator(zl, AnalogConfig(radius=a.analog_radius, k=a.analog_k, stochastic=not a.analog_mean), dev)
+        del zl
+        print(f"[study] analog archive: {len(names)} training storms, {len(analog.keys)} patches "
+              f"(radius {a.analog_radius}, k {a.analog_k}, {'mean' if a.analog_mean else 'one drawn'})", flush=True)
     rows = {}      # truth -> {"free": compact, "floor": x, mode: [compact per seed], "fc_" + mode: [curve per seed]}
     for tn in truths:
         truth = ColumnData([load_member(files[tn])], norm, dev)
@@ -196,7 +219,7 @@ def main():
                 kw = {**base, **MODES[mode], "seed": sd}
                 if mode in ENOI_MODES:
                     kw["letkf"] = LETKFConfig(loc_km=a.loc_km, inflation=a.enoi_alpha, rtps=0.0)
-                r = run_twin(ae, prop, truth, z_truth, Z0, norm, TwinConfig(**kw),
+                r = run_twin(ae, analog if mode == "analog" else prop, truth, z_truth, Z0, norm, TwinConfig(**kw),
                              refl_head=refl_head, static_ens=static, static_phys=static_phys)
                 rows[tn][mode].append(compact(summarize_twin(r)))
                 rows[tn]["fc_" + mode].append(forecast_curve(r))
@@ -228,10 +251,17 @@ def main():
                if rows[t]["fc_" + m] and rows[t]["fc_" + m][0]]
         if fcs:
             agg["modes"][m]["forecast_nmse_by_lead"] = np.mean(fcs, 0).tolist()
+            # G3: every per-lead forecast score (incl. persistence of the analysis and reflectivity FSS), mean over
+            # truths of the seed means; FSS is nan where neither field has echoes >= 35 dBZ (nan-means)
+            fk = list(rows[truths[0]]["fc_" + m][0])
+            agg["modes"][m]["forecast_by_lead"] = {k: np.nanmean([np.nanmean([np.array(c[k]) for c in rows[t]["fc_" + m]], 0)
+                                                                 for t in truths], 0).tolist() for k in fk}
     agg["free"] = {k: ci(free_of("prior", k)) for k in keys if k in rows[truths[0]]["free"]["prior"]}
     ffc = [np.array(rows[t]["fc_free"]["nmse_mean_dec"]) for t in truths if rows[t]["fc_free"]]
     if ffc:
         agg["free"]["forecast_nmse_by_lead"] = np.mean(ffc, 0).tolist()
+        agg["free"]["forecast_by_lead"] = {k: np.nanmean([np.array(rows[t]["fc_free"][k]) for t in truths], 0).tolist()
+                                           for k in rows[truths[0]]["fc_free"]}
     agg["floor"] = ci([rows[t]["floor"] for t in truths])
     agg["frac_truths_latent_beats_noDA"] = float(np.mean(np.array(per_truth("latent", "prior", "nmse_mean_dec"))
                                                          < np.array(free_of("prior", "nmse_mean_dec")))) if "latent" in a.modes else None

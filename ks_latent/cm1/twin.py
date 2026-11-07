@@ -65,7 +65,9 @@ import torch
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
 from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis_torch
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
-from ks_latent.cm1.verify import displacement_km, main_pool_front_km
+from ks_latent.cm1.verify import displacement_km, fss, main_pool_front_km
+
+FSS_KM = 10.0   # G3: FSS window for reflectivity >= 35 dBZ
 
 
 @dataclass
@@ -87,7 +89,7 @@ class TwinConfig:
     radar_x_km: float = 330.0
     surface_vars: tuple = ("th",)
     sigma_surface: tuple = (("th", 0.5), ("u", 1.0), ("prs", 0.2), ("qv", 0.5))  # K, m/s, hPa, g/kg
-    forecast_model: str = "surrogate"      # or "persistence"
+    forecast_model: str = "surrogate"      # or "persistence", or "analog" (pass an AnalogPropagator as prop)
     ensemble_mode: str = "cycled"          # "cycled", "enoi" (latent static anomalies), "enoi_phys" (no ML), "oi_clim"
     analysis_space: str = "latent"         # or "physical"
     forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
@@ -159,7 +161,7 @@ def _hold(cfg) -> int | None:
 def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: np.ndarray, y: np.ndarray | None,
             norm: Normalizer, Z_levels: int, refl_head=None, refl_cols=None, cref_true=None,
             y_refl=None, vr_op=None, vr_true=None, dec: torch.Tensor | None = None,
-            keep: torch.Tensor | None = None) -> dict:
+            keep: torch.Tensor | None = None, obs_sigma: float = 0.0, rank_rng=None) -> dict:
     """Scores of ensemble `Z` (or of decoded members `dec`, for physical-space analyses) against the
     true normalized columns `u_true` (C, NX). `keep` (NX,) bool: the columns the nMSE scores use."""
     if dec is None:
@@ -188,6 +190,11 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
            "front_true_km": float(front), "front_disp_km": displacement_km(th_mean, th_true, center_km=front)}
     if y is not None:
         out["ranks"] = (th_mem < y[None, :]).sum(0).tolist()   # rank of each observation among members
+        if rank_rng is not None and obs_sigma > 0:
+            # Hamill (2001): with noisy observations the members must carry the observation error too, or the
+            # histogram is U-shaped even for a perfect ensemble. Own generator: the observation draws are unchanged.
+            th_p = th_mem + rank_rng.normal(0.0, obs_sigma, th_mem.shape)
+            out["ranks_pert"] = (th_p < y[None, :]).sum(0).tolist()
     if refl_head is not None:
         r_mem = refl_head(dec)[:, refl_cols].double().cpu().numpy()          # (N, m_r)
         r_true = cref_true[refl_cols]
@@ -206,12 +213,19 @@ def _scores(ae: ColumnFieldAE, Z: torch.Tensor, u_true: torch.Tensor, obs_cols: 
 
 @torch.no_grad()
 def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) -> list:
-    """Free forecast of ensemble Z from frame t for cfg.forecast_frames frames; per-lead scores (G3)."""
+    """Free forecast of ensemble Z from frame t for cfg.forecast_frames frames; per-lead scores (G3), with the
+    same scores for persistence of the starting ensemble (the analysis held fixed: the floor any forecast from
+    it must beat). Reflectivity >= 35 dBZ is scored with the FSS at FSS_KM of the members' mean reflectivity."""
     out, Zf = [], Z.clone()
     Zl = truth.Z
     ith = VARS.index("th") * Zl
     s_th = float(norm.scale[VARS.index("th")])
     dev = Z.device
+    dec0 = ae.decode(Z)
+    md0 = dec0.mean(0)
+    th0 = (md0[ith] * s_th).double().cpu().numpy()
+    r0 = refl_head(dec0).mean(0).double().cpu().numpy() if refl_head is not None else None
+    n_fss = max(1, int(round(FSS_KM / 0.25)))
     for j in range(cfg.forecast_frames):
         if t + j + 1 >= truth.T[0]:
             break
@@ -222,13 +236,19 @@ def _forecast_scores(ae, prop, Z, z_truth, truth, t, cfg, norm, refl_head, gen) 
         th_t = (u_true[ith] * s_th).double().cpu().numpy()
         th_m = (md[ith] * s_th).double().cpu().numpy()
         f = main_pool_front_km(th_t)
-        rec = {"lead_frames": j + 1, "nmse_mean_dec": float(((md - u_true) ** 2)[:, _keep(cfg, truth.NX, dev)].mean()),
-               "front_disp_km": displacement_km(th_m, th_t, center_km=f)}
+        kp = _keep(cfg, truth.NX, dev)
+        rec = {"lead_frames": j + 1, "nmse_mean_dec": float(((md - u_true) ** 2)[:, kp].mean()),
+               "front_disp_km": displacement_km(th_m, th_t, center_km=f),
+               "nmse_persist": float(((md0 - u_true) ** 2)[:, kp].mean()),
+               "front_disp_km_persist": displacement_km(th0, th_t, center_km=f)}
         if refl_head is not None:
             cref_t = truth.cref[0][t + j + 1].clamp(min=0).double().numpy()
             r = refl_head(dec).mean(0).double().cpu().numpy()
             echo = cref_t > 10
             rec["refl_echo_rmse"] = float(np.sqrt(np.mean((r[echo] - cref_t[echo]) ** 2))) if echo.any() else float("nan")
+            km = kp.cpu().numpy()
+            rec["fss_refl35"] = fss(r[km], cref_t[km], 35.0, [n_fss])[n_fss]
+            rec["fss_refl35_persist"] = fss(r0[km], cref_t[km], 35.0, [n_fss])[n_fss]
         out.append(rec)
     return out
 
@@ -243,7 +263,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     ae.eval()
     if cfg.forecast_model == "persistence":
         prop = None
-    elif cfg.forecast_model != "surrogate":
+    elif cfg.forecast_model not in ("surrogate", "analog"):    # analog: `prop` is an AnalogPropagator (G2b)
         raise ValueError(f"unknown forecast_model {cfg.forecast_model!r}")
     for pk in (prop if isinstance(prop, (list, tuple)) else [prop]):
         if pk is not None:
@@ -301,6 +321,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     Z = Z0.clone()
     U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
     gen = torch.Generator().manual_seed(cfg.seed if cfg.noise_seed is None else cfg.noise_seed)
+    rank_rng = np.random.default_rng(10_000 + cfg.seed)     # perturbed-member ranks only (claim 2)
     hist = []
     for k in range(cfg.n_cycles):
         t = cfg.t0 + k * cfg.steps_per_cycle
@@ -329,7 +350,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
             vr_true = vr_op.truth_values(u_true)
             y_vr = vr_true + rng.normal(0.0, cfg.sigma_vr, vr_true.size)
         sk = dict(refl_head=refl_head, refl_cols=refl_cols, cref_true=cref_true, y_refl=y_refl,
-                  vr_op=vr_op, vr_true=vr_true, keep=keep)
+                  vr_op=vr_op, vr_true=vr_true, keep=keep, obs_sigma=cfg.sigma_obs, rank_rng=rank_rng)
         rec = {"cycle": k, "frame": t1, "prior": _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=dec_prior, **sk)}
         _stash(rec, "prior", cfg, o, NXp)
         if assimilate:
@@ -407,8 +428,9 @@ def summarize_twin(res: dict) -> dict:
         for k in ("refl_obs_rmse", "refl_obs_spread", "refl_echo_rmse", "vr_obs_rmse", "vr_obs_spread"):
             if k in cyc[0][stage]:
                 out[stage][k] = float(np.nanmean([c[stage][k] for c in cyc]))
-        if "ranks" in cyc[0][stage]:
-            N = res["config"]["n_members"]
-            ranks = np.concatenate([c[stage]["ranks"] for c in cyc])
-            out[stage]["rank_hist"] = np.bincount(ranks, minlength=N + 1).tolist()
+        N = res["config"]["n_members"]
+        for key, name in (("ranks", "rank_hist"), ("ranks_pert", "rank_hist_pert")):
+            if key in cyc[0][stage]:
+                out[stage][name] = np.bincount(np.concatenate([c[stage][key] for c in cyc]), minlength=N + 1).tolist()
+                out[stage][key + "_cycles"] = [list(map(int, c[stage][key])) for c in cyc]   # for decorrelated tests
     return out

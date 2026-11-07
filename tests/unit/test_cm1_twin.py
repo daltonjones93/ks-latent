@@ -271,3 +271,30 @@ def test_observation_only_mode_has_no_memory(setup):
     assert c["analysis"]["th_obs_rmse"] < c["prior"]["th_obs_rmse"]
     with pytest.raises(ValueError):
         run_twin(ae, prop, truth, z_truth, Z0, nrm, cfg)
+
+
+def test_perturbed_ranks_g3_scores_and_analog_forecast_model(setup):
+    """Claim 2 / G3 / G2b plumbing: perturbed-member ranks are recorded beside the plain ones (same counts);
+    forecasts carry persistence-of-analysis scores and reflectivity FSS (persistence scored against the moving
+    truth, so its error differs by lead); the analog forecast model runs in the twin."""
+    from ks_latent.cm1.analog import AnalogConfig, AnalogPropagator
+    from ks_latent.cm1.refl import ReflectivityHead, ReflHeadConfig
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    head = ReflectivityHead(ReflHeadConfig(n_channels=7 * Zl, hidden=8, layers=2)).eval()
+    cfg = TwinConfig(t0=3, n_cycles=4, steps_per_cycle=2, halo=1, refl_every_cells=8, forecast_from=(1,),
+                     forecast_frames=3, letkf=LETKFConfig(loc_km=10.0, rtps=0.3))
+    r = run_twin(ae, prop, truth, z_truth, Z0, nrm, cfg, refl_head=head)
+    s = summarize_twin(r)
+    N = Z0.shape[0]
+    assert len(s["prior"]["rank_hist_pert"]) == N + 1 and sum(s["prior"]["rank_hist_pert"]) == sum(s["prior"]["rank_hist"])
+    assert len(s["prior"]["ranks_pert_cycles"]) == 2                      # second half of 4 cycles
+    fc = r["cycles"][1]["forecast"]
+    assert {"nmse_persist", "front_disp_km_persist", "fss_refl35", "fss_refl35_persist"} <= set(fc[0])
+    assert len({round(f["nmse_persist"], 12) for f in fc}) == 3           # truth moves, the held analysis does not
+    # the analog archive: the other members' encoded trajectories
+    arch = [z_truth[:20]]
+    an = AnalogPropagator(arch, AnalogConfig(radius=1, k=3, frame_stride=1, pca_dim=0))
+    ra = run_twin(ae, an, truth, z_truth, Z0, nrm, TwinConfig(t0=3, n_cycles=2, steps_per_cycle=2, halo=1,
+                                                              forecast_model="analog",
+                                                              letkf=LETKFConfig(loc_km=10.0, rtps=0.3)))
+    assert ra["config"]["forecast_model"] == "analog" and np.isfinite(ra["cycles"][-1]["prior"]["nmse_mean_dec"])

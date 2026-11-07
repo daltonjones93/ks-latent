@@ -321,7 +321,7 @@ The CM1 analogue of Paper I's L-transfer. CM1 is not extensive chaos, so there i
   - **When the storms meet (measured on one single run):** deep gravity waves cross to the other storm after ~3 h; storm 2's rear cold pool (spreading west at ~55 km/h) reaches the midline at ~4 h and storm 1's inflow region by 5–6 h. So up to ~3 h the halves behave like independent storms; after that the run tests the model on interacting storms, which it never saw in training. For 6 h with no interaction: nx = 4000, var2 = 600 000 (~2.5× a single run).
   - **Before launching:** rebuild cm1.exe on Cashew (the current one ignores var2 and would silently give one storm at 400 km); have `make_ensemble.py` require `two_storms_var2` in `build/PATCHES` when var2 is set and check `cm1.log` for "latent_DA: two thermals at x ="; add nx / var2 options (or a two-storm template).
 - [ ] **T3 (C)** **Four storms** (1600 km), if T1/T2 hold: the ensemble-size-per-storm curve with 1 / 2 / 4 storms.
-- [ ] **T4 (C)** **Transfer to unseen environments** = H3 / D8 (moisture × shear region held out).
+- [x] **T4 (C)** **= H3, done.** **Transfer to unseen environments** = H3 / D8 (moisture × shear region held out).
 
 ## L. Lyapunov spectrum of the latent model as an estimate of CM1's (added 2026-11-06)
 Can the trained propagator stand in for CM1's missing tangent model? Paper I's `ks_latent/analysis/lyapunov.py` takes any lattice model: `benettin` only needs a step that advances a state and a batch of tangent vectors (`torch.func.jvp` through the CM1 propagator). The latent state is 200 sites × 32 channels = 6 400 dimensions (~6 200 without the held boundary sites), so the full spectrum is feasible (float64 QR on CPU, minutes).
@@ -488,6 +488,35 @@ Working title: **equation-free ensemble data assimilation of a squall line with 
 
 Each task below answers a specific objection a referee would raise. They come in priority order: **tier 1** is essential, **tier 2** strengthens the paper a lot, **tier 3** is a stretch goal or polish.
 
+### Claims status and paper outline (2026-11-07)
+**Status against the approved G0 claims** (numbers from `cm1_notes.md`; 22 test storms × 3 seeds, held boundaries unless stated):
+
+| Claim | Threshold | Result | Status |
+|---|---|---|---|
+| 1. DA works | ≥ 10% below no DA, CI excl. 0, ≥ 80% of truths, front < 1 km | 0.273 vs 0.469 (−42%), 22/22, front 0.38 km | **met** |
+| 2. Calibrated | spread/error 0.7-1.3 at θ′ obs; rank histogram not U-shaped (χ², p > 0.01) | spread/error 0.71 (noise 0.1, chosen on validation) | **half met**: rank test queued (g3_headline + `rank_test.py`) |
+| 3. Better than static / obs-only | ≥ 10% below each | −23% surrogate EnOI, −53% physical EnOI, analysis −16% obs-only | **met** |
+| 4. Generalizes | gain in held-out region ≥ half of in-distribution; 30-min skill within 25% | gain 59% vs 48%; skill within 3% (60-min front error 2x) | **met** |
+| 5. Forecasts | skill < 0.5 at 30 min, < 1 at 60, beats advection | 0.357 / 0.361; advection 1.21 / 1.25 | **met** |
+| 6. Transfer | localized 2-storm / 1-storm ratio ≤ 1.1 at every N; unlocalized larger at N = 8 | 0.99 / 1.00 (N 8 / 32); unlocalized 1.08 / 1.04 | **met** (8 storms, 1 seed; extension queued) |
+
+Exploratory results already in hand: latent vs physical-space analysis (0.236 vs 0.245, G1); learned vs hand-set model error (G1b: hand-set more accurate, learned calibrated out of the box at RTPS 0.5, 1.04); shifted tilings (E3c, −4% at 4x cost); Lyapunov / spreading (L1 / L5); SM5 error growth; P probes.
+
+**Still to run before writing (tier 1):** claim 2's rank test; G2b (persistence-ensemble and analog baselines); G3 (forecasts from the analyses); the transfer extension (16 two-storm storms, 3 seeds, N 8 / 16 / 32). Queued: `cluster/saidie/g_paper.sh` (Saidie, one GPU, after S55) and the T2 extension on Cashew. Pre-registered in `cm1_notes.md`, G0 addendum 3. G4 (adaptive inflation) is not queued: claim 2's spread criterion is met with the noise level chosen on validation, and the stochastic model at RTPS 0.5 already gives a calibrated ensemble without a tuned noise level (1.04); that is the "calibration without hand tuning" result, reported as such. Tier 2 worth adding if time allows: G6 (ensemble size), G7 (localization against the reach rule), G9 (cost table, cheap).
+
+**Not in Paper III:** SM4b / SM4c (stochastic flow model; its DA case rests on G8b, sparse observations, not run; a separate short paper or a later section), FPc / FPd / S55 (interpretable latent laws; a separate paper if FPd works), FP0 (its own short note or part of that paper).
+
+**Paper outline** (JAMES or MWR; working title: equation-free ensemble data assimilation of a squall line with a learned local latent surrogate):
+1. Introduction: convective-scale DA needs a model; when only data are available (no equations, or equations too costly), can a learned surrogate carry the ensemble? Locality as the organizing idea (Papers I-II). Novelty and prior art (G12; verify every citation).
+2. Data: CM1 2D squall lines, 3 ensembles (control, environment spread, held-out corner), 1-min output; data-only locality analysis (information reach ~2 km per minute).
+3. Model: column autoencoder (108x), local stencil propagator, Stage C; reflectivity and radial-velocity operators learned from data.
+4. Forecasts: skill vs persistence and advection to 2 h (claim 5), storm metrics (front, cold pool, rain FSS), the smoothing of deterministic forecasts stated plainly (band-variance retained), held boundaries.
+5. DA method: latent LETKF, localization on the site lattice, RTPS, observation operators; the reach rule.
+6. Twin experiments: headline (claim 1), calibration (claim 2), baselines (claim 3 + G2b), forecasts from the analyses (G3), learned vs hand-set model error (G1b), physical vs latent analysis.
+7. Generalization: unseen environments (claim 4); transfer to interacting storms in a doubled domain without retraining (claim 6, extended).
+8. Cost (G9) and limitations: 2D, one storm archetype, dense idealized observations, perfect-truth-generator twin setting, cold-pool bias, smooth deterministic forecasts; why no CM1-EnKF (the premise is DA without the equations).
+9. Conclusions.
+
 ### G0. Pre-register the claims (before the final runs; ground rule from CLAUDE.md)
 - [x] **G0 (D+C)** **Approved by Dalton 2026-11-05: `cm1_notes.md`, "G0 pre-registration — APPROVED"; it supersedes the proposal below.** Write the paper's decision rules into `docs/cm1_notes.md` *before* running G1–G5. Original proposal:
   - **DA works:** θ′ + reflectivity beats no DA by ≥ 10% in all-variable forecast nMSE, averaged over truths, with a 95% confidence interval excluding 0. Front median |displacement| < 1 km.
@@ -503,7 +532,7 @@ Each task below answers a specific objection a referee would raise. They come in
   - Run the best DA settings on ≥ 10 truths × 3 observation-noise seeds.
   - Report mean ± 95% CI, and paired differences (DA − no DA) per truth.
   - Done when: the tables and figures of E4/E4b have error bars.
-- [ ] **G1b (C)** **Learned against hand-set model error** (added 2026-11-05). Deterministic Stage C model with latent noise 0.02 / 0.05 / 0.1, against the stochastic Stage C model (learned noise) with 0 / 0.02, on the full run's 22 test storms × 3 seeds, 32 random training members, `th+refl+vr`. `cluster/saidie/noise_study.sh` (jobs 8838–8844, after the full-run training); compare with `scripts/cm1/compare_studies.py` (paired per truth).
+- [x] **G1b (C)** **Done (Saidie 8860-8866, 8876-8877; notes "G1b"): deterministic chosen; hand-set noise 0.1 more accurate, learned noise calibrated at RTPS 0.5 (1.04).** **Learned against hand-set model error** (added 2026-11-05). Deterministic Stage C model with latent noise 0.02 / 0.05 / 0.1, against the stochastic Stage C model (learned noise) with 0 / 0.02, on the full run's 22 test storms × 3 seeds, 32 random training members, `th+refl+vr`. `cluster/saidie/noise_study.sh` (jobs 8838–8844, after the full-run training); compare with `scripts/cm1/compare_studies.py` (paired per truth).
   - Why: in G1 the ensemble's spread at the θ′ observations is only 0.5 of its error (spread/error 0.505 ± 0.03), so the hand-set noise leaves the ensemble twice too confident; the stochastic model's own forecasts are calibrated (0.93).
   - Done when: cycled nMSE, spread/error and 5 / 30 / 60-min forecast nMSE for all five, with paired differences against noise 0.05.
 - [x] **G2 (C)** **Claim 3 met (Cashew 750274–750276): latent DA 23% better than surrogate EnOI, 53% better than physical-archive EnOI (worse than no DA), analysis 16% better than observation-only; better on 22 / 22, 22 / 22, 20 / 22 storms.** **Tuned on validation: surrogate EnOI alpha 0.02, physical-archive EnOI 0.05, observation-only 0.5. Test-storm runs moved to Cashew CPU (750274–750276, 2026-11-06 evening; Saidie full for hours), so the Saidie SM / M1a chains no longer wait on them.** **Claim-3 run (2026-11-06): (c) observation-only analysis implemented (`oi_clim`, da_study `obs_only`, tested); alpha for all three baselines tuned on the validation storms (Saidie 8889–8892, 8894–8897); then the 22 test storms. Earlier: (a) and (b) run in job 8717: latent 0.236 vs physical-space 0.245 vs surrogate EnOI 0.331; the physical-archive EnOI (alpha 0.5) is worse than no DA (0.732) and needs tuning before it is a fair baseline. (c) still to do.** **Conventional (equation-free) baselines with the same observations and members.**
@@ -511,17 +540,17 @@ Each task below answers a specific objection a referee would raise. They come in
   - (b) **Physical-space LETKF on the decoded surrogate ensemble:** the same forecasts, but analysed in physical space instead of latent space. It isolates what the latent update itself buys: dimension, locality, and staying on the decoder's manifold. Paper II found a cost from returning to the decoder range, so this needs checking here.
   - (c) **Spline / optimal interpolation of the observations alone** (no ensemble), as in Paper II.
   - Done when: one table with the latent LETKF vs (a)–(c), on the G1 truths.
-- [ ] **G2b (C)** **Equation-free forecast-model baselines with the same LETKF and observations.**
+- [~] **G2b (C)** **Implemented 2026-11-07 (`persist`, `analog` modes in da_study; `ks_latent/cm1/analog.py`, tested); queued in `cluster/saidie/g_paper.sh`.** **Equation-free forecast-model baselines with the same LETKF and observations.**
   - (a) **Analog forecasting:** each member's forecast is what followed its nearest neighbours in the training archive. Distance in latent space, k neighbours, averaged increments; matched by time since initiation. It asks whether a learned surrogate beats looking things up.
   - (b) **Persistence ensemble:** members do not evolve between analyses. This is the floor for any forecast model.
   - Done when: both appear in the G2 table on the G1 truths.
-- [ ] **G3 (C)** **DA-initialized forecasts.** From analyses at 1.5, 2, 2.5 and 3 h, run 0–60 min ensemble forecasts. Compare them with no-DA forecasts and with persistence of the analysis: nMSE, front displacement, low-level-rain FSS, reflectivity ≥ 35 dBZ.
+- [~] **G3 (C)** **Persistence-of-analysis and reflectivity >= 35 dBZ FSS added to the forecast scores (tested); queued as g3_headline in `cluster/saidie/g_paper.sh`.** **DA-initialized forecasts.** From analyses at 1.5, 2, 2.5 and 3 h, run 0–60 min ensemble forecasts. Compare them with no-DA forecasts and with persistence of the analysis: nMSE, front displacement, low-level-rain FSS, reflectivity ≥ 35 dBZ.
   - Done when: a "forecast skill vs lead after DA" figure. This is the result forecasters care about: how long DA keeps paying off.
 - [ ] **G4 (C)** **Calibration without hand tuning.**
   - Replace the fixed model-noise level with adaptive inflation driven by the innovations (e.g. Desroziers-type / Anderson 2009 adaptive inflation; *verify the exact scheme before citing*), and/or the multi-model spread of E3b.
   - Report spread/error, rank histograms (θ′, reflectivity, radial velocity), and **reliability of reflectivity exceedance probabilities**: Brier score and reliability diagram for ≥ 35 dBZ.
   - Done when: calibration meets G0 with no per-experiment tuning.
-- [ ] **G5 (C)** **Unseen environments (needs `ens_B`).**
+- [x] **G5 (C)** **Done as H3 (Saidie 8868-8873): claim 4 met.** **Unseen environments (needs `ens_B`).**
   - Train on `ens_B` minus a held-out region of moisture × shear.
   - The truth comes from the held-out region; the ensemble from training environments, i.e. an imperfect surrogate *and* a mismatched prior.
   - Done when: DA gain in held-out vs in-distribution environments, with the G1 error bars.
