@@ -58,6 +58,12 @@ def main():
     ap.add_argument("--stage-c-batch", type=int, default=6)
     ap.add_argument("--stage-c-lr", type=float, default=1e-4)
     ap.add_argument("--w-sfc-th", type=float, default=2.0)
+    ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM4c: + w x energy score of decoded samples")
+    ap.add_argument("--init-flow", default="", help="SM4c: start from a trained flow run (its flow.pt and ae.pt); "
+                                                    "no pretraining. With --stage-c-steps 0: evaluation only")
+    ap.add_argument("--temperature", type=float, default=1.0, help="SM4c: source-noise scale when sampling (evaluation)")
+    ap.add_argument("--n-flow-eval", type=int, default=0, help="SM4c: Euler steps when sampling (0: as trained)")
+    ap.add_argument("--eval-lead-min", type=float, default=60.0)
     ap.add_argument("--eval-samples", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="auto")
@@ -82,6 +88,16 @@ def main():
     fcfg = FlowPropConfig(latent_channels=z["train"][0].shape[-1], hidden=a.hidden, flow_hidden=a.hidden,
                           n_flow=a.n_flow, flow_radius=a.flow_radius, delta_scale=scale)
     flow = FlowPropagator(fcfg).to(dev)
+    if a.init_flow:
+        init = Path(a.init_flow).expanduser()
+        ck = torch.load(init / "flow.pt", map_location=dev)
+        fcfg = FlowPropConfig(**ck["cfg"])
+        flow = FlowPropagator(fcfg).to(dev)
+        flow.load_state_dict(ck["state_dict"])
+        if (init / "ae.pt").exists():
+            ae.load_state_dict(torch.load(init / "ae.pt", map_location=dev)["state_dict"])
+        a.steps = 0
+        log(f"[SM4c] initialized from {init} (flow and autoencoder); no flow-matching pretraining")
     log(f"[SM4] flow propagator: {sum(p.numel() for p in flow.parameters()) / 1e6:.2f} M parameters, reach "
         f"{fcfg.reach_sites} sites/step, {a.n_flow} Euler steps; {len(z['train'])} training storms")
     if a.width <= 2 * fcfg.reach_sites + 4:
@@ -108,7 +124,8 @@ def main():
             if v < best:
                 best, best_state = v, {k: t.detach().clone() for k, t in flow.state_dict().items()}
             log(f"  [SM4] step {step + 1}/{a.steps} loss {loss.item():.4f} val {v:.4f} [{time.time() - t_start:.0f}s]")
-    flow.load_state_dict(best_state)
+    if best_state is not None:
+        flow.load_state_dict(best_state)
     flow.eval()
     rc = None
     if a.stage_c_steps:
@@ -118,7 +135,8 @@ def main():
             p_.requires_grad_(True)
         sc = StageCConfig(window_sites=max(a.stage_c_window, 4 * halo + 8), halo_sites=halo, batch=a.stage_c_batch,
                           steps=a.stage_c_steps, lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th,
-                          seed=a.seed, crps_samples=a.stage_c_crps, val_every=max(1, a.stage_c_steps // 16))
+                          seed=a.seed, crps_samples=a.stage_c_crps, val_every=max(1, a.stage_c_steps // 16),
+                          w_energy=a.stage_c_energy)
         log(f"[SM4b] Stage C (decoded-rollout CRPS) on the flow model and autoencoder: {sc}")
         rc = train_stage_c(ae, flow, data["train"], data["val"], sc, log=log)
         ae.eval(); flow.eval()
@@ -128,12 +146,16 @@ def main():
     (out / "config.json").write_text(json.dumps({"flow": dataclasses.asdict(fcfg), "base_run": str(run), "args": vars(a)}, indent=1))
     (out / "history.json").write_text(json.dumps(hist, indent=1))
     del data, z
+    flow.temperature = a.temperature
+    if a.n_flow_eval:
+        flow.cfg.n_flow = a.n_flow_eval
     # ---- evaluation on the test storms, held boundaries; same cases for every model ----
     test = ColumnData([load_member(files[n]) for n in split["test"]], norm, dev)
     zt = encode_members(ae, test)
-    zt0 = zt if rc is None else encode_members(ae0, test)
+    own_ae = rc is not None or bool(a.init_flow)        # the flow model's autoencoder differs from the base run's
+    zt0 = encode_members(ae0, test) if own_ae else zt
     dt = test.dt
-    n_lead, every = int(round(60 * 60 / dt)), int(round(60 * 60 / dt))
+    n_lead, every = int(round(a.eval_lead_min * 60 / dt)), int(round(60 * 60 / dt))
     if every + n_lead >= min(test.T):   # short runs (smoke): shrink the evaluation to fit
         n_lead = every = max(1, min(test.T) // 3)
         log(f"  WARNING: test runs have only {min(test.T)} frames; evaluating {n_lead} leads every {every} frames")
@@ -147,7 +169,7 @@ def main():
             rows["stochastic"] = forecast_report(ae_s, prop_s, test, encode_members(ae_s, test), norm_s, t0s, n_lead, halo,
                                                  n_samples=a.eval_samples, boundary="persistence")
     lead = [round(s / 60) for s in rows["flow"]["lead_s"]]
-    idx = [lead.index(L) for L in (5, 30, 60) if L in lead] or [0, len(lead) - 1]
+    idx = [lead.index(L) for L in (5, 30, 60, 90) if L in lead] or [0, len(lead) - 1]
     print(f"\n[SM4] test storms, held boundaries: skill (nMSE/persistence) | CRPS skill | spread/error at leads "
           f"{[lead[i] for i in idx]} min")
     for k, r in rows.items():
@@ -157,8 +179,9 @@ def main():
         print(f"   {k:13s} " + " ".join("%.3f" % sk[i] for i in idx) + "  |  " + " ".join("%.3f" % cr[i] for i in idx)
               + "  |  " + (" ".join("%.2f" % se[i] for i in idx) if se else "  -"))
     results = {"split": split, "dt_s": dt, "forecast": rows["flow"], "comparison": rows,
-               "reconstruction": (json.loads((run / "results.json").read_text())["reconstruction"] if rc is None
-                                  else reconstruction_report(ae, test, norm))}
+               "reconstruction": (reconstruction_report(ae, test, norm) if own_ae
+                                  else json.loads((run / "results.json").read_text())["reconstruction"]),
+               "temperature": a.temperature, "n_flow_eval": a.n_flow_eval or fcfg.n_flow}
     (out / "results.json").write_text(json.dumps(results, indent=1))
     write_provenance(out / "results.json", config=fcfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - t_start,
                      extra={"args": vars(a)})

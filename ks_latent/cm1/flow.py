@@ -69,6 +69,7 @@ class FlowPropagator(nn.Module):
         if scale.numel() != c or (scale <= 0).any():
             raise ValueError("delta_scale needs one positive value per latent channel")
         self.register_buffer("scale", scale)
+        self.temperature = 1.0      # sampling only: the source noise is drawn with this standard deviation
 
     def context(self, z: torch.Tensor) -> torch.Tensor:
         h = z.transpose(1, 2)                                                  # (B, c, P)
@@ -107,7 +108,7 @@ class FlowPropagator(nn.Module):
             z = z[:, -1]
         B, P, c = z.shape
         h = self.context(z)
-        x = eps if eps is not None else torch.randn((B, c, P), generator=gen, device="cpu").to(z.device, z.dtype)
+        x = eps if eps is not None else self.temperature * torch.randn((B, c, P), generator=gen, device="cpu").to(z.device, z.dtype)
         n = self.cfg.n_flow
         for i in range(n):
             s = torch.full((B,), i / n, device=z.device, dtype=z.dtype)

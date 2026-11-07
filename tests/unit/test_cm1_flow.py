@@ -94,3 +94,20 @@ def test_pointwise_velocity_has_context_reach_and_trains_in_stage_c():
                                                      val_every=3, warmup=1, crps_samples=2), log=lambda s: None)
     assert np.isfinite(r["best_val_decoded_rollout_mse"])
     assert any((flow.state_dict()[k] != p0[k]).any() for k in p0 if k != "scale")
+
+
+def test_temperature_scales_the_source_noise_and_zero_is_deterministic():
+    torch.manual_seed(0)
+    f = FlowPropagator(_cfg())
+    for p in f.parameters():
+        torch.nn.init.normal_(p, std=0.3)
+    z = torch.randn(2, 12, 3)
+    s1 = f(z, gen=torch.Generator().manual_seed(1))
+    f.temperature = 0.0
+    a, b = f(z, gen=torch.Generator().manual_seed(1)), f(z, gen=torch.Generator().manual_seed(2))
+    torch.testing.assert_close(a, b)
+    torch.testing.assert_close(a, f(z, eps=torch.zeros(2, 3, 12)))
+    f.temperature = 0.5
+    eps = 0.5 * torch.randn((2, 3, 12), generator=torch.Generator().manual_seed(1))
+    torch.testing.assert_close(f(z, gen=torch.Generator().manual_seed(1)), f(z, eps=eps))
+    assert not torch.allclose(s1, a)

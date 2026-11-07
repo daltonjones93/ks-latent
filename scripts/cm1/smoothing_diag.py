@@ -63,6 +63,8 @@ def main():
     ap.add_argument("--t0-min", type=float, nargs="+", default=[60.0, 120.0])
     ap.add_argument("--leads-min", type=float, nargs="+", default=[5.0, 30.0, 60.0])
     ap.add_argument("--n-samples", type=int, default=8)
+    ap.add_argument("--temperature", type=float, default=1.0, help="flow model only: scale of its source noise")
+    ap.add_argument("--n-flow", type=int, default=0, help="flow model only: Euler steps when sampling (0: as trained)")
     ap.add_argument("--device", default="cpu")
     a = ap.parse_args()
     t_start = time.time()
@@ -70,6 +72,12 @@ def main():
     dev = torch.device(a.device)
     ae, prop, norm, cfg, split = load_run(Path(a.run).expanduser(), dev)
     ae_s, prop_s, norm_s, cfg_s, _ = load_stochastic_run(Path(a.run_stoch).expanduser(), dev)
+    if a.temperature != 1.0:
+        if not hasattr(prop_s, "temperature"):
+            raise ValueError("--temperature applies to flow models only")
+        prop_s.temperature = a.temperature
+    if a.n_flow:
+        prop_s.cfg.n_flow = a.n_flow
     if list(norm.scale) != list(norm_s.scale):
         raise ValueError("the two runs use different normalizers")
     halo = cfg["stage_b"]["halo_sites"]
@@ -112,6 +120,8 @@ def main():
         print(f"[SM0] {sn} done [{time.time() - t_start:.0f}s]", flush=True)
     k_wave = np.fft.rfftfreq(NX, d=0.25)                          # cycles per km
     lam = np.where(k_wave > 0, 1.0 / np.maximum(k_wave, 1e-12), np.inf)
+    np.savez(out / "spectra.npz", lam_km=lam, **{f"{L:g}|{k}|{f}|{ln}": spec[L][k][f][ln] / max(n_cases, 1)
+                                                for L in a.leads_min for k in kinds for f in FIELDS for ln in levels})
     res = {"storms": storms, "n_cases": n_cases, "levels": levels, "bands_km": BANDS, "band_variance_ratio": {},
            "extremes": {}}
     for L in a.leads_min:
