@@ -141,11 +141,13 @@ def build_config(a, dt: float | None) -> RunConfig:
                         latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups,
                         vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel, kind=a.ae_kind)
     prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else (a.prop_hidden or a.hidden), layers=layers,
-                             body=a.prop_body, heads=a.prop_heads,
+                             body=a.prop_body, heads=a.prop_heads, law_quadratic=not a.law_no_quadratic,
+                             law_residual_hidden=a.law_residual_hidden, law_integrator=a.law_integrator,
+                             law_substeps=a.law_substeps, law_l1=a.law_l1, law_res_weight=a.law_res_weight,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
-                      val_every=max(1, a.steps_a // 20), seed=a.seed)
+                      val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac)
     sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
                       steps=a.steps_b, k_max=k_max, k_sampling=a.k_sampling, val_every=max(1, a.steps_b // 20),
                       seed=a.seed, crps_samples=a.crps_samples)
@@ -275,8 +277,17 @@ def main():
                     help="Stage C with a stochastic propagator: fair CRPS over this many decoded rollouts")
     ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM2: weight of the energy score in Stage C")
     ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
-    ap.add_argument("--prop-body", choices=["conv", "attention"], default="conv",
-                    help="propagator body: stencil convolutions, or windowed self-attention (M1a)")
+    ap.add_argument("--prop-body", choices=["conv", "attention", "law"], default="conv",
+                    help="propagator body: stencil convolutions, windowed self-attention (M1a), or an explicit latent "
+                         "PDE (FPc: linear + quadratic terms + penalized residual)")
+    ap.add_argument("--law-l1", type=float, default=0.0, help="FPc: L1 weight on the law's coefficients")
+    ap.add_argument("--law-res-weight", type=float, default=0.0, help="FPc: weight of the residual's tendency share")
+    ap.add_argument("--law-residual-hidden", type=int, default=64, help="FPc: residual MLP width (0: none)")
+    ap.add_argument("--law-no-quadratic", action="store_true", help="FPc: linear law (+ residual) only")
+    ap.add_argument("--law-integrator", choices=["euler", "heun"], default="heun")
+    ap.add_argument("--law-substeps", type=int, default=1)
+    ap.add_argument("--nested-frac", type=float, default=0.0,
+                    help="FPc: nested dropout (importance-ordered channels) in Stages A and C: share of samples truncated")
     ap.add_argument("--prop-heads", type=int, default=4)
     ap.add_argument("--prop-hidden", type=int, default=0, help="propagator width (0: --hidden, which also sets the autoencoder's)")
     ap.add_argument("--noise-channels", type=int, default=0, help="stochastic propagator noise channels (D14c)")
@@ -438,7 +449,7 @@ def main():
                               halo_sites=cfg.stage_b.halo_sites, batch=a.stage_c_batch, steps=a.stage_c_steps,
                               lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th, seed=a.seed,
                               crps_samples=a.stage_c_crps, w_energy=a.stage_c_energy, w_spectral=a.stage_c_spectral,
-                              val_every=max(1, a.stage_c_steps // 16))
+                              val_every=max(1, a.stage_c_steps // 16), nested_frac=a.nested_frac)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
             rcst = train_stage_c(ae, prop, data["train"], data["val"], sc, log=log)

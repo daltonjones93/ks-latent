@@ -262,11 +262,21 @@ class StencilPropConfig:
     padding_mode: str = "replicate"
     n_hist: int = 1          # frames of history the step sees (D13); 1 = Markovian
     noise_channels: int = 0  # random input channels per site (D14c stochastic propagator); 0 = deterministic
-    body: str = "conv"       # "conv" (stencil convolutions) or "attention" (M1a: windowed self-attention)
+    body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a) or "law" (FPc: structured latent PDE)
     heads: int = 4           # attention heads (body = "attention")
+    # body = "law" (FPc): dz/dt = A0 z + A1 d1z + A2 d2z + b + Q [z_i z_j, z_i d1z_j] + R(z, d1z, d2z), integrated
+    # over one frame; see LatentLaw. Penalties are applied by `StencilPropagator.penalty()` in Stages B / C.
+    law_quadratic: bool = True        # include the quadratic library
+    law_residual_hidden: int = 64     # pointwise MLP residual width (0: none)
+    law_integrator: str = "heun"      # "euler" or "heun"
+    law_substeps: int = 1
+    law_l1: float = 0.0               # L1 weight on A0 (off-diagonal), A1, A2 and Q (sparsity and sparse coupling)
+    law_res_weight: float = 0.0       # weight of the residual's share of the tendency
 
     @property
     def reach_sites(self) -> int:
+        if self.body == "law":
+            return (2 if self.law_integrator == "heun" else 1) * self.law_substeps
         return self.layers * self.radius
 
 
@@ -298,6 +308,130 @@ class _WindowAttention(nn.Module):
         return x + self.mlp(self.n2(x))
 
 
+def _d1_d2(z: torch.Tensor) -> tuple:
+    """Centred first and second differences along the sites of `z` (B, P, c), replicate padding (open edges)."""
+    zp = torch.cat([z[:, :1], z, z[:, -1:]], dim=1)
+    return 0.5 * (zp[:, 2:] - zp[:, :-2]), zp[:, 2:] - 2 * z + zp[:, :-2]
+
+
+class LatentLaw(nn.Module):
+    """FPc: an explicit latent PDE in x with one frame as the time unit,
+
+        dz/dt = A0 z + A1 d1z + A2 d2z + b + Q1 [z_i z_j]_{i<=j} + Q2 [z_i d1z_j] + R(z, d1z, d2z),
+
+    d1, d2 centred differences over sites (radius 1). The linear part gives each latent mode's dispersion
+    relation directly (A1: propagation, A2: diffusion / anti-diffusion, A0: growth / decay and channel coupling);
+    Q1 / Q2 are the quadratic interactions (Q2 includes advection-like terms z_i d1z_j); R is a pointwise MLP
+    residual (zero-initialized output) whose share of the tendency measures how far the law is from closed form.
+    Every coefficient is zero at initialization, so the step is exactly the identity. Integrated over one frame
+    with `substeps` explicit Euler or Heun steps; reach = stages x substeps sites per frame."""
+
+    def __init__(self, c: int, quadratic: bool = True, residual_hidden: int = 64, integrator: str = "heun",
+                 substeps: int = 1):
+        super().__init__()
+        if integrator not in ("euler", "heun") or substeps < 1:
+            raise ValueError("integrator must be 'euler' or 'heun' and substeps >= 1")
+        self.c, self.integrator, self.substeps = c, integrator, substeps
+        self.A = nn.Parameter(torch.zeros(3, c, c))               # A0, A1, A2 (output, input)
+        self.b = nn.Parameter(torch.zeros(c))
+        iu = torch.triu_indices(c, c)
+        self.register_buffer("iu", iu)
+        self.quadratic = quadratic
+        if quadratic:
+            self.Q1 = nn.Parameter(torch.zeros(c, iu.shape[1]))
+            self.Q2 = nn.Parameter(torch.zeros(c, c * c))
+        self.R = None
+        if residual_hidden:
+            self.R = nn.Sequential(nn.Linear(3 * c, residual_hidden), nn.GELU(), nn.Linear(residual_hidden, c))
+            nn.init.zeros_(self.R[-1].weight)
+            nn.init.zeros_(self.R[-1].bias)
+        self.register_buffer("masks", torch.ones(0))              # filled by `prune`: keep-masks of A, Q1, Q2
+        self._res, self._tot = [], []
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        m = state_dict.get(prefix + "masks")
+        if m is not None and m.shape != self.masks.shape:     # a pruned checkpoint: take its keep-masks
+            self.masks = torch.empty_like(m, device=self.A.device)
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+
+    def coefficient_tensors(self) -> dict:
+        out = {"A": self.A}
+        if self.quadratic:
+            out.update(Q1=self.Q1, Q2=self.Q2)
+        return out
+
+    def tendency(self, z: torch.Tensor) -> torch.Tensor:
+        d1, d2 = _d1_d2(z)
+        A = self.A
+        if self.masks.numel():
+            A = A * self._mask("A")
+        f = z @ A[0].T + d1 @ A[1].T + d2 @ A[2].T + self.b
+        if self.quadratic:
+            Q1, Q2 = (self.Q1 * self._mask("Q1"), self.Q2 * self._mask("Q2")) if self.masks.numel() else (self.Q1, self.Q2)
+            zz = (z[..., :, None] * z[..., None, :])[..., self.iu[0], self.iu[1]]
+            zd = (z[..., :, None] * d1[..., None, :]).flatten(-2)
+            f = f + zz @ Q1.T + zd @ Q2.T
+        if self.R is not None:
+            r = self.R(torch.cat([z, d1, d2], dim=-1))
+            if self.training:
+                self._res.append((r ** 2).mean())
+                self._tot.append(((f + r) ** 2).mean().detach())
+            f = f + r
+        return f
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        h = 1.0 / self.substeps
+        for _ in range(self.substeps):
+            k1 = self.tendency(z)
+            if self.integrator == "euler":
+                z = z + h * k1
+            else:
+                k2 = self.tendency(z + h * k1)
+                z = z + 0.5 * h * (k1 + k2)
+        return z
+
+    def penalty(self, l1: float, res_weight: float) -> torch.Tensor:
+        """L1 on the law's coefficients (A0's diagonal exempt: each mode's own growth or decay is not a coupling)
+        plus `res_weight` x the residual's mean share of the squared tendency over the calls since the last
+        penalty (training mode only). Clears the accumulated residual statistics."""
+        p = self.A.new_zeros(())
+        if l1:
+            off = self.A[0] - torch.diag_embed(torch.diagonal(self.A[0]))
+            p = p + l1 * (off.abs().sum() + self.A[1:].abs().sum())
+            if self.quadratic:
+                p = p + l1 * (self.Q1.abs().sum() + self.Q2.abs().sum())
+        if res_weight and self._res:
+            p = p + res_weight * torch.stack(self._res).mean() / (torch.stack(self._tot).mean() + 1e-8)
+        self._res, self._tot = [], []
+        return p
+
+    def _mask(self, name: str) -> torch.Tensor:
+        sizes = {k: v.numel() for k, v in self.coefficient_tensors().items()}
+        off = 0
+        for k, n in sizes.items():
+            if k == name:
+                return self.masks[off:off + n].view_as(self.coefficient_tensors()[k])
+            off += n
+        raise KeyError(name)
+
+    @torch.no_grad()
+    def prune(self, threshold: float) -> int:
+        """Zero (and keep zero) every coefficient of A, Q1, Q2 with |value| < threshold; returns the number
+        kept. A0's diagonal is always kept."""
+        keep = []
+        for k, v in self.coefficient_tensors().items():
+            m = (v.abs() >= threshold).float()
+            if k == "A":
+                m[0] = torch.maximum(m[0], torch.eye(self.c, device=m.device))
+            v.mul_(m)
+            keep.append(m.flatten())
+        self.masks = torch.cat(keep)
+        return int(self.masks.sum().item())
+
+    def n_terms(self, threshold: float = 0.0) -> int:
+        return int(sum((v.abs() > threshold).sum().item() for v in self.coefficient_tensors().values()))
+
+
 class StencilPropagator(nn.Module):
     """One step `z_{n+1} = z_n + f(...)`, `f` local with reach `layers * radius` sites.
 
@@ -321,6 +455,11 @@ class StencilPropagator(nn.Module):
             self.convs = nn.ModuleList(nn.Conv1d(a, H, 2 * r + 1, padding=r, padding_mode=cfg.padding_mode)
                                        for a in dims)
             self.head = nn.Conv1d(H, c, 1)
+        elif cfg.body == "law":         # FPc: explicit latent PDE (Markovian, deterministic)
+            if cfg.n_hist != 1 or cfg.noise_channels:
+                raise ValueError("body 'law' is Markovian and deterministic: n_hist = 1, noise_channels = 0")
+            self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps)
+            return
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
             self.blocks = nn.ModuleList(_WindowAttention(H, cfg.heads, r) for _ in range(cfg.layers))
@@ -331,8 +470,16 @@ class StencilPropagator(nn.Module):
         nn.init.zeros_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
+    def penalty(self) -> torch.Tensor:
+        """Regularization of the step to add to the training loss (zero except for body 'law')."""
+        if self.cfg.body == "law":
+            return self.law.penalty(self.cfg.law_l1, self.cfg.law_res_weight)
+        return next(self.parameters()).new_zeros(())
+
     def forward(self, z: torch.Tensor, eps: torch.Tensor | None = None,
                 gen: torch.Generator | None = None) -> torch.Tensor:
+        if self.cfg.body == "law":
+            return self.law(z[:, -1] if z.dim() == 4 else z)
         if self.cfg.n_hist == 1:
             if z.dim() == 4:
                 z = z[:, -1]

@@ -48,6 +48,26 @@ class StageAConfig:
     val_every: int = 250
     val_batches: int = 8
     seed: int = 0
+    nested_frac: float = 0.0   # FPc: share of samples decoded from only their first k channels (k uniform)
+
+
+def _penalty(prop) -> torch.Tensor | float:
+    """The propagator's own regularization (FPc law body), or 0 for propagators without one (e.g. the flow model)."""
+    f = getattr(prop, "penalty", None)
+    return f() if f is not None else 0.0
+
+
+def nested_truncate(z: torch.Tensor, frac: float, gen: torch.Generator) -> torch.Tensor:
+    """FPc nested dropout: for a share `frac` of the samples, keep only the first k latent channels (k uniform in
+    1..c, zero the rest) before decoding, so channel 1 alone is the best 1-channel description, 1-2 the best pair,
+    and so on: an importance-ordered latent. `z` (B, P, c); frac 0 returns z unchanged."""
+    if frac <= 0:
+        return z
+    B, c = z.shape[0], z.shape[-1]
+    k = torch.randint(1, c + 1, (B,), generator=gen)
+    k = torch.where(torch.rand(B, generator=gen) < frac, k, torch.full_like(k, c))
+    keep = (torch.arange(c)[None, :] < k[:, None]).to(z.device, z.dtype)
+    return z * keep[:, None, :]
 
 
 @dataclass
@@ -140,7 +160,7 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
         ae.train()
         u, env = draw(data_tr, g)                                                  # (B, C, W)
         z = ae.encode(u, env)
-        uh = ae.decode(z)
+        uh = ae.decode(nested_truncate(z, cfg.nested_frac, g))
         l_rec = F.mse_loss(_interior(uh, m), _interior(u, m))
         zs = _interior(z, mask_sites, dim=1).reshape(-1, z.shape[-1])
         _, l_var = decorr_var_loss(zs)
@@ -290,6 +310,7 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
         else:
             pred = forced_halo_rollout(prop, win, k, h, noise, gen=g)
             loss = F.mse_loss(_interior(pred, h, dim=2), target)
+        loss = loss + _penalty(prop)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(prop.parameters(), cfg.grad_clip)
@@ -341,6 +362,7 @@ class StageCConfig:
     w_sfc_th: float = 0.0       # extra weight on theta' below `sfc_levels` levels (cold pool, G10)
     sfc_levels: int = 10        # ~ the lowest 1 km of the 62-level grid
     crps_samples: int = 0       # > 1: stochastic propagator, decoded-space fair CRPS over this many rollouts
+    nested_frac: float = 0.0    # FPc: nested dropout on the reconstruction term (keeps the channel ordering)
     w_energy: float = 0.0       # SM2: + w * energy score of the decoded samples (spatial structure); needs samples
     w_spectral: float = 0.0     # SM3: + w * log-spectrum mismatch of each sample; needs samples
     active_frac: float = 0.5
@@ -415,11 +437,11 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         u, env = draw(data_tr, Hh + k, g)                                          # (B, H+k, C, W)
         l_roll, z = rollout_err(u, env, k, True, g)
         u0 = u[:, Hh - 1]
-        l_rec = F.mse_loss(_interior(ae.decode(z[:, Hh - 1]), m), _interior(u0, m))
+        l_rec = F.mse_loss(_interior(ae.decode(nested_truncate(z[:, Hh - 1], cfg.nested_frac, g)), m), _interior(u0, m))
         zs = _interior(z[:, Hh - 1], m_sites, dim=1).reshape(-1, z.shape[-1])
         _, l_var = decorr_var_loss(zs)
         l_ld = logdet_barrier_loss(zs, eps=cfg.logdet_eps)
-        loss = l_roll + cfg.w_rec * l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld
+        loss = l_roll + cfg.w_rec * l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld + _penalty(prop)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
