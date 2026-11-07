@@ -767,10 +767,25 @@ All arms start from sm4b_flow_stagec. Ratios are a single sample's band variance
 | E8 (8 Euler steps) | 1.74 / 1.67 | 2.09 / 2.72 | 0.85 | 1.32 / 1.21 | 1.33 / 1.17 | 1.12 / 1.18 | +0.9 / +3.0 / +4.5% |
 | k90 (Stage C to 90 min) | 1.38 / 1.17 | 1.87 / 1.39 | 0.67 | 1.16 / 1.09 | 1.25 / 1.10 | 1.03 / 1.01 | +0.7 / −0.9 / −0.8% |
 | es (CRPS + energy score) | 1.68 / 1.53 | 2.26 / 2.39 | 0.97 | 1.18 / 1.10 | 1.22 / 1.10 | 1.13 / 1.13 | −1.0 / −0.8 / +0.1% |
+| k90 + es | 1.62 / 1.44 | 1.97 / 1.86 | 0.87 | 1.32 / 1.20 | 1.29 / 1.09 | 1.07 / 1.12 | +1.0 / +0.2 / +0.4% |
 
-Pre-registered success (all at 60 and 90 min unless stated): 4-16 km 0.8-1.2; condensate's ≤ 1.3; the three extremes within 10%; CRPS ≤ 2% worse at 5-60; < 4 km ≥ 0.6 at 30. **No arm passes** (k90 + es still running).
+Pre-registered success (all at 60 and 90 min unless stated): 4-16 km 0.8-1.2; condensate's ≤ 1.3; the three extremes within 10%; CRPS ≤ 2% worse at 5-60; < 4 km ≥ 0.6 at 30. **No arm passes (final, all 8 arms).** k90 + es (8998's last arm) is worse than k90 alone on every sharpness measure: the energy score's added variance undoes the longer horizon's gain.
 - **Temperature trades sharpness for skill and cannot fix it alone.** T0.85 brings the mean 4-16 km variance into range and the extremes nearly (w 1.14 at 60), at +2% CRPS, but the < 4 km variance drops to 0.56 and condensate stays 1.7×. Lower temperatures cost CRPS fast (T0.7 +7%).
 - **Not integration error:** 8 Euler steps make the overshoot worse (1.74 / 1.67). The coarse 4-step sampler was damping a learned step distribution that is itself too wide.
 - **Training horizon matters a little:** k90 is the only arm that improves both sharpness (1.53 → 1.38 at 60) and CRPS (−0.9% at 30-60). It is not enough on its own.
 - **The energy score does not help:** es adds small-scale variance (< 4 km 0.97) and leaves the mesoscale overshoot unchanged.
 - **The excess sits in condensate:** with variance in range for w, θ and u (T0.85), condensate's 4-16 km variance is still 1.6-1.7×. The flow makes too many mid-sized cloud and rain features. Likely next: k90 at T ≈ 0.85, or the mean-anchored hybrid (idea 5); a condensate-specific fix is a candidate if neither works.
+
+## FPc: the column model with an explicit latent law (2026-11-07, Saidie 9017-9028; 22 test storms, starts every hour, `forecast_report` as in train_cm1)
+The neural propagator is replaced by dz/dt = A0 z + A1 d1z + A2 d2z + b + Q1[z z] + Q2[z d1z] + R(z, d1z, d2z), Heun, tendency cap 5 (after 8999 diverged), trained Stage B then Stage C with the autoencoder in the loop. Skill is decoded nMSE / persistence's (lower is better); full_v1_stagec has 0.365 / 0.344 at 30 / 60 min.
+
+| Arm | Skill 5 / 30 / 60 | Residual share | Terms > 1e-3 / > 1e-2 | Channels unused (ablation < 1e-3) | Pruning, no retraining: last stable / first unstable (60-min skill > 1) |
+|---|---|---|---|---|---|
+| reuse (full_v1 AE, L1 1e-5) | 0.227 / 0.377 / 0.362 | 0.014 | 46 761 / 14 334 | 0 of 32 | 46 761 terms (0.371) / 37 072 still 0.745, 14 340 diverges |
+| L1 1e-4 | 0.231 / 0.385 / 0.367 | 0.029 | 30 219 / 4 195 | 0 of 32 | 30 220 (0.393) / 18 805 (49) |
+| nested dropout AE | 0.244 / 0.377 / 0.357 | 0.011 | 42 724 / 10 231 | 5 of 32 | 49 388 (0.361) / 42 724 (3.3) |
+
+**Pre-registered reading (plan, FPc): met on skill and residual, not on readability.** Every arm is within 10% of full_v1_stagec at 30 and 60 min (bounds 0.402 / 0.378) with a residual share of 0.01-0.03 (bound 0.3): an explicit local quadratic PDE in the 32 latent channels forecasts CM1 squall lines as well as the neural propagator, and the MLP residual carries only 1-3% of the tendency. **But the law is dense.** 30 000-47 000 of its 52 736 coefficients are above 1e-3, and pruning without retraining has no knee: skill holds until a few thousand to ~30 000 terms are removed, then the 60-min forecast blows up. There is no law of a readable size (hundreds of terms) on this latent. That is the question FPd asks (thresholding during training, with the autoencoder adapting).
+- **Nested dropout orders the channels** (1 channel: reconstruction 0.30, 4: 0.15, 8: 0.086, against 1.10 / 0.97 / 0.74 without), at no skill cost (0.377 / 0.357). The largest terms then act on the first channels (d2 z0, d2 z1, z1 d1z1): diffusion-like and advection-like terms of the leading modes. 5 trailing channels are nearly unused (ablation 0.0008-0.001), as expected when the ordering pushes content forward.
+- **Linear part about z = 0:** damped at 4-8 km (growth −0.01 to −0.18 /min), weakly growing at 32-128 km (+0.01 to +0.09 /min); fastest phase speeds 0.4-0.5 km/min at 4 km rising to 2.5-3.2 km/min at 128 km. That last value is between the cold-pool speed and the gravity-wave speeds (Q1). z = 0 is the climatological mean latent, not a rest state, so these are indicative only.
+- The largest single terms are diagonal second derivatives (d2 z_k on dz_k/dt, +0.10 to +0.19: diffusion of each channel) and first derivatives (advection). Channel couplings are spread thin, and none dominates.
