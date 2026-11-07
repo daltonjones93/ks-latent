@@ -144,7 +144,7 @@ def build_config(a, dt: float | None) -> RunConfig:
                              body=a.prop_body, heads=a.prop_heads, law_quadratic=not a.law_no_quadratic,
                              law_residual_hidden=a.law_residual_hidden, law_integrator=a.law_integrator,
                              law_substeps=a.law_substeps, law_l1=a.law_l1, law_res_weight=a.law_res_weight,
-                             law_global=a.law_global,
+                             law_global=a.law_global, law_cap=a.law_cap,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
@@ -285,6 +285,8 @@ def main():
     ap.add_argument("--law-res-weight", type=float, default=0.0, help="FPc: weight of the residual's tendency share")
     ap.add_argument("--law-residual-hidden", type=int, default=64, help="FPc: residual MLP width (0: none)")
     ap.add_argument("--law-no-quadratic", action="store_true", help="FPc: linear law (+ residual) only")
+    ap.add_argument("--law-cap", type=float, default=0.0,
+                    help="FPc: saturating bound on the law's tendency, cap tanh(F/cap) per minute (0: off)")
     ap.add_argument("--law-global", action="store_true",
                     help="FPc: + G <z> (channel means over the sites the step sees); train with --window-b = domain width")
     ap.add_argument("--law-integrator", choices=["euler", "heun"], default="heun")
@@ -304,6 +306,14 @@ def main():
     ap.add_argument("--stage-c-k", type=int, default=20)
     ap.add_argument("--stage-c-lr", type=float, default=1e-4)
     ap.add_argument("--stage-c-batch", type=int, default=12)
+    ap.add_argument("--c-law-l1", type=float, default=-1.0, help="FPd: law L1 weight in Stage C (-1: the run's)")
+    ap.add_argument("--c-law-res-end", type=float, default=-1.0,
+                    help="FPd: ramp the law's residual-share weight to this over the first half of Stage C (-1: off)")
+    ap.add_argument("--c-law-prune-every", type=int, default=0, help="FPd: sequential thresholding period (steps)")
+    ap.add_argument("--c-law-prune-rel", type=float, default=0.02,
+                    help="FPd: prune terms below this fraction of the largest coupling")
+    ap.add_argument("--c-site-smooth", type=float, default=0.0,
+                    help="FPd: weight of the latent's second difference over sites (physical space, not channel index)")
     ap.add_argument("--w-sfc-th", type=float, default=0.0, help="Stage C extra weight on theta' in the lowest ~1 km")
     ap.add_argument("--env-file", default="",
                     help="environment features (scripts/cm1/build_env.py), '+'-separated files: condition the encoder (D11)")
@@ -452,7 +462,10 @@ def main():
                               halo_sites=cfg.stage_b.halo_sites, batch=a.stage_c_batch, steps=a.stage_c_steps,
                               lr=a.stage_c_lr, k_max=a.stage_c_k, w_sfc_th=a.w_sfc_th, seed=a.seed,
                               crps_samples=a.stage_c_crps, w_energy=a.stage_c_energy, w_spectral=a.stage_c_spectral,
-                              val_every=max(1, a.stage_c_steps // 16), nested_frac=a.nested_frac)
+                              val_every=max(1, a.stage_c_steps // 16), nested_frac=a.nested_frac,
+                              law_l1=a.c_law_l1, law_res_weight_end=a.c_law_res_end,
+                              law_prune_every=a.c_law_prune_every, law_prune_rel=a.c_law_prune_rel,
+                              w_site_smooth=a.c_site_smooth)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
             rcst = train_stage_c(ae, prop, data["train"], data["val"], sc, log=log)

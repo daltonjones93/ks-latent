@@ -161,3 +161,86 @@ def test_global_mean_term_couples_every_site_and_is_penalized_and_pruned():
     assert abs(d - 0.5 * 3.0 / 30) < 1e-3
     kept = p.law.prune(0.3)
     assert p.law._mask("G").sum() == 1 and kept == 3        # + the always-kept diagonal of A0 (2 entries)
+
+
+def test_repeated_pruning_only_removes_terms_and_reports_read_masked_coefficients():
+    """FPd: after pruning, Adam momentum and weight decay move masked raw parameters off zero; a later pruning
+    must not bring those terms back, and term counts / reports must read the masked (effective) coefficients."""
+    torch.manual_seed(2)
+    p = _law_prop(c=3, law_residual_hidden=0)
+    for t in p.law.coefficient_tensors().values():
+        torch.nn.init.normal_(t, std=0.1)
+    opt = torch.optim.AdamW(p.parameters(), lr=0.05, weight_decay=0.1)
+    for _ in range(3):                         # build up momentum on every coefficient
+        loss = ((p(torch.randn(2, 10, 3)) - 1) ** 2).mean()
+        opt.zero_grad(); loss.backward(); opt.step()
+    kept1 = p.law.prune(0.1)
+    mask1 = p.law.masks.clone()
+    for _ in range(3):                         # stale momentum moves the masked raw parameters
+        loss = ((p(torch.randn(2, 10, 3)) - 1) ** 2).mean()
+        opt.zero_grad(); loss.backward(); opt.step()
+    raw_masked = torch.cat([v.detach().flatten() for v in p.law.coefficient_tensors().values()])[mask1 == 0]
+    assert raw_masked.abs().max() > 0          # the drift this guards against is real
+    assert p.law.n_terms() <= kept1
+    kept2 = p.law.prune(0.0)                   # threshold 0 would keep everything without the mask
+    assert kept2 <= kept1 and ((p.law.masks > 0) <= (mask1 > 0)).all()
+    assert p.law.max_coupling() >= 0.1
+
+
+def test_site_smoothness_is_scale_free_and_zero_for_linear_fields():
+    from ks_latent.cm1.train import site_smoothness
+    x = torch.linspace(-1, 1, 30)
+    lin = torch.stack([x, 2 * x - 0.3], -1)[None].repeat(2, 1, 1)
+    assert site_smoothness(lin).item() < 1e-10
+    z = torch.randn(2, 30, 4)
+    torch.testing.assert_close(site_smoothness(3.0 * z), site_smoothness(z))
+    assert site_smoothness(z).item() > 1.0     # independent sites: E d2^2 = 6 var
+
+
+def test_stage_c_fpd_ramps_residual_weight_and_prunes():
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z))
+    prop = _law_prop(c=3, law_l1=1e-5, law_res_weight=0.1)
+    for t in prop.law.coefficient_tensors().values():
+        torch.nn.init.normal_(t, std=0.05)
+    n0 = prop.law.n_terms()
+    msgs = []
+    rc = train_stage_c(ae, prop, tr, va, StageCConfig(window_sites=14, halo_sites=2, batch=2, steps=8, k_max=2,
+                                                      val_every=2, warmup=1, law_l1=1e-3, law_res_weight_end=2.0,
+                                                      law_res_ramp_frac=0.5, law_prune_every=2,
+                                                      law_prune_start_frac=0.5, law_prune_rel=0.3,
+                                                      w_site_smooth=0.1), log=msgs.append)
+    assert prop.cfg.law_l1 == 1e-3 and abs(prop.cfg.law_res_weight - 2.0) < 1e-9
+    assert any("pruned below" in m for m in msgs)
+    assert prop.law.n_terms() < n0 and rc["history"][-1]["law_terms"] == prop.law.n_terms()
+    assert np.isfinite(rc["best_val_decoded_rollout_mse"])
+    conv = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1))
+    with pytest.raises(ValueError):
+        train_stage_c(ae, conv, tr, va, StageCConfig(window_sites=14, halo_sites=2, batch=2, steps=2, k_max=2,
+                                                     law_prune_every=1), log=lambda s: None)
+
+
+def test_tendency_cap_bounds_rollouts_and_is_transparent_for_small_tendencies():
+    """FPc fix: an explicit quadratic law blew up in a 45-step rollout (Saidie 8999). With a cap, every step is
+    bounded by cap per stage; for small tendencies the capped law equals the uncapped one."""
+    torch.manual_seed(0)
+    free, capped = _law_prop(c=3, law_residual_hidden=0), _law_prop(c=3, law_residual_hidden=0, law_cap=1.0)
+    with torch.no_grad():
+        for p in (free, capped):
+            p.law.Q1.fill_(0.5)                  # dz/dt ~ z^2: finite-time blow-up without a bound
+    z = torch.full((1, 12, 3), 2.0)
+    zf, zc = z.clone(), z.clone()
+    with torch.no_grad():
+        for _ in range(45):
+            zf, zc = free(zf), capped(zc)
+    assert not torch.isfinite(zf).all()
+    assert torch.isfinite(zc).all() and (zc - z).abs().max() <= 45 * 1.0 + 1e-4
+    small = 1e-3 * torch.randn(2, 12, 3)
+    torch.testing.assert_close(capped(small), free(small), atol=1e-8, rtol=1e-6)
+    with pytest.raises(ValueError):
+        _law_prop(law_cap=-1.0)

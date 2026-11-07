@@ -42,7 +42,7 @@ def term_names(c: int, iu: torch.Tensor) -> dict:
 def top_terms(law, n: int) -> list:
     names = term_names(law.c, law.iu)
     rows = []
-    co = law.coefficient_tensors()
+    co = law.effective_coefficients()
     A = co["A"].detach().cpu().numpy()
     for o in range(3):
         for i in range(law.c):
@@ -59,7 +59,7 @@ def top_terms(law, n: int) -> list:
 
 
 def dispersion(law, wavelengths_km: list) -> list:
-    A = law.coefficient_tensors()["A"].detach().double().cpu()
+    A = law.effective_coefficients()["A"].detach().double().cpu()
     out = []
     for L in wavelengths_km:
         kappa = 2 * np.pi * SITE_KM / L                       # radians per site
@@ -105,6 +105,24 @@ def main():
                     zk = z.clone(); zk[..., k:] = 0
                     err[k].append(((ae.decode(zk) - u) ** 2).mean().item())
     res["ordering_nmse_first_k"] = {str(k): float(np.mean(v)) for k, v in err.items()}
+    # channel use (FPd's cheat check): each channel's spread over test states, and the reconstruction nMSE
+    # increase when that channel alone is replaced by its mean (a channel the decoder ignores costs ~0)
+    with torch.no_grad():
+        zs, abl = [], np.zeros(c)
+        n_ab = 0
+        for m in range(len(test.u)):
+            for t in range(test.T[m] // 4, test.T[m], max(1, test.T[m] // 4)):
+                u = test.full(m, t)
+                z = ae.encode(u)
+                zs.append(z.reshape(-1, c))
+                base = ((ae.decode(z) - u) ** 2).mean().item()
+                mu = z.mean(dim=-2, keepdim=True)
+                for j in range(c):
+                    zj = z.clone(); zj[..., j] = mu[..., j]
+                    abl[j] += ((ae.decode(zj) - u) ** 2).mean().item() - base
+                n_ab += 1
+        res["channel_std"] = [float(x) for x in torch.cat(zs).std(0).cpu()]
+        res["channel_ablation_nmse_increase"] = [float(x) for x in abl / max(1, n_ab)]
     # residual share on encoded test states
     zt = encode_members(ae, test)
     with torch.no_grad():
@@ -118,11 +136,16 @@ def main():
             f = law.tendency(zz)
             num += float((r ** 2).sum()); den += float((f ** 2).sum())
     res["residual_share"] = num / den if den else 0.0
+    if law.cap:   # share of encoded test tendencies in the saturated range (|F| > cap, i.e. |cap tanh| > 0.76 cap)
+        with torch.no_grad():
+            sat = [float((law.tendency(z[::5].to(dev)).abs() > 0.76 * law.cap).float().mean()) for z in zt]
+        res["cap_saturated_share"] = float(np.mean(sat))
     res["n_coefficients"] = sum(v.numel() for v in law.coefficient_tensors().values())
     res["terms_above"] = {f"{t:g}": law.n_terms(t) for t in (1e-4, 1e-3, 1e-2, 1e-1)}
     res["top_terms"] = top_terms(law, 25)
     if law.global_mean:   # size of the domain-mean coupling against the local linear coupling
-        res["global_vs_local_A0_norm"] = float(law.G.norm() / law.A[0].norm().clamp(min=1e-12))
+        eff = law.effective_coefficients()
+        res["global_vs_local_A0_norm"] = float(eff["G"].norm() / eff["A"][0].norm().clamp(min=1e-12))
     res["dispersion"] = dispersion(law, [4, 8, 16, 32, 64, 128])
     # pruning path
     every = int(round(60 * 60 / test.dt))
@@ -144,8 +167,14 @@ def main():
               f"[{time.time() - t0:.0f}s]", flush=True)
     res["pruning_path"] = path
     (run / "law_report.json").write_text(json.dumps(res, indent=1))
+    if "cap_saturated_share" in res:
+        print(f"[law] tendency cap {law.cap}: share of test tendencies saturated {res['cap_saturated_share']:.4f}")
     print(f"\n[law] {run.name}: {res['n_coefficients']} coefficients; above 1e-4/1e-3/1e-2/1e-1: "
           f"{' / '.join(str(v) for v in res['terms_above'].values())}; residual share of the tendency {res['residual_share']:.3f}")
+    ab = np.array(res["channel_ablation_nmse_increase"])
+    print(f"[law] channel use: std min/median {min(res['channel_std']):.3f}/{np.median(res['channel_std']):.3f}; "
+          f"ablation nMSE increase min/median/max {ab.min():.4f}/{np.median(ab):.4f}/{ab.max():.4f}; "
+          f"channels costing < 1e-3 when removed: {int((ab < 1e-3).sum())} of {len(ab)}")
     print("[law] reconstruction nMSE from the first k channels: " +
           "  ".join(f"k={k} {v:.4f}" for k, v in res["ordering_nmse_first_k"].items()))
     print("[law] linear part about z = 0: wavelength -> max growth (1/min), fastest |phase speed| (km/min)")

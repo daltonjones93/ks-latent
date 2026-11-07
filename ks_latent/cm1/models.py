@@ -273,6 +273,7 @@ class StencilPropConfig:
     law_l1: float = 0.0               # L1 weight on A0 (off-diagonal), A1, A2 and Q (sparsity and sparse coupling)
     law_res_weight: float = 0.0       # weight of the residual's share of the tendency
     law_global: bool = False          # + G <z>: each channel's mean over all sites the step sees (hybrid local/global)
+    law_cap: float = 0.0              # > 0: dz/dt = cap tanh(F / cap), a saturating bound so rollouts stay finite
 
     @property
     def reach_sites(self) -> int:
@@ -325,14 +326,15 @@ class LatentLaw(nn.Module):
     Q1 / Q2 are the quadratic interactions (Q2 includes advection-like terms z_i d1z_j); R is a pointwise MLP
     residual (zero-initialized output) whose share of the tendency measures how far the law is from closed form.
     Every coefficient is zero at initialization, so the step is exactly the identity. Integrated over one frame
-    with `substeps` explicit Euler or Heun steps; reach = stages x substeps sites per frame."""
+    with `substeps` explicit Euler or Heun steps; reach = stages x substeps sites per frame. With `cap` > 0 the
+    tendency is cap tanh(F / cap): identical to F for small F, bounded for large."""
 
     def __init__(self, c: int, quadratic: bool = True, residual_hidden: int = 64, integrator: str = "heun",
-                 substeps: int = 1, global_mean: bool = False):
+                 substeps: int = 1, global_mean: bool = False, cap: float = 0.0):
         super().__init__()
-        if integrator not in ("euler", "heun") or substeps < 1:
-            raise ValueError("integrator must be 'euler' or 'heun' and substeps >= 1")
-        self.c, self.integrator, self.substeps = c, integrator, substeps
+        if integrator not in ("euler", "heun") or substeps < 1 or cap < 0:
+            raise ValueError("integrator must be 'euler' or 'heun', substeps >= 1, cap >= 0")
+        self.c, self.integrator, self.substeps, self.cap = c, integrator, substeps, cap
         self.A = nn.Parameter(torch.zeros(3, c, c))               # A0, A1, A2 (output, input)
         self.b = nn.Parameter(torch.zeros(c))
         iu = torch.triu_indices(c, c)
@@ -388,6 +390,11 @@ class LatentLaw(nn.Module):
                 self._res.append((r ** 2).mean())
                 self._tot.append(((f + r) ** 2).mean().detach())
             f = f + r
+        if self.cap:
+            # Saturating bound (FPc fix, 2026-11-07): an explicit quadratic law rolled out 45 steps blew up to inf
+            # in Stage B (Saidie 8999). cap tanh(F / cap) equals F within 3% for |F| < 0.3 cap, so the law reads
+            # as written in the normal regime, and every step is bounded by cap.
+            f = self.cap * torch.tanh(f / self.cap)
         return f
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
@@ -427,13 +434,25 @@ class LatentLaw(nn.Module):
             off += n
         raise KeyError(name)
 
+    def effective_coefficients(self) -> dict:
+        """The coefficients the law actually uses: raw parameters times their keep-masks. After pruning, a
+        masked parameter can drift away from zero (Adam momentum, weight decay) without any effect on the law,
+        so reports and term counts must read these, not the raw parameters."""
+        co = self.coefficient_tensors()
+        if not self.masks.numel():
+            return co
+        return {k: v * self._mask(k) for k, v in co.items()}
+
     @torch.no_grad()
     def prune(self, threshold: float) -> int:
-        """Zero (and keep zero) every coefficient of A, Q1, Q2 with |value| < threshold; returns the number
-        kept. A0's diagonal is always kept."""
+        """Zero (and keep zero) every coefficient of A, Q1, Q2, G with |value| < threshold; returns the number
+        kept. A0's diagonal is always kept. Repeated pruning only removes terms: a term pruned earlier stays
+        pruned (FPd's sequential thresholding during training)."""
         keep = []
         for k, v in self.coefficient_tensors().items():
             m = (v.abs() >= threshold).float()
+            if self.masks.numel():
+                m = m * self._mask(k)
             if k == "A":
                 m[0] = torch.maximum(m[0], torch.eye(self.c, device=m.device))
             v.mul_(m)
@@ -442,7 +461,17 @@ class LatentLaw(nn.Module):
         return int(self.masks.sum().item())
 
     def n_terms(self, threshold: float = 0.0) -> int:
-        return int(sum((v.abs() > threshold).sum().item() for v in self.coefficient_tensors().values()))
+        return int(sum((v.abs() > threshold).sum().item() for v in self.effective_coefficients().values()))
+
+    def max_coupling(self) -> float:
+        """Largest |coefficient| of the law excluding A0's diagonal (the scale for relative thresholds)."""
+        mx = 0.0
+        for k, v in self.effective_coefficients().items():
+            v = v.detach()
+            if k == "A":
+                v = torch.cat([(v[0] - torch.diag_embed(torch.diagonal(v[0]))).flatten(), v[1:].flatten()])
+            mx = max(mx, float(v.abs().max()))
+        return mx
 
 
 class StencilPropagator(nn.Module):
@@ -472,7 +501,7 @@ class StencilPropagator(nn.Module):
             if cfg.n_hist != 1 or cfg.noise_channels:
                 raise ValueError("body 'law' is Markovian and deterministic: n_hist = 1, noise_channels = 0")
             self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps,
-                                 cfg.law_global)
+                                 cfg.law_global, cfg.law_cap)
             return
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)

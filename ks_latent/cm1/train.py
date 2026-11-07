@@ -22,6 +22,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -334,6 +335,9 @@ def train_stage_b(prop: StencilPropagator, z_tr: list[torch.Tensor], z_va: list[
             hist.append(rec)
             log(f"  [B] step {step + 1}/{cfg.steps} k {k} loss {loss.item():.5f} val {v:.5f} "
                 f"(persistence {pers.mean().item():.5f}) [{rec['wall_s']:.0f}s]")
+            if not (np.isfinite(v) and np.isfinite(loss.item())):
+                raise FloatingPointError(f"Stage B diverged at step {step + 1} (k {k}): train loss {loss.item()}, "
+                                         f"val (k={cfg.k_max}) {v}; for a law propagator try --law-cap")
             if v < best:
                 best, best_state = v, {kk: t.detach().clone() for kk, t in prop.state_dict().items()}
     prop.load_state_dict(best_state)
@@ -365,10 +369,26 @@ class StageCConfig:
     nested_frac: float = 0.0    # FPc: nested dropout on the reconstruction term (keeps the channel ordering)
     w_energy: float = 0.0       # SM2: + w * energy score of the decoded samples (spatial structure); needs samples
     w_spectral: float = 0.0     # SM3: + w * log-spectrum mismatch of each sample; needs samples
+    # FPd (law propagator only): shape the latent so the explicit law closes
+    law_l1: float = -1.0              # >= 0: override the law's L1 weight for this stage
+    law_res_weight_end: float = -1.0  # >= 0: ramp the residual-share weight linearly to this value ...
+    law_res_ramp_frac: float = 0.5    # ... over this fraction of the steps
+    law_prune_every: int = 0          # > 0: sequential thresholding every this many steps ...
+    law_prune_start_frac: float = 0.4 # ... from this fraction of the steps on ...
+    law_prune_rel: float = 0.02       # ... zeroing terms below this fraction of the largest coupling
+    w_site_smooth: float = 0.0        # + w * mean (second difference of z over sites)^2 / var(z), first frame
     active_frac: float = 0.5
     val_every: int = 250
     val_batches: int = 4
     seed: int = 0
+
+
+def site_smoothness(z: torch.Tensor) -> torch.Tensor:
+    """FPd: mean squared second difference of the latent over neighbouring sites, relative to the latent's
+    variance (scale-free, so shrinking z does not lower it). `z` (B, P, c). Over physical space (sites), not
+    over the channel index."""
+    d2 = z[:, 2:] - 2 * z[:, 1:-1] + z[:, :-2]
+    return (d2 ** 2).mean() / (z.var() + 1e-8)
 
 
 def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnData, data_va: ColumnData,
@@ -410,6 +430,14 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     kcfg = StageBConfig(k_max=cfg.k_max, k_ramp_frac=cfg.k_ramp_frac, k_sampling=cfg.k_sampling)
+    is_law = getattr(prop.cfg, "body", None) == "law"
+    fpd = cfg.law_l1 >= 0 or cfg.law_res_weight_end >= 0 or cfg.law_prune_every > 0
+    if fpd and not is_law:
+        raise ValueError("law_l1 / law_res_weight_end / law_prune_every need a law propagator (body 'law')")
+    if cfg.law_l1 >= 0:
+        prop.cfg.law_l1 = cfg.law_l1
+    res0 = prop.cfg.law_res_weight if is_law else 0.0
+    prune_start = int(cfg.law_prune_start_frac * cfg.steps)
 
     def rollout_err(u, env, k, weighted, gen):
         B, F_ = u.shape[:2]
@@ -434,6 +462,9 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     for step in range(cfg.steps):
         ae.train(); prop.train()
         k = _k_now(step / cfg.steps, kcfg, g)
+        if cfg.law_res_weight_end >= 0:
+            fr = min(1.0, step / max(1, cfg.law_res_ramp_frac * cfg.steps))
+            prop.cfg.law_res_weight = res0 + (cfg.law_res_weight_end - res0) * fr
         u, env = draw(data_tr, Hh + k, g)                                          # (B, H+k, C, W)
         l_roll, z = rollout_err(u, env, k, True, g)
         u0 = u[:, Hh - 1]
@@ -442,10 +473,18 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         _, l_var = decorr_var_loss(zs)
         l_ld = logdet_barrier_loss(zs, eps=cfg.logdet_eps)
         loss = l_roll + cfg.w_rec * l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld + _penalty(prop)
+        if cfg.w_site_smooth:
+            loss = loss + cfg.w_site_smooth * site_smoothness(_interior(z[:, Hh - 1], m_sites, dim=1))
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
         opt.step(); sched.step()
+        if cfg.law_prune_every and step + 1 >= prune_start and (step + 1 - prune_start) % cfg.law_prune_every == 0:
+            thr = cfg.law_prune_rel * prop.law.max_coupling()
+            kept = prop.law.prune(thr)
+            best, best_state = float("inf"), None     # checkpoints from before a pruning are not eligible
+            log(f"  [C] step {step + 1}: pruned below {thr:.2e} ({cfg.law_prune_rel:g} x largest coupling): "
+                f"{kept} terms kept, residual weight {prop.cfg.law_res_weight:.3g}")
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             ae.eval(); prop.eval()
             with torch.no_grad():
@@ -453,6 +492,11 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                         for x, e in val) / len(val)
             rec = {"step": step + 1, "k": k, "l_roll": l_roll.item(), "l_rec": l_rec.item(), "l_logdet": l_ld.item(),
                    "val_decoded_rollout_mse": v, "wall_s": time.time() - t0}
+            if not (np.isfinite(v) and np.isfinite(rec["l_roll"])):
+                raise FloatingPointError(f"Stage C diverged at step {step + 1} (k {k}): rollout loss {rec['l_roll']}, "
+                                         f"val (k={cfg.k_max}) {v}")
+            if is_law:
+                rec.update(law_terms=prop.law.n_terms(), law_res_weight=prop.cfg.law_res_weight)
             hist.append(rec)
             log(f"  [C] step {step + 1}/{cfg.steps} k {k} roll {rec['l_roll']:.4f} rec {rec['l_rec']:.4f} "
                 f"val (decoded, k={cfg.k_max}) {v:.4f} [{rec['wall_s']:.0f}s]")
