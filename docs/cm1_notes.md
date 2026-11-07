@@ -742,7 +742,8 @@ Same sweep as FP1 with the local latent stepper trained jointly (decoded k-step 
 | 4:4:2 jet | 0.5 | 0.012 | 0.88 0.93 0.49 | 0.20 / 0.14 / 0.40 / 0.62 / 0.73 |
 | 8:4:2 jet | 1 | 0.009 | 0.92 0.97 0.64 | 0.18 / 0.14 / 0.59 / 2.0 / 21 |
 
-- **Within the training horizon the field models are very good:** 5-min skill 0.14-0.19 for most configs, better than the column model's 0.213.
+- **Compression caveat (read first):** data = 7 numbers per grid point, so compression = 7 / num/pt: 7x at m = 1, 1.75x at m = 4 full resolution, 14x for 4:4:2, against the column model's 108x. Most of these latents nearly are the data.
+- **Within the training horizon the low-compression field models are very good:** 5-min skill 0.14-0.19 for most configs, numerically better than the column model's 0.213, but at 8-60x less compression. This is not a like-for-like win.
 - **Beyond it they are unstable:** every config is worse than persistence by 30 min, most diverge (skill 10²-10⁶ at 60 min). Short-horizon training (k ≤ 5) does not constrain the long rollout; the column model needed Stage C (k 45) for the same reason. More numbers per point → better short forecasts and faster blow-up.
 - Coarser latent grids are the most stable (4:4:2, 0.5 num/pt: 0.62 / 0.73 at 30 / 60 min).
 - Training with propagation raises the probes of conserved variables (θ_il 0.35-0.90 and q_t 0.60-0.95 rise with m; η stays hard, ≤ 0.68), but no m saturation is visible in the short-range skill (5-min: 0.35 / 0.23 / 0.19 / 0.19 / 0.18 for m = 1-6 at full resolution; it flattens from m = 3).
