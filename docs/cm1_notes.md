@@ -595,3 +595,44 @@ DA (θ′ + reflectivity, noise 0.1, 36 cycles from 1 h, so the scored second ha
 
 - Seed spread of the conv model is tiny (±0.003). At matched size attention is better at 5 min but worse at 30–60 min by more than that: **not adopted** under the pre-registered rule.
 - At 256 wide it is 12% better at 5 min, equal at 30–60 min, with better rain FSS and a weaker cold-pool bias. Under the rule (30 and 60 min) it is not adopted for forecasting, **but the DA cycles every 5 min, where it is clearly better, so it is worth a DA test.**
+
+## Capacity, attention-in-DA, representation-in-DA and the PCA baseline (2026-11-07, Saidie 8966–8994, Cashew 750295–750296)
+DA rows: 22 test storms × 3 seeds, θ′ + reflectivity + radial velocity, latent noise tuned on the 6 validation storms (`pick_tuned.py`, lowest validation prior nMSE), paired against the headline (noise_det_0.1, 0.273 ± 0.022).
+
+**M1c, capacity control** (conv propagator 512 wide, 1.64 M parameters, matched to attn256's 1.60 M; one seed):
+
+| Propagator | Parameters | Skill 5 / 30 / 60 | Rain FSS 60 | Cold-pool bias |
+|---|---|---|---|---|
+| conv 128 (full_v1_stagec; seed 1: 0.212 / 0.368 / 0.342) | 0.43 M | 0.213 / **0.365** / **0.344** | 0.590 | −17.4% |
+| conv 512 (m1c_conv512_s0_stagec) | 1.64 M | 0.199 / 0.378 / 0.354 | 0.617 | −15.6% |
+| attention 256 (m1a_attn256_s0_stagec) | 1.60 M | **0.188** / 0.369 / 0.348 | **0.639** | −15.3% |
+
+- Capacity explains about half of attention's 5-min gain (0.213 → 0.199 from size alone, → 0.188 with attention) and most of the rain-FSS and cold-pool gains. At 30–60 min neither large model beats the small conv model (conv-512 is 3% worse). Attention adds ~5% at 5 min over a conv model of the same size.
+
+**M1a-DA, attention propagator in DA** (tuned noise 0.05): cycled 0.274 ± 0.024, analysis 0.261; paired against the headline **+0.001 ± 0.011** (lower on 12 / 22), 5 / 30 / 60 min forecasts −0.003 / −0.002 / +0.001. **No DA gain**: the 12% better 5-min forecast does not show up in cycling (observations every 5 min correct what the model gets wrong at 5 min). Spread/error 0.44 against the headline's 0.71 (its validation-best noise is lower). Not adopted.
+
+**SM1-DA, richer representation in DA** (64-channel model, reconstruction −36%; tuned noise 0.05): cycled 0.296 ± 0.023, paired **+0.023 ± 0.006 (worse, 21 / 22 storms)**, 60-min forecasts +0.056. A better autoencoder makes DA worse, not better (more latent dimensions per site for 32 members to constrain). **M1b's gate fails**: attention in the autoencoder is not worth building for DA.
+
+**I-PCA, is the nonlinear autoencoder needed?** **Yes, clearly.**
+1. *Linear local-latent model* (PCA-32 per 2 km site, same propagator, Stage B + C, tuned noise 0.02, the bottom of the grid, but validation nMSE is flat there, 0.350 / 0.353 at 0.02 / 0.05):
+   - Forecasts: skill 0.306 / 0.420 / 0.399 against 0.213 / 0.365 / 0.344 (44 / 15 / 16% worse); fronts 1.09 / 2.02 km against 0.62 / 1.39; rain FSS 0.49 against 0.59; divergence ratio 0.61 against the truth's 0.22 (PCA cannot keep the anelastic balance).
+   - DA: cycled **0.372 ± 0.026**, paired **+0.100 ± 0.012** (worse on 22 / 22), fronts 0.55 against 0.38 km. Still beats no DA (−0.245), but is **worse than both claim-3 baselines that use the learned model** (surrogate EnOI 0.356, observation-only analysis 0.311): the learned autoencoder is what makes the latent DA beat them.
+2. *Nonlinear probes* (MLP vs linear, test R²; Cashew 750295): MLPs read both latents better (log rain rate: latent 0.916 → 0.972, PCA 0.948 → 0.977; w_max: 0.847 → 0.950, PCA 0.856 → 0.964), and the gap between the latent and PCA closes to ≤ 0.01 everywhere. So the latent's information is all there, but nonlinearly encoded; the P-probe finding "latent ≈ PCA-32" was a linear-readout artefact. Event prediction (P3): latent and PCA AUCs within 0.01 with or without MLP.
+3. *Reconstruction at equal dimension* (22 test storms):
+
+| Model | Dim / site | nMSE | Storm nMSE | w 1 km, < 4 / 4–16 km | Cond 5 km, < 4 / 4–16 km | w 99.9% (truth 11.0) |
+|---|---|---|---|---|---|---|
+| autoencoder (full_v1) | 32 | **0.022** | **0.071** | 0.73 / 0.97 | 0.48 / 0.92 | 10.78 |
+| autoencoder 64 ch (sm1_c64) | 64 | 0.014 | 0.044 | 0.86 / 0.98 | 0.59 / 0.96 | 10.87 |
+| PCA-16 | 16 | 0.116 | 0.303 | 0.53 / 0.63 | 0.51 / 0.60 | 10.13 |
+| PCA-32 | 32 | 0.061 | 0.170 | 0.59 / 0.91 | 0.65 / 0.68 | 10.56 |
+| PCA-64 | 64 | 0.029 | 0.085 | 0.80 / 0.98 | 0.60 / 0.82 | 10.75 |
+
+   The autoencoder at 32 beats PCA at 64 (half the dimension); PCA-32's error is 2.7× larger, worst in the 4–16 km condensate band (0.68 against 0.92). PCA-64 explains 95.4% of the storm-weighted variance.
+
+**M1a-T (part 1), does attention transfer?** T2 two-storm runs with attn256 (Cashew 750296; unpaired, 8 storms, one seed; conv t2_v1 in brackets):
+- Forecast error ratio two-storm / single at 5 / 30 / 60 min: before interaction 0.93 / 0.99 / 1.01 (0.98 / 0.99 / 1.01) and 1.03 / 1.00 / 1.13 (0.97 / 1.00 / 1.04); after it 1.23 / 1.03 / 1.22 (1.17 / 1.03 / 1.14) and 1.15 / 0.90 / 1.28 (1.09 / 0.83 / 1.15). Two-storm 60-min skill 0.362 / 0.438 / 0.384 / 0.491 against conv 0.378 / 0.409 / 0.358 / 0.448: worse in 3 of 4 starts.
+- Localized DA ratio 1.005 (N = 8) / 1.069 (N = 32) against conv 0.99 / 1.00; absolute two-storm 0.397 / 0.347 against 0.392 / 0.336.
+- So attention still transfers (claim 6 holds: ratios ≤ 1.1), but somewhat less well than the conv model, mostly at 60 min after the storms interact (ratio ~1.25 against ~1.15), consistent with state-dependent neighbour weights generalizing worse to configurations not seen in training. Within the ±10% unpaired uncertainty for DA. L1 / L5 spectra and spreading pending (Cashew 750297).
+
+**Summary.** The original small conv propagator on the learned 32-channel autoencoder remains the model: bigger or attention propagators help only at 5 min, which DA does not need; a richer autoencoder hurts DA; a linear (PCA) latent is much worse at everything. The nonlinear autoencoder and locality are both load-bearing.
