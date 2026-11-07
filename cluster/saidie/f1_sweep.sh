@@ -4,6 +4,7 @@
 # (stride x / z = 2/1, 4/2, 8/4) the jet decoder with m = 2, 4, 8. Same split and normalizer as full_v1;
 # scored on the 22 test storms like the column autoencoders, plus the rediscovery probe.
 #   ssh saidie 'cd ~/latent_DA && AFTER=<job> bash -l cluster/saidie/f1_sweep.sh'
+# FP1b (joint propagation): CONFIGS="..." OUT=~/cm1_runs/f1b_prop EXTRA="--prop-k 5" bash -l cluster/saidie/f1_sweep.sh
 set -euo pipefail
 cd "$HOME/latent_DA"
 DATA="cache:$HOME/cm1_cache+$HOME/cm1_cache_A2+$HOME/cm1_cache_B"
@@ -15,7 +16,7 @@ j=$(sbatch --parsable ${dep:-} --account=chen-saidie --partition=general --gres=
 [ -n \"\${CUDA_VISIBLE_DEVICES:-}\" ] || { echo 'CUDA_VISIBLE_DEVICES not set'; exit 1; }
 . \$HOME/venvs/cm1/bin/activate; export PYTHONPATH=\$HOME/latent_DA OMP_NUM_THREADS=16
 python -m pytest -q tests/unit/test_cm1_field_ae.py -p no:cacheprovider
-python scripts/cm1/train_field_ae.py --profile smoke --out $OUT/smoke --configs 2:1:1:jet 2:2:1:jet --device cuda | tail -4
+python scripts/cm1/train_field_ae.py --profile smoke --out $OUT/smoke --configs 2:1:1:jet 2:2:1:jet --device cuda ${EXTRA:-} | tail -4
 python scripts/cm1/train_field_ae.py --profile full --ref-run $HOME/cm1_runs/full_v1 --source $DATA --out $OUT \
-  --configs $CONFIGS --steps ${STEPS:-20000} --device cuda")
+  --configs $CONFIGS --steps ${STEPS:-20000} --device cuda ${EXTRA:-}")
 echo "f1_sweep: $j"

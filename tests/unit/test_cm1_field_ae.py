@@ -76,3 +76,17 @@ def test_bad_config_raises():
         FieldAEConfig(decoder="conv")
     with pytest.raises(ValueError):
         FieldAEConfig(m=0)
+
+
+def test_field_prop_is_identity_at_init_and_has_its_reach():
+    from ks_latent.cm1.field_ae import FieldProp, FieldPropConfig
+    torch.manual_seed(0)
+    p = FieldProp(FieldPropConfig(m=3, n_levels_latent=10, width=8, layers=2))
+    phi = torch.randn(2, 3, 10, 24)
+    torch.testing.assert_close(p(phi), phi)
+    torch.nn.init.normal_(p.head.weight)
+    phi.requires_grad_(True)
+    p(phi)[0, :, 5, 12].sum().backward()
+    nz = phi.grad[0].abs().sum(0).nonzero()
+    assert (nz[:, 0] - 5).abs().max() == 2 and (nz[:, 1] - 12).abs().max() == 2
+    assert p.cfg.reach == 2

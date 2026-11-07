@@ -127,3 +127,40 @@ class FieldAE(nn.Module):
     def forward(self, u: torch.Tensor, env=None):
         phi = self.encode(u)
         return self.decode(phi, u.shape[-1]), phi
+
+
+@dataclass
+class FieldPropConfig:
+    """Local stepper of the latent field (FP1b): phi(t + dt) = phi + head(body(phi, height)), `layers` 3x3
+    convolutions (reach `layers` latent cells per step in x and z), zero-initialized head (identity at
+    init). A generic local law used to count how many fields closed dynamics need, not the readable law
+    of FP2."""
+    m: int
+    n_levels_latent: int
+    width: int = 64
+    layers: int = 6
+    n_zfeat: int = 4
+
+    @property
+    def reach(self) -> int:
+        return self.layers
+
+
+class FieldProp(nn.Module):
+    def __init__(self, cfg: FieldPropConfig):
+        super().__init__()
+        self.cfg = cfg
+        self.register_buffer("zfeat", height_features(cfg.n_levels_latent, cfg.n_zfeat))
+        layers, c = [], cfg.m + self.zfeat.shape[0]
+        for _ in range(cfg.layers):
+            layers += [nn.Conv2d(c, cfg.width, 3, padding=1, padding_mode="replicate"), nn.GELU()]
+            c = cfg.width
+        self.body = nn.Sequential(*layers)
+        self.head = nn.Conv2d(c, cfg.m, 1)
+        nn.init.zeros_(self.head.weight)
+        nn.init.zeros_(self.head.bias)
+
+    def forward(self, phi: torch.Tensor) -> torch.Tensor:
+        B, _, Zc, X = phi.shape
+        zf = self.zfeat[None, :, :, None].expand(B, -1, -1, X)
+        return phi + self.head(self.body(torch.cat([phi, zf], dim=1)))

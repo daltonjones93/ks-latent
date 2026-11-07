@@ -26,7 +26,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
-from da_twin import load_run, member_files  # noqa: E402
+from da_twin import load_run, load_stochastic_run, member_files  # noqa: E402
 from ks_latent.cm1.data import ColumnData, load_member  # noqa: E402
 from ks_latent.cm1.models import rollout_from  # noqa: E402
 from ks_latent.cm1.physics import BaseState  # noqa: E402
@@ -69,7 +69,7 @@ def main():
     out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
     dev = torch.device(a.device)
     ae, prop, norm, cfg, split = load_run(Path(a.run).expanduser(), dev)
-    ae_s, prop_s, norm_s, cfg_s, _ = load_run(Path(a.run_stoch).expanduser(), dev)
+    ae_s, prop_s, norm_s, cfg_s, _ = load_stochastic_run(Path(a.run_stoch).expanduser(), dev)
     if list(norm.scale) != list(norm_s.scale):
         raise ValueError("the two runs use different normalizers")
     halo = cfg["stage_b"]["halo_sites"]

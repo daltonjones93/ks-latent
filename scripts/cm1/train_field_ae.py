@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ks_latent.cm1.data import (ColumnData, Normalizer, load_member, positive_channel_mask,  # noqa: E402
                                 split_members, synthetic_members)
 from ks_latent.cm1.evaluate import reconstruction_report  # noqa: E402
-from ks_latent.cm1.field_ae import FieldAE, FieldAEConfig  # noqa: E402
+from ks_latent.cm1.field_ae import FieldAE, FieldAEConfig, FieldProp, FieldPropConfig  # noqa: E402
 from ks_latent.cm1.physics import CP, G, RD, BaseState  # noqa: E402
 from ks_latent.cm1.probe import fit_mlp, predict_mlp  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
@@ -98,40 +98,106 @@ def probe(ae: FieldAE, d: ColumnData, norm: Normalizer, base, dev, n_per_storm: 
     return out
 
 
+def halo_cells(cfg: FieldAEConfig, a) -> int:
+    """Data cells at each window edge excluded from the rollout loss: the propagator's reach over k_max
+    steps plus the encoder's receptive field (window edges are padded, unlike the storm's interior)."""
+    return a.prop_k * a.prop_layers * cfg.stride_x + 32 if a.prop_k else 0
+
+
 def train_one(cfg, d_tr, d_va, pos, a, dev, log) -> tuple:
+    """Reconstruction only (prop_k = 0), or jointly with a local latent stepper (FP1b): loss = reconstruction
+    of the first frame + w_roll x mean over k = 1..K of the decoded k-step forecast error (physical-space
+    targets, interior of the window), K ramped from 1 to prop_k over the first k_ramp of training."""
     torch.manual_seed(a.seed)
     ae = FieldAE(cfg, pos).to(dev)
-    opt = torch.optim.AdamW(ae.parameters(), lr=a.lr, weight_decay=1e-5)
+    prop, params, K = None, list(ae.parameters()), a.prop_k
+    if K:
+        prop = FieldProp(FieldPropConfig(m=cfg.m, n_levels_latent=-(-cfg.n_levels // cfg.stride_z), width=a.prop_width,
+                                         layers=a.prop_layers, n_zfeat=cfg.n_zfeat)).to(dev)
+        params += list(prop.parameters())
+    H = halo_cells(cfg, a)
+    width = min(max(a.window, 2 * H + 192) if K else a.window, d_tr.NX)
+    if K and width - 2 * H < 32:
+        raise ValueError(f"window {width} leaves no interior for halo {H}")
+    opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=1e-5)
     warm = min(500, a.steps // 10)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: (s + 1) / warm if s < warm else
                                               0.05 + 0.95 * 0.5 * (1 + math.cos(math.pi * (s - warm) / max(1, a.steps - warm))))
     gen = torch.Generator().manual_seed(a.seed)
     vgen = torch.Generator().manual_seed(a.seed + 1)
-    val = [d_va.windows(a.batch, a.window, 1, vgen)[0][:, 0] for _ in range(a.val_batches)]
+    val = [d_va.windows(a.batch, width, K + 1, vgen)[0] for _ in range(a.val_batches)]
+
+    def losses(u, k):
+        y0, phi = ae(u[:, 0])
+        rec = ((y0 - u[:, 0]) ** 2).mean()
+        roll = torch.zeros((), device=u.device)
+        for j in range(1, k + 1):
+            phi = prop(phi)
+            roll = roll + ((ae.decode(phi, u.shape[-1]) - u[:, j])[..., H:u.shape[-1] - H] ** 2).mean() / k
+        return rec, roll
+
     best, best_state, hist = float("inf"), None, []
     t0 = time.time()
     acc = torch.zeros((), device=dev)
+    tag = f"{cfg.m}:{cfg.stride_x}:{cfg.stride_z}:{cfg.decoder}" + (f" +prop k{K}" if K else "")
+    mods = [ae] + ([prop] if prop is not None else [])
     for step in range(1, a.steps + 1):
-        u = d_tr.windows(a.batch, a.window, 1, gen)[0][:, 0].to(dev, non_blocking=True)
-        loss = ((ae(u)[0] - u) ** 2).mean()
+        k = min(K, 1 + int(K * step / max(1, a.k_ramp * a.steps))) if K else 0
+        u = d_tr.windows(a.batch, width, k + 1, gen)[0].to(dev, non_blocking=True)
+        rec, roll = losses(u, k)
+        loss = rec + a.w_roll * roll
         opt.zero_grad(set_to_none=True); loss.backward()
-        torch.nn.utils.clip_grad_norm_(ae.parameters(), 1.0)
+        torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step(); sched.step()
         acc += loss.detach()
         if step % a.val_every == 0 or step == a.steps:
-            ae.eval()
+            for mdl in mods:
+                mdl.eval()
             with torch.no_grad():
-                v = float(np.mean([((ae(x.to(dev))[0] - x.to(dev)) ** 2).mean().item() for x in val]))
-            ae.train()
+                vs = [losses(x.to(dev), K) for x in val]
+            v_rec = float(np.mean([r.item() for r, _ in vs]))
+            v_roll = float(np.mean([r.item() for _, r in vs]))
+            v = v_rec + v_roll
+            for mdl in mods:
+                mdl.train()
             tr_loss = float(acc) / (step - (hist[-1]["step"] if hist else 0))
             acc.zero_()
-            hist.append({"step": step, "train": tr_loss, "val": v})
+            hist.append({"step": step, "k": k, "train": tr_loss, "val": v, "val_rec": v_rec, "val_roll": v_roll})
             if v < best:
-                best, best_state = v, {k: t.detach().clone() for k, t in ae.state_dict().items()}
-            log(f"  [{cfg.m}:{cfg.stride_x}:{cfg.stride_z}:{cfg.decoder}] step {step}/{a.steps} train {tr_loss:.4f} "
-                f"val {v:.4f} [{time.time() - t0:.0f}s]")
-    ae.load_state_dict(best_state)
-    return ae.eval(), hist, best
+                best = v
+                best_state = [{n: t.detach().clone() for n, t in mdl.state_dict().items()} for mdl in mods]
+            log(f"  [{tag}] step {step}/{a.steps} k {k} train {tr_loss:.4f} val rec {v_rec:.4f} roll {v_roll:.4f} "
+                f"[{time.time() - t0:.0f}s]")
+    for mdl, st in zip(mods, best_state):
+        mdl.load_state_dict(st)
+        mdl.eval()
+    return ae, prop, hist, best
+
+
+@torch.no_grad()
+def forecast_skill(ae: FieldAE, prop: FieldProp, d: ColumnData, leads: list, t0s_min: list, dev) -> dict:
+    """Decoded forecasts from the encoded truth, whole domain: sum of squared normalized errors over
+    channels and columns, divided by persistence's, per lead (all columns and storm columns)."""
+    acc = {L: np.zeros(4) for L in leads}
+    for m in range(len(d.u)):
+        for t0m in t0s_min:
+            t0 = int(round(t0m * 60 / d.dt))
+            if t0 + max(leads) >= d.T[m]:
+                continue
+            u0 = d.full(m, t0, device=dev)
+            phi = ae.encode(u0)
+            for j in range(1, max(leads) + 1):
+                phi = prop(phi)
+                if j in leads:
+                    y = ae.decode(phi, u0.shape[-1])[0].cpu()
+                    tr = d.full(m, t0 + j)[0]
+                    e = ((y - tr) ** 2).mean(0).numpy()
+                    p = ((u0[0].cpu() - tr) ** 2).mean(0).numpy()
+                    act = (d.cref[m][t0 + j] > 10).numpy()
+                    acc[j] += [e.sum(), p.sum(), e[act].sum(), p[act].sum()]
+    return {"leads_min": [L * d.dt / 60 for L in leads],
+            "skill": [float(acc[L][0] / acc[L][1]) for L in leads],
+            "skill_storm": [float(acc[L][2] / max(acc[L][3], 1e-12)) for L in leads]}
 
 
 def main():
@@ -149,6 +215,12 @@ def main():
     ap.add_argument("--val-every", type=int, default=1000)
     ap.add_argument("--val-batches", type=int, default=8)
     ap.add_argument("--probe-points", type=int, default=20000, help="per storm (0: no probe)")
+    ap.add_argument("--prop-k", type=int, default=0, help="FP1b: train jointly with a latent stepper, rollouts up to K steps (0: reconstruction only)")
+    ap.add_argument("--prop-layers", type=int, default=6, help="3x3 layers of the stepper = its reach per step (latent cells)")
+    ap.add_argument("--prop-width", type=int, default=64)
+    ap.add_argument("--w-roll", type=float, default=1.0)
+    ap.add_argument("--k-ramp", type=float, default=0.3, help="fraction of training over which K ramps from 1")
+    ap.add_argument("--leads", type=int, nargs="+", default=[1, 5, 15, 30, 60], help="forecast leads (frames)")
     ap.add_argument("--max-test", type=int, default=0)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--seed", type=int, default=0)
@@ -165,6 +237,7 @@ def main():
         get = lambda n: byname[n]
         a.steps, a.val_every, a.window, a.batch, a.val_batches = min(a.steps, 40), 20, 64, 4, 2
         a.width = min(a.width, 16)
+        a.prop_layers, a.prop_width, a.leads = min(a.prop_layers, 2), min(a.prop_width, 16), [1, 3]
         base = None
     else:
         from da_twin import member_files
@@ -188,24 +261,32 @@ def main():
     cfgs = [parse_config(s, V, Z, a.width) for s in a.configs]
     trained = {}
     for s, cfg in zip(a.configs, cfgs):
-        ae, hist, best = train_one(cfg, d_tr, d_va, pos, a, dev, log)
+        ae, prop, hist, best = train_one(cfg, d_tr, d_va, pos, a, dev, log)
         n_par = sum(p.numel() for p in ae.parameters())
-        torch.save({"config": cfg.__dict__, "state_dict": ae.state_dict()}, out / f"field_ae_{s.replace(':', '_')}.pt")
-        trained[s] = ae
+        ck = {"config": cfg.__dict__, "state_dict": ae.state_dict()}
+        if prop is not None:
+            ck.update(prop_config=prop.cfg.__dict__, prop_state_dict=prop.state_dict())
+        torch.save(ck, out / f"field_ae_{s.replace(':', '_')}.pt")
+        trained[s] = (ae, prop)
         res["runs"][s] = {"config": cfg.__dict__, "numbers_per_point": cfg.numbers_per_point, "parameters": n_par,
+                          "prop_parameters": sum(p.numel() for p in prop.parameters()) if prop is not None else 0,
                           "best_val": best, "history": hist}
     del d_tr
     if dev.type == "cuda":
         torch.cuda.empty_cache()
     log(f"[FP1] scoring {len(te)} test storms")
     reps = {s: [] for s in trained}
+    fcs = {s: [] for s in trained}
+    t0s = [60.0, 120.0, 180.0] if a.profile == "full" else [0.0]
     for n in te:
         d = ColumnData([get(n)], norm, torch.device("cpu"))
-        for s, ae in trained.items():
+        for s, (ae, prop) in trained.items():
             with torch.no_grad():
                 reps[s].append(reconstruction_report(ae, d, norm))
+            if prop is not None:
+                fcs[s].append(forecast_skill(ae, prop, d, a.leads, t0s, dev))
     d_te = ColumnData([get(n) for n in te], norm, torch.device("cpu")) if a.probe_points else None
-    for s, ae in trained.items():
+    for s, (ae, prop) in trained.items():
         rs = reps[s]
         r = res["runs"][s]
         r["nmse_all"] = float(np.mean([x["nmse_all"] for x in rs]))
@@ -213,6 +294,10 @@ def main():
         r["rmse_phys_storm"] = {v: float(np.mean([x["rmse_phys_storm"][v] for x in rs if "rmse_phys_storm" in x]))
                                 for v in norm.vars}
         r["physics"] = {p: float(np.mean([x["physics"][p] for x in rs])) for p in rs[0]["physics"]}
+        if fcs[s]:
+            r["forecast"] = {"leads_min": fcs[s][0]["leads_min"],
+                             "skill": np.mean([f["skill"] for f in fcs[s]], axis=0).tolist(),
+                             "skill_storm": np.mean([f["skill_storm"] for f in fcs[s]], axis=0).tolist()}
         if d_te is not None and len(te) >= 2:
             r["probe_r2"] = probe(ae, d_te, norm, base, dev, a.probe_points, a.seed)
     (out / "f1.json").write_text(json.dumps(res, indent=1))
@@ -226,6 +311,14 @@ def main():
         log("%-14s %8.3f %8.4f %8.4f %8.3f  %s" % (s, r["numbers_per_point"], r["nmse_all"], r["nmse_storm"],
                                                  r["physics"].get("div_ratio_recon", float("nan")),
                                                  " ".join(f"{pr.get(k, float('nan')):.2f}" for k in names)))
+    if any("forecast" in r for r in res["runs"].values()):
+        log("\n[FP1b] forecast skill (decoded nMSE / persistence's, test storms, starts 1-3 h; column model full_v1_stagec "
+            "under its own protocol: 0.213 / 0.365 / 0.344 at 5 / 30 / 60 min)")
+        for s, r in res["runs"].items():
+            if "forecast" in r:
+                f = r["forecast"]
+                log("%-14s all %s | storm %s" % (s, " ".join(f"{L:g}m {v:.3f}" for L, v in zip(f["leads_min"], f["skill"])),
+                                                 " ".join(f"{v:.3f}" for v in f["skill_storm"])))
     log(f"[FP1] done in {(time.time() - t_start) / 60:.1f} min -> {out}")
 
 

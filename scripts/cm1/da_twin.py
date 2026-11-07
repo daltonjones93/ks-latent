@@ -60,6 +60,26 @@ def load_run(run: Path, dev):
     return ae.eval(), prop.eval(), norm, cfg, split
 
 
+def load_stochastic_run(run: Path, dev):
+    """A stochastic model run for sampling: a `train_cm1.py` run with a noise-channel propagator (as
+    `load_run`), or a `train_flow.py` run (flow.pt; SM4/SM4b): its autoencoder (ae.pt, if Stage C updated
+    it, else the base run's), the FlowPropagator, and the base run's normalizer, config and split."""
+    if not (run / "flow.pt").exists():
+        return load_run(run, dev)
+    from ks_latent.cm1.flow import FlowPropagator, FlowPropConfig
+    meta = json.loads((run / "config.json").read_text())
+    base = Path(meta["base_run"])
+    if not base.exists():                       # copied from another cluster: same name under ~/cm1_runs
+        base = Path.home() / "cm1_runs" / base.name
+    ae, _, norm, cfg, split = load_run(base, dev)
+    if (run / "ae.pt").exists():
+        ae.load_state_dict(torch.load(run / "ae.pt", map_location=dev)["state_dict"])
+    ck = torch.load(run / "flow.pt", map_location=dev)
+    flow = FlowPropagator(FlowPropConfig(**ck["cfg"])).to(dev)
+    flow.load_state_dict(ck["state_dict"])
+    return ae.eval(), flow.eval(), norm, cfg, split
+
+
 def plot(res: dict, out: Path):
     import matplotlib
     matplotlib.use("Agg")

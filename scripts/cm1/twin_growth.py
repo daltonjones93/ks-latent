@@ -29,7 +29,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
-from da_twin import load_run  # noqa: E402
+from da_twin import load_run, load_stochastic_run  # noqa: E402
 from ks_latent.cm1.data import ColumnData, member_from_cm1io  # noqa: E402
 from ks_latent.cm1.io import load_grads_run  # noqa: E402
 from ks_latent.cm1.models import rollout_from  # noqa: E402
@@ -143,7 +143,7 @@ def main():
         dd = [float((((ae.decode(base[j:j + 1]) - ae.decode(pertr[j:j + 1])) ** 2).mean()).sqrt()) for j in range(nl)]
         sur["det_tiny_latent_perturbation"] = dd
         if a.run_stoch:
-            ae_s, prop_s, norm_s, cfg_s, _ = load_run(Path(a.run_stoch).expanduser(), dev)
+            ae_s, prop_s, norm_s, cfg_s, _ = load_stochastic_run(Path(a.run_stoch).expanduser(), dev)
             zs = encode_members(ae_s, d0)[0]
             la = rollout_from(prop_s, zs, t0, nl, halo, 8, gen=torch.Generator().manual_seed(0), boundary="persistence")
             sp = []

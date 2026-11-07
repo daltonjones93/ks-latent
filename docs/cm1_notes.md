@@ -647,3 +647,26 @@ Pointwise velocity network (reach 3 sites/min), 4 Euler steps, one-step flow-mat
 | stochastic Stage C (CRPS) | 0.267 / 0.410 / 0.395 | 0.348 / 0.363 / 0.388 | 0.86 / 0.91 / 0.92 |
 
 Rollout training turned the pilot (worse, under-dispersed) into a model within 5% of the stochastic one in CRPS at every lead, with the same calibration. The SM4b success rule also asks for sharper samples; SM0/SM5 on its samples are not run yet.
+
+## FP0: known-answer pilot for a transport + sources law (2026-11-07, Cashew 750306, 3 min)
+Hand-built fields from raw CM1 output; laws fitted on ens_A mem001–004, scored on ens_A2 mem001–002 and ens_B mem003, mem016 (held out); frame pairs every 3 min from 1 to 4 h, dt = 60 s, storm columns ± 10 km. Skill against persistence (1 = perfect, 0 = persistence):
+
+| Variable | Transport (semi-Lagrangian) | + sparse sources | Residual R² (held out) | Terms at threshold 0.05 |
+|---|---|---|---|---|
+| θ | 0.546 | 0.867 | 0.70 | 7 |
+| q_v | 0.784 | 0.937 | 0.71 | 6 |
+| θ_il (conserved) | 0.650 | 0.868 | 0.62 | 6 |
+| q_t (conserved) | 0.814 | 0.922 | 0.58 | 5 |
+| η (vorticity) | 0.878 | **0.947** | 0.56 | **3** |
+| q_p (precipitation) | 0.471 | 0.767 | 0.56 | 7 |
+| q_cl (cloud) | 0.533 | 0.657 | 0.27 | 6 |
+
+Selected laws (bootstrap frequency ≥ 0.8, coefficients in SI units):
+- **η: Dη/Dt = −0.80 ∂B/∂x + 28.5 ∇²η + 1.07 η w dlnρ0/dz.** Three terms, every one physical: the baroclinic source (known −1), the anelastic compression term (known +1), and an eddy viscosity of 28.5 m²/s (plausible for CM1's subgrid mixing at 250 m).
+- **q_t: fall-out +5.74 ∂q_p/∂z** (a fall speed of 5.7 m/s, right for rain/graupel), plus mixing (35 m²/s) and small cloud–precipitation terms.
+- **θ_il: fall-out −1.83e4 ∂q_p/∂z**, consistent with q_t's: −(Lv/(cp π)) × 5.74 m/s ≈ −1.6e4 to −2.0e4. But also a condensation term (+414): θ_il is not exactly conserved here (ice processes, linearization).
+- **θ and q_v: the condensation term is selected with the right signs, but attenuated:** q_v's coefficient 0.22 (known +1), θ's −912 (known −Lv/(cp π) ≈ −2500 to −3500), a consistent factor ~0.25–0.35 for both. Most likely regression dilution: the proxy w · 1[cloud] · dq_sat/dz is noisy (cloud edges, w at scalar points, liquid-only saturation, 1-min steps), and a noisy regressor's coefficient shrinks towards 0.
+
+Against the pre-registered checks: η's dB/dx within ±0.3 of −1 ✓ (−0.80); q_t's fall-out positive at a few m/s ✓ (5.7 m/s); conserved variables transport better than their non-conserved counterparts ✓ (θ_il 0.65 vs θ 0.55; q_t 0.81 vs q_v 0.78, small margin); **q_v's condensation within ±0.3 of +1 ✗ (0.22)**. So the transport, buoyancy and fall-out parts of the pipeline are trustworthy; the condensation proxy is not, and a learned law should not be judged on condensation terms until it is fixed (FP3's 10-s data tests the time-resolution part; a better proxy would use the saturation adjustment itself).
+
+Also: sources explain only 56–71% of the Lagrangian residual even with every term; the rest is unexplained physics or noise at 1-min resolution (FP3 will separate the two).
