@@ -56,6 +56,7 @@ def phys(u: torch.Tensor, norm, Z: int):
     return {"w": var("w"), "cond": cond, "th": var("th")}
 
 
+@torch.no_grad()
 def sections(a, out: Path):
     dev = torch.device(a.device)
     ae, prop, norm, cfg, split = load_run(Path(a.det).expanduser(), dev)
@@ -125,7 +126,8 @@ def bands_and_extremes(a, out: Path):
     fig, axs = plt.subplots(1, 2, figsize=(8.5, 3.2), constrained_layout=True)
     for b, (ax, title) in enumerate(zip(axs, ("< 4 km", "4-16 km"))):
         ax.axhline(1, color=INK, lw=1)
-        ax.text(leads[-1], 1.02, "truth", color=MUTED, ha="right", va="bottom", fontsize=8)
+        ax.text(0.99, 1.0, "truth  ", color=MUTED, ha="right", va="bottom", fontsize=8,
+                transform=ax.get_yaxis_transform())
         for i, (label, kind, r, _) in enumerate(sm0):
             Ls = [L for L in leads if str(L) in r["band_variance_ratio"]]
             y = [np.mean([r["band_variance_ratio"][str(L)][kind][fl][b] for fl in FIELD_LEVELS]) for L in Ls]
@@ -133,9 +135,10 @@ def bands_and_extremes(a, out: Path):
         ax.set_title(f"Variance kept at wavelengths {title}", fontsize=9)
         ax.set_xlabel("lead (min)"); ax.set_ylabel("fraction of the truth's variance")
         ax.set_xticks(leads)
-    axs[0].legend(fontsize=7, loc="upper left")
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=len(l), fontsize=8, bbox_to_anchor=(0.5, -0.08))
     fig.suptitle("Single forecasts or samples, mean over w, θ′, u, condensate at ~1 and ~5 km; test storms", fontsize=9)
-    fig.savefig(out / "fig_sm4b_bands.png", dpi=160); plt.close(fig)
+    fig.savefig(out / "fig_sm4b_bands.png", dpi=160, bbox_inches="tight"); plt.close(fig)
     print(f"-> {out / 'fig_sm4b_bands.png'}")
     fig, axs = plt.subplots(1, 3, figsize=(11, 3.2), constrained_layout=True)
     for ax, (e, title) in zip(axs, (("w999", "w, 99.9th percentile (m/s)"), ("cond999", "condensate, 99.9th percentile (g/kg)"),
@@ -150,8 +153,9 @@ def bands_and_extremes(a, out: Path):
             ax.plot(Ls_, [ex[str(L)][kind][e] if isinstance(ex[str(L)][kind], dict) else np.mean([c[e] for c in ex[str(L)][kind]])
                           for L in Ls_], STYLES[i], marker=MARKERS[i], color=SERIES[i], lw=2, ms=6, label=label)
         ax.set_title(title, fontsize=9); ax.set_xlabel("lead (min)"); ax.set_xticks(leads)
-    axs[0].legend(fontsize=7)
-    fig.savefig(out / "fig_sm4b_extremes.png", dpi=160); plt.close(fig)
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=len(l), fontsize=8, bbox_to_anchor=(0.5, -0.08))
+    fig.savefig(out / "fig_sm4b_extremes.png", dpi=160, bbox_inches="tight"); plt.close(fig)
     print(f"-> {out / 'fig_sm4b_extremes.png'}")
     with_spec = [(lab, k, sp) for lab, k, _, sp in sm0 if sp is not None]
     if not with_spec:
@@ -171,27 +175,31 @@ def bands_and_extremes(a, out: Path):
         ax.invert_xaxis(); ax.axvline(4, color=MUTED, lw=0.8, ls=":")
         ax.set_title(f"{'w' if f == 'w' else 'condensate'} at ~{1 if ln == 'low' else 5} km, {L} min", fontsize=9)
         ax.set_xlabel("wavelength (km)")
-    axs[0].set_ylabel("power"); axs[0].legend(fontsize=7)
-    fig.savefig(out / "fig_sm4b_spectra.png", dpi=160); plt.close(fig)
+    axs[0].set_ylabel("power")
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=len(l), fontsize=8, bbox_to_anchor=(0.5, -0.08))
+    fig.savefig(out / "fig_sm4b_spectra.png", dpi=160, bbox_inches="tight"); plt.close(fig)
     print(f"-> {out / 'fig_sm4b_spectra.png'}")
 
 
 def crps(a, out: Path):
     r = json.loads((Path(a.flow).expanduser() / "results.json").read_text())["comparison"]
     names = {"deterministic": "Deterministic", "stochastic": "Noise-channel", "flow": "SM4b flow"}
-    colours = {"deterministic": SERIES[0], "stochastic": SERIES[1], "flow": SERIES[3]}
+    slot = {"deterministic": 0, "stochastic": 1, "flow": 3}          # same slot, colour and line style as the other figures
     fig, axs = plt.subplots(1, 3, figsize=(11, 3.2), constrained_layout=True)
-    for i, (k, row) in enumerate((k, r[k]) for k in names if k in r):
+    for k, row in ((k, r[k]) for k in names if k in r):
+        i = slot[k]
         L = np.array(row["lead_s"]) / 60
-        axs[0].plot(L, np.array(row["nmse"]) / np.array(row["nmse_pers"]), STYLES[i], color=colours[k], lw=2, label=names[k])
-        axs[1].plot(L, np.array(row["crps"]) / np.array(row["crps_pers"]), STYLES[i], color=colours[k], lw=2, label=names[k])
+        axs[0].plot(L, np.array(row["nmse"]) / np.array(row["nmse_pers"]), STYLES[i], color=SERIES[i], lw=2, label=names[k])
+        axs[1].plot(L, np.array(row["crps"]) / np.array(row["crps_pers"]), STYLES[i], color=SERIES[i], lw=2, label=names[k])
         if row.get("spread_err"):
-            axs[2].plot(L, row["spread_err"], STYLES[i], color=colours[k], lw=2, label=names[k])
+            axs[2].plot(L, row["spread_err"], STYLES[i], color=SERIES[i], lw=2, label=names[k])
     axs[2].axhline(1, color=INK, lw=1)
     for ax, t in zip(axs, ("Error of the mean (nMSE / persistence)", "CRPS / persistence MAE", "Spread / error (1 = calibrated)")):
         ax.set_title(t, fontsize=9); ax.set_xlabel("lead (min)")
-    axs[0].legend(fontsize=7)
-    fig.savefig(out / "fig_sm4b_crps.png", dpi=160); plt.close(fig)
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=len(l), fontsize=8, bbox_to_anchor=(0.5, -0.08))
+    fig.savefig(out / "fig_sm4b_crps.png", dpi=160, bbox_inches="tight"); plt.close(fig)
     print(f"-> {out / 'fig_sm4b_crps.png'}")
 
 
