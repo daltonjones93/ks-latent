@@ -527,7 +527,7 @@ Exploratory results already in hand: latent vs physical-space analysis (0.236 vs
 
   Every outcome is reported, including failures.
 
-- [~] **Fable-review section 6** (`docs/cm1_fable_review.md` §6; pre-registered as G0 addendum 4). Chain A (after FPd): N5 localization sweep, N2 adaptive noise, N4 ensemble size (32 and 64 channels), M1 observation spacing × cycle length (deterministic vs stochastic), N6 cost on an H200. Chain B (after G2b): M3 stochastic propagator on the frozen full_v1_stagec autoencoder, then the mean-anchored ensemble DA. Out `~/cm1_da/fable/`.
+- [~] **Fable-review section 6** (`docs/cm1_fable_review.md` §6; pre-registered as G0 addendum 4). Chain A (after FPd): N5 localization sweep, N2 adaptive noise, N4 ensemble size (32 and 64 channels), M1 observation spacing × cycle length (deterministic vs stochastic), N6 cost on an H200. Chain B (after G2b): M3 stochastic propagator on the frozen full_v1_stagec autoencoder, then the mean-anchored ensemble DA. Out `~/cm1_da/fable/`. **Submitted 2026-11-07: Saidie 9074-9078 (chain A, after 9038), 9079-9082 (chain B, after 9072); CPU cost on Cashew 750376. Smoke (Cashew 750375) passed.**
 
 ### Tier 1: essential
 - [x] **G1 (C)** **Done (job 8717, 12 truths × 3 seeds, `th+refl+vr`): forecast nMSE 0.236 ± 0.027 vs no DA 0.380 ± 0.099; latent beats no DA on 12/12 truths; physical-space analysis 0.245, surrogate EnOI 0.331. See `cm1_notes.md`.** **Many truths, with error bars.**
