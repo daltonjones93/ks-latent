@@ -457,6 +457,19 @@ User direction (2026-11-08): FPd showed the 32-channel law cannot be pruned to a
 - **Reading:** the result is "a usable leading-channel law" if, for some k ≤ 4, the pde fit for channel 0 has ≤ 30 terms and held-out R² ≥ 0.5, and its closed rollout beats persistence of channel 0 at 30 min. Otherwise report the best R² and rollout at each k: how many channels a closed law needs.
 - From the smoke test (2 storms, not a result): channel 0 correlates +0.79 with surface θ′, −0.85 with column condensate and −0.72 with column-max w, so it is a cold-pool / convection coordinate. Its largest pde term is z0 ∂x z0.
 
+### G0 addendum 5b (2026-11-08, before the runs): FPe with higher spatial order, second order in time, and rollout refits
+- **What the first-order full run showed (9094),** so this addendum is written after seeing it:
+  - The one-step fits explain up to 65% of channel 0's held-out tendency, with pde terms only; local ODEs explain ≤ 20%.
+  - Their closed rollouts are unstable: worse than persistence at 30 min.
+  - The k = 1 law with 3 terms is a nonlinear advection: ∂t z0 = −(0.057 + 0.083 z0) ∂x z0. Its constant speed, 0.11 km/min, is Q2's storm propagation speed.
+- **Added, at user direction:**
+  - spatial derivatives up to 3rd and 4th order (`pde3`, `pde4`: dispersion and hyperdiffusion, as in KS);
+  - second order in time (d²z/dt² with dz/dt in the library);
+  - a rollout refit (`--refit-rollout 30`): the STLSQ support is kept and its coefficients are refit on closed rollouts up to 30 min, which addresses the instability.
+- All tested on known lattice laws (advection-diffusion, the wave equation, hyperdiffusion). The refit test also checks that the input coefficients are not modified, after an aliasing bug in the first smoke run.
+- **Runs (CPU):** time order 1 and 2 separately × kinds pde / pde3 / pde4 × k 1 / 2 / 4 × thresholds 0.03 / 0.1.
+- **Reading:** as addendum 5 (≤ 30 terms for channel 0, held-out R² ≥ 0.5, closed rollout better than persistence of channel 0 at 30 min), now judged on the refit law. Reported in addition: whether pde4 or time order 2 improves the refit rollout over pde at equal k.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|
