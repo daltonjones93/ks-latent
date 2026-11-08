@@ -793,3 +793,23 @@ The neural propagator is replaced by dz/dt = A0 z + A1 d1z + A2 d2z + b + Q1[z z
 - **Nested dropout orders the channels** (1 channel: reconstruction 0.30, 4: 0.15, 8: 0.086, against 1.10 / 0.97 / 0.74 without), at no skill cost (0.377 / 0.357). The largest terms then act on the first channels (d2 z0, d2 z1, z1 d1z1): diffusion-like and advection-like terms of the leading modes. 5 trailing channels are nearly unused (ablation 0.0008-0.001), as expected when the ordering pushes content forward.
 - **Linear part about z = 0:** damped at 4-8 km (growth −0.01 to −0.18 /min), weakly growing at 32-128 km (+0.01 to +0.09 /min); fastest phase speeds 0.4-0.5 km/min at 4 km rising to 2.5-3.2 km/min at 128 km. That last value is between the cold-pool speed and the gravity-wave speeds (Q1). z = 0 is the climatological mean latent, not a rest state, so these are indicative only.
 - The largest single terms are diagonal second derivatives (d2 z_k on dz_k/dt, +0.10 to +0.19: diffusion of each channel) and first derivatives (advection). Channel couplings are spread thin, and none dominates.
+
+## G3 and claim 2's rank test (2026-11-07, Saidie 9048; 22 test storms x 3 seeds, the G0 headline setup)
+The headline reproduces: analysis-cycle prior nMSE 0.274 ± 0.023 (0.273 before), no DA 0.469, latent better on 22 of 22.
+
+**G3, forecasts from the analyses at 90 / 120 / 150 / 180 min.** Leads 1 / 11 / 21 / 31 / 41 / 51 min:
+
+| | nMSE | Front displacement (km) | Reflectivity ≥ 35 dBZ FSS (10 km) |
+|---|---|---|---|
+| From the analyses | 0.25 / 0.30 / 0.30 / 0.31 / 0.33 / 0.33 | 0.4 / 1.0 / 1.7 / 2.2 / 3.0 / 3.1 | 0.98 / 0.96 / 0.94 / 0.94 / 0.93 / 0.93 |
+| Persistence of the analysis | 0.26 / 0.38 / 0.42 / 0.47 / 0.52 / 0.56 | 0.4 / 1.7 / 3.0 / 4.5 / 6.2 / 7.9 | 0.98 / 0.96 / 0.94 / 0.91 / 0.88 / 0.85 |
+| No DA (free ensemble) | 0.40 / 0.43 / 0.43 / 0.44 / 0.46 / 0.46 | 6.5 / 6.7 / 7.0 / 7.1 / 7.3 / 7.3 | 0.83 / 0.84 / 0.85 / 0.84 / 0.84 / 0.84 |
+
+DA-initialized forecasts beat both references at every lead after the first minutes. At 50 min they are still clearly better than no DA (nMSE 0.33 against 0.46; the front 3 km off, not 7). They also beat persistence of the analysis by 40% in nMSE, with a front error less than half of persistence's. The forecast model moves the line correctly.
+
+**Claim 2, rank histogram (members + N(0, σ_obs), θ′ at the observation sites; `scripts/cm1/rank_test.py`).**
+- **Pre-registered pooled χ²:** rejects flatness, as G0 addendum 3 expected for 237 600 correlated ranks (p ≈ 0).
+- **Decorrelated (every 10th site, every 3rd cycle, seed 0; exploratory):** also rejects (n 2 640, p 1.6e-16).
+- **The shape:** mildly U-shaped. The outer bins hold 1.34× the flat frequency pooled and 1.11× decorrelated, with mean rank bias +0.02.
+- **Without the observation-error perturbation:** a strong U (6.2×), the expected artefact.
+- **Reading:** slight underdispersion, consistent with spread/error 0.71. The rank criterion is not met as written: formally rejected, the histogram close to flat. Claim 2 stays half met, and the paper reports it so.
