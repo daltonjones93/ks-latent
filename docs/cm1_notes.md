@@ -990,3 +990,19 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - Pending: 9101 / 9103 (time order 2 with refit), 9102 (k = 8), 9104-9105 (+dd / +cubic), 9108 (+mixed).
 
 **FPd scratch, seed 1 (9089-9090):** trained. The law replication on it is running (9091). At prune ≤ 0.001 it is still all 17 770 terms (skill 0.24 / 0.39 / 0.37 at 5 / 30 / 60 min).
+
+## FPe: smoothed-field check of the z0 ∂³z0 term, and second order in time with refit (Saidie 9109, 9110, 9101; 2026-11-08)
+**Smoothing check** (Gaussian over sites, σ = 1 / 2; k = 1, thr 0.1; persistence and the full model are recomputed on the smoothed field, so compare only within a run):
+
+| σ (sites) | kind | R² z0 | one-step law MSE (persistence) | z0 ∂³z0 coefficient, one-step / refit |
+|---|---|---|---|---|
+| 0 | pde4 | 0.41 | 0.170 (0.196) | 0.073 / 0.039 |
+| 1 | pde3 | 0.27 | 0.110 (0.152) | 0.099 / 0.089 |
+| 2 | pde3 | 0.14 | 0.302 (0.116) | 0.211 / 0.116 |
+
+- **The term is selected at every smoothing**, the only third-order term in each law, and the advection term z0 ∂x z0 stays small positive (0.02-0.05). So it is not an artefact of one front sharpness.
+- **But its coefficient is not a constant:** it doubles from σ = 1 to σ = 2, and one-step skill over persistence is lost at σ = 2. A physical dispersion coefficient would not depend on the smoothing width; this one does. Reading: it describes front sharpening / propagation on a ~1-site feature, not dispersion. **Not reported as a physical coefficient.**
+- Without ∂³ in the library the second-order laws lose the advection term at σ ≥ 1 (∂²z0 and z0 ∂²z0 take over).
+- Refit at k = 2 beats persistence at σ = 2 (z0 MSE 0.042-0.050 against 0.116), but with the usual inflated diffusion.
+
+**Second order in time with refit (9101, k 1/2/4 done):** k = 1 refit laws are worse than persistence (0.10-1.7 against 0.196, one at 0.10); several k = 2 refits explode (10⁵). First order with refit remains better. Second order is not pursued unless +dd/+cubic changes this.
