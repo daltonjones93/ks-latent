@@ -488,6 +488,13 @@ User direction: allow products of time and space derivatives. The first-order li
 - **Runs (CPU, after 9104-9105):** kinds pde+mixed and pde4+mixed, ℓ² 0.1 / 0.3 / 1.0 sites² (ℓ 0.6 / 1.1 / 2 km), k 1 / 2 / 4 / 8, thresholds 0.03 / 0.1, rollout refit to 30 min.
 - **Reading:** as addendum 5b. In addition, ℓ² is chosen by the refit rollout skill on the test storms. This is reported as exploratory, since ℓ² is a hyperparameter scored on test storms; a validation-storm choice would need a rerun. Also whether the refit moves ℓ² far from its starting value, which would mean ℓ² is a stability knob rather than a physical scale.
 
+### G0 addendum 5e (2026-11-08, before the run): FPe-S, does the fitted advection speed track each storm's measured speed?
+User-approved test of whether an FPe coefficient carries CM1 physics, independent of the latent's gauge. `scripts/cm1/storm_speed_law.py`:
+- **Per-storm fit** (40 storms: 30 training + 10 test, nothing trained, frames 30-330, interior sites): dz0/dt = c0 + a1 ∂x z0 + a2 z0 ∂x z0. **c_eff** = (∂x z0)²-weighted mean of −(a1 + a2 z0), in km/min. It is gauge-free (a constant shift of z0 changes a1, not a1 + a2 z0 at the actual z0).
+- **Measured speed** from the truth columns, Theil-Sen slope of centroid position against time (every 5 min): (i) condensate-weighted centroid, (ii) cold-pool centroid (weights max(0, −θ′_sfc)).
+- **Reading, fixed now:** the advection coefficient "carries physics" if Pearson r(c_eff, measured speed) ≥ 0.5 for at least one of the two measures, with the bootstrap 95% CI over storms excluding 0 and a permutation p < 0.05; and the OLS slope of measured on c_eff within 0.5-2 (the law's speed is of the right size). r between 0.3 and 0.5 is reported as weak. Below 0.3, or CI covering 0: the advection coefficient does not track storm speed and the 0.12 km/min match was a coincidence.
+- Both measures and the smoothed variants (σ = 1) are reported whatever the outcome; storms pooled over train and test, so no tuning on the test set.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|
