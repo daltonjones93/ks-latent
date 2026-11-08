@@ -449,6 +449,14 @@ Source: `docs/cm1_fable_review.md` §6. Common protocol for every study below: t
   - N7 / L2b: needs a CM1 patch that applies the tiny perturbation after a restart read.
   - M2 (PFF), M4 (pair-divergence loss), M5 (waits on FPd), M6-M8: not yet coded.
 
+### G0 addendum 5 (2026-11-08, before the full run): FPe, a closed equation for the leading channels
+User direction (2026-11-08): FPd showed the 32-channel law cannot be pruned to a readable size. Ask a smaller question instead: on the ordered (nested-dropout) latent fpc_nested_stagec, is there a short equation for the first k channels in terms of themselves only? `scripts/cm1/lead_channel_law.py`:
+- **Fit:** bootstrap STLSQ over whole storms (FP0's tool, centred fit) of dz_j/dt (centred difference, per minute), j < k, on 30 training storms, frames 30-330. Two libraries in the first k channels: "ode" (z and quadratic products: a local ODE per site) and "pde" (plus ∂x z and ∂²x z and their products with z). k = 1 / 2 / 4 / 8, thresholds 0.01 / 0.03 / 0.1.
+- **Scoring,** on 10 test storms: held-out tendency R²; closed rollouts of the k-channel system from 60 / 120 / 180 min (Heun, tendency cap 5, edges held), scored by channel 0's MSE against persistence and against the trained model's own all-channel rollout; decoded nMSE with channels ≥ k zeroed.
+- **Control:** the same on fpc_law_reuse_stagec, whose latent is not ordered.
+- **Reading:** the result is "a usable leading-channel law" if, for some k ≤ 4, the pde fit for channel 0 has ≤ 30 terms and held-out R² ≥ 0.5, and its closed rollout beats persistence of channel 0 at 30 min. Otherwise report the best R² and rollout at each k: how many channels a closed law needs.
+- From the smoke test (2 storms, not a result): channel 0 correlates +0.79 with surface θ′, −0.85 with column condensate and −0.72 with column-max w, so it is a cold-pool / convection coordinate. Its largest pde term is z0 ∂x z0.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|
