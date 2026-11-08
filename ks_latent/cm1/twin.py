@@ -89,7 +89,12 @@ class TwinConfig:
     radar_x_km: float = 330.0
     surface_vars: tuple = ("th",)
     sigma_surface: tuple = (("th", 0.5), ("u", 1.0), ("prs", 0.2), ("qv", 0.5))  # K, m/s, hPa, g/kg
-    forecast_model: str = "surrogate"      # or "persistence", or "analog" (pass an AnalogPropagator as prop)
+    forecast_model: str = "surrogate"      # or "persistence", "analog" (pass an AnalogPropagator as prop), or
+                                           # "anchored" (prop = (deterministic, stochastic); M3: the mean follows the
+                                           # deterministic model, the perturbations the stochastic one)
+    adaptive_noise: str = "none"  # N2: "none", "global" or "site": the additive noise amplitude is rescaled each cycle
+    adapt_gamma: float = 0.5      # from the prior innovations (Desroziers-type ratio E[d^2] - R over HPH, obs-error
+    adapt_bounds: tuple = (0.2, 5.0)   # normalized); amp *= clip(ratio)^(gamma/2), kept within bounds x model_noise
     ensemble_mode: str = "cycled"          # "cycled", "enoi" (latent static anomalies), "enoi_phys" (no ML), "oi_clim"
     analysis_space: str = "latent"         # or "physical"
     forecast_from: tuple = ()              # cycle indices after which to run a free forecast (G3)
@@ -112,9 +117,16 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
     end are set to the truth at every step, or, with `hold` = a frame index, to the truth at that frame
     throughout (no future boundary information)."""
     P = Z.shape[1]
-    props = prop if isinstance(prop, (list, tuple)) else [prop]
+    anchored = isinstance(prop, dict)         # {"det": ..., "stoch": ...}: mean-anchored ensemble (M3)
+    props = [None] if anchored else (prop if isinstance(prop, (list, tuple)) else [prop])
+    amp = model_noise
+    if torch.is_tensor(amp):                  # per-site amplitude (P,) -> (1, P, 1)
+        amp = amp.to(Z.device, Z.dtype).reshape(1, -1, 1)
     for j in range(steps):
-        if props[0] is None:          # persistence
+        if anchored:
+            S = prop["stoch"](Z, gen=gen)
+            Z = prop["det"](Z.mean(0, keepdim=True)) + (S - S.mean(0, keepdim=True))
+        elif props[0] is None:          # persistence
             pass
         elif len(props) == 1:
             Z = props[0](Z, gen=gen)          # a stochastic propagator draws its noise from `gen` (reproducible)
@@ -123,12 +135,35 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
             for k, pk in enumerate(props):
                 Zn[k::len(props)] = pk(Z[k::len(props)], gen=gen)
             Z = Zn
-        if model_noise > 0:
-            Z = Z + model_noise * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
+        if torch.is_tensor(amp) or model_noise > 0:
+            Z = Z + amp * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
         if halo > 0:
             zt = z_truth[t + j + 1 if hold is None else hold].expand(Z.shape[0], -1, -1)
             Z = torch.cat([zt[:, :halo], Z[:, halo:P - halo], zt[:, P - halo:]], dim=1)
     return Z
+
+
+def adapt_noise(amp: torch.Tensor, Yb: np.ndarray, y: np.ndarray, r_var: np.ndarray, x_obs_km: np.ndarray,
+                x_site_km: np.ndarray, cfg: "TwinConfig") -> torch.Tensor:
+    """N2: rescale the additive-noise amplitude per site (or globally) from the prior innovations.
+
+    With d = y - mean(Yb) and s^2 the prior ensemble variance in observation space, a calibrated ensemble has
+    E[d^2] = s^2 + R. In units of R: ratio = sum w (d^2/R - 1) / sum w (s^2/R), the variance the prior should
+    have over the variance it has (Desroziers et al. 2005; Anderson 2009 in spirit). w are the LETKF's Gaspari-Cohn
+    weights for each site ("site") or all ones ("global"). The amplitude moves by clip(ratio, 1/4, 4)^(gamma/2)
+    per cycle, kept in [lo, hi] x the base noise. Sites without observations keep their amplitude."""
+    from ks_latent.cm1.letkf import gaspari_cohn
+    d2 = (y - Yb.mean(0)) ** 2 / r_var - 1.0
+    s2 = Yb.var(0, ddof=1) / r_var
+    if cfg.adaptive_noise == "global":
+        w = np.ones((1, y.size))
+    else:
+        w = gaspari_cohn((x_site_km[:, None] - x_obs_km[None, :]) / cfg.letkf.loc_km)      # (P, m)
+    num, den = w @ d2, w @ s2
+    ratio = np.where(den > 1e-12, num / np.maximum(den, 1e-12), 1.0)
+    fac = torch.as_tensor(np.clip(ratio, 0.25, 4.0) ** (cfg.adapt_gamma / 2), dtype=amp.dtype)
+    lo, hi = cfg.adapt_bounds
+    return (amp * fac).clamp(lo * cfg.model_noise, hi * cfg.model_noise)
 
 
 def _keep(cfg, NX: int, dev) -> torch.Tensor:
@@ -263,9 +298,17 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     ae.eval()
     if cfg.forecast_model == "persistence":
         prop = None
+    elif cfg.forecast_model == "anchored":
+        if not (isinstance(prop, (list, tuple)) and len(prop) == 2):
+            raise ValueError("forecast_model='anchored' needs prop = (deterministic, stochastic) sharing one latent")
+        prop = {"det": prop[0], "stoch": prop[1]}
     elif cfg.forecast_model not in ("surrogate", "analog"):    # analog: `prop` is an AnalogPropagator (G2b)
         raise ValueError(f"unknown forecast_model {cfg.forecast_model!r}")
-    for pk in (prop if isinstance(prop, (list, tuple)) else [prop]):
+    if cfg.adaptive_noise not in ("none", "global", "site"):
+        raise ValueError(f"unknown adaptive_noise {cfg.adaptive_noise!r}")
+    if cfg.adaptive_noise != "none" and cfg.model_noise <= 0:
+        raise ValueError("adaptive_noise rescales model_noise, which must be > 0")
+    for pk in (list(prop.values()) if isinstance(prop, dict) else prop if isinstance(prop, (list, tuple)) else [prop]):
         if pk is not None:
             pk.eval()
             if pk.cfg.n_hist > 1:
@@ -322,6 +365,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
     U_mean = ae.decode(Z0).mean(0) if cfg.ensemble_mode == "enoi_phys" else None   # physical background mean
     gen = torch.Generator().manual_seed(cfg.seed if cfg.noise_seed is None else cfg.noise_seed)
     rank_rng = np.random.default_rng(10_000 + cfg.seed)     # perturbed-member ranks only (claim 2)
+    amp = torch.full((P,), cfg.model_noise, dtype=Z.dtype) if cfg.adaptive_noise != "none" else cfg.model_noise
     hist = []
     for k in range(cfg.n_cycles):
         t = cfg.t0 + k * cfg.steps_per_cycle
@@ -338,7 +382,7 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         elif cfg.ensemble_mode == "oi_clim":      # the archive itself: average storm + its anomalies
             dec_prior = static_phys(t1).to(dev)
         else:
-            Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, cfg.model_noise, gen, hold=_hold(cfg))
+            Z = _forecast(prop, Z, z_truth, t, cfg.steps_per_cycle, cfg.halo, amp, gen, hold=_hold(cfg))
         u_true = truth.full(0, t1, device=dev)[0]
         y = (u_true[ith, obs_cols] * s_th).double().cpu().numpy() + rng.normal(0.0, cfg.sigma_obs, obs_cols.size)
         cref_true = truth.cref[0][t1].clamp(min=0).double().numpy()
@@ -371,6 +415,9 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 Ys.append(vr_op._from_columns(dec).double().cpu().numpy()); ys.append(y_vr)
                 rs.append(np.full(y_vr.size, cfg.sigma_vr ** 2)); xs.append(vr_op.x_km)
             Yall, yall, rall, xall = np.concatenate(Ys, 1), np.concatenate(ys), np.concatenate(rs), np.concatenate(xs)
+            if cfg.adaptive_noise != "none" and cfg.ensemble_mode == "cycled":
+                amp = adapt_noise(amp, Yall, yall, rall, xall, x_site, cfg)
+                rec["noise_amp"] = float(amp.mean())
             if cfg.ensemble_mode in ("enoi_phys", "oi_clim"):   # physical background and analysis, no latent
                 x_cell = (np.arange(NX) + 0.5) * 0.25
                 Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().cpu().numpy(), Yall, yall, rall, x_cell, xall, cfg.letkf, device=dev)

@@ -1,0 +1,132 @@
+[
+ {
+  "name": "n4_c32_N8",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 8 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c32_N16",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 16 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c32_N32",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c32_N64",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 64 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c32_N93",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 93 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c64_N8",
+  "run": "sm1_c64_stagec",
+  "args": "--modes latent --n-members 8 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c64_N16",
+  "run": "sm1_c64_stagec",
+  "args": "--modes latent --n-members 16 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c64_N32",
+  "run": "sm1_c64_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c64_N64",
+  "run": "sm1_c64_stagec",
+  "args": "--modes latent --n-members 64 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "n4_c64_N93",
+  "run": "sm1_c64_stagec",
+  "args": "--modes latent --n-members 93 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.15
+   ]
+  },
+  "test": "pick"
+ }
+]

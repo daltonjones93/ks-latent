@@ -312,6 +312,7 @@ def main():
     ap.add_argument("--c-law-prune-every", type=int, default=0, help="FPd: sequential thresholding period (steps)")
     ap.add_argument("--c-law-prune-rel", type=float, default=0.02,
                     help="FPd: prune terms below this fraction of the largest coupling")
+    ap.add_argument("--c-freeze-ae", action="store_true", help="Stage C updates the propagator only (M3: shared latent)")
     ap.add_argument("--c-site-smooth", type=float, default=0.0,
                     help="FPd: weight of the latent's second difference over sites (physical space, not channel index)")
     ap.add_argument("--w-sfc-th", type=float, default=0.0, help="Stage C extra weight on theta' in the lowest ~1 km")
@@ -465,7 +466,7 @@ def main():
                               val_every=max(1, a.stage_c_steps // 16), nested_frac=a.nested_frac,
                               law_l1=a.c_law_l1, law_res_weight_end=a.c_law_res_end,
                               law_prune_every=a.c_law_prune_every, law_prune_rel=a.c_law_prune_rel,
-                              w_site_smooth=a.c_site_smooth)
+                              w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
             rcst = train_stage_c(ae, prop, data["train"], data["val"], sc, log=log)

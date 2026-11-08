@@ -1,0 +1,402 @@
+[
+ {
+  "name": "m1_det_obs2_cyc5",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 5",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs2_cyc5",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 5 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs2_cyc10",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 10",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs2_cyc10",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 10 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs2_cyc15",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 15",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs2_cyc15",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 15 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs2_cyc30",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 30",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs2_cyc30",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 2 --refl-km 2 --vr-km 2 --cycle-min 30 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs4_cyc5",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 5",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs4_cyc5",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 5 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs4_cyc10",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 10",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs4_cyc10",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 10 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs4_cyc15",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 15",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs4_cyc15",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 15 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs4_cyc30",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 30",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs4_cyc30",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 4 --refl-km 4 --vr-km 4 --cycle-min 30 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs8_cyc5",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 5",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs8_cyc5",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 5 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs8_cyc10",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 10",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs8_cyc10",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 10 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs8_cyc15",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 15",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs8_cyc15",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 15 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs8_cyc30",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 30",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs8_cyc30",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 8 --refl-km 8 --vr-km 8 --cycle-min 30 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs16_cyc5",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 5",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs16_cyc5",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 5 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs16_cyc10",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 10",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs16_cyc10",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 10 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs16_cyc15",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 15",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs16_cyc15",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 15 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_det_obs16_cyc30",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 30",
+  "grid": {
+   "--model-noise": [
+    0.05,
+    0.1,
+    0.2
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m1_stoch_obs16_cyc30",
+  "run": "full_v1_stagec_crps",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --obs-km 16 --refl-km 16 --vr-km 16 --cycle-min 30 --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ }
+]

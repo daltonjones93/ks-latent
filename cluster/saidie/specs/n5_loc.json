@@ -1,0 +1,17 @@
+[
+ {
+  "name": "n5_loc",
+  "run": "full_v1_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --model-noise 0.1",
+  "grid": {
+   "--loc-km": [
+    2,
+    5,
+    10,
+    20,
+    40
+   ]
+  },
+  "test": "all"
+ }
+]

@@ -244,3 +244,22 @@ def test_tendency_cap_bounds_rollouts_and_is_transparent_for_small_tendencies():
     torch.testing.assert_close(capped(small), free(small), atol=1e-8, rtol=1e-6)
     with pytest.raises(ValueError):
         _law_prop(law_cap=-1.0)
+
+
+def test_stage_c_freeze_ae_trains_only_the_propagator():
+    """M3: with freeze_ae the autoencoder (hence the latent) is bit-identical after Stage C, and a stochastic
+    propagator still learns (its parameters move)."""
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3),
+                       positive_channel_mask(Z))
+    sp = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, noise_channels=2))
+    ae0 = {k: v.clone() for k, v in ae.state_dict().items()}
+    p0 = [p.detach().clone() for p in sp.parameters()]
+    train_stage_c(ae, sp, tr, va, StageCConfig(window_sites=14, halo_sites=2, batch=2, steps=4, k_max=2, val_every=2,
+                                               warmup=1, crps_samples=2, freeze_ae=True), log=lambda s: None)
+    assert all(torch.equal(ae0[k], v) for k, v in ae.state_dict().items())
+    assert any(not torch.equal(a, b.detach()) for a, b in zip(p0, sp.parameters()))

@@ -298,3 +298,57 @@ def test_perturbed_ranks_g3_scores_and_analog_forecast_model(setup):
                                                               forecast_model="analog",
                                                               letkf=LETKFConfig(loc_km=10.0, rtps=0.3)))
     assert ra["config"]["forecast_model"] == "analog" and np.isfinite(ra["cycles"][-1]["prior"]["nmse_mean_dec"])
+
+
+def test_adaptive_noise_follows_the_innovations():
+    """N2: the amplitude grows where innovations exceed the prior spread plus R, shrinks where the ensemble is
+    over-dispersed, stays put where a site sees no observations, and respects the bounds."""
+    from ks_latent.cm1.twin import adapt_noise
+    rng = np.random.default_rng(0)
+    N, m = 40, 50
+    x_obs = np.linspace(0.0, 20.0, m)
+    x_site = np.array([5.0, 15.0, 100.0])                   # the last site is far from every observation
+    r = np.ones(m)
+    y = np.zeros(m)
+    Yb = rng.normal(0.0, 0.3, (N, m))                        # spread 0.3 << innovation scale
+    Yb[:, x_obs > 10] = rng.normal(0.0, 3.0, (N, (x_obs > 10).sum()))   # right half over-dispersed
+    Yb -= Yb.mean(0) - np.where(x_obs > 10, 0.0, 2.0)        # left: mean 2 away from y (d^2 = 4 > s^2 + R)
+    amp = torch.full((3,), 0.1)
+    cfg = TwinConfig(model_noise=0.1, adaptive_noise="site", letkf=LETKFConfig(loc_km=2.0))
+    a1 = adapt_noise(amp, Yb, y, r, x_obs, x_site, cfg)
+    assert a1[0] > 0.1 and a1[1] < 0.1 and a1[2] == 0.1
+    a = amp
+    for _ in range(50):
+        a = adapt_noise(a, Yb, y, r, x_obs, x_site, cfg)
+    assert torch.allclose(a, torch.tensor([0.5, 0.02, 0.1]))   # pinned at the bounds (5x, 0.2x); far site untouched
+    g = adapt_noise(amp, Yb, y, r, x_obs, x_site, TwinConfig(model_noise=0.1, adaptive_noise="global"))
+    assert torch.allclose(g, g[0].expand(3))                  # one factor everywhere
+
+
+def test_adaptive_noise_and_anchored_ensemble_in_the_twin(setup):
+    """N2 and M3 run end to end. Anchored: one forecast step puts the mean exactly on the deterministic model's
+    step of the mean and keeps the stochastic model's anomalies; the stochastic member must share the latent."""
+    ae, prop, truth, z_truth, Z0, nrm = setup
+    base = dict(t0=3, n_cycles=4, steps_per_cycle=2, halo=1, letkf=LETKFConfig(loc_km=10.0, rtps=0.3))
+    r = run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, model_noise=0.1, adaptive_noise="site"))
+    amps = [c["noise_amp"] for c in r["cycles"]]
+    assert all(0.02 <= x <= 0.5 for x in amps) and len(set(amps)) > 1
+    with pytest.raises(ValueError):
+        run_twin(ae, prop, truth, z_truth, Z0, nrm, TwinConfig(**base, model_noise=0.0, adaptive_noise="site"))
+    torch.manual_seed(2)
+    sp = StencilPropagator(StencilPropConfig(latent_channels=4, hidden=8, layers=1, radius=1, noise_channels=2)).eval()
+    det = StencilPropagator(StencilPropConfig(latent_channels=4, hidden=8, layers=1, radius=1)).eval()
+    with torch.no_grad():
+        sp.head.weight.normal_(0, 0.1)
+        det.head.weight.normal_(0, 0.1)
+    g = torch.Generator().manual_seed(3)
+    Z1 = _forecast({"det": det, "stoch": sp}, Z0, z_truth, 3, 1, 0, 0.0, g)
+    g = torch.Generator().manual_seed(3)
+    S = sp(Z0, gen=g)
+    with torch.no_grad():
+        assert torch.allclose(Z1.mean(0), det(Z0.mean(0, keepdim=True))[0], atol=1e-5)
+        assert torch.allclose(Z1 - Z1.mean(0), S - S.mean(0), atol=1e-5)
+    ra = run_twin(ae, (det, sp), truth, z_truth, Z0, nrm, TwinConfig(**base, forecast_model="anchored"))
+    assert np.isfinite(ra["cycles"][-1]["prior"]["nmse_mean_dec"])
+    with pytest.raises(ValueError):
+        run_twin(ae, sp, truth, z_truth, Z0, nrm, TwinConfig(**base, forecast_model="anchored"))

@@ -265,6 +265,8 @@ The programme below is ordered by expected value per unit of cluster time, with 
 
 ### 6.1 Near term (close Paper III; 1–2 weeks)
 
+> **Queue status (2026-11-07, Opus 5.5):** pre-registered as G0 addendum 4 in `cm1_notes.md`. Code: `twin.adapt_noise` (N2), the `anchored` forecast model and `--stoch-run` (M3), `--vr-km`, Stage C `--c-freeze-ae`, `scripts/cm1/da_sweep.py` (validation tuning, then test storms at the pick), `scripts/cm1/cost_table.py`, specs in `cluster/saidie/specs/`, launcher `cluster/saidie/fable_runs.sh`. Queued: chain A (after FPd) N5, N2, N4, M1, N6 (H200); chain B (after the G2b chain) M3 training, then M3 DA. N6 on CPU: Cashew. **N8a needs no run:** L1 already ran the propagator in float64 on CPU. Not queued: N3 (S55 adapter needed; S55's forecasts, 0.48 / 0.57 / 0.51, already give a non-local forecast baseline), N7 (needs a CM1 restart-perturbation patch), M2, M4–M8.
+
 **N1. Finish the pre-registered runs.** G2b extended grid (Saidie 9061–9072), T2 extension (Cashew 750368), FPc arm 4, FPd. No new design; record under the existing rules.
 
 **N2. Calibration without hand tuning (G4).**

@@ -1,0 +1,28 @@
+[
+ {
+  "name": "m3_anchored",
+  "run": "full_v1_stagec",
+  "args": "--modes anchored --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --model-noise 0 --stoch-run /home/c838596879/cm1_runs/m3_stoch_frozen_stagec",
+  "grid": {
+   "--rtps": [
+    0.0,
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ },
+ {
+  "name": "m3_stoch_frozen_alone",
+  "run": "m3_stoch_frozen_stagec",
+  "args": "--modes latent --n-members 32 --random-members --seeds 0 1 2 --obs-set th+refl+vr --boundary persistence --forecast-from --model-noise 0",
+  "grid": {
+   "--rtps": [
+    0.0,
+    0.5,
+    0.9
+   ]
+  },
+  "test": "pick"
+ }
+]

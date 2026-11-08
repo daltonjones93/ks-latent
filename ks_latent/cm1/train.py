@@ -377,6 +377,7 @@ class StageCConfig:
     law_prune_start_frac: float = 0.4 # ... from this fraction of the steps on ...
     law_prune_rel: float = 0.02       # ... zeroing terms below this fraction of the largest coupling
     w_site_smooth: float = 0.0        # + w * mean (second difference of z over sites)^2 / var(z), first frame
+    freeze_ae: bool = False           # M3: train the propagator only (the autoencoder, hence the latent, stays fixed)
     active_frac: float = 0.5
     val_every: int = 250
     val_batches: int = 4
@@ -426,7 +427,9 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         e = data.env_of(mem)
         return u.to(dev), (None if e is None else e.to(dev))
     val = [draw(data_va, Hh + cfg.k_max, vg) for _ in range(cfg.val_batches)]
-    params = list(ae.parameters()) + list(prop.parameters())
+    if cfg.freeze_ae:
+        ae.requires_grad_(False)
+    params = ([] if cfg.freeze_ae else list(ae.parameters())) + list(prop.parameters())
     opt = torch.optim.AdamW(params, lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     kcfg = StageBConfig(k_max=cfg.k_max, k_ramp_frac=cfg.k_ramp_frac, k_sampling=cfg.k_sampling)

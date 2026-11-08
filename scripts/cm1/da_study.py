@@ -50,7 +50,8 @@ MODES = {"latent": {}, "physical": {"analysis_space": "physical"},
          "enoi_phys": {"ensemble_mode": "enoi_phys", "forecast_model": "persistence", "model_noise": 0.0},
          "obs_only": {"ensemble_mode": "oi_clim", "forecast_model": "persistence", "model_noise": 0.0},
          "persist": {"forecast_model": "persistence"},     # G2b: same LETKF, members do not evolve (needs noise)
-         "analog": {"forecast_model": "analog"}}           # G2b: same LETKF, local analog forecasts (ks_latent.cm1.analog)
+         "analog": {"forecast_model": "analog"},           # G2b: same LETKF, local analog forecasts (ks_latent.cm1.analog)
+         "anchored": {"forecast_model": "anchored"}}       # M3: mean by the deterministic model, perturbations by --stoch-run           # G2b: same LETKF, local analog forecasts (ks_latent.cm1.analog)
 ENOI_MODES = ("enoi_surrogate", "enoi_phys", "obs_only")    # static-archive ensembles: covariance scaled by --enoi-alpha, no RTPS
 METRICS = ("nmse_mean_dec", "th_obs_rmse", "th_obs_spread", "front_abs_disp_km_median", "refl_echo_rmse",
            "vr_obs_rmse")
@@ -133,6 +134,12 @@ def main():
     ap.add_argument("--analog-radius", type=int, default=1, help="G2b analog: patch half-width in sites")
     ap.add_argument("--analog-mean", action="store_true", help="G2b analog: mean of the k increments (default: one drawn)")
     ap.add_argument("--analog-members", type=int, default=0, help="G2b analog: archive from the first n training storms (0: all)")
+    ap.add_argument("--adaptive-noise", default="none", choices=["none", "global", "site"],
+                    help="N2: rescale --model-noise each cycle from the prior innovations (twin.adapt_noise)")
+    ap.add_argument("--adapt-gamma", type=float, default=0.5)
+    ap.add_argument("--vr-km", type=float, default=2.0, help="radial-velocity spacing along the beam footprint (km)")
+    ap.add_argument("--stoch-run", default=None,
+                    help="M3 'anchored' mode: run dir of a stochastic propagator trained on --run's frozen autoencoder")
     ap.add_argument("--device", default="auto")
     a = ap.parse_args()
     t_start = time.time()
@@ -188,6 +195,7 @@ def main():
                 surface_vars=("th", "u", "prs", "qv") if "mesonet" in a.obs_set else ("th",),
                 refl_every_cells=int(round(a.refl_km / 0.25)) if "refl" in a.obs_set else 0, sigma_refl=a.sigma_refl,
                 vr_tilts=tuple(a.vr_tilts) if "vr" in a.obs_set else (), sigma_vr=a.sigma_vr, radar_x_km=a.radar_x_km,
+                vr_every_cells=int(round(a.vr_km / 0.25)), adaptive_noise=a.adaptive_noise, adapt_gamma=a.adapt_gamma,
                 forecast_from=tuple(a.forecast_from), forecast_frames=int(round(a.forecast_minutes * 60 / dt)),
                 letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary=a.boundary)
     analog = None
@@ -201,6 +209,17 @@ def main():
         del zl
         print(f"[study] analog archive: {len(names)} training storms, {len(analog.keys)} patches "
               f"(radius {a.analog_radius}, k {a.analog_k}, {'mean' if a.analog_mean else 'one drawn'})", flush=True)
+    stoch_prop = None
+    if "anchored" in a.modes:
+        if not a.stoch_run:
+            raise ValueError("mode 'anchored' needs --stoch-run")
+        ae2, stoch_prop, _, _, _ = load_run(Path(a.stoch_run).expanduser(), dev)
+        diff = max(float((p1 - p2).abs().max()) for p1, p2 in zip(ae.state_dict().values(), ae2.state_dict().values()))
+        if diff > 0:
+            raise ValueError(f"--stoch-run's autoencoder differs from --run's (max |diff| {diff:.3g}): latents not shared")
+        if stoch_prop.cfg.noise_channels == 0:
+            raise ValueError("--stoch-run must hold a stochastic propagator (noise_channels > 0)")
+        del ae2
     rows = {}      # truth -> {"free": compact, "floor": x, mode: [compact per seed], "fc_" + mode: [curve per seed]}
     for tn in truths:
         truth = ColumnData([load_member(files[tn])], norm, dev)
@@ -210,16 +229,19 @@ def main():
         with torch.no_grad():
             floor = [float(((ae(u)[0] - u) ** 2).mean()) for u in
                      (truth.full(0, t0 + (k + 1) * spc, device=dev) for k in range(n_cycles // 2, n_cycles))]
-        free = run_twin(ae, prop, truth, z_truth, Z0, norm, TwinConfig(**{**base, "model_noise": 0.0}),
+        free = run_twin(ae, prop, truth, z_truth, Z0, norm, TwinConfig(**{**base, "model_noise": 0.0, "adaptive_noise": "none"}),
                         assimilate=False, refl_head=refl_head)
         rows[tn] = {"floor": float(np.mean(floor)), "free": compact(summarize_twin(free)), "fc_free": forecast_curve(free)}
         for mode in a.modes:
             rows[tn][mode], rows[tn]["fc_" + mode] = [], []
             for sd in a.seeds:
                 kw = {**base, **MODES[mode], "seed": sd}
+                if kw["model_noise"] == 0:             # nothing to adapt (no-noise modes)
+                    kw["adaptive_noise"] = "none"
                 if mode in ENOI_MODES:
                     kw["letkf"] = LETKFConfig(loc_km=a.loc_km, inflation=a.enoi_alpha, rtps=0.0)
-                r = run_twin(ae, analog if mode == "analog" else prop, truth, z_truth, Z0, norm, TwinConfig(**kw),
+                pm = analog if mode == "analog" else (prop, stoch_prop) if mode == "anchored" else prop
+                r = run_twin(ae, pm, truth, z_truth, Z0, norm, TwinConfig(**kw),
                              refl_head=refl_head, static_ens=static, static_phys=static_phys)
                 rows[tn][mode].append(compact(summarize_twin(r)))
                 rows[tn]["fc_" + mode].append(forecast_curve(r))
