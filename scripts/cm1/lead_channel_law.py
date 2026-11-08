@@ -15,6 +15,7 @@ Reported for k = 1, 2, 4, 8 and each library, on held-out test storms:
     condition) and score nMSE against the truth, against the same decode of persistence
   - what the leading channels are: correlations with site-mean surface theta', column-max w, column condensate,
     low-level u, from the truth columns
+With --time-orders 2 the law is second order in time (ks_latent.cm1.leadlaw): d2z/dt2 = F(z, dz/dt, ...).
   python scripts/cm1/lead_channel_law.py --run ~/cm1_runs/fpc_nested_stagec --source cache:A+A2+B --out ~/cm1_da/fpe
 """
 from __future__ import annotations
@@ -34,57 +35,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, load_member  # noqa: E402
-from ks_latent.cm1.fieldpde import bootstrap_stlsq, r2  # noqa: E402
+from ks_latent.cm1.leadlaw import backward_velocity, fit, r2, rollout, training_rows  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import _forecast  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
-
-
-def derivs(z: np.ndarray):
-    """z (..., P, k) -> d1, d2 over sites (interior; edges replicated), per site spacing."""
-    zp = np.concatenate([z[..., :1, :], z, z[..., -1:, :]], axis=-2)
-    return 0.5 * (zp[..., 2:, :] - zp[..., :-2, :]), zp[..., 2:, :] - 2 * z + zp[..., :-2, :]
-
-
-def library(z: np.ndarray, kind: str):
-    """z (..., P, k) -> features (..., P, F) and their names."""
-    k = z.shape[-1]
-    lin, names = [z], [f"z{j}" for j in range(k)]
-    if kind == "pde":
-        d1, d2 = derivs(z)
-        lin += [d1, d2]
-        names += [f"d1z{j}" for j in range(k)] + [f"d2z{j}" for j in range(k)]
-    L = np.concatenate(lin, -1)
-    nz = k
-    quad, qn = [], []
-    for a, b in itertools.combinations_with_replacement(range(L.shape[-1]), 2):
-        if a >= nz and b >= nz:          # no products of two derivatives
-            continue
-        quad.append(L[..., a] * L[..., b]); qn.append(f"{names[a]}*{names[b]}")
-    F = np.concatenate([np.ones(z.shape[:-1] + (1,)), L, np.stack(quad, -1)], -1)
-    return F, ["1"] + names + qn
-
-
-def tendency(xi: np.ndarray, z: np.ndarray, kind: str, cap: float) -> np.ndarray:
-    F, _ = library(z, kind)
-    f = F @ xi                                            # (..., P, k)
-    return cap * np.tanh(f / cap) if cap else f
-
-
-def rollout(xi, z0, steps, kind, cap, halo):
-    z, out = z0.copy(), []
-    edge = z0.copy()
-    for _ in range(steps):
-        k1 = tendency(xi, z, kind, cap)
-        k2 = tendency(xi, z + k1, kind, cap)
-        z = z + 0.5 * (k1 + k2)
-        z[:halo], z[-halo:] = edge[:halo], edge[-halo:]
-        if not np.isfinite(z).all():
-            out.append(np.full_like(z, np.nan)); break
-        out.append(z.copy())
-    while len(out) < steps:
-        out.append(np.full_like(z0, np.nan))
-    return np.stack(out)
 
 
 def main():
@@ -103,6 +57,9 @@ def main():
     ap.add_argument("--starts", type=int, nargs="+", default=[60, 120, 180])
     ap.add_argument("--leads", type=int, nargs="+", default=[5, 15, 30, 60])
     ap.add_argument("--cap", type=float, default=5.0)
+    ap.add_argument("--time-orders", type=int, nargs="+", default=[1], choices=[1, 2],
+                    help="2: target d2z/dt2 with dz/dt of the kept channels in the library (waves, memory)")
+    ap.add_argument("--t-smooth", type=float, default=0.0, help="Gaussian smoothing of z in time (frames) before differencing")
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--device", default="cpu")
     a = ap.parse_args()
@@ -171,51 +128,40 @@ def main():
     for k in a.ks:
         if k > c:
             continue
-        for kind in a.kinds:
+        for order, kind in itertools.product(a.time_orders, a.kinds):
             X, Y, G = [], [], []
             for si, z in enumerate(ztr):
-                zz = z[f0 - 1: f1 + 1, :, :k]
-                dz = 0.5 * (zz[2:] - zz[:-2])                               # per minute
-                F, names = library(zz[1:-1], kind)
-                F, dz = F[:, halo:-halo], dz[:, halo:-halo]
-                X.append(F.reshape(-1, F.shape[-1])); Y.append(dz.reshape(-1, k))
-                G.append(np.repeat(si, X[-1].shape[0]))
+                Xi, Yi, names = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth)
+                X.append(Xi); Y.append(Yi); G.append(np.repeat(si, len(Xi)))
             X, Y, G = np.concatenate(X), np.concatenate(Y), np.concatenate(G)
             if len(X) > a.max_rows:
                 ii = rng.choice(len(X), a.max_rows, replace=False); X, Y, G = X[ii], Y[ii], G[ii]
-            # held-out tendencies
-            Xt, Yt = [], []
+            Xt, Yt = [], []                          # held-out targets (dz/dt, or d2z/dt2 for order 2)
             for z in zte:
-                zz = z[f0 - 1: f1 + 1, :, :k]
-                F, _ = library(zz[1:-1], kind)
-                Xt.append(F[:, halo:-halo].reshape(-1, F.shape[-1]))
-                Yt.append((0.5 * (zz[2:] - zz[:-2]))[:, halo:-halo].reshape(-1, k))
+                Xi, Yi, _ = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth)
+                Xt.append(Xi); Yt.append(Yi)
             Xt, Yt = np.concatenate(Xt), np.concatenate(Yt)
             for thr in a.thresholds:
-                xi = np.zeros((X.shape[1], k)); freq = np.zeros_like(xi)
-                mx = X[:, 1:].mean(0)
-                for j in range(k):        # centred fit (the constant column has no spread); intercept from the means
-                    b = bootstrap_stlsq(X[:, 1:] - mx, Y[:, j] - Y[:, j].mean(), G, thr, n_boot=a.n_boot)
-                    xi[1:, j], freq[1:, j] = b["full"], b["freq"]
-                    xi[0, j], freq[0, j] = Y[:, j].mean() - mx @ b["full"], 1.0
+                xi, freq = fit(X, Y, G, thr, n_boot=a.n_boot)
                 r2t = [r2(Yt[:, j], Xt @ xi[:, j]) for j in range(k)]
-                # closed rollouts
                 errs = {L: {"law": [], "pers": [], "ref": [], "dec_law": [], "dec_pers": []} for L in a.leads}
                 for si, z in enumerate(zte):
                     for t0 in a.starts:
                         if (si, t0) not in ref:
                             continue
-                        traj = rollout(xi, z[t0, :, :k], max(a.leads), kind, a.cap, halo)
+                        zk = z[:, :, :k]
+                        traj = rollout(xi, zk[t0], max(a.leads), kind, a.cap, halo, order,
+                                       backward_velocity(zk, t0) if order == 2 else None)
                         for L in a.leads:
                             tru = z[t0 + L, halo:-halo, 0]
                             errs[L]["law"].append(np.mean((traj[L - 1, halo:-halo, 0] - tru) ** 2))
                             errs[L]["pers"].append(np.mean((z[t0, halo:-halo, 0] - tru) ** 2))
                             errs[L]["ref"].append(np.mean((ref[(si, t0)][L - 1, halo:-halo, 0] - tru) ** 2))
                             u_true = dte[si].full(0, t0 + L)[0]
-                            for key, zk in (("dec_law", traj[L - 1]), ("dec_pers", z[t0, :, :k])):
-                                if not np.isfinite(zk).all():
+                            for key, zz in (("dec_law", traj[L - 1]), ("dec_pers", zk[t0])):
+                                if not np.isfinite(zz).all():
                                     errs[L][key].append(np.nan); continue
-                                zf = np.zeros_like(z[t0]); zf[:, :k] = zk
+                                zf = np.zeros_like(z[t0]); zf[:, :k] = zz
                                 with torch.no_grad():
                                     dec = ae.decode(torch.as_tensor(zf, dtype=torch.float32)[None])[0]
                                 errs[L][key].append(float(((dec - u_true) ** 2).mean()))
@@ -223,17 +169,19 @@ def main():
                 n_terms = int((xi != 0).sum())
                 top0 = sorted([(names[i], float(xi[i, 0]), float(freq[i, 0])) for i in np.flatnonzero(xi[:, 0])],
                               key=lambda t: -abs(t[1]))[:12]
-                rec = {"k": k, "kind": kind, "threshold": thr, "n_terms": n_terms,
+                rec = {"k": k, "kind": kind, "time_order": order, "threshold": thr, "n_terms": n_terms,
                        "n_terms_z0": int((xi[:, 0] != 0).sum()), "r2_test": r2t, "skill": skill, "z0_terms": top0,
-                       "library_size": X.shape[1]}
+                       "library_size": X.shape[1], "blowups": int(sum(np.isnan(v).sum() for v in
+                                                                      [np.array(errs[max(a.leads)]["law"])]))}
                 res["fits"].append(rec)
                 s30 = skill.get(30, skill[max(skill)])
-                print(f"[FPe] k {k} {kind} thr {thr}: {n_terms} terms ({rec['n_terms_z0']} for z0 of {X.shape[1]}), "
+                lhs = "dz0/dt" if order == 1 else "d2z0/dt2"
+                print(f"[FPe] k {k} {kind} order {order} thr {thr}: {n_terms} terms ({rec['n_terms_z0']} for z0 of {X.shape[1]}), "
                       f"test R^2 z0 {r2t[0]:.3f}" + (f" mean {np.mean(r2t):.3f}" if k > 1 else "")
                       + f" | z0 MSE at 30 min: law {s30['law']:.4f} persistence {s30['pers']:.4f} full model {s30['ref']:.4f}"
-                      + f" | decoded (first k ch) law {s30['dec_law']:.4f} persistence {s30['dec_pers']:.4f} [{time.time() - t_start:.0f}s]",
-                      flush=True)
-                print("      dz0/dt = " + " ".join(f"{v:+.3g} {n} ({f:.1f})" for n, v, f in top0[:8]), flush=True)
+                      + f" | decoded (first k ch) law {s30['dec_law']:.4f} persistence {s30['dec_pers']:.4f}"
+                      + f" | blow-ups {rec['blowups']} [{time.time() - t_start:.0f}s]", flush=True)
+                print(f"      {lhs} = " + " ".join(f"{v:+.3g} {n} ({f:.1f})" for n, v, f in top0[:10]), flush=True)
                 (out / "fpe.json").write_text(json.dumps(res, indent=1))
     from dataclasses import make_dataclass
     Args = make_dataclass("FPeArgs", [(k, object, tuple(v) if isinstance(v, list) else v) for k, v in vars(a).items()])
