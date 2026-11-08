@@ -495,11 +495,11 @@ Each task below answers a specific objection a referee would raise. They come in
 | Claim | Threshold | Result | Status |
 |---|---|---|---|
 | 1. DA works | ≥ 10% below no DA, CI excl. 0, ≥ 80% of truths, front < 1 km | 0.273 vs 0.469 (−42%), 22/22, front 0.38 km | **met** |
-| 2. Calibrated | spread/error 0.7-1.3 at θ′ obs; rank histogram not U-shaped (χ², p > 0.01) | spread/error 0.71 (noise 0.1, chosen on validation) | **half met**: rank test queued (g3_headline + `rank_test.py`) |
+| 2. Calibrated | spread/error 0.7-1.3 at θ′ obs; rank histogram not U-shaped (χ², p > 0.01) | spread/error 0.71; perturbed-member histogram mildly U (outer bins 1.11-1.34×), χ² rejects; adaptive noise (N2) does not fix it (0.60-0.61) | **half met** |
 | 3. Better than static / obs-only | ≥ 10% below each | −23% surrogate EnOI, −53% physical EnOI, analysis −16% obs-only | **met** |
 | 4. Generalizes | gain in held-out region ≥ half of in-distribution; 30-min skill within 25% | gain 59% vs 48%; skill within 3% (60-min front error 2x) | **met** |
 | 5. Forecasts | skill < 0.5 at 30 min, < 1 at 60, beats advection | 0.357 / 0.361; advection 1.21 / 1.25 | **met** |
-| 6. Transfer | localized 2-storm / 1-storm ratio ≤ 1.1 at every N; unlocalized larger at N = 8 | 0.99 / 1.00 (N 8 / 32); unlocalized 1.08 / 1.04 | **met** (8 storms, 1 seed; extension queued) |
+| 6. Transfer | localized 2-storm / 1-storm ratio ≤ 1.1 at every N; unlocalized larger at N = 8 | extended (16 storms × 3 seeds): 1.002 / 1.008 / 1.020 at N 8 / 16 / 32; unlocalized 1.056 / 1.062 / 1.087 | **met** |
 
 Exploratory results already in hand: latent vs physical-space analysis (0.236 vs 0.245, G1); learned vs hand-set model error (G1b: hand-set more accurate, learned calibrated out of the box at RTPS 0.5, 1.04); shifted tilings (E3c, −4% at 4x cost); Lyapunov / spreading (L1 / L5); SM5 error growth; P probes.
 
@@ -527,7 +527,7 @@ Exploratory results already in hand: latent vs physical-space analysis (0.236 vs
 
   Every outcome is reported, including failures.
 
-- [~] **Fable-review section 6** (`docs/cm1_fable_review.md` §6; pre-registered as G0 addendum 4). Chain A (after FPd): N5 localization sweep, N2 adaptive noise, N4 ensemble size (32 and 64 channels), M1 observation spacing × cycle length (deterministic vs stochastic), N6 cost on an H200. Chain B (after G2b): M3 stochastic propagator on the frozen full_v1_stagec autoencoder, then the mean-anchored ensemble DA. Out `~/cm1_da/fable/`. **Submitted 2026-11-07: Saidie 9074-9078 (chain A, after 9038), 9079-9082 (chain B, after 9072); CPU cost on Cashew 750376. Smoke (Cashew 750375) passed.**
+- [~] **Fable-review section 6** (`docs/cm1_fable_review.md` §6; pre-registered as G0 addendum 4). Chain A (after FPd): N5 localization sweep, N2 adaptive noise, N4 ensemble size (32 and 64 channels), M1 observation spacing × cycle length (deterministic vs stochastic), N6 cost on an H200. Chain B (after G2b): M3 stochastic propagator on the frozen full_v1_stagec autoencoder, then the mean-anchored ensemble DA. Out `~/cm1_da/fable/`. **Submitted 2026-11-07: Saidie 9074-9078 (chain A, after 9038), 9079-9082 (chain B, after 9072); CPU cost on Cashew 750376. Smoke (Cashew 750375) passed.** **Results 2026-11-08 (notes, 'Overnight 2026-11-07/08'):** N5 optimum 5 km (the reach rule's ≥ 10 km not supported); N2 ties on accuracy but spread/error 0.60 (fails); N4: the 64-channel penalty persists at every N (not sampling error); M1: deterministic + noise wins in all 16 cells by 6-9%, no reversal; N6: 3-h DA experiment 0.67 s on an H200; M3 rerunning (9088) after a fix.
 
 ### Tier 1: essential
 - [x] **G1 (C)** **Done (job 8717, 12 truths × 3 seeds, `th+refl+vr`): forecast nMSE 0.236 ± 0.027 vs no DA 0.380 ± 0.099; latent beats no DA on 12/12 truths; physical-space analysis 0.245, surrogate EnOI 0.331. See `cm1_notes.md`.** **Many truths, with error bars.**

@@ -829,3 +829,70 @@ DA-initialized forecasts beat both references at every lead after the first minu
 - **The shape:** mildly U-shaped. The outer bins hold 1.34× the flat frequency pooled and 1.11× decorrelated, with mean rank bias +0.02.
 - **Without the observation-error perturbation:** a strong U (6.2×), the expected artefact.
 - **Reading:** slight underdispersion, consistent with spread/error 0.71. The rank criterion is not met as written: formally rejected, the histogram close to flat. Claim 2 stays half met, and the paper reports it so.
+
+## Overnight 2026-11-07/08: G2b, T2 extension, FPd, and the Fable section-6 sweeps (Saidie 9032-9082, Cashew 750365-750376)
+All DA rows: 22 test storms × 3 seeds, the G0 setup, the setting chosen on the 6 validation storms by lowest prior nMSE (`choice.json` in `~/cm1_da/fable/<name>/`). Headline: 0.273 ± 0.022, no DA 0.469.
+
+**G2b, equation-free forecast-model baselines (pre-registered grid + addendum 3b), test at the validation pick:**
+
+| Baseline | Validation pick | Test cycled nMSE | vs no DA | spread/error |
+|---|---|---|---|---|
+| persistence ensemble | noise 0.05 (grid 0-0.3; val 1.62) | 1.551 ± 0.115 | +1.08 | 0.34 |
+| analog, one drawn neighbour | noise 0.05 (val 14.0) | 14.5 | +14.0 | 1.08 |
+| analog, mean of 10 neighbours | noise 0.05 (val 6.22) | 6.80 ± 0.83 | +6.33 | 0.99 |
+
+- The latent DA beats both by a factor of 5 or more (the addendum-3 reading: ≥ 10% better, CI excluding 0; met trivially). Both baselines are **worse than no DA**. Persistence without noise is a frozen 1-h ensemble; its spread collapses (0.08) and it cannot follow the storm (1.59). With noise it random-walks off the manifold. Local analogs are incoherent between neighbouring sites even when averaged over 10 neighbours.
+- So these are not strong baselines. The informative equation-free comparison stays claim 3 (surrogate EnOI 0.356, physical EnOI 0.578, obs-only 0.311). Report G2b as "a forecast model is needed, and a local look-up is not one". A fair analog would match whole-domain states (Lguensat et al. 2017) or kernel-weight them (Zhao & Giannakis 2016). It is not run.
+
+**T2 extension (claim 6; 16 two-storm truths × 3 seeds, Cashew 750368):** localized DA error ratio two-storm / single 1.002 / 1.008 / 1.020 at N = 8 / 16 / 32 (≤ 1.1 at every N ✓); unlocalized 1.056 / 1.062 / 1.087, larger than localized at N = 8 ✓. **Claim 6 met on the extended set.** Unlocalized errors are 0.43-0.45 against localized 0.34-0.39. Forecasts: error ratio 0.96-1.06 at starts of 1-2 h (before the storms interact), 1.15-1.20 at 60 min from 3-4 h. The single-storm references are the 10 ens_A2 test storms (unpaired).
+
+**FPd (law-shaped latent, Saidie 9032-9038):**
+
+| Arm | Skill 5 / 30 / 60 | Terms kept | Residual share | Unused channels |
+|---|---|---|---|---|
+| fpd_reuse | 0.241 / 0.394 / 0.374 | 15 356 | 0.000 | 0 of 32 |
+| fpd_smooth (+ site smoothness) | 0.241 / 0.396 / 0.375 | 15 403 | 0.000 | 0 |
+| fpd_scratch | identical to fpd_smooth (see below) | | | |
+
+- **Pre-registered reading: not met** on the term count (15.4k against ≤ 500). The other three criteria are met: residual share 0.000 < 0.1; 30-min skill 0.394 within 10% of 0.365 (bound 0.402); every channel used. Sequential thresholding during training cut the law 3.4× (52.7k → 15.4k) and closed it (the MLP residual is gone), at +8% error at 30 min. But the remaining terms are all needed: the next pruning level (1% of the largest coupling, 6.2k terms) blows up the 60-min forecast. A readable law is not reached on this latent.
+- **fpd_scratch is not a scratch model.** Stage A with the same recipe and seed reproduced full_v1's autoencoder bit for bit on the GPU (identical md5), and every later stage then repeated fpd_smooth. That is a reproducibility check, not a third arm. Rerun with `--seed 1`: Saidie 9089-9091.
+
+**N5, localization radius (noise 0.1):** validation 2 / 5 / 10 / 20 / 40 km: 0.262 / **0.259** / 0.266 / 0.275 / 0.295; test 0.275 / **0.271** / 0.279 / 0.292 / 0.307. The optimum is 5 km on both. **The reach rule's prediction (optimum ≥ 10 km) is not supported:** 10 km is 3% worse than 5 km, and larger radii are monotonically worse. Spread/error falls with radius (0.72 → 0.62). With 32 members and 32 channels per site, sampling noise in the cross-covariances seems to bind before the information reach does. Sobash & Stensrud (2013) found larger horizontal radii best at 2-3 km grid spacing, so this differs from the physical-space EnKF experience.
+
+**N2, adaptive additive noise:** global: val flat at 0.256 for every base level → 0.1, test **0.272 ± 0.022**, spread/error 0.61. Site: val → 0.05, test **0.274 ± 0.022**, spread/error 0.60. Accuracy ties the headline, but **calibration is worse than the hand-tuned 0.1 (0.71), so the pre-registered reading fails** (it needed 0.9-1.1). The likely reason: the innovation ratio pools θ′, reflectivity and radial velocity in units of R, and reflectivity and radial velocity are ~2/3 of the observations. So the ensemble is calibrated in their mixture, not at the θ′ observations, where claim 2 measures it. Calibrating per observation type would be the follow-up.
+
+**N4, ensemble size** (test cycled nMSE at the validation-chosen noise):
+
+| N | 8 | 16 | 32 | 64 | 93 |
+|---|---|---|---|---|---|
+| 32 channels | 0.305 | 0.287 | 0.277 (0.05) | 0.264 | 0.261 |
+| 64 channels | 0.340 | 0.311 | 0.297 | 0.290 | 0.284 |
+| 64-channel penalty | +0.035 | +0.024 | +0.020 | +0.026 | +0.023 |
+
+- **The 64-channel penalty does not vanish with N** (+0.02-0.03 at every N up to the full pool), so the pre-registered sampling-error reading is not supported. More latent channels per site make DA worse independently of ensemble size up to 93. The candidate explanation is the observation operator: decoded columns from a 64-channel latent are less smooth in the latent, so the linear (ensemble-space) update fits worse. That is untested.
+- The 32-channel error falls 14% from N = 8 to 93 and flattens above 64 (0.264 → 0.261). At N = 32 the validation pick was 0.05 this time (0.258 against 0.259 at 0.1, a tie), so this row is 0.277 rather than the headline's 0.273.
+
+**M1, observation spacing × cycle length, deterministic (noise tuned) vs stochastic (RTPS tuned), paired per storm:**
+
+| obs km \ cycle | 5 | 10 | 15 | 30 |
+|---|---|---|---|---|
+| 2 | 0.277 / 0.299 (+8%) | 0.291 / 0.317 (+9%) | 0.303 / 0.328 (+8%) | 0.325 / 0.351 (+8%) |
+| 4 | 0.286 / 0.312 (+9%) | 0.301 / 0.321 (+7%) | 0.315 / 0.335 (+6%) | 0.333 / 0.354 (+6%) |
+| 8 | 0.300 / 0.320 (+7%) | 0.307 / 0.329 (+7%) | 0.319 / 0.345 (+8%) | 0.343 / 0.363 (+6%) |
+| 16 | 0.319 / 0.342 (+7%) | 0.333 / 0.353 (+6%) | 0.341 / 0.364 (+7%) | 0.366 / 0.390 (+7%) |
+
+(deterministic / stochastic cycled nMSE; the paired difference's CI excludes 0 in every cell; the stochastic model is lower on 1-7 of 22 storms).
+- **Pre-registered reading: no reversal in any cell; the hypothesis is rejected over this range.** Down to 16 km spacing with 30-min cycles, the deterministic model with hand-set noise stays 6-9% better, about the stochastic model's mean-forecast deficit (7-12%). Thinner observations and longer cycles raise both errors by similar amounts (2 km/5 min → 16 km/30 min: +32% and +30%). The stochastic model is calibrated everywhere (spread/error 0.87-1.03). The deterministic one is under-dispersive everywhere (0.42-0.65), because validation always picks the smallest noise in the grid, 0.05, so its optimum may lie lower still.
+- Caveat for the interpretation: neither model has CM1's error growth (SM5), so this tests learned noise against hand-set noise, not realistic against unrealistic dynamics. The unstable-subspace argument would need a surrogate whose spread grows like CM1's (M4).
+
+**N6, cost** (`scripts/cm1/cost_table.py`; 32 members, 200 × 32 latent; excludes data loading):
+
+| | One forecast hour | One DA cycle (θ′ + refl + Vr, LETKF) | 3-h DA experiment (36 cycles) |
+|---|---|---|---|
+| H200 | 0.0095 s | 0.019 s | 0.67 s |
+| Cashew CPU, 16 threads | 0.32 s | 0.39 s | 14 s |
+| CM1, 32 members, one core each (measured ~14.5 core-min per member-hour) | 7.7 core-hours | | |
+
+That is ~86 000× in wall time on 16 CPU threads, ~5 400× per core. (Both runs crashed after writing `cost.json`, in the provenance call; fixed.)
+
+**M3 (mean-anchored ensemble):** the stochastic propagator on the frozen autoencoder trained (9079-9080). The DA sweep failed on a state-dict comparison of boolean buffers (fixed) and is rerunning: Saidie 9088.

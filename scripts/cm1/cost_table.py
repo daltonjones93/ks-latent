@@ -90,7 +90,7 @@ def main():
     res["cm1_forecast_hour_core_s"] = cm1_s
     res["speedup_forecast_vs_cm1_core"] = cm1_s / res["forecast_hour_s"]
     (out / "cost.json").write_text(json.dumps(res, indent=1))
-    write_provenance(out / "cost.json", config=vars(a), seed=0, device=str(dev), wall_time_s=0.0)
+    write_provenance(out / "cost.json", config=tc, seed=0, device=str(dev), wall_time_s=0.0, extra={"args": vars(a)})
     print(f"[cost] {json.dumps(res)}")
 
 

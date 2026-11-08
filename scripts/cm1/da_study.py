@@ -214,9 +214,10 @@ def main():
         if not a.stoch_run:
             raise ValueError("mode 'anchored' needs --stoch-run")
         ae2, stoch_prop, _, _, _ = load_run(Path(a.stoch_run).expanduser(), dev)
-        diff = max(float((p1 - p2).abs().max()) for p1, p2 in zip(ae.state_dict().values(), ae2.state_dict().values()))
-        if diff > 0:
-            raise ValueError(f"--stoch-run's autoencoder differs from --run's (max |diff| {diff:.3g}): latents not shared")
+        s1, s2 = ae.state_dict(), ae2.state_dict()
+        bad = [k for k in s1 if k not in s2 or not torch.equal(s1[k], s2[k])]
+        if bad or set(s1) != set(s2):
+            raise ValueError(f"--stoch-run's autoencoder differs from --run's ({bad[:3]}...): latents not shared")
         if stoch_prop.cfg.noise_channels == 0:
             raise ValueError("--stoch-run must hold a stochastic propagator (noise_channels > 0)")
         del ae2
