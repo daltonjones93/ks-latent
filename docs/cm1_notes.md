@@ -935,3 +935,58 @@ All DA rows: 22 test storms × 3 seeds, the G0 setup, the setting chosen on the 
 That is ~86 000× in wall time on 16 CPU threads, ~5 400× per core. (Both runs crashed after writing `cost.json`, in the provenance call; fixed.)
 
 **M3 (mean-anchored ensemble):** the stochastic propagator on the frozen autoencoder trained (9079-9080). The DA sweep failed on a state-dict comparison of boolean buffers (fixed) and is rerunning: Saidie 9088.
+- **M3 result (9088; 22 test storms × 3 seeds):**
+  - Validation picks RTPS 0.5: prior nMSE 0.295, spread/error 0.97, so it is calibrated.
+  - Test cycled nMSE is **0.312 ± 0.022**, against the headline's 0.274. That is +14%; the pre-registered limit was +2%.
+  - **Not adopted.**
+  - The frozen stochastic model alone gives 0.307 on test. It is calibrated at validation (spread/error 1.00, RTPS 0.5), but it has the same ~12% accuracy deficit as before.
+  - So anchoring the mean to the deterministic model does not recover its accuracy. The anchored mean is advanced from the analysis mean, so the stochastic perturbations, through the analysis update, still steer it.
+
+## FPe results, first batch (2026-11-08, Saidie 9095, 9098, 9100; 30 training / 10 test storms; z0 MSE at 30 min, persistence 0.196)
+**Unordered control (9095, fpc_law_reuse_stagec):**
+- Channel 0 has no physical meaning: |r| ≤ 0.32 with every diagnostic.
+- Held-out R² is ≤ 0.12 for k ≤ 4, and 0.29 at k = 8.
+- No law beats persistence.
+- **The ordering is what makes a leading-channel law possible.**
+
+**Second order in time (9098, t-smooth 2, no refit):**
+- R² for z0 is 0.31-0.34 (k = 1), 0.38-0.46 (k = 2) and 0.51-0.60 (k = 4). That is below first order at every k.
+- Every closed rollout explodes (z0 MSE 10²-10⁴).
+- Not pursued without the refit; 9101 and 9103 have the refit.
+
+**First order with rollout refit (9100), channel 0 (cold-pool / convection coordinate):**
+- r = +0.80 with θ′_sfc, −0.86 with column condensate, −0.72 with w_max.
+
+| k | kind | thr | terms (z0) | R² z0 | one-step law | refit law | refit, decoded |
+|---|---|---|---|---|---|---|---|
+| 1 | pde | 0.1 | 3 | 0.21 | 1.44 | 0.187 | 0.539 |
+| 1 | pde3 | 0.1 | 5 | 0.41 | **0.150** | 0.147 | 0.493 |
+| 1 | pde4 | 0.1 | 3 | 0.41 | **0.170** | 0.166 | 0.530 |
+| 1 | pde | 0.03 | 7 | 0.22 | 1.33 | 0.095 | 0.461 |
+| 2 | pde3 | 0.03 | 20 | 0.60 | 3.8 | 0.076 | 0.408 |
+| 4 | pde3 | 0.03 | 43 | 0.69 | 33 | 0.078 | 0.377 |
+| 4 | pde | 0.03 | 35 | 0.65 | 19 | 0.079 | 0.371 |
+
+Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.034.
+
+- **Pre-registered reading (5b): met.**
+  - k = 2, pde3, thr 0.03: 20 terms for z0, held-out R² 0.60.
+  - Its refit rollout is 0.076 against persistence's 0.196, 2.6× better.
+  - It is still 2.2× worse than the full model.
+- **The k = 1 laws with a third derivative are the first one-step fits that beat persistence without a refit.** pde4, thr 0.1, 3 terms:
+  - ∂t z0 = +0.073 z0 ∂³x z0 + 0.015 z0 ∂x z0 − 0.004.
+  - z0 MSE is 0.170 (persistence 0.196). The refit barely changes the coefficients (0.039 / 0.022 / −0.004) or the skill (0.166).
+  - It is stable between the one-step and refit fits, so by the interpretability criterion it is a candidate.
+  - **But its leading term needs care.** A wide 5-point ∂³ stencil acting on a front about one site wide behaves like a lagged gradient, so z0 ∂³z0 may stand in for front propagation on an unresolved front, not for physical dispersion. With ∂³ in the library, the advection term z0 ∂x z0 changes sign and shrinks (from −0.083 to +0.015). That points to the two terms sharing one role.
+  - **To check before interpreting:** fit the same law on the smoothed field, or with a compact stencil.
+- **Refits inflate diffusion, as feared.** With thr 0.03 the refit raises ∂²z0 from 0.018 to 0.20-0.32 sites²/min.
+  - That is ~1.3-2.1 × 10⁴ m²/s, against FP0's ~30 m²/s.
+  - The one-step 0.018 is ~1 200 m²/s.
+  - These refit diffusivities are stability terms, not physical eddy mixing, and should not be reported as such.
+- **The k = 1 advection law (3 terms, thr 0.1)** is ∂t z0 = −(0.059 + 0.082 z0) ∂x z0 − 0.004.
+  - The base speed is 0.12 km/min (Q2's storm speed ~0.12).
+  - The speed rises 0.16 km/min per unit of z0, with warm (z0 > 0) air moving faster.
+  - Its closed one-step rollout fails (1.44). The refit stabilizes it but shrinks the speed to 0.04 km/min, so the refit coefficients lose the physical match.
+- Pending: 9101 / 9103 (time order 2 with refit), 9102 (k = 8), 9104-9105 (+dd / +cubic), 9108 (+mixed).
+
+**FPd scratch, seed 1 (9089-9090):** trained. The law replication on it is running (9091). At prune ≤ 0.001 it is still all 17 770 terms (skill 0.24 / 0.39 / 0.37 at 5 / 30 / 60 min).
