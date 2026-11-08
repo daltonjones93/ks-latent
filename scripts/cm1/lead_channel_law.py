@@ -67,6 +67,10 @@ def main():
     ap.add_argument("--mixed-l2", type=float, nargs="+", default=[0.1, 0.3, 1.0],
                     help="+mixed kinds: fixed length scales l2 (sites^2) of (1 - l2 d2x) dz/dt, each fitted and scored")
     ap.add_argument("--t-smooth", type=float, default=0.0, help="Gaussian smoothing of z in time (frames) before differencing")
+    ap.add_argument("--x-smooth", type=float, default=0.0,
+                    help="Gaussian smoothing of the latent field over sites (sites) before everything; tests whether "
+                         "d3/d4 terms act on a ~1-site front as a lagged gradient. Persistence and the full-model reference "
+                         "are then also computed on the smoothed field: compare only within a run.")
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--device", default="cpu")
     a = ap.parse_args()
@@ -89,6 +93,10 @@ def main():
         return zs, us
     ztr, _ = enc(split["train"][: a.n_train])
     zte, dte = enc(split["test"][: a.n_test])
+    if a.x_smooth > 0:
+        from scipy.ndimage import gaussian_filter1d
+        ztr = [gaussian_filter1d(z, a.x_smooth, axis=1, mode="nearest") for z in ztr]
+        zte = [gaussian_filter1d(z, a.x_smooth, axis=1, mode="nearest") for z in zte]
     c = ztr[0].shape[-1]
     print(f"[FPe] {Path(a.run).name}: {len(ztr)} training / {len(zte)} test storms, c {c}, halo {halo} [{time.time() - t_start:.0f}s]",
           flush=True)
