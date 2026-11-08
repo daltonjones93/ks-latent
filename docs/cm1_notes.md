@@ -481,6 +481,13 @@ User direction: two library options, `+dd` and `+cubic` (`ks_latent.cm1.leadlaw.
   - k = 8 left out: its library would be 1-8 k columns.
 - **Reading:** as addendum 5b, judged on the refit law; in addition, whether a selected dd or cubic term survives the refit with a stable coefficient (the interpretability criterion: [[project-interpretable-latent-pde-goal]] in memory; coefficients in physical units, stable between the one-step and refit fits).
 
+### G0 addendum 5d (2026-11-08, before the runs): FPe with mixed derivatives (BBM / Boussinesq-type law)
+User direction: allow products of time and space derivatives. The first-order library is extended with the implicit operator (1 − ℓ²∂²x) ∂t z = F(z) (`+mixed`), the form of BBM / Boussinesq equations. In a horizontal-only description it is also how nonhydrostatic gravity-wave dispersion appears, and it damps the response of the shortest waves without dissipating energy. (Products of ∂t z with spatial derivatives already exist in the second-order-in-time library as v_i ∂ⁿz_j.)
+- **A fitting trap, found in the smoke test and fixed before any result.** Fitting ℓ² as a regression coefficient of ∂²x(∂t z) gave ℓ² ≈ −0.3: unphysical, and a near-singular operator whose rollouts exploded. The bias arises because ∂²x(∂t z) at a site contains −2 ∂t z of that site, so the target is regressed on itself; the "R² 0.80-0.88" of that run is this artefact. Now ℓ² ≥ 0 is FIXED during the sparse fit (target (1 − ℓ²∂²x) ∂t z) and scanned. The rollout refit may adjust each channel's ℓ², projected onto ℓ² ≥ 0. Tested on a known BBM-type lattice law: the true ℓ² gives the smallest residual and the coefficients are recovered.
+- **Interpretation:** ℓ = √ℓ² × 2 km is a dispersion length, to compare with CM1's vertical scales; with the advection term it gives a wave speed and dispersion relation.
+- **Runs (CPU, after 9104-9105):** kinds pde+mixed and pde4+mixed, ℓ² 0.1 / 0.3 / 1.0 sites² (ℓ 0.6 / 1.1 / 2 km), k 1 / 2 / 4 / 8, thresholds 0.03 / 0.1, rollout refit to 30 min.
+- **Reading:** as addendum 5b. In addition, ℓ² is chosen by the refit rollout skill on the test storms. This is reported as exploratory, since ℓ² is a hyperparameter scored on test storms; a validation-storm choice would need a rerun. Also whether the refit moves ℓ² far from its starting value, which would mean ℓ² is a stability knob rather than a physical scale.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|

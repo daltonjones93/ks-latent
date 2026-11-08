@@ -8,6 +8,13 @@ Library terms (all built from the first k channels only):
         d3 (dispersion) and d4 (hyperdiffusion, as in Kuramoto-Sivashinsky), which can damp the shortest waves
   +dd    adds products of two spatial derivatives (e.g. the KPZ term (d1 z)^2), e.g. kind 'pde4+dd'
   +cubic adds cubic products z_i z_j z_l and z_i z_j d z_l (at most one derivative), e.g. 'pde+cubic'
+  +mixed (time order 1 only) a mixed-derivative (BBM / Boussinesq-type) implicit law
+         (I - D2 (x) A^T) dz/dt = F(z),  i.e. dz_j/dt - sum_i A_ij d2x(dz_i/dt) = F_j(z),
+         with A = l2 I for a FIXED length scale l2 >= 0 (in sites^2; l = sqrt(l2) x 2 km) during the sparse fit:
+         the target is (1 - l2 d2x) dz/dt. (Fitting A as a regression coefficient is biased: d2x(dz/dt) at a
+         site contains -2 dz/dt of that site, so the fit regresses the target on itself and returns l2 < 0,
+         a near-singular operator; seen on CM1, 2026-11-08.) l2 is scanned and chosen by rollout skill; the
+         rollout refit may adjust the diagonal of A, projected onto A >= 0. The last k rows of xi hold A.
 With time_order = 2 the first time derivatives v = dz/dt are added as library variables (v, and products z_i v_j,
 v_i v_j, plus d2 v for "pde"), and the target becomes d2z/dt2: the law is second order in time,
   d2z/dt2 = F(z, dz/dt, d1z, d2z, ...),
@@ -49,11 +56,15 @@ def parse_kind(kind: str):
     derivative, e.g. z0^3, z0^2 d1z0; Ginzburg-Landau-type saturation). Returns (spatial order, dd, cubic)."""
     base, *opts = kind.split("+")
     orders = {"ode": 0, "pde": 2, "pde3": 3, "pde4": 4}
-    if base not in orders or not set(opts) <= {"dd", "cubic"}:
-        raise ValueError(f"kind must be ode/pde/pde3/pde4 with optional +dd, +cubic; got {kind!r}")
-    if "dd" in opts and base == "ode":
-        raise ValueError("'+dd' needs spatial derivatives (pde, pde3 or pde4)")
+    if base not in orders or not set(opts) <= {"dd", "cubic", "mixed"}:
+        raise ValueError(f"kind must be ode/pde/pde3/pde4 with optional +dd, +cubic, +mixed; got {kind!r}")
+    if ("dd" in opts or "mixed" in opts) and base == "ode":
+        raise ValueError("'+dd' and '+mixed' need spatial derivatives (pde, pde3 or pde4)")
     return orders[base], "dd" in opts, "cubic" in opts
+
+
+def is_mixed(kind: str) -> bool:
+    return "mixed" in kind.split("+")[1:]
 
 
 def _dx_order(kind: str) -> int:
@@ -110,14 +121,18 @@ def smooth_t(z: np.ndarray, sigma: float) -> np.ndarray:
     return sum(w[i] * zp[i: i + len(z)] for i in range(2 * r + 1))
 
 
-def training_rows(z: np.ndarray, kind: str, time_order: int, halo: int, t_smooth: float = 0.0):
+def training_rows(z: np.ndarray, kind: str, time_order: int, halo: int, t_smooth: float = 0.0, l2: float = 0.0):
     """z (T, P, k) -> library rows X (n, F), targets Y (n, k) and names, interior sites, frames 1..T-2."""
     zs = smooth_t(z, t_smooth)
     v = 0.5 * (zs[2:] - zs[:-2])                                  # dz/dt at frames 1..T-2
     if time_order == 1:
         F, names = library(zs[1:-1], kind)
         Y = v
+        if is_mixed(kind):           # target (1 - l2 d2x) dz/dt; A = l2 I is appended by `with_mixed`
+            Y = v - l2 * site_derivs(v, 2)[1]
     elif time_order == 2:
+        if is_mixed(kind):
+            raise ValueError("'+mixed' is for time order 1 (time order 2 already has d2x v)")
         F, names = library(zs[1:-1], kind, v)
         Y = zs[2:] - 2 * zs[1:-1] + zs[:-2]                        # d2z/dt2
     else:
@@ -147,12 +162,38 @@ def backward_velocity(z: np.ndarray, t0: int) -> np.ndarray:
     return 0.5 * (3 * z[t0] - 4 * z[t0 - 1] + z[t0 - 2])
 
 
+def with_mixed(xi: np.ndarray, freq: np.ndarray, names: list, l2: float):
+    """Append the mixed-operator rows A = l2 I (k x k) to a fit of the +mixed target, and their names."""
+    k = xi.shape[1]
+    if l2 < 0:
+        raise ValueError("l2 must be >= 0")
+    return (np.vstack([xi, l2 * np.eye(k)]), np.vstack([freq, np.eye(k)]),
+            names + [f"d2tz{j}" for j in range(k)])
+
+
+def d2_matrix(P: int) -> np.ndarray:
+    """The (P, P) matrix of `site_derivs`' second difference (edges replicated)."""
+    return site_derivs(np.eye(P)[:, :, None], 2)[1][..., 0].T
+
+
+def mixed_operator(A: np.ndarray, P: int) -> np.ndarray:
+    """I - kron(D2, A^T) for w flattened site-major (index p k + j): row (p, j) of the implicit law
+    w_j - sum_i A[i, j] (D2 w_i) = F_j."""
+    k = A.shape[0]
+    return np.eye(P * k) - np.kron(d2_matrix(P), A.T)
+
+
 def rollout(xi: np.ndarray, z0: np.ndarray, steps: int, kind: str, cap: float, halo: int,
             time_order: int = 1, v0: np.ndarray | None = None) -> np.ndarray:
     """Closed rollout of the fitted law from z0 (P, k) (and v0 for time_order 2), edge sites held; Heun; the
     (second) time derivative is capped as cap * tanh(f / cap). Returns (steps, P, k); nan after a blow-up."""
     capf = (lambda f: cap * np.tanh(f / cap)) if cap else (lambda f: f)
-    if time_order == 1:
+    if time_order == 1 and is_mixed(kind):
+        P, k = z0.shape
+        nF = xi.shape[0] - k
+        Minv = np.linalg.inv(mixed_operator(xi[nF:], P))
+        rhs = lambda z, v: (capf((Minv @ (library(z, kind)[0] @ xi[:nF]).reshape(-1)).reshape(P, k)), None)
+    elif time_order == 1:
         rhs = lambda z, v: (capf(library(z, kind)[0] @ xi), None)
     else:
         if v0 is None:
@@ -199,6 +240,9 @@ def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order:
     Z = [torch.as_tensor(t, dtype=torch.float64) for t in trajs]
     capf = (lambda f: cap * torch.tanh(f / cap)) if cap else (lambda f: f)
     sl = slice(halo, -halo) if halo else slice(None)
+    mixed = is_mixed(kind)
+    if mixed:
+        D2t = torch.as_tensor(d2_matrix(Z[0].shape[1]), dtype=torch.float64)
     last = (w * mask).detach().clone()
     for it in range(iters):
         K = int(round(2 + (k_max - 2) * min(1.0, it / (0.5 * iters))))
@@ -211,8 +255,17 @@ def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order:
         z0, tgt, v0 = torch.stack(z0s), torch.stack(tgt, 1), torch.stack(v0s)     # (B, P, k), (K, B, P, k)
         W = w * mask
         z, v, loss = z0, (v0 if time_order == 2 else None), 0.0
+        if time_order == 1 and mixed:
+            Pn, kn = z0.shape[1], z0.shape[2]
+            nF = W.shape[0] - kn
+            Mop = torch.eye(Pn * kn, dtype=W.dtype) - torch.kron(D2t, W[nF:].T)
+            LU, piv = torch.linalg.lu_factor(Mop)
         for s in range(K):
-            if time_order == 1:
+            if time_order == 1 and mixed:
+                def f(z_, v_):
+                    Fz = (torch_library(z_, kind) @ W[:nF]).reshape(z_.shape[0], -1, 1)
+                    return capf(torch.linalg.lu_solve(LU, piv, Fz).reshape(z_.shape)), None
+            elif time_order == 1:
                 f = lambda z_, v_: (capf(torch_library(z_, kind) @ W), None)
             else:
                 f = lambda z_, v_: (v_, capf(torch_library(z_, kind, v_) @ W))
@@ -234,10 +287,13 @@ def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order:
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_([w], 1.0)
         opt.step()
+        if mixed:                    # keep the mixed operator's length scales non-negative (A >= 0)
+            with torch.no_grad():
+                w[w.shape[0] - Z[0].shape[2]:].clamp_(min=0.0)
         if log and (it + 1) % max(1, iters // 5) == 0:
             log(f"      refit iteration {it + 1}/{iters}: K {K}, rollout MSE {float(loss):.4f}")
     out = (w * mask).detach()
     return (out if torch.isfinite(out).all() else last).numpy()
 
 
-__all__ = ["parse_kind", "torch_library", "refit_rollout", "backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]
+__all__ = ["with_mixed", "is_mixed", "d2_matrix", "mixed_operator", "parse_kind", "torch_library", "refit_rollout", "backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]

@@ -7,6 +7,7 @@ FP0) of dz_j/dt (centred difference, per minute) for j < k on a library built fr
   ode   z_0..z_{k-1} and their quadratic products (a local ODE per site: no neighbours)
   pde   plus d1 z, d2 z (centred differences over 2 km sites) and products with z
   pde3, pde4  derivatives up to third / fourth order (dispersion, hyperdiffusion)
+  +dd, +cubic, +mixed  derivative products, cubic terms, d2x(dz/dt) (BBM-type implicit law; ks_latent.cm1.leadlaw)
 Reported for k = 1, 2, 4, 8 and each library, on held-out test storms:
   - tendency R^2 (one step), number of terms, the selected terms of channel 0 with selection frequency
   - CLOSED rollouts of the fitted k-channel system (Heun, 1 min, edge sites held at the start state, tendency
@@ -36,7 +37,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, load_member  # noqa: E402
-from ks_latent.cm1.leadlaw import backward_velocity, fit, r2, refit_rollout, rollout, training_rows  # noqa: E402
+from ks_latent.cm1.leadlaw import backward_velocity, fit, is_mixed, r2, refit_rollout, rollout, training_rows, with_mixed  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import _forecast  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
@@ -63,6 +64,8 @@ def main():
     ap.add_argument("--refit-rollout", type=int, default=0,
                     help="> 0: keep the STLSQ support and refit its coefficients on closed rollouts up to this many minutes")
     ap.add_argument("--refit-iters", type=int, default=1500)
+    ap.add_argument("--mixed-l2", type=float, nargs="+", default=[0.1, 0.3, 1.0],
+                    help="+mixed kinds: fixed length scales l2 (sites^2) of (1 - l2 d2x) dz/dt, each fitted and scored")
     ap.add_argument("--t-smooth", type=float, default=0.0, help="Gaussian smoothing of z in time (frames) before differencing")
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--device", default="cpu")
@@ -132,22 +135,27 @@ def main():
     for k in a.ks:
         if k > c:
             continue
-        for order, kind in itertools.product(a.time_orders, a.kinds):
+        combos = [(o, kd, l2) for o in a.time_orders for kd in a.kinds
+                  for l2 in (a.mixed_l2 if is_mixed(kd) else [0.0]) if not (o == 2 and is_mixed(kd))]
+        for order, kind, l2 in combos:
             X, Y, G = [], [], []
             for si, z in enumerate(ztr):
-                Xi, Yi, names = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth)
+                Xi, Yi, names = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth, l2)
                 X.append(Xi); Y.append(Yi); G.append(np.repeat(si, len(Xi)))
             X, Y, G = np.concatenate(X), np.concatenate(Y), np.concatenate(G)
             if len(X) > a.max_rows:
                 ii = rng.choice(len(X), a.max_rows, replace=False); X, Y, G = X[ii], Y[ii], G[ii]
             Xt, Yt = [], []                          # held-out targets (dz/dt, or d2z/dt2 for order 2)
             for z in zte:
-                Xi, Yi, _ = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth)
+                Xi, Yi, _ = training_rows(z[f0 - 1: f1 + 1, :, :k], kind, order, halo, a.t_smooth, l2)
                 Xt.append(Xi); Yt.append(Yi)
             Xt, Yt = np.concatenate(Xt), np.concatenate(Yt)
             for thr in a.thresholds:
                 xi, freq = fit(X, Y, G, thr, n_boot=a.n_boot)
-                r2t = [r2(Yt[:, j], Xt @ xi[:, j]) for j in range(k)]
+                r2t = [r2(Yt[:, j], Xt @ xi[:, j]) for j in range(k)]      # +mixed: R^2 of the (1 - l2 d2x) dz/dt target
+                tnames = names
+                if is_mixed(kind):
+                    xi, freq, tnames = with_mixed(xi, freq, names, l2)
                 xi_rt = None
                 if a.refit_rollout:
                     xi_rt = refit_rollout(xi, [z[f0 - 2: f1 + 1, :, :k] for z in ztr], kind, halo, order,
@@ -182,19 +190,19 @@ def main():
                                 errs[L][key].append(float(((dec - u_true) ** 2).mean()))
                 skill = {L: {key: (float(np.nanmean(v)) if len(v) else None) for key, v in e.items()} for L, e in errs.items()}
                 n_terms = int((xi != 0).sum())
-                top0 = sorted([(names[i], float(xi[i, 0]), float(freq[i, 0])) for i in np.flatnonzero(xi[:, 0])],
+                top0 = sorted([(tnames[i], float(xi[i, 0]), float(freq[i, 0])) for i in np.flatnonzero(xi[:, 0])],
                               key=lambda t: -abs(t[1]))[:12]
-                rec = {"k": k, "kind": kind, "time_order": order, "threshold": thr, "n_terms": n_terms,
+                rec = {"k": k, "kind": kind, "l2": l2, "time_order": order, "threshold": thr, "n_terms": n_terms,
                        "n_terms_z0": int((xi[:, 0] != 0).sum()), "r2_test": r2t, "skill": skill, "z0_terms": top0,
                        "library_size": X.shape[1],
                        "z0_terms_refit": None if xi_rt is None else sorted(
-                           [(names[i], float(xi_rt[i, 0])) for i in np.flatnonzero(xi_rt[:, 0])], key=lambda t: -abs(t[1]))[:12],
+                           [(tnames[i], float(xi_rt[i, 0])) for i in np.flatnonzero(xi_rt[:, 0])], key=lambda t: -abs(t[1]))[:12],
                        "blowups": int(sum(np.isnan(v).sum() for v in
                                                                       [np.array(errs[max(a.leads)]["law"])]))}
                 res["fits"].append(rec)
                 s30 = skill.get(30, skill[max(skill)])
                 lhs = "dz0/dt" if order == 1 else "d2z0/dt2"
-                print(f"[FPe] k {k} {kind} order {order} thr {thr}: {n_terms} terms ({rec['n_terms_z0']} for z0 of {X.shape[1]}), "
+                print(f"[FPe] k {k} {kind}{f' l2 {l2:g}' if is_mixed(kind) else ''} order {order} thr {thr}: {n_terms} terms ({rec['n_terms_z0']} for z0 of {X.shape[1]}), "
                       f"test R^2 z0 {r2t[0]:.3f}" + (f" mean {np.mean(r2t):.3f}" if k > 1 else "")
                       + f" | z0 MSE at 30 min: law {s30['law']:.4f} persistence {s30['pers']:.4f} full model {s30['ref']:.4f}"
                       + f" | decoded (first k ch) law {s30['dec_law']:.4f} persistence {s30['dec_pers']:.4f}"

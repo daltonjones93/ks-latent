@@ -179,3 +179,54 @@ def test_dd_and_cubic_options():
             Xs.append(X); Ys.append(Y); G.append(np.full(len(X), g))
         xi, _ = fit(np.concatenate(Xs), np.concatenate(Ys), np.concatenate(G), threshold=0.05, n_boot=3)
         assert check(dict(zip(names, xi[:, 0]))), kind
+
+
+def test_mixed_derivative_bbm_type_law_is_recovered_rolled_out_and_refit():
+    """+mixed: (1 - l2 d2x) dz/dt = -c d1z + D d2z. With l2 FIXED and scanned, the residual is smallest at the
+    true l2, where the fit recovers c and D; the implicit rollout tracks the data; the operator matches its
+    definition; the refit keeps the support and the mixed operator non-negative."""
+    from ks_latent.cm1.leadlaw import d2_matrix, mixed_operator, refit_rollout, site_derivs, with_mixed
+    P = 40
+    D2 = d2_matrix(P)
+    zz = np.random.default_rng(7).normal(size=(P, 1))
+    assert np.allclose(D2 @ zz[:, 0], site_derivs(zz, 2)[1][:, 0])
+    A = np.array([[0.3, 0.1], [0.0, 0.2]])
+    w = np.random.default_rng(8).normal(size=(P, 2))
+    lhs = w - np.stack([0.3 * (D2 @ w[:, 0]), 0.1 * (D2 @ w[:, 0]) + 0.2 * (D2 @ w[:, 1])], 1)
+    assert np.allclose(mixed_operator(A, P) @ w.reshape(-1), lhs.reshape(-1))
+    rng = np.random.default_rng(9)
+    T, c, D, l2, sub = 80, 0.3, 0.1, 0.5, 40
+    Lp = lambda z: np.roll(z, 1) - 2 * z + np.roll(z, -1)
+    Minv = np.linalg.inv(np.eye(P) - l2 * np.stack([Lp(e) for e in np.eye(P)], 1))   # periodic generator
+    trajs = []
+    for z in _fields(P, 4, rng):
+        traj = []
+        for _ in range(T):
+            traj.append(z.copy())
+            for _ in range(sub):
+                z = z + Minv @ (-c * _d1(z) + D * Lp(z)) / sub
+        trajs.append(np.array(traj)[:, :, None])
+    res = {}
+    for l2s in (0.0, 0.25, 0.5, 1.0):
+        rows = [training_rows(tr, "pde+mixed", 1, halo=3, l2=l2s) for tr in trajs]
+        X, Y = np.concatenate([r[0] for r in rows]), np.concatenate([r[1] for r in rows])
+        G = np.concatenate([np.full(len(r[0]), g) for g, r in enumerate(rows)])
+        xi, freq = fit(X, Y, G, threshold=0.05, n_boot=3)
+        res[l2s] = (np.mean((Y - X @ xi) ** 2) / np.var(Y), xi, freq, rows[0][2])
+    assert min(res, key=lambda q: res[q][0]) == 0.5
+    _, xi, freq, names = res[0.5]
+    xi, freq, names = with_mixed(xi, freq, names, 0.5)
+    coef = dict(zip(names, xi[:, 0]))
+    assert names[-1] == "d2tz0" and coef["d2tz0"] == 0.5
+    assert abs(coef["d1z0"] + c) < 0.03 and abs(coef["d2z0"] - D) < 0.03
+    tr = trajs[0]
+    pred = rollout(xi, tr[10], 15, "pde+mixed", cap=0.0, halo=0)
+    i = slice(12, 28)
+    assert np.abs(pred[-1, i] - tr[25, i]).mean() / np.abs(tr[25, i]).mean() < 0.1
+    bad = xi.copy(); bad[-1, 0] = 0.01                                   # start the refit from a too-small l2
+    new = refit_rollout(bad, trajs, "pde+mixed", halo=3, k_max=5, iters=30, batch=2, cap=0.0)
+    assert np.isfinite(new).all() and np.array_equal(new != 0, bad != 0) and new[-1, 0] >= 0
+    with pytest.raises(ValueError):
+        training_rows(tr, "pde+mixed", 2, halo=3)
+    with pytest.raises(ValueError):
+        with_mixed(xi[:-1], freq[:-1], names[:-1], -0.1)
