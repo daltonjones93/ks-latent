@@ -124,7 +124,7 @@ Two methodological cautions for the paper: single seeds in most model screens (t
 | P5 traversal | the onset direction is a deepening cloud with ice at 8–10 km, not low-level drizzle |
 | P7 storm-scale | pooled local latent as good as physical baselines for 30-min-ahead totals (no unified latent needed) |
 | FP0/FP0b, laws on hand-built fields | Dη/Dt = −0.80 ∂B/∂x + 28.5 ∇²η + 1.07 η w dlnρ/dz (known −1, +1); fall speed 5.7 m/s; condensation 0.77 (known 1) with a Lagrangian regressor; all four pre-registered checks pass |
-| FPc, explicit latent PDE | skill 0.377/0.362 (within 10% of the neural propagator), residual share 1–3%, **dense** (30–47k of 52.7k terms > 1e-3), no pruning knee; nested dropout orders channels at no cost; domain-mean arm **pending** |
+| FPc, explicit latent PDE | skill 0.377/0.362 (within 10% of the neural propagator), residual share 1–3%, **dense** (30–47k of 52.7k terms > 1e-3), no pruning knee; nested dropout orders channels at no cost; a domain-mean input G⟨z⟩ is as large in norm as A0 (0.90) but buys only 1.5–2% skill: locality stands |
 | FPd, SINDy-AE-style sparsification during training | **pending** (Saidie 9032–9038) |
 
 **Assessment.** The P-study is well designed (baselines, the trivial-far-field trap caught and fixed, gauge caveats stated). Its most quotable result is the 30-min rain-onset lead with a local latent neighbourhood. FP0 is a clean known-answer validation that makes the later law-finding credible. FPc's "accurate but dense" is the expected outcome for a chaotic system with a generic quadratic library; FPd is the real test.
