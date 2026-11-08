@@ -6,6 +6,7 @@ for the first k channels in terms of themselves only? Sparse regression (bootstr
 FP0) of dz_j/dt (centred difference, per minute) for j < k on a library built from the first k channels:
   ode   z_0..z_{k-1} and their quadratic products (a local ODE per site: no neighbours)
   pde   plus d1 z, d2 z (centred differences over 2 km sites) and products with z
+  pde3, pde4  derivatives up to third / fourth order (dispersion, hyperdiffusion)
 Reported for k = 1, 2, 4, 8 and each library, on held-out test storms:
   - tendency R^2 (one step), number of terms, the selected terms of channel 0 with selection frequency
   - CLOSED rollouts of the fitted k-channel system (Heun, 1 min, edge sites held at the start state, tendency
@@ -35,7 +36,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, load_member  # noqa: E402
-from ks_latent.cm1.leadlaw import backward_velocity, fit, r2, rollout, training_rows  # noqa: E402
+from ks_latent.cm1.leadlaw import backward_velocity, fit, r2, refit_rollout, rollout, training_rows  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import _forecast  # noqa: E402
 from ks_latent.utils.io import write_provenance  # noqa: E402
@@ -59,6 +60,9 @@ def main():
     ap.add_argument("--cap", type=float, default=5.0)
     ap.add_argument("--time-orders", type=int, nargs="+", default=[1], choices=[1, 2],
                     help="2: target d2z/dt2 with dz/dt of the kept channels in the library (waves, memory)")
+    ap.add_argument("--refit-rollout", type=int, default=0,
+                    help="> 0: keep the STLSQ support and refit its coefficients on closed rollouts up to this many minutes")
+    ap.add_argument("--refit-iters", type=int, default=1500)
     ap.add_argument("--t-smooth", type=float, default=0.0, help="Gaussian smoothing of z in time (frames) before differencing")
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--device", default="cpu")
@@ -144,34 +148,48 @@ def main():
             for thr in a.thresholds:
                 xi, freq = fit(X, Y, G, thr, n_boot=a.n_boot)
                 r2t = [r2(Yt[:, j], Xt @ xi[:, j]) for j in range(k)]
-                errs = {L: {"law": [], "pers": [], "ref": [], "dec_law": [], "dec_pers": []} for L in a.leads}
+                xi_rt = None
+                if a.refit_rollout:
+                    xi_rt = refit_rollout(xi, [z[f0 - 2: f1 + 1, :, :k] for z in ztr], kind, halo, order,
+                                          k_max=a.refit_rollout, iters=a.refit_iters, cap=a.cap, log=print)
+                errs = {L: {"law": [], "pers": [], "ref": [], "dec_law": [], "dec_pers": [], "law_rt": [], "dec_law_rt": []}
+                        for L in a.leads}
                 for si, z in enumerate(zte):
                     for t0 in a.starts:
                         if (si, t0) not in ref:
                             continue
                         zk = z[:, :, :k]
-                        traj = rollout(xi, zk[t0], max(a.leads), kind, a.cap, halo, order,
-                                       backward_velocity(zk, t0) if order == 2 else None)
+                        v0 = backward_velocity(zk, t0) if order == 2 else None
+                        traj = rollout(xi, zk[t0], max(a.leads), kind, a.cap, halo, order, v0)
+                        traj_rt = None if xi_rt is None else rollout(xi_rt, zk[t0], max(a.leads), kind, a.cap, halo, order, v0)
                         for L in a.leads:
                             tru = z[t0 + L, halo:-halo, 0]
                             errs[L]["law"].append(np.mean((traj[L - 1, halo:-halo, 0] - tru) ** 2))
                             errs[L]["pers"].append(np.mean((z[t0, halo:-halo, 0] - tru) ** 2))
                             errs[L]["ref"].append(np.mean((ref[(si, t0)][L - 1, halo:-halo, 0] - tru) ** 2))
+                            if traj_rt is not None:
+                                errs[L]["law_rt"].append(np.mean((traj_rt[L - 1, halo:-halo, 0] - tru) ** 2))
                             u_true = dte[si].full(0, t0 + L)[0]
-                            for key, zz in (("dec_law", traj[L - 1]), ("dec_pers", zk[t0])):
+                            cases = [("dec_law", traj[L - 1]), ("dec_pers", zk[t0])]
+                            if traj_rt is not None:
+                                cases.append(("dec_law_rt", traj_rt[L - 1]))
+                            for key, zz in cases:
                                 if not np.isfinite(zz).all():
                                     errs[L][key].append(np.nan); continue
                                 zf = np.zeros_like(z[t0]); zf[:, :k] = zz
                                 with torch.no_grad():
                                     dec = ae.decode(torch.as_tensor(zf, dtype=torch.float32)[None])[0]
                                 errs[L][key].append(float(((dec - u_true) ** 2).mean()))
-                skill = {L: {key: float(np.nanmean(v)) for key, v in e.items()} for L, e in errs.items()}
+                skill = {L: {key: (float(np.nanmean(v)) if len(v) else None) for key, v in e.items()} for L, e in errs.items()}
                 n_terms = int((xi != 0).sum())
                 top0 = sorted([(names[i], float(xi[i, 0]), float(freq[i, 0])) for i in np.flatnonzero(xi[:, 0])],
                               key=lambda t: -abs(t[1]))[:12]
                 rec = {"k": k, "kind": kind, "time_order": order, "threshold": thr, "n_terms": n_terms,
                        "n_terms_z0": int((xi[:, 0] != 0).sum()), "r2_test": r2t, "skill": skill, "z0_terms": top0,
-                       "library_size": X.shape[1], "blowups": int(sum(np.isnan(v).sum() for v in
+                       "library_size": X.shape[1],
+                       "z0_terms_refit": None if xi_rt is None else sorted(
+                           [(names[i], float(xi_rt[i, 0])) for i in np.flatnonzero(xi_rt[:, 0])], key=lambda t: -abs(t[1]))[:12],
+                       "blowups": int(sum(np.isnan(v).sum() for v in
                                                                       [np.array(errs[max(a.leads)]["law"])]))}
                 res["fits"].append(rec)
                 s30 = skill.get(30, skill[max(skill)])
@@ -180,7 +198,10 @@ def main():
                       f"test R^2 z0 {r2t[0]:.3f}" + (f" mean {np.mean(r2t):.3f}" if k > 1 else "")
                       + f" | z0 MSE at 30 min: law {s30['law']:.4f} persistence {s30['pers']:.4f} full model {s30['ref']:.4f}"
                       + f" | decoded (first k ch) law {s30['dec_law']:.4f} persistence {s30['dec_pers']:.4f}"
+                      + (f" | REFIT law {s30['law_rt']:.4f} decoded {s30['dec_law_rt']:.4f}" if xi_rt is not None else "")
                       + f" | blow-ups {rec['blowups']} [{time.time() - t_start:.0f}s]", flush=True)
+                if xi_rt is not None:
+                    print("      refit: " + " ".join(f"{v:+.3g} {n}" for n, v in rec["z0_terms_refit"][:10]), flush=True)
                 print(f"      {lhs} = " + " ".join(f"{v:+.3g} {n} ({f:.1f})" for n, v, f in top0[:10]), flush=True)
                 (out / "fpe.json").write_text(json.dumps(res, indent=1))
     from dataclasses import make_dataclass

@@ -4,6 +4,8 @@ State z (T, P, k): the first k channels of an ordered (nested-dropout) latent fi
 Library terms (all built from the first k channels only):
   ode   z, and quadratic products z_i z_j                              (a local ODE per site)
   pde   + d1 z, d2 z (centred differences over sites) and products z_i d z_j (no derivative x derivative)
+  pde3, pde4  the same with spatial derivatives up to third / fourth order (five-point stencils, reach 2 sites):
+        d3 (dispersion) and d4 (hyperdiffusion, as in Kuramoto-Sivashinsky), which can damp the shortest waves
 With time_order = 2 the first time derivatives v = dz/dt are added as library variables (v, and products z_i v_j,
 v_i v_j, plus d2 v for "pde"), and the target becomes d2z/dt2: the law is second order in time,
   d2z/dt2 = F(z, dz/dt, d1z, d2z, ...),
@@ -23,24 +25,39 @@ import numpy as np
 from ks_latent.cm1.fieldpde import bootstrap_stlsq, r2
 
 
-def site_derivs(z: np.ndarray):
-    """z (..., P, k) -> centred first and second differences over sites (edges replicated)."""
-    zp = np.concatenate([z[..., :1, :], z, z[..., -1:, :]], axis=-2)
-    return 0.5 * (zp[..., 2:, :] - zp[..., :-2, :]), zp[..., 2:, :] - 2 * z + zp[..., :-2, :]
+def site_derivs(z: np.ndarray, order: int = 2):
+    """z (..., P, k) -> centred differences over sites up to `order` (2: d1, d2; 3: + d3; 4: + d3, d4), edges
+    replicated. d3 = (z[i+2] - 2 z[i+1] + 2 z[i-1] - z[i-2]) / 2, d4 = z[i+2] - 4 z[i+1] + 6 z[i] - 4 z[i-1] + z[i-2]."""
+    zp = np.concatenate([z[..., :1, :], z[..., :1, :], z, z[..., -1:, :], z[..., -1:, :]], axis=-2)
+    P = z.shape[-2]
+    m2, m1, p1, p2 = (zp[..., i: i + P, :] for i in (0, 1, 3, 4))
+    out = [0.5 * (p1 - m1), p1 - 2 * z + m1]
+    if order >= 3:
+        out.append(0.5 * (p2 - 2 * p1 + 2 * m1 - m2))
+    if order >= 4:
+        out.append(p2 - 4 * p1 + 6 * z - 4 * m1 + m2)
+    return out
+
+
+def _dx_order(kind: str) -> int:
+    orders = {"pde": 2, "pde3": 3, "pde4": 4}
+    if kind != "ode" and kind not in orders:
+        raise ValueError(f"kind must be 'ode', 'pde', 'pde3' or 'pde4', got {kind!r}")
+    return orders.get(kind, 0)
 
 
 def library(z: np.ndarray, kind: str, v: np.ndarray | None = None):
     """Features (..., P, F) and names. `v` (same shape as z): first time derivatives (time_order 2)."""
-    if kind not in ("ode", "pde"):
-        raise ValueError(f"kind must be 'ode' or 'pde', got {kind!r}")
+    nd = _dx_order(kind)
     k = z.shape[-1]
     lin, names = [z], [f"z{j}" for j in range(k)]
     if v is not None:
         lin.append(v); names += [f"v{j}" for j in range(k)]
     n_state = len(names)                         # z (and v): products among these are allowed
-    if kind == "pde":
-        d1, d2 = site_derivs(z)
-        lin += [d1, d2]; names += [f"d1z{j}" for j in range(k)] + [f"d2z{j}" for j in range(k)]
+    if nd:
+        ds = site_derivs(z, nd)
+        for n, d in enumerate(ds, 1):
+            lin.append(d); names += [f"d{n}z{j}" for j in range(k)]
         if v is not None:
             lin.append(site_derivs(v)[1]); names += [f"d2v{j}" for j in range(k)]
     L = np.concatenate(lin, -1)
@@ -132,4 +149,88 @@ def rollout(xi: np.ndarray, z0: np.ndarray, steps: int, kind: str, cap: float, h
     return np.stack(out)
 
 
-__all__ = ["backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]
+def torch_library(z, kind: str, v=None):
+    """Torch twin of `library` (same columns, same order), differentiable; z (..., P, k)."""
+    import torch
+    def sd(x, order):
+        xp = torch.cat([x[..., :1, :], x[..., :1, :], x, x[..., -1:, :], x[..., -1:, :]], dim=-2)
+        P = x.shape[-2]
+        m2, m1, p1, p2 = (xp[..., i: i + P, :] for i in (0, 1, 3, 4))
+        out = [0.5 * (p1 - m1), p1 - 2 * x + m1]
+        if order >= 3:
+            out.append(0.5 * (p2 - 2 * p1 + 2 * m1 - m2))
+        if order >= 4:
+            out.append(p2 - 4 * p1 + 6 * x - 4 * m1 + m2)
+        return out
+    nd = _dx_order(kind)
+    lin = [z] + ([v] if v is not None else [])
+    n_state = sum(t.shape[-1] for t in lin)
+    if nd:
+        lin += sd(z, nd)
+        if v is not None:
+            lin.append(sd(v, 2)[1])
+    L = torch.cat(lin, -1)
+    cols = [torch.ones_like(z[..., :1]), L]
+    quad = [L[..., a] * L[..., b] for a, b in itertools.combinations_with_replacement(range(L.shape[-1]), 2)
+            if not (a >= n_state and b >= n_state)]
+    if quad:
+        cols.append(torch.stack(quad, -1))
+    return torch.cat(cols, -1)
+
+
+def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order: int = 1, k_max: int = 30,
+                  iters: int = 1500, batch: int = 8, lr: float = 3e-3, cap: float = 5.0, seed: int = 0,
+                  log=None) -> np.ndarray:
+    """Keep the support of `xi` (F, k) and refit its nonzero coefficients so that closed rollouts of up to `k_max`
+    steps (curriculum 2 -> k_max over the first half) match the trajectories `trajs` [(T, P, k)] on interior sites,
+    edges held at the start state, as in `rollout`. Adam on the mean squared rollout error; returns the new xi."""
+    import torch
+    g = torch.Generator().manual_seed(seed)
+    mask = torch.tensor(xi != 0)
+    w = torch.nn.Parameter(torch.tensor(xi, dtype=torch.float64))        # a copy: never write into the caller's xi
+    opt = torch.optim.Adam([w], lr=lr)
+    Z = [torch.as_tensor(t, dtype=torch.float64) for t in trajs]
+    capf = (lambda f: cap * torch.tanh(f / cap)) if cap else (lambda f: f)
+    sl = slice(halo, -halo) if halo else slice(None)
+    last = (w * mask).detach().clone()
+    for it in range(iters):
+        K = int(round(2 + (k_max - 2) * min(1.0, it / (0.5 * iters))))
+        idx = torch.randint(len(Z), (batch,), generator=g)
+        z0s, tgt, v0s = [], [], []
+        for i in idx.tolist():
+            t0 = int(torch.randint(2, Z[i].shape[0] - K, (1,), generator=g))
+            z0s.append(Z[i][t0]); tgt.append(Z[i][t0 + 1: t0 + 1 + K])
+            v0s.append(0.5 * (3 * Z[i][t0] - 4 * Z[i][t0 - 1] + Z[i][t0 - 2]))
+        z0, tgt, v0 = torch.stack(z0s), torch.stack(tgt, 1), torch.stack(v0s)     # (B, P, k), (K, B, P, k)
+        W = w * mask
+        z, v, loss = z0, (v0 if time_order == 2 else None), 0.0
+        for s in range(K):
+            if time_order == 1:
+                f = lambda z_, v_: (capf(torch_library(z_, kind) @ W), None)
+            else:
+                f = lambda z_, v_: (v_, capf(torch_library(z_, kind, v_) @ W))
+            a1, b1 = f(z, v)
+            a2, b2 = f(z + a1, None if v is None else v + b1)
+            zn = z + 0.5 * (a1 + a2)
+            if v is not None:
+                v = v + 0.5 * (b1 + b2)
+            if halo:
+                zn = torch.cat([z0[:, :halo], zn[:, halo:-halo], z0[:, -halo:]], 1)
+            z = zn
+            loss = loss + ((z[:, sl] - tgt[s][:, sl]) ** 2).mean()
+        loss = loss / K
+        if not torch.isfinite(loss):
+            if log:
+                log(f"      refit: non-finite loss at iteration {it} (K {K}); keeping the last finite coefficients")
+            break
+        last = (w * mask).detach().clone()
+        opt.zero_grad(); loss.backward()
+        torch.nn.utils.clip_grad_norm_([w], 1.0)
+        opt.step()
+        if log and (it + 1) % max(1, iters // 5) == 0:
+            log(f"      refit iteration {it + 1}/{iters}: K {K}, rollout MSE {float(loss):.4f}")
+    out = (w * mask).detach()
+    return (out if torch.isfinite(out).all() else last).numpy()
+
+
+__all__ = ["torch_library", "refit_rollout", "backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]
