@@ -136,3 +136,46 @@ def test_fourth_order_stencils_and_recovery_of_hyperdiffusion():
     xi, _ = fit(np.concatenate(Xs), np.concatenate(Ys), np.concatenate(G), threshold=0.05, n_boot=3)
     coef = dict(zip(names, xi[:, 0]))
     assert abs(coef["d1z0"] + c) < 0.03 and abs(coef["d2z0"] - D) < 0.04 and abs(coef["d4z0"] + H) < 0.02
+
+
+def test_dd_and_cubic_options():
+    """+dd adds exactly the derivative x derivative products; +cubic the cubic terms with at most one derivative;
+    numpy and torch libraries agree with both; a KPZ-type law z_t = D d2z + lam (d1z)^2 is recovered with +dd;
+    a cubic saturation z_t = a z - b z^3 + D d2z with +cubic."""
+    import torch
+    from ks_latent.cm1.leadlaw import parse_kind, torch_library
+    z = np.random.default_rng(5).normal(size=(3, 10, 2))
+    _, base = library(z, "pde")
+    _, wdd = library(z, "pde+dd")
+    extra = set(wdd) - set(base)
+    assert extra and all(t.count("*") == 1 and t.count("d") == 2 for t in extra)
+    assert "d1z0*d1z0" in extra and "d1z0*d2z1" in extra
+    _, wc = library(z, "pde4+cubic")
+    cub = [t for t in wc if t.count("*") == 2]
+    assert "z0*z0*z0" in cub and "z0*z1*d4z1" in cub and not any(t.count("d") > 1 for t in cub)
+    for kind in ("pde+dd", "pde4+dd+cubic", "ode+cubic"):
+        for vv in (None, z):
+            F, _ = library(z, kind, vv)
+            assert np.allclose(F, torch_library(torch.as_tensor(z), kind, None if vv is None else torch.as_tensor(vv)).numpy())
+    with pytest.raises(ValueError):
+        parse_kind("ode+dd")
+    with pytest.raises(ValueError):
+        parse_kind("pde+quartic")
+    rng = np.random.default_rng(6)
+    P, T, sub = 40, 60, 50
+    for kind, law, check in (
+            ("pde+dd", lambda z: 0.2 * _lap(z) + 0.15 * _d1(z) ** 2,
+             lambda c: abs(c["d2z0"] - 0.2) < 0.03 and abs(c["d1z0*d1z0"] - 0.15) < 0.03),
+            ("pde+cubic", lambda z: 0.05 * z - 0.05 * z ** 3 + 0.2 * _lap(z),
+             lambda c: abs(c["z0"] - 0.05) < 0.02 and abs(c["z0*z0*z0"] + 0.05) < 0.02 and abs(c["d2z0"] - 0.2) < 0.03)):
+        Xs, Ys, G = [], [], []
+        for g, z in enumerate(_fields(P, 4, rng)):
+            traj = []
+            for _ in range(T):
+                traj.append(z.copy())
+                for _ in range(sub):
+                    z = z + law(z) / sub
+            X, Y, names = training_rows(np.array(traj)[:, :, None], kind, 1, halo=3)
+            Xs.append(X); Ys.append(Y); G.append(np.full(len(X), g))
+        xi, _ = fit(np.concatenate(Xs), np.concatenate(Ys), np.concatenate(G), threshold=0.05, n_boot=3)
+        assert check(dict(zip(names, xi[:, 0]))), kind

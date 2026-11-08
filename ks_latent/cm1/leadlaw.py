@@ -6,6 +6,8 @@ Library terms (all built from the first k channels only):
   pde   + d1 z, d2 z (centred differences over sites) and products z_i d z_j (no derivative x derivative)
   pde3, pde4  the same with spatial derivatives up to third / fourth order (five-point stencils, reach 2 sites):
         d3 (dispersion) and d4 (hyperdiffusion, as in Kuramoto-Sivashinsky), which can damp the shortest waves
+  +dd    adds products of two spatial derivatives (e.g. the KPZ term (d1 z)^2), e.g. kind 'pde4+dd'
+  +cubic adds cubic products z_i z_j z_l and z_i z_j d z_l (at most one derivative), e.g. 'pde+cubic'
 With time_order = 2 the first time derivatives v = dz/dt are added as library variables (v, and products z_i v_j,
 v_i v_j, plus d2 v for "pde"), and the target becomes d2z/dt2: the law is second order in time,
   d2z/dt2 = F(z, dz/dt, d1z, d2z, ...),
@@ -25,10 +27,12 @@ import numpy as np
 from ks_latent.cm1.fieldpde import bootstrap_stlsq, r2
 
 
-def site_derivs(z: np.ndarray, order: int = 2):
+def site_derivs(z, order: int = 2, cat=None):
     """z (..., P, k) -> centred differences over sites up to `order` (2: d1, d2; 3: + d3; 4: + d3, d4), edges
-    replicated. d3 = (z[i+2] - 2 z[i+1] + 2 z[i-1] - z[i-2]) / 2, d4 = z[i+2] - 4 z[i+1] + 6 z[i] - 4 z[i-1] + z[i-2]."""
-    zp = np.concatenate([z[..., :1, :], z[..., :1, :], z, z[..., -1:, :], z[..., -1:, :]], axis=-2)
+    replicated. d3 = (z[i+2] - 2 z[i+1] + 2 z[i-1] - z[i-2]) / 2, d4 = z[i+2] - 4 z[i+1] + 6 z[i] - 4 z[i-1] + z[i-2].
+    Works on numpy arrays, or on torch tensors with cat=torch.cat."""
+    cat = cat or np.concatenate
+    zp = cat([z[..., :1, :], z[..., :1, :], z, z[..., -1:, :], z[..., -1:, :]], -2)
     P = z.shape[-2]
     m2, m1, p1, p2 = (zp[..., i: i + P, :] for i in (0, 1, 3, 4))
     out = [0.5 * (p1 - m1), p1 - 2 * z + m1]
@@ -39,35 +43,61 @@ def site_derivs(z: np.ndarray, order: int = 2):
     return out
 
 
+def parse_kind(kind: str):
+    """'ode' | 'pde' | 'pde3' | 'pde4', optionally with '+dd' (products of two spatial derivatives, e.g. the KPZ
+    term (d1z)^2) and '+cubic' (cubic products: three state variables, or two state variables times one
+    derivative, e.g. z0^3, z0^2 d1z0; Ginzburg-Landau-type saturation). Returns (spatial order, dd, cubic)."""
+    base, *opts = kind.split("+")
+    orders = {"ode": 0, "pde": 2, "pde3": 3, "pde4": 4}
+    if base not in orders or not set(opts) <= {"dd", "cubic"}:
+        raise ValueError(f"kind must be ode/pde/pde3/pde4 with optional +dd, +cubic; got {kind!r}")
+    if "dd" in opts and base == "ode":
+        raise ValueError("'+dd' needs spatial derivatives (pde, pde3 or pde4)")
+    return orders[base], "dd" in opts, "cubic" in opts
+
+
 def _dx_order(kind: str) -> int:
-    orders = {"pde": 2, "pde3": 3, "pde4": 4}
-    if kind != "ode" and kind not in orders:
-        raise ValueError(f"kind must be 'ode', 'pde', 'pde3' or 'pde4', got {kind!r}")
-    return orders.get(kind, 0)
+    return parse_kind(kind)[0]
+
+
+def _build(z, kind: str, v, cat, stack, want_names: bool):
+    """Shared term builder for `library` (numpy) and `torch_library` (torch): identical columns and order."""
+    nd, dd, cubic = parse_kind(kind)
+    k = z.shape[-1]
+    lin, names = [z], [f"z{j}" for j in range(k)]
+    if v is not None:
+        lin.append(v)
+        names += [f"v{j}" for j in range(k)]
+    n_state = len(names)                         # z (and v)
+    if nd:
+        for n, d in enumerate(site_derivs(z, nd, cat), 1):
+            lin.append(d)
+            names += [f"d{n}z{j}" for j in range(k)]
+        if v is not None:
+            lin.append(site_derivs(v, 2, cat)[1])
+            names += [f"d2v{j}" for j in range(k)]
+    L = cat(lin, -1)
+    n = L.shape[-1]
+    cols, qn = [], []
+    for a, b in itertools.combinations_with_replacement(range(n), 2):
+        if a >= n_state and b >= n_state and not dd:     # derivative x derivative only with +dd
+            continue
+        cols.append(L[..., a] * L[..., b])
+        qn.append(f"{names[a]}*{names[b]}")
+    if cubic:                                            # at most one derivative in a cubic term
+        for a, b, c in itertools.combinations_with_replacement(range(n), 3):
+            if (a >= n_state) + (b >= n_state) + (c >= n_state) > 1:
+                continue
+            cols.append(L[..., a] * L[..., b] * L[..., c])
+            qn.append(f"{names[a]}*{names[b]}*{names[c]}")
+    one = z[..., :1] * 0 + 1
+    F = cat([one, L] + ([stack(cols, -1)] if cols else []), -1)
+    return F, (["1"] + names + qn if want_names else None)
 
 
 def library(z: np.ndarray, kind: str, v: np.ndarray | None = None):
     """Features (..., P, F) and names. `v` (same shape as z): first time derivatives (time_order 2)."""
-    nd = _dx_order(kind)
-    k = z.shape[-1]
-    lin, names = [z], [f"z{j}" for j in range(k)]
-    if v is not None:
-        lin.append(v); names += [f"v{j}" for j in range(k)]
-    n_state = len(names)                         # z (and v): products among these are allowed
-    if nd:
-        ds = site_derivs(z, nd)
-        for n, d in enumerate(ds, 1):
-            lin.append(d); names += [f"d{n}z{j}" for j in range(k)]
-        if v is not None:
-            lin.append(site_derivs(v)[1]); names += [f"d2v{j}" for j in range(k)]
-    L = np.concatenate(lin, -1)
-    quad, qn = [], []
-    for a, b in itertools.combinations_with_replacement(range(L.shape[-1]), 2):
-        if a >= n_state and b >= n_state:        # no products of two spatial derivatives
-            continue
-        quad.append(L[..., a] * L[..., b]); qn.append(f"{names[a]}*{names[b]}")
-    F = np.concatenate([np.ones(z.shape[:-1] + (1,)), L] + ([np.stack(quad, -1)] if quad else []), -1)
-    return F, ["1"] + names + qn
+    return _build(z, kind, v, np.concatenate, np.stack, True)
 
 
 def smooth_t(z: np.ndarray, sigma: float) -> np.ndarray:
@@ -152,30 +182,7 @@ def rollout(xi: np.ndarray, z0: np.ndarray, steps: int, kind: str, cap: float, h
 def torch_library(z, kind: str, v=None):
     """Torch twin of `library` (same columns, same order), differentiable; z (..., P, k)."""
     import torch
-    def sd(x, order):
-        xp = torch.cat([x[..., :1, :], x[..., :1, :], x, x[..., -1:, :], x[..., -1:, :]], dim=-2)
-        P = x.shape[-2]
-        m2, m1, p1, p2 = (xp[..., i: i + P, :] for i in (0, 1, 3, 4))
-        out = [0.5 * (p1 - m1), p1 - 2 * x + m1]
-        if order >= 3:
-            out.append(0.5 * (p2 - 2 * p1 + 2 * m1 - m2))
-        if order >= 4:
-            out.append(p2 - 4 * p1 + 6 * x - 4 * m1 + m2)
-        return out
-    nd = _dx_order(kind)
-    lin = [z] + ([v] if v is not None else [])
-    n_state = sum(t.shape[-1] for t in lin)
-    if nd:
-        lin += sd(z, nd)
-        if v is not None:
-            lin.append(sd(v, 2)[1])
-    L = torch.cat(lin, -1)
-    cols = [torch.ones_like(z[..., :1]), L]
-    quad = [L[..., a] * L[..., b] for a, b in itertools.combinations_with_replacement(range(L.shape[-1]), 2)
-            if not (a >= n_state and b >= n_state)]
-    if quad:
-        cols.append(torch.stack(quad, -1))
-    return torch.cat(cols, -1)
+    return _build(z, kind, v, torch.cat, torch.stack, False)[0]
 
 
 def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order: int = 1, k_max: int = 30,
@@ -233,4 +240,4 @@ def refit_rollout(xi: np.ndarray, trajs: list, kind: str, halo: int, time_order:
     return (out if torch.isfinite(out).all() else last).numpy()
 
 
-__all__ = ["torch_library", "refit_rollout", "backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]
+__all__ = ["parse_kind", "torch_library", "refit_rollout", "backward_velocity", "site_derivs", "library", "smooth_t", "training_rows", "fit", "rollout", "r2"]

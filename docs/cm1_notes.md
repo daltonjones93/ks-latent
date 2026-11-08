@@ -470,6 +470,17 @@ User direction (2026-11-08): FPd showed the 32-channel law cannot be pruned to a
 - **Runs (CPU):** time order 1 and 2 separately × kinds pde / pde3 / pde4 × k 1 / 2 / 4 × thresholds 0.03 / 0.1.
 - **Reading:** as addendum 5 (≤ 30 terms for channel 0, held-out R² ≥ 0.5, closed rollout better than persistence of channel 0 at 30 min), now judged on the refit law. Reported in addition: whether pde4 or time order 2 improves the refit rollout over pde at equal k.
 
+### G0 addendum 5c (2026-11-08, before the runs): FPe with derivative-product and cubic terms
+User direction: two library options, `+dd` and `+cubic` (`ks_latent.cm1.leadlaw.parse_kind`), both tested on known laws. They answer questions the quadratic library cannot.
+- **`+dd`:** products of two spatial derivatives, e.g. the KPZ term (∂x z)², which coarse-grained KS flows to. The test recovers D∂²z + λ(∂x z)².
+- **`+cubic`:** cubic terms with at most one derivative, e.g. z0³ or z0² ∂x z0 (Ginzburg-Landau-type saturation). The test recovers az − bz³ + D∂²z.
+- **Runs (CPU, after 9100-9103):**
+  - time order 1, k 1 / 2 / 4;
+  - time order 2, k 1 / 2;
+  - each with kinds pde+dd, pde+cubic, pde+dd+cubic, pde4+dd, pde4+cubic, pde4+dd+cubic, thresholds 0.03 / 0.1, rollout refit to 30 min;
+  - k = 8 left out: its library would be 1-8 k columns.
+- **Reading:** as addendum 5b, judged on the refit law; in addition, whether a selected dd or cubic term survives the refit with a stable coefficient (the interpretability criterion: [[project-interpretable-latent-pde-goal]] in memory; coefficients in physical units, stable between the one-step and refit fits).
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|
