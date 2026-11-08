@@ -779,7 +779,7 @@ Pre-registered success (all at 60 and 90 min unless stated): 4-16 km 0.8-1.2; co
 - **The energy score does not help:** es adds small-scale variance (< 4 km 0.97) and leaves the mesoscale overshoot unchanged.
 - **The excess sits in condensate:** with variance in range for w, θ and u (T0.85), condensate's 4-16 km variance is still 1.6-1.7×. The flow makes too many mid-sized cloud and rain features. Likely next: k90 at T ≈ 0.85, or the mean-anchored hybrid (idea 5); a condensate-specific fix is a candidate if neither works.
 
-## FPc: the column model with an explicit latent law (2026-11-07, Saidie 9017-9028; 22 test storms, starts every hour, `forecast_report` as in train_cm1)
+## FPc: the column model with an explicit latent law (2026-11-07, Saidie 9017-9028, arm 4 with the domain mean still running; 22 test storms, starts every hour, `forecast_report` as in train_cm1)
 The neural propagator is replaced by dz/dt = A0 z + A1 d1z + A2 d2z + b + Q1[z z] + Q2[z d1z] + R(z, d1z, d2z), Heun, tendency cap 5 (after 8999 diverged), trained Stage B then Stage C with the autoencoder in the loop. Skill is decoded nMSE / persistence's (lower is better); full_v1_stagec has 0.365 / 0.344 at 30 / 60 min.
 
 | Arm | Skill 5 / 30 / 60 | Residual share | Terms > 1e-3 / > 1e-2 | Channels unused (ablation < 1e-3) | Pruning, no retraining: last stable / first unstable (60-min skill > 1) |
@@ -787,6 +787,7 @@ The neural propagator is replaced by dz/dt = A0 z + A1 d1z + A2 d2z + b + Q1[z z
 | reuse (full_v1 AE, L1 1e-5) | 0.227 / 0.377 / 0.362 | 0.014 | 46 761 / 14 334 | 0 of 32 | 46 761 terms (0.371) / 37 072 still 0.745, 14 340 diverges |
 | L1 1e-4 | 0.231 / 0.385 / 0.367 | 0.029 | 30 219 / 4 195 | 0 of 32 | 30 220 (0.393) / 18 805 (49) |
 | nested dropout AE | 0.244 / 0.377 / 0.357 | 0.011 | 42 724 / 10 231 | 5 of 32 | 49 388 (0.361) / 42 724 (3.3) |
+| whole-domain windows (200 sites; arm 4's control, Saidie 9028) | 0.226 / 0.371 / 0.354 | 0.008 | 45 346 / 12 283 | 0 of 32 | 45 346 (0.371) / 34 624 (137) |
 
 **Pre-registered reading (plan, FPc): met on skill and residual, not on readability.** Every arm is within 10% of full_v1_stagec at 30 and 60 min (bounds 0.402 / 0.378) with a residual share of 0.01-0.03 (bound 0.3): an explicit local quadratic PDE in the 32 latent channels forecasts CM1 squall lines as well as the neural propagator, and the MLP residual carries only 1-3% of the tendency. **But the law is dense.** 30 000-47 000 of its 52 736 coefficients are above 1e-3, and pruning without retraining has no knee: skill holds until a few thousand to ~30 000 terms are removed, then the 60-min forecast blows up. There is no law of a readable size (hundreds of terms) on this latent. That is the question FPd asks (thresholding during training, with the autoencoder adapting).
 - **Nested dropout orders the channels** (1 channel: reconstruction 0.30, 4: 0.15, 8: 0.086, against 1.10 / 0.97 / 0.74 without), at no skill cost (0.377 / 0.357). The largest terms then act on the first channels (d2 z0, d2 z1, z1 d1z1): diffusion-like and advection-like terms of the leading modes. 5 trailing channels are nearly unused (ablation 0.0008-0.001), as expected when the ordering pushes content forward.
