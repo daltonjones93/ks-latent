@@ -1161,3 +1161,12 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 | mean | **0.451** | |
 - Four leading channels together are much more closed (0.45) than channel 0 alone (0.19 for the 4-term law, 5g), and the largest terms are advection-like (z0 ∂x z0, z0 ∂x z1) and diffusion (∂²x z0, ∂²x z1).
 - 5i (a) therefore requires closure R² ≥ 0.70 on the trained runs (baseline + 0.15 = 0.60, so the absolute bar binds).
+
+## FPf Stage C: closed channel-0 law with the encoder free (Saidie 9161, fit 9181; pre-registration 5h)
+`fpf_lead_stagec` against `fpc_nested_stagec`:
+- Cost: nmse_all 0.0294 vs 0.0287 (+2%); |disp| median 0.81 / 1.48 km at 30 / 60 min vs 0.59 / 1.12 (+37% / +32%). The k=1 reconstruction NMSE was not measured.
+- Gauge map r +0.821 (channel 0 still tracks θ′).
+- Law fitted to the encoded **data** (centred difference of z0): law4 R² train 0.097 / test 0.109, law6 0.099 / 0.111, against 0.19 / 0.21 before. The channel-0 equation the propagator uses (its own tendency) is fitted by law4 with R² 0.92 and by law6 with R² 1.00 (it is the law by construction), but the propagator's dz0/dt explains R² −0.15 of the data's centred difference.
+- Law the propagator uses, in θ′ units (law4 on its own tendency): c(θ′) = −0.061 + 0.0017 θ′ km/min, ν = +6190 m²/s: a smoother, with almost no advection (c_eff −0.076 km/min against the −0.28 measured for the cold pool).
+- **Pre-registered reading (5h): (a) fails** (data R² 0.11, bar 0.4): the constraint is cosmetic, the encoded z0 does not evolve by the law the propagator uses. **(b) fails** (displacement +37% / +32% against a 25% limit). (c): c1 = 0.0017 km/min per K is far below the density-current 0.0042-0.009 value and the FPe-U value; not interpretable. No second seed.
+- Reading: forcing channel 0 alone to be closed does not make the data's z0 closed; rollout training satisfies the constraint by smoothing channel 0 and moving the advection into other channels. Next: FPg (5i), where g acts on the 4 leading channels and is matched to the dense law by a loss rather than imposed on it.
