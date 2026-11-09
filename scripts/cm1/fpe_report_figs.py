@@ -127,7 +127,7 @@ def fig_channel0(ae, norm, Zl, out, s, b):
         ax.axvline(0, color="#bbbbbb", lw=0.8)
     axes[0].set_ylabel("model level (stretched; 0 = surface)")
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, frameon=False, fontsize=7, loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.08))
+    fig.legend(h, l, frameon=False, fontsize=7, loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.16))
     fig.suptitle("What channel 0 encodes: decoded column with only channel 0 set", fontsize=9)
     save(fig, out, "fig_channel0_profiles")
 
@@ -194,7 +194,7 @@ def binned_speed(R, s, b, edges, rng, n_boot=200):
     return base, np.nanpercentile(boots, 2.5, 0), np.nanpercentile(boots, 97.5, 0)
 
 
-def fig_law(phys, speed, binned, edges, out):
+def fig_law(phys, speed, binned, edges, out, phys1=None):
     tr = phys["train"]
     c0, c1 = tr["c0_km_min"], tr["c1_km_min_per_K"]
     thw, ceff = tr["theta_weighted_K"], tr["c_eff_km_min"]
@@ -206,6 +206,10 @@ def fig_law(phys, speed, binned, edges, out):
     ax.fill_between(mid, lo, hi, color=GRAY, alpha=0.25, lw=0, label="binned local speed, 95% CI")
     ax.plot(mid, base, color=GRAY, marker="o", ms=3, lw=1, label="binned local speed")
     ax.plot(th, c0 + c1 * th, color=ORANGE, label=f"law: c = {c0:+.2f} {c1:+.3f} theta'")
+    if phys1:
+        t1 = phys1["train"]
+        ax.plot(th, t1["c0_km_min"] + t1["c1_km_min_per_K"] * th, color=ORANGE, ls="--", lw=1.2,
+                label=f"law, autoencoder seed 1: c = {t1['c0_km_min']:+.2f} {t1['c1_km_min_per_K']:+.3f} theta'")
     thn = th[th < 0]
     ax.plot(thn, -abs(ceff) * np.sqrt(thn / thw), color=BLUE, ls="--",
             label="density-current scaling, through the front point")
@@ -272,6 +276,7 @@ def main():
     ap.add_argument("--source", required=True)
     ap.add_argument("--phys", required=True)
     ap.add_argument("--speed", required=True)
+    ap.add_argument("--phys-seed1", default=None)
     ap.add_argument("--fpe-dirs", nargs="+", default=[])
     ap.add_argument("--out", required=True)
     ap.add_argument("--n-test", type=int, default=10)
@@ -314,7 +319,7 @@ def main():
     binned = binned_speed(R, s, b, edges, rng)
     summary["binned_speed"] = {"edges": edges.tolist(), "speed": binned[0].tolist(), "lo": binned[1].tolist(),
                                "hi": binned[2].tolist()}
-    fig_law(phys, speed, binned, edges, out)
+    fig_law(phys, speed, binned, edges, out, json.load(open(Path(a.phys_seed1).expanduser())) if a.phys_seed1 else None)
     del ae
     for tag, run in (("standard (unordered)", a.control), ("nested, seed 1", a.seed1)):
         if not run:

@@ -1068,3 +1068,17 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
   - (iii) Test c1 inside the training CI: met.
   - (iv) Seed-1 autoencoder: pending (9149-9150).
 - **Reading:** the coefficient is stable and has the physically expected sign of the cold-pool dependence (colder → faster toward the storm's direction). But its size is not √-scaling, and the zero crossing at −4 K means the linear form is an effective fit across the front, not density-current theory. R² 0.2: this is one fifth of channel 0's tendency.
+
+**FPe-U, seed-1 autoencoder (9149-9152; fpc_nested_s1_stagec, same recipe, seed 1):**
+- **Ordering reproduces exactly:** nMSE with channel 0 alone is 0.301 (seed 0: 0.296); the curves agree to 0.01 for every k.
+- **Gauge map:** θ′ = −3.46 z0 − 1.61 K, r = −0.81. Channel 0 has the OPPOSITE sign, which is the gauge freedom in action.
+- **Law in K:**
+  - c(θ′) = +0.225 + 0.0578 θ′ km/min (CI of c1 0.0548-0.0610);
+  - ν = −963 m²/s;
+  - R² 0.24;
+  - test storms: c1 = 0.0567, R² 0.27;
+  - c_eff at the front −0.34 km/min.
+- **Agreement with seed 0:** same form and signs after gauge fixing; c1 is 18% larger and ν 57% more negative. The bootstrap CIs of c1 do not overlap, so the autoencoder spread of the coefficients is ~20%.
+- **Criterion 5f(iv):** same signs, c1 within a factor 2: met.
+- **Overall 5f: not met.** (i) and (ii) fail on both seeds: c0 > 0, and c1 is 3.3-3.5× the density-current value.
+- **FPe-S on seed 1:** r = 0.31 with both measures, slope 0.12. Not met.
