@@ -503,6 +503,33 @@ User direction: interpretability matters, rollout reliability does not. `scripts
 - **Comparison:** density-current scaling |c| ∝ √|θ′|, i.e. d|c|/d|θ′| = |c| / (2|θ′|) at the data's mean |c| and mean |θ′| (weighted by (∂x θ′)²).
 - **Reading, fixed now:** the law is physically interpretable if (i) the bootstrap 95% CI of c1 excludes 0 with c1 > 0 and c0 < 0 (the colder the pool, the faster the front moves toward −x); (ii) c1 is within a factor 3 of the density-current value, for the geometric slope and both bounds; (iii) the test-storm c1 lies inside the training bootstrap CI; (iv) the retrained seed-1 nested autoencoder (`cluster/saidie/fpc_nested_s1.sh`) gives the same signs and c1 within a factor 2. ν is reported and compared with FP0's ~30 m²/s but not interpreted physically if it is far above (the latent smooths). Failing any of (i)-(iii): the advection coefficient is a fitting artefact of the latent, not a statement about CM1's cold pools.
 
+### G0 addendum 5g (2026-11-09, before the run): FPf-D, distilling a short channel-0 law from the trained propagator
+User question: learn the propagator first (with nested dropout), then a PDE from the propagator. The trained LatentLaw of `fpc_nested_stagec` is already a dense explicit PDE; FPe fitted to the encoded data instead. `scripts/cm1/law_distill.py`:
+- **Targets** on the encoded states of the 30 training and 10 test storms (frames 30-330, interior sites): the data's centred difference of z0 (FPe-U's target), and the propagator's own dz0/dt = `law.tendency(z)[..., 0]`, which is exact in time and depends on every channel; also the propagator's tendency at perturbed states z + 0.1 sd N(0, 1) (off the data).
+- **Libraries:** law4 = [1, ∂x z0, z0 ∂x z0, ∂²x z0] (FPe-U) and law6 = [1, z0, ∂x z0, ∂²x z0, z0², z0 ∂x z0] (the FPf constrained row, 5h). OLS fitted on training storms, R² on both splits (test out of sample). Also reported: R² of the dense law's own z0-alone terms against its full tendency; law4 in θ′ units via the FPe-U gauge map, with a bootstrap over storms.
+- **Reading, fixed now** (reference: law4 R² on the data, train 0.19):
+  - test R² of law4 on the propagator target ≥ 0.4 → the data fits were **noise-limited**: a short law exists for the model's dynamics even though finite differences hide it;
+  - < 0.3 → **closure-limited**: the propagator's own dz0/dt needs the other channels, and distillation cannot give a short law. 0.3-0.4 is ambiguous.
+  - The distilled c1 is "consistent with FPe-U" if it lies inside FPe-U's training bootstrap CI.
+  - Nothing here is a test of CM1 physics beyond 5f; it decides whether option 1 is worth pursuing.
+
+### G0 addendum 5h (2026-11-09, before the runs): FPf, a constrained closed law for channel 0 learned with the model
+User question: learn the propagator and a PDE for it at the same time. Option 2, as a structural constraint rather than an extra loss: `--law-lead z0 --law-lead-nu-pos` (`LatentLaw(lead="z0")`, `tests/unit/test_cm1_lead_law.py`). Channel 0's equation is restricted to
+dz0/dt = b0 + a0 z0 + a1 ∂x z0 + ν ∂²x z0 + q z0² + a2 z0 ∂x z0, with ν = softplus(·) ≥ 0, no other channel and no residual. Channels 1-31 keep the full law plus residual. The cap (5) still applies.
+- **Runs** (`cluster/saidie/fpf_lead.sh`, one GPU, sequential):
+  - `fpf_lead`: Stage B only, reusing `fpc_nested`'s autoencoder (frozen), with the same recipe as `fpc_nested` (law-res-weight 0.1, cap 5, law-l1 1e-5, k-max 45). This measures the constraint's cost with the encoder fixed.
+  - `fpf_lead_stagec`: Stage C from it (15000 steps, k 45, w-sfc-th 2, nested 0.5), the same recipe as `fpc_nested_stagec`. Here the encoder can move to a coordinate that obeys the law.
+  - Comparisons: `fpf_lead` vs `fpc_nested`, and `fpf_lead_stagec` vs `fpc_nested_stagec`.
+- **Reading, fixed now (Stage C run):**
+  - (a) **The law is learned, not just imposed:** law4 or law6 OLS on the new encoder's *data* (centred differences, test storms) has R² ≥ 0.4, against 0.19 for `fpc_nested_stagec`. If this fails, the propagator uses the closed law but the encoded z0 does not actually evolve by it, so the constraint is cosmetic.
+  - (b) **Cost:**
+    - test `reconstruction.nmse_all` within 10% of 0.0287;
+    - k=1 (channel 0 alone) reconstruction NMSE within 25% of `fpc_nested_stagec`'s;
+    - `forecast.disp_abs_km_median` at 30 and 60 min within 25% of `fpc_nested_stagec`'s.
+    - If the cost fails while (a) holds, the result is still a trade-off worth reporting, but not adopted as the model.
+  - (c) **Physics:** the learned channel-0 coefficients are converted to θ′ units with the FPe-U gauge map. Reported: c(θ′) = c0 + c1 θ′, ν (m²/s) and the ratio of c1 to the density-current value (3.3-3.5 in 5f). "Closer to CM1 physics" means c1 > 0 and the ratio < 2. Signs and the ratio are reported whatever they are.
+  - A seed-1 repeat is run only if (a) holds. The gauge map r is also reported: if channel 0 stops tracking θ′ (|r| < 0.7), (c) is not interpretable.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|

@@ -274,6 +274,11 @@ class StencilPropConfig:
     law_res_weight: float = 0.0       # weight of the residual's share of the tendency
     law_global: bool = False          # + G <z>: each channel's mean over all sites the step sees (hybrid local/global)
     law_cap: float = 0.0              # > 0: dz/dt = cap tanh(F / cap), a saturating bound so rollouts stay finite
+    # FPf (2026-11-09): constrain channel 0's equation to a short closed law in z0 alone,
+    #   dz0/dt = b0 + a0 z0 + a1 d1z0 + nu d2z0 + q z0^2 + a2 z0 d1z0     (no other channel, no residual),
+    # so training must find a leading coordinate that obeys it; channels 1.. keep the full law. "" = off.
+    law_lead: str = ""                # "" or "z0"
+    law_lead_nu_pos: bool = False     # nu = softplus(.) >= 0 in channel 0's law (no anti-diffusion)
 
     @property
     def reach_sites(self) -> int:
@@ -330,10 +335,13 @@ class LatentLaw(nn.Module):
     tendency is cap tanh(F / cap): identical to F for small F, bounded for large."""
 
     def __init__(self, c: int, quadratic: bool = True, residual_hidden: int = 64, integrator: str = "heun",
-                 substeps: int = 1, global_mean: bool = False, cap: float = 0.0):
+                 substeps: int = 1, global_mean: bool = False, cap: float = 0.0, lead: str = "",
+                 lead_nu_pos: bool = False):
         super().__init__()
         if integrator not in ("euler", "heun") or substeps < 1 or cap < 0:
             raise ValueError("integrator must be 'euler' or 'heun', substeps >= 1, cap >= 0")
+        if lead not in ("", "z0") or (lead_nu_pos and not lead):
+            raise ValueError("lead must be '' or 'z0'; lead_nu_pos needs lead 'z0'")
         self.c, self.integrator, self.substeps, self.cap = c, integrator, substeps, cap
         self.A = nn.Parameter(torch.zeros(3, c, c))               # A0, A1, A2 (output, input)
         self.b = nn.Parameter(torch.zeros(c))
@@ -354,6 +362,21 @@ class LatentLaw(nn.Module):
             # below is the local part's.
             self.G = nn.Parameter(torch.zeros(c, c))
         self.register_buffer("masks", torch.ones(0))              # filled by `prune`: keep-masks of A, Q1, Q2, G
+        self.lead, self.lead_nu_pos = lead, lead_nu_pos
+        if lead:   # fixed structural masks: row 0 keeps only its z0-alone terms (FPf)
+            mA = torch.ones(3, c, c); mA[:, 0, :] = 0; mA[:, 0, 0] = 1
+            self.register_buffer("lead_A", mA)
+            if quadratic:
+                m1 = torch.ones(c, iu.shape[1]); m1[0] = 0; m1[0, 0] = 1        # iu column 0 is (0, 0): z0^2
+                m2 = torch.ones(c, c * c); m2[0] = 0; m2[0, 0] = 1              # column 0 is z0 d1z0
+                self.register_buffer("lead_Q1", m1); self.register_buffer("lead_Q2", m2)
+            if global_mean:
+                mG = torch.ones(c, c); mG[0] = 0
+                self.register_buffer("lead_G", mG)
+            if lead_nu_pos:   # softplus(-6) = 2.5e-3 sites^2/frame: nearly the identity at initialization
+                self.nu0_raw = nn.Parameter(torch.tensor(-6.0))
+                e = torch.zeros(3, c, c); e[2, 0, 0] = 1
+                self.register_buffer("lead_nu_e", e)
         self._res, self._tot = [], []
 
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
@@ -370,22 +393,35 @@ class LatentLaw(nn.Module):
             out["G"] = self.G
         return out
 
+    def _lead(self, name: str, v: torch.Tensor) -> torch.Tensor:
+        """Apply the FPf structural constraint on channel 0's row (identity when `lead` is off)."""
+        if not self.lead:
+            return v
+        v = v * getattr(self, "lead_" + name)
+        if name == "A" and self.lead_nu_pos:
+            v = v * (1 - self.lead_nu_e) + self.lead_nu_e * F.softplus(self.nu0_raw)
+        return v
+
     def tendency(self, z: torch.Tensor) -> torch.Tensor:
         d1, d2 = _d1_d2(z)
         A = self.A
         if self.masks.numel():
             A = A * self._mask("A")
+        A = self._lead("A", A)
         f = z @ A[0].T + d1 @ A[1].T + d2 @ A[2].T + self.b
         if self.quadratic:
             Q1, Q2 = (self.Q1 * self._mask("Q1"), self.Q2 * self._mask("Q2")) if self.masks.numel() else (self.Q1, self.Q2)
+            Q1, Q2 = self._lead("Q1", Q1), self._lead("Q2", Q2)
             zz = (z[..., :, None] * z[..., None, :])[..., self.iu[0], self.iu[1]]
             zd = (z[..., :, None] * d1[..., None, :]).flatten(-2)
             f = f + zz @ Q1.T + zd @ Q2.T
         if self.global_mean:
             G = self.G * self._mask("G") if self.masks.numel() else self.G
-            f = f + z.mean(dim=-2, keepdim=True) @ G.T
+            f = f + z.mean(dim=-2, keepdim=True) @ self._lead("G", G).T
         if self.R is not None:
             r = self.R(torch.cat([z, d1, d2], dim=-1))
+            if self.lead:   # channel 0's law is closed: no residual
+                r = torch.cat([torch.zeros_like(r[..., :1]), r[..., 1:]], dim=-1)
             if self.training:
                 self._res.append((r ** 2).mean())
                 self._tot.append(((f + r) ** 2).mean().detach())
@@ -439,9 +475,9 @@ class LatentLaw(nn.Module):
         masked parameter can drift away from zero (Adam momentum, weight decay) without any effect on the law,
         so reports and term counts must read these, not the raw parameters."""
         co = self.coefficient_tensors()
-        if not self.masks.numel():
-            return co
-        return {k: v * self._mask(k) for k, v in co.items()}
+        if self.masks.numel():
+            co = {k: v * self._mask(k) for k, v in co.items()}
+        return {k: self._lead(k, v) for k, v in co.items()}
 
     @torch.no_grad()
     def prune(self, threshold: float) -> int:
@@ -501,7 +537,7 @@ class StencilPropagator(nn.Module):
             if cfg.n_hist != 1 or cfg.noise_channels:
                 raise ValueError("body 'law' is Markovian and deterministic: n_hist = 1, noise_channels = 0")
             self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps,
-                                 cfg.law_global, cfg.law_cap)
+                                 cfg.law_global, cfg.law_cap, cfg.law_lead, cfg.law_lead_nu_pos)
             return
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
