@@ -1184,3 +1184,19 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - **Pre-registered reading:** (a) **met**: mean closure 0.922 (≥ 0.70 and 0.47 above the baseline). (b) **not met**: the 60-min displacement error is 37% worse (limit 25%); nmse and the 30-min error are inside. (c) **not met**: head-vs-data R² averages 0.21 (bar 0.4); channel 0 reaches 0.399, channel 2 is negative.
 - Reading: the loss does make the leading channels closed (0.45 → 0.92) at a small reconstruction cost, but closure is a property of the propagator, not of the data. The dense law's own tendency on channels 0-3 explains the data's centred difference less well than before (channel 0: 0.48 → 0.39; channel 2: 0.53 → −0.09), so the model has become closed by moving away from the observed one-step change of some channels. A closed law for the model's leading channels exists; it is not yet a law for CM1's data.
 - Not adopted. Weight 1.0 (9178/9179) pending; no second seed (c fails).
+
+## FPg, weight 1.0, and the physical reading of the heads (Saidie 9178/9179, reports 9190-9192; pre-registration 5i)
+**w = 1.0** (`fpg_n4_w1_stagec`): closure R² 0.997 / 1.000 / 1.000 / 1.000 (mean 0.999), but F-vs-data R² on test is −0.21 / −0.62 / −0.14 / +0.13 and head-vs-data averages −0.22. Cost: nmse_all 0.0307 (+7%), |disp| median 0.83 / 1.77 km at 30 / 60 min (+41% / +58%). **(a) met, (b) not met, (c) not met.** Neither weight is adopted. Stronger weight buys closure by detaching the model from the data's one-step change (the head's channel-0 equation is then dominated by ∂²x z0: 0.96 of the tendency's sd, ν ≈ 12900 m²/s).
+
+**What the leading channels carry** (`law_head_physical.py`, correlation of z_i with site means over the training storms, every 5th frame; w = 0.1 / w = 1.0 runs agree to ±0.04):
+| channel | θ′_sfc | w max | w min | u′_sfc | condensate | q_v,sfc |
+|---|---|---|---|---|---|---|
+| z0 | +0.82 | −0.69 | +0.65 | −0.22 | −0.83 | +0.65 |
+| z1 | −0.51 | −0.20 | +0.04 | −0.50 | −0.07 | −0.49 |
+| z2 | −0.10 | −0.29 | +0.27 | +0.22 | −0.25 | −0.13 |
+| z3 | −0.41 | +0.05 | −0.01 | −0.19 | 0.00 | −0.36 |
+- z0 is a cold-pool / precipitation-core amplitude (cold surface, rain, updraft/downdraft together). z1 is a surface-outflow variant (θ′ and u′_sfc, q_v), z3 a θ′-q_v pattern, z2 weakly updraft/condensate. They are partially mixed (a latent has no unique physical meaning), so these are labels, not definitions.
+
+**The head's channel-0 equation** (w = 0.1): z0-only terms explain R² 0.095 of g_0 without refit; the largest terms by sd share are ∂²x z0 (0.59), ∂x z0 (0.56), then couplings z1 ∂x z2, z0 ∂x z2, ∂x z1, ∂²x z1, z0 ∂x z1 (0.29-0.33). Channel 0's tendency is mostly diffusion/advection of z0 plus advective coupling to z1 and z2. In θ′ units the z0-only terms give c(θ′) = −0.276 + 0.0070 θ′ km/min, ν = 7300 m²/s. At w = 1.0 they give c(θ′) = −0.189 − 0.0052 θ′ and ν = 12900 m²/s.
+- The sign of c1 flips between the two weights (+0.0070 vs −0.0052), and FPe-U's data fit gave +0.049; so the advection's dependence on θ′ is **not** a stable property of the closed head. The w = 0.1 value is within a factor 2 of the density-current scale (0.009-0.014), but that was noticed after the fact, the z0-only terms carry little of g_0, and the sign is not reproduced at w = 1.0: not claimed.
+- The robust statements: (i) the leading channels are physically recognisable; (ii) their dynamics is advection + diffusion with advective coupling between them; (iii) the c1 > 0 advection found in FPe/FPf-D from the data and from the dense propagator is the only θ′-dependence of the speed that is reproduced across the data and the unconstrained model.
