@@ -1149,3 +1149,15 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
   - The advection is about 0.01 km/min, against storm speeds of about 0.3 km/min.
   - With only z0 available, the best rollout-trained closed law smooths channel 0 instead of propagating it. This agrees with 5g's closure-limited result.
 - Not a 5h decision (the decision is on Stage C), but it is the baseline Stage C must improve on: can the encoder move so that z0 propagates by itself?
+
+## FPg baseline: closure of the dense law on its 4 leading channels, no loss (Saidie 9180; pre-registration 5i)
+`fpc_nested_stagec`, OLS of F_i on the 39-term library of channels 0-3 only, fitted on train storms, scored on test:
+| channel | closure R² test | F vs data R² test |
+|---|---|---|
+| 0 | 0.509 | 0.477 |
+| 1 | 0.360 | 0.453 |
+| 2 | 0.490 | 0.530 |
+| 3 | 0.446 | 0.608 |
+| mean | **0.451** | |
+- Four leading channels together are much more closed (0.45) than channel 0 alone (0.19 for the 4-term law, 5g), and the largest terms are advection-like (z0 ∂x z0, z0 ∂x z1) and diffusion (∂²x z0, ∂²x z1).
+- 5i (a) therefore requires closure R² ≥ 0.70 on the trained runs (baseline + 0.15 = 0.60, so the absolute bar binds).
