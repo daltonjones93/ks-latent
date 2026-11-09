@@ -1123,3 +1123,16 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - The advection coefficient is the same: c1 = +0.0490 km/min per K (bootstrap 95% CI 0.0468-0.0517), inside FPe-U's CI, with c0 = +0.149 km/min.
 - ν changes sign: +2915 m²/s (CI 2787-3039) from the propagator target, against −614 from the data. The data fit's anti-diffusion therefore comes from the finite-difference target, not from the model's dynamics. Neither value is physical (FP0 ~30 m²/s).
 - **Consequence for 5h:** a closed short law for channel 0 is not present in the current coordinate. Only the encoder-free Stage C (`fpf_lead_stagec`) can test whether one exists in another coordinate.
+
+## FPf Stage B: constrained channel-0 law with the autoencoder frozen (Saidie 9160; pre-registration 5h)
+`fpf_lead` (frozen `fpc_nested` autoencoder) against `fpc_nested` (same autoencoder, dense law), test storms:
+| run | nmse_all | \|disp\| median 30 / 60 min (km) | main-front error median 30 / 60 min (km) |
+|---|---|---|---|
+| fpc_nested (dense law) | 0.0267 | 1.01 / 2.15 | 1.00 / 2.25 |
+| fpf_lead (closed z0 law) | 0.0267 | 1.75 / 5.12 | 1.38 / 4.38 |
+| fpc_nested_stagec (reference for 5h) | 0.0287 | 0.59 / 1.12 | 0.75 / 1.25 |
+- In the frozen coordinate the closed law costs forecast skill: displacement error is 1.7× worse at 30 min and 2.4× worse at 60 min.
+- The learned channel-0 law (sites, frames) is almost pure diffusion: b −0.0044, a0 +0.0037, a1 +0.0048, ν +0.066 (≈ 4400 m²/s), q +0.0020, a2 +0.0064.
+  - The advection is about 0.01 km/min, against storm speeds of about 0.3 km/min.
+  - With only z0 available, the best rollout-trained closed law smooths channel 0 instead of propagating it. This agrees with 5g's closure-limited result.
+- Not a 5h decision (the decision is on Stage C), but it is the baseline Stage C must improve on: can the encoder move so that z0 propagates by itself?
