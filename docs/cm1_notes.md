@@ -1013,3 +1013,23 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - Refit at k = 2 beats persistence at σ = 2 (z0 MSE 0.042-0.050 against 0.116), but with the usual inflated diffusion.
 
 **Second order in time with refit (9101, k 1/2/4 done):** k = 1 refit laws are worse than persistence (0.10-1.7 against 0.196, one at 0.10); several k = 2 refits explode (10⁵). First order with refit remains better. Second order is not pursued unless +dd/+cubic changes this.
+
+## FPe-S: per-storm advection speed against measured storm speed (Saidie 9111, 9112; 40 storms; pre-registration 5e)
+| smoothing | measure | Pearson r (95% CI) | permutation p | Spearman | slope measured/law | mean law vs measured (km/min) |
+|---|---|---|---|---|---|---|
+| none | condensate centroid | +0.40 (−0.07, +0.79) | 0.010 | +0.09 | 0.19 | −0.277 vs −0.023 |
+| none | cold-pool centroid | +0.35 (−0.26, +0.87) | 0.029 | +0.60 | 0.17 | −0.277 vs −0.286 |
+| σ = 1 | condensate centroid | +0.49 (+0.01, +0.79) | 0.001 | +0.19 | 0.35 | −0.074 vs −0.023 |
+| σ = 1 | cold-pool centroid | +0.46 (−0.11, +0.84) | 0.003 | +0.44 | 0.33 | −0.074 vs −0.286 |
+
+- **Pre-registered reading: NOT met.** Needed r ≥ 0.5 with the CI excluding 0 and a slope in 0.5-2. Best case r = 0.49 with slope 0.35; the unsmoothed r is 0.35-0.40 with CIs covering 0. By the rule: weak correlation, slope off by a factor 3-6.
+- **What is real:** the **mean** effective speed of the unsmoothed law (−0.277 km/min) equals the mean cold-pool speed (−0.286). But the storm-to-storm variation of the law's speed does not track the storms' speeds (slope 0.2). The earlier "+0.12 km/min = Q2 storm speed" match is withdrawn: that was the gauge-dependent speed at z0 = 0.
+- Pearson and Spearman disagree (0.35 vs 0.60 for cold pool), so a few storms drive the correlation.
+
+## FPe: k = 8, second order with +dd / +cubic, first order with +dd / +cubic (Saidie 9102-9105; z0 MSE at 30 min after the refit, persistence 0.196)
+- **k = 8 (first order):** R² for z0 rises to 0.63-0.82, but only one refit law beats persistence (pde, thr 0.1, 13 terms, 0.18). Eight channels do not close better than two.
+- **First order, k = 1:** `+dd` and `+cubic` make **every** pde refit law beat persistence (0.09-0.19) and raise R² a little (0.21 → 0.25; pde4: 0.41 → 0.46). They do not beat the best earlier law (k = 2 pde3, 0.076). Best compact: k = 1 pde+dd, thr 0.1, 7 terms, refit 0.135.
+- **First order, k = 2:** pde+dd thr 0.03 (23 terms, R² 0.575) beats persistence even one-step (0.187), refit 0.092. At k ≥ 4 all refits blow up.
+- **The KPZ-type term (∂x z0)² keeps its sign:** −0.046 one-step and −0.110 refit in pde+dd; −0.041 and −0.117 in pde4+dd (selected in 70% of bootstraps). The sign is stable across libraries and fits; the refit makes it 2.5× larger. `+cubic` adds nothing: z0² ∂x z0 is small (+0.01 → −0.001).
+- **Second order in time:** R² is higher (0.5-0.63 at k = 1) but one-step rollouts all explode, and only a few refits (thr 0.03) beat persistence (0.11-0.18). First order stays better.
+- **Pending:** 9108 (+mixed).
