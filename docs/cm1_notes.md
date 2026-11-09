@@ -495,6 +495,14 @@ User-approved test of whether an FPe coefficient carries CM1 physics, independen
 - **Reading, fixed now:** the advection coefficient "carries physics" if Pearson r(c_eff, measured speed) ≥ 0.5 for at least one of the two measures, with the bootstrap 95% CI over storms excluding 0 and a permutation p < 0.05; and the OLS slope of measured on c_eff within 0.5-2 (the law's speed is of the right size). r between 0.3 and 0.5 is reported as weak. Below 0.3, or CI covering 0: the advection coefficient does not track storm speed and the 0.12 km/min match was a coincidence.
 - Both measures and the smoothed variants (σ = 1) are reported whatever the outcome; storms pooled over train and test, so no tuning on the test set.
 
+### G0 addendum 5f (2026-11-09, before the run): FPe-U, the channel-0 advection law in physical units
+User direction: interpretability matters, rollout reliability does not. `scripts/cm1/law_physical_units.py`:
+- **Gauge map** θ′_sfc = s z0 + b fitted on the 30 training storms (site means, every 5th frame); s from the geometric-mean slope, with the OLS and inverse-OLS slopes as bounds.
+- **Law, one-step OLS, no sparsity, no rollout refit** (frames 30-330, interior sites): dz0/dt = k0 + a1 ∂x z0 + a2 z0 ∂x z0 + ν ∂²x z0. In K: c(θ′) = c0 + c1 θ′ (km/min, with ∂t θ′ = −c ∂x θ′ + ...), ν in m²/s, the source in K/min.
+- **Uncertainty:** bootstrap over the 30 training storms; the same law from the 10 test storms with the training map.
+- **Comparison:** density-current scaling |c| ∝ √|θ′|, i.e. d|c|/d|θ′| = |c| / (2|θ′|) at the data's mean |c| and mean |θ′| (weighted by (∂x θ′)²).
+- **Reading, fixed now:** the law is physically interpretable if (i) the bootstrap 95% CI of c1 excludes 0 with c1 > 0 and c0 < 0 (the colder the pool, the faster the front moves toward −x); (ii) c1 is within a factor 3 of the density-current value, for the geometric slope and both bounds; (iii) the test-storm c1 lies inside the training bootstrap CI; (iv) the retrained seed-1 nested autoencoder (`cluster/saidie/fpc_nested_s1.sh`) gives the same signs and c1 within a factor 2. ν is reported and compared with FP0's ~30 m²/s but not interpreted physically if it is far above (the latent smooths). Failing any of (i)-(iii): the advection coefficient is a fitting artefact of the latent, not a statement about CM1's cold pools.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|
