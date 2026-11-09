@@ -1109,3 +1109,17 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - **Criterion 5f(iv):** same signs, c1 within a factor 2: met.
 - **Overall 5f: not met.** (i) and (ii) fail on both seeds: c0 > 0, and c1 is 3.3-3.5× the density-current value.
 - **FPe-S on seed 1:** r = 0.31 with both measures, slope 0.12. Not met.
+
+## FPf-D: short channel-0 law distilled from the trained propagator (Saidie 9162; pre-registration 5g)
+`law_distill.py` on `fpc_nested_stagec`, 30 training / 10 test storms, frames 30-330. Gauge map r +0.794, s +3.48 K.
+| target | law4 R² train / test | law6 R² train / test |
+|---|---|---|
+| data, centred difference (FPe-U) | 0.193 / 0.212 | 0.194 / 0.213 |
+| propagator dz0/dt on the data | 0.187 / 0.191 | 0.188 / 0.191 |
+| propagator dz0/dt, perturbed states (0.1 sd) | 0.267 / 0.263 | 0.272 / 0.267 |
+- The propagator's dz0/dt explains R² 0.47 of the data's centred difference (train and test).
+- The dense law's own z0-alone terms explain R² 0.002 of its full channel-0 tendency. The trained law routes channel 0's dynamics almost entirely through coupling to other channels and the quadratic cross terms.
+- **Pre-registered reading (5g): closure-limited** (test R² 0.19 < 0.3). The short law fits the propagator no better than the data, so the data fits were not held back by finite-difference noise. Distillation gives no short law.
+- The advection coefficient is the same: c1 = +0.0490 km/min per K (bootstrap 95% CI 0.0468-0.0517), inside FPe-U's CI, with c0 = +0.149 km/min.
+- ν changes sign: +2915 m²/s (CI 2787-3039) from the propagator target, against −614 from the data. The data fit's anti-diffusion therefore comes from the finite-difference target, not from the model's dynamics. Neither value is physical (FP0 ~30 m²/s).
+- **Consequence for 5h:** a closed short law for channel 0 is not present in the current coordinate. Only the encoder-free Stage C (`fpf_lead_stagec`) can test whether one exists in another coordinate.
