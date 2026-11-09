@@ -57,3 +57,28 @@ def test_default_is_unchanged_and_propagator_wiring():
     assert p.law.lead == "z0" and p.law.lead_nu_pos
     off = LatentLaw(3)
     assert not hasattr(off, "lead_A")
+
+
+def test_head_loss_gradients_and_closure():
+    c, n = 6, 3
+    law = LatentLaw(c, residual_hidden=8, head_n=n)
+    torch.manual_seed(1)
+    with torch.no_grad():
+        for p_ in law.parameters():
+            p_.normal_(0, 0.1)
+    law.train()
+    z = torch.randn(2, 10, c)
+    law(z)
+    pen = law.penalty(0.0, 0.0, head_weight=1.0)
+    assert pen > 0 and not law._hd
+    law(z)
+    pen = law.penalty(0.0, 0.0, head_weight=1.0)
+    pen.backward()
+    assert law.A.grad.abs().sum() > 0 and law.head.A.grad.abs().sum() > 0   # both sides are pulled
+    # eval mode: no accumulation, zero penalty
+    law.eval(); law(z)
+    assert not law._hd
+    # head == dense on the first n channels (no residual, no coupling to channels >= n) gives zero loss
+    d = LatentLaw(c, residual_hidden=0, head_n=n)
+    d.train(); d.head.load_state_dict({k: v for k, v in LatentLaw(n).state_dict().items()}, strict=False)
+    d(z); assert float(d.penalty(0.0, 0.0, 1.0)) == 0.0

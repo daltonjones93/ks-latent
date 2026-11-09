@@ -530,6 +530,19 @@ dz0/dt = b0 + a0 z0 + a1 ∂x z0 + ν ∂²x z0 + q z0² + a2 z0 ∂x z0, with �
   - (c) **Physics:** the learned channel-0 coefficients are converted to θ′ units with the FPe-U gauge map. Reported: c(θ′) = c0 + c1 θ′, ν (m²/s) and the ratio of c1 to the density-current value (3.3-3.5 in 5f). "Closer to CM1 physics" means c1 > 0 and the ratio < 2. Signs and the ratio are reported whatever they are.
   - A seed-1 repeat is run only if (a) holds. The gauge map r is also reported: if channel 0 stops tracking θ′ (|r| < 0.7), (c) is not interpretable.
 
+### G0 addendum 5i (2026-11-09, before the runs): FPg, a closed PDE on the n leading channels trained jointly with the dense propagator
+User direction: the joint scheme should keep a dense propagator F and add a separate PDE g, with a representation loss, and g should be a function of the n most important channels (the dropout's ordering), not of channel 0 alone. Not the 5h structural constraint (that makes channel 0's row itself the law). `LatentLaw(head_n=n)`, flags `--law-head-n n --law-head-weight w`.
+- **Model:** the dense law F is unchanged. A separate head g (same library: 1, z, ∂x z, ∂²x z, z_i z_j, z_i ∂x z_j; no residual, no cap) acts on channels 0..n-1 only and gives dz_i/dt = g_i for i < n.
+- **Loss:** w · mean (F_{<n}(z) − g(z_{<n}))² / mean F_{<n}(z)², added to every training loss that already has the law penalty (Stage B and C); gradients flow into both g and F (and into the encoder in Stage C, through z). Over all steps of the rollout, both Heun stages. The sparsity weight law_l1 also applies to g.
+- **Runs** (`cluster/saidie/fpg_run.sh`, one GPU, sequential, after 9161): n = 4, w ∈ {0.1, 1.0}. For each: Stage B on the frozen `fpc_nested` autoencoder (`fpg_n4_w*`), then Stage C from it (`fpg_n4_w*_stagec`) with the same recipe as `fpc_nested_stagec`. The weight is not tuned: both are reported, and if both pass the lower weight is the adopted one.
+- **Measurement** (`scripts/cm1/law_head_report.py`, test storms): the closure R² = R² of an OLS fit of F_i (i < n) on the head's library built from the first n channels only (fitted on train storms, scored on test), averaged over the n channels; the same on `fpc_nested_stagec` is the baseline (how closed F is without the loss). Also the head's R² against F and against the data.
+- **Reading, fixed now (Stage C runs):**
+  - (a) **Closure is gained:** mean closure R² on test ≥ 0.70 and ≥ 0.15 above the `fpc_nested_stagec` baseline. If not, the loss does not make the leading channels closed.
+  - (b) **Cost:** test nmse_all within 10% of 0.0287; |disp| median at 30 and 60 min within 25% of 0.59 and 1.12 km. If (b) fails while (a) holds, it is reported as a trade-off and not adopted.
+  - (c) **The head is the law:** head-vs-data R² on test ≥ 0.4 (it was 0.19 for the 4-term channel-0 law on data), averaged over the n channels.
+  - (d) **Physics:** if (a)-(c) hold, the head's channel-0 equation is read in the z0 gauge map's units (θ′ for the z0 terms) and its advection and diffusion terms reported; interpretation is not claimed unless the signs and sizes are consistent with 5f (c1 > 0). A second seed only if (a)-(c) hold.
+  - All three of (a)-(c) must hold for "a closed short law exists for the n leading channels"; otherwise the plain statement is that the encoder cannot make them closed at this cost.
+
 ## E3c: shifted tilings in the DA (2026-11-06, Saidie 8893; 22 test storms × 3 seeds, noise 0.1, held boundaries)
 | | Cycled nMSE (prior) | Paired vs single | Storms lower | Analysis nMSE |
 |---|---|---|---|---|

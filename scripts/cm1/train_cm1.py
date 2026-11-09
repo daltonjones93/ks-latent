@@ -146,6 +146,7 @@ def build_config(a, dt: float | None) -> RunConfig:
                              law_substeps=a.law_substeps, law_l1=a.law_l1, law_res_weight=a.law_res_weight,
                              law_global=a.law_global, law_cap=a.law_cap, law_lead=a.law_lead,
                              law_lead_nu_pos=a.law_lead_nu_pos,
+                             law_head_n=a.law_head_n, law_head_weight=a.law_head_weight,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
@@ -293,6 +294,8 @@ def main():
     ap.add_argument("--law-integrator", choices=["euler", "heun"], default="heun")
     ap.add_argument("--law-lead", choices=["", "z0"], default="",
                     help="FPf: channel 0's equation restricted to a closed short law in z0 alone (no residual)")
+    ap.add_argument("--law-head-n", type=int, default=0, help="FPg: closed PDE head on the first n channels (0: off)")
+    ap.add_argument("--law-head-weight", type=float, default=0.0, help="FPg: weight of the head's representation loss")
     ap.add_argument("--law-lead-nu-pos", action="store_true", help="FPf: channel 0's diffusion nu = softplus(.) >= 0")
     ap.add_argument("--law-substeps", type=int, default=1)
     ap.add_argument("--nested-frac", type=float, default=0.0,

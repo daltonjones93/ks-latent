@@ -279,6 +279,13 @@ class StencilPropConfig:
     # so training must find a leading coordinate that obeys it; channels 1.. keep the full law. "" = off.
     law_lead: str = ""                # "" or "z0"
     law_lead_nu_pos: bool = False     # nu = softplus(.) >= 0 in channel 0's law (no anti-diffusion)
+    # FPg (2026-11-09): a separate closed PDE g on the first `law_head_n` channels (the most important, by the nested
+    # dropout's ordering), dz_i/dt = g_i(z_{0..n-1}, d1z, d2z) for i < n (same library as the law, no residual), trained
+    # with a representation loss  law_head_weight * |F_{<n}(z) - g(z_{<n})|^2 / |F_{<n}|^2  against the dense law's
+    # tendency on those channels. The dense law F is untouched structurally (stays accurate); the loss pulls F's
+    # leading-channel tendency toward closure in the leading channels. 0 = off.
+    law_head_n: int = 0
+    law_head_weight: float = 0.0
 
     @property
     def reach_sites(self) -> int:
@@ -336,7 +343,7 @@ class LatentLaw(nn.Module):
 
     def __init__(self, c: int, quadratic: bool = True, residual_hidden: int = 64, integrator: str = "heun",
                  substeps: int = 1, global_mean: bool = False, cap: float = 0.0, lead: str = "",
-                 lead_nu_pos: bool = False):
+                 lead_nu_pos: bool = False, head_n: int = 0):
         super().__init__()
         if integrator not in ("euler", "heun") or substeps < 1 or cap < 0:
             raise ValueError("integrator must be 'euler' or 'heun', substeps >= 1, cap >= 0")
@@ -362,6 +369,13 @@ class LatentLaw(nn.Module):
             # below is the local part's.
             self.G = nn.Parameter(torch.zeros(c, c))
         self.register_buffer("masks", torch.ones(0))              # filled by `prune`: keep-masks of A, Q1, Q2, G
+        self.head_n = head_n
+        self.head = None
+        if head_n:
+            if not 1 <= head_n <= c:
+                raise ValueError("head_n must be in 1..c")
+            self.head = LatentLaw(head_n, quadratic, 0, integrator, 1, False, 0.0)
+        self._hd, self._hr = [], []
         self.lead, self.lead_nu_pos = lead, lead_nu_pos
         if lead:   # fixed structural masks: row 0 keeps only its z0-alone terms (FPf)
             mA = torch.ones(3, c, c); mA[:, 0, :] = 0; mA[:, 0, 0] = 1
@@ -426,6 +440,10 @@ class LatentLaw(nn.Module):
                 self._res.append((r ** 2).mean())
                 self._tot.append(((f + r) ** 2).mean().detach())
             f = f + r
+        if self.head is not None and self.training:
+            g = self.head.tendency(z[..., :self.head_n])
+            self._hd.append(((f[..., :self.head_n] - g) ** 2).mean())
+            self._hr.append((f[..., :self.head_n] ** 2).mean().detach())
         if self.cap:
             # Saturating bound (FPc fix, 2026-11-07): an explicit quadratic law rolled out 45 steps blew up to inf
             # in Stage B (Saidie 8999). cap tanh(F / cap) equals F within 3% for |F| < 0.3 cap, so the law reads
@@ -444,7 +462,7 @@ class LatentLaw(nn.Module):
                 z = z + 0.5 * h * (k1 + k2)
         return z
 
-    def penalty(self, l1: float, res_weight: float) -> torch.Tensor:
+    def penalty(self, l1: float, res_weight: float, head_weight: float = 0.0) -> torch.Tensor:
         """L1 on the law's coefficients (A0's diagonal exempt: each mode's own growth or decay is not a coupling)
         plus `res_weight` x the residual's mean share of the squared tendency over the calls since the last
         penalty (training mode only). Clears the accumulated residual statistics."""
@@ -458,7 +476,12 @@ class LatentLaw(nn.Module):
                 p = p + l1 * self.G.abs().sum()
         if res_weight and self._res:
             p = p + res_weight * torch.stack(self._res).mean() / (torch.stack(self._tot).mean() + 1e-8)
-        self._res, self._tot = [], []
+        if self.head is not None:
+            if head_weight and self._hd:
+                p = p + head_weight * torch.stack(self._hd).mean() / (torch.stack(self._hr).mean() + 1e-8)
+            if l1:
+                p = p + self.head.penalty(l1, 0.0)
+        self._res, self._tot, self._hd, self._hr = [], [], [], []
         return p
 
     def _mask(self, name: str) -> torch.Tensor:
@@ -537,7 +560,8 @@ class StencilPropagator(nn.Module):
             if cfg.n_hist != 1 or cfg.noise_channels:
                 raise ValueError("body 'law' is Markovian and deterministic: n_hist = 1, noise_channels = 0")
             self.law = LatentLaw(c, cfg.law_quadratic, cfg.law_residual_hidden, cfg.law_integrator, cfg.law_substeps,
-                                 cfg.law_global, cfg.law_cap, cfg.law_lead, cfg.law_lead_nu_pos)
+                                 cfg.law_global, cfg.law_cap, cfg.law_lead, cfg.law_lead_nu_pos,
+                                 cfg.law_head_n)
             return
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
@@ -552,7 +576,7 @@ class StencilPropagator(nn.Module):
     def penalty(self) -> torch.Tensor:
         """Regularization of the step to add to the training loss (zero except for body 'law')."""
         if self.cfg.body == "law":
-            return self.law.penalty(self.cfg.law_l1, self.cfg.law_res_weight)
+            return self.law.penalty(self.cfg.law_l1, self.cfg.law_res_weight, self.cfg.law_head_weight)
         return next(self.parameters()).new_zeros(())
 
     def forward(self, z: torch.Tensor, eps: torch.Tensor | None = None,
