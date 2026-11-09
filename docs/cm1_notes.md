@@ -1170,3 +1170,17 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - Law the propagator uses, in θ′ units (law4 on its own tendency): c(θ′) = −0.061 + 0.0017 θ′ km/min, ν = +6190 m²/s: a smoother, with almost no advection (c_eff −0.076 km/min against the −0.28 measured for the cold pool).
 - **Pre-registered reading (5h): (a) fails** (data R² 0.11, bar 0.4): the constraint is cosmetic, the encoded z0 does not evolve by the law the propagator uses. **(b) fails** (displacement +37% / +32% against a 25% limit). (c): c1 = 0.0017 km/min per K is far below the density-current 0.0042-0.009 value and the FPe-U value; not interpretable. No second seed.
 - Reading: forcing channel 0 alone to be closed does not make the data's z0 closed; rollout training satisfies the constraint by smoothing channel 0 and moving the advection into other channels. Next: FPg (5i), where g acts on the 4 leading channels and is matched to the dense law by a loss rather than imposed on it.
+
+## FPg, weight 0.1: closed PDE head on the 4 leading channels (Saidie 9176/9177, report 9184; pre-registration 5i)
+`fpg_n4_w01_stagec` (n = 4, w = 0.1) against `fpc_nested_stagec`, test storms:
+| channel | closure R² (OLS on channels 0-3) | head vs F | head vs data | F vs data |
+|---|---|---|---|---|
+| 0 | 0.819 | 0.789 | 0.399 | 0.390 |
+| 1 | 0.890 | 0.878 | 0.264 | 0.317 |
+| 2 | 0.985 | 0.984 | −0.139 | −0.087 |
+| 3 | 0.996 | 0.995 | 0.308 | 0.330 |
+| mean | **0.922** (baseline 0.451) | | 0.208 | |
+- Cost: nmse_all 0.0300 (+4.5%); |disp| median 0.65 / 1.54 km at 30 / 60 min vs 0.59 / 1.12 (+10% / +37%).
+- **Pre-registered reading:** (a) **met**: mean closure 0.922 (≥ 0.70 and 0.47 above the baseline). (b) **not met**: the 60-min displacement error is 37% worse (limit 25%); nmse and the 30-min error are inside. (c) **not met**: head-vs-data R² averages 0.21 (bar 0.4); channel 0 reaches 0.399, channel 2 is negative.
+- Reading: the loss does make the leading channels closed (0.45 → 0.92) at a small reconstruction cost, but closure is a property of the propagator, not of the data. The dense law's own tendency on channels 0-3 explains the data's centred difference less well than before (channel 0: 0.48 → 0.39; channel 2: 0.53 → −0.09), so the model has become closed by moving away from the observed one-step change of some channels. A closed law for the model's leading channels exists; it is not yet a law for CM1's data.
+- Not adopted. Weight 1.0 (9178/9179) pending; no second seed (c fails).
