@@ -1041,3 +1041,30 @@ Persistence (decoded, first k channels) is 0.51-0.54. The full model's z0 is 0.0
 - **The KPZ-type term (∂x z0)² keeps its sign:** −0.046 one-step and −0.110 refit in pde+dd; −0.041 and −0.117 in pde4+dd (selected in 70% of bootstraps). The sign is stable across libraries and fits; the refit makes it 2.5× larger. `+cubic` adds nothing: z0² ∂x z0 is small (+0.01 → −0.001).
 - **Second order in time:** R² is higher (0.5-0.63 at k = 1) but one-step rollouts all explode, and only a few refits (thr 0.03) beat persistence (0.11-0.18). First order stays better.
 - **Pending:** 9108 (+mixed).
+
+## FPe-U: the channel-0 law in physical units (Saidie 9148; pre-registration 5f)
+**Gauge map** (30 training storms): θ′_sfc = 3.48 z0 − 1.55 K, r = +0.79 (slope bounds: OLS 2.76, inverse OLS 4.38 K per unit z0). θ′ has mean −2.15 K and sd 3.28 K.
+
+**Law** (one-step OLS, 4 terms), rewritten in K: ∂t θ′ = −c(θ′) ∂x θ′ + ν ∂²x θ′ + S.
+
+| | R² | c0 (km/min) | c1 (km/min per K) | ν (m²/s) | S (K/min) | c_eff at the front (km/min) |
+|---|---|---|---|---|---|---|
+| train (30 storms) | 0.19 | +0.202 | +0.0490 | −614 | −0.014 | −0.277 at θ′ = −9.8 K |
+| bootstrap 95% CI | | +0.168, +0.236 | +0.0462, +0.0517 | −671, −551 | | −0.313, −0.232 |
+| test (10 storms) | 0.21 | +0.173 | +0.0476 | −628 | −0.015 | −0.303 at θ′ = −10.0 K |
+
+- **What it says:**
+  - The front speed is linear in the cold-pool strength.
+  - The speed is zero at θ′ ≈ −4.1 K. Colder air moves toward −x, the storm's direction, and at the front's typical −10 K it moves at −0.28 to −0.30 km/min, the cold-pool centroid speed (FPe-S, −0.29).
+  - Ambient air (θ′ = 0) moves the other way, at +0.2 km/min.
+  - c1 is tight: CI ±6%, the test storms agree to 3%.
+- **ν is negative (−614 m²/s, CI excludes 0):** the one-step law is anti-diffusive. It sharpens the front, so as a PDE it is ill-posed.
+  - That explains why every unrefit closed rollout blew up.
+  - It also explains why the rollout refit adds large positive diffusion: it compensates.
+  - The earlier 7-term sparse fit had +0.018 on ∂²z0, but with z0 ∂²z0 also present; this 4-term fit has no such term.
+- **Pre-registered reading (5f): NOT met.**
+  - (i) c1 > 0 with CI excluding 0: yes. But c0 < 0 was required, and c0 = +0.20 (CI excludes 0), so (i) fails as written.
+  - (ii) Density-current scaling predicts d|c|/d|θ′| = |c|/(2|θ′|) = 0.014 km/min per K. The law's c1 is 0.049, 3.5× steeper, and 2.7-4.4× across the slope bounds: outside a factor 3. Fails.
+  - (iii) Test c1 inside the training CI: met.
+  - (iv) Seed-1 autoencoder: pending (9149-9150).
+- **Reading:** the coefficient is stable and has the physically expected sign of the cold-pool dependence (colder → faster toward the storm's direction). But its size is not √-scaling, and the zero crossing at −4 K means the linear form is an effective fit across the front, not density-current theory. R² 0.2: this is one fifth of channel 0's tendency.
