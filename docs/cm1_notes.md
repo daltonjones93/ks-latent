@@ -1348,3 +1348,22 @@ Question: can the propagator's missing perturbation growth (leading Lyapunov 0.0
 - **Prediction, stated before the run:** the training-storm growth loss falls by more than half; on the held-out storms it falls by less (I expect 20-50%) because four storms of one regime is little data; the anchor MSE rises by under 20%; the held-out leading Lyapunov at 15-30 min stays below 0.06 /min (the loss acts on finite decoded differences, the Lyapunov is a tangent-space quantity, and the autoencoder may not carry the growing modes); the response amplitude ratios (5k b) stay below 0.5.
 - **Reading:** growth counts as learned only if the held-out window growth loss falls by at least 50% AND the held-out leading Lyapunov at 15-30 min reaches 0.06 /min in both folds, with the anchor MSE up by less than 20%. A drop in window loss without the Lyapunov rising means the model learned the finite-size growth of CM1's own differences (a fit to the data) but not an unstable direction of its own dynamics. A held-out loss that does not fall means it is memorising the training storms.
 Exploratory: one model, four storms, two folds.
+
+### 5n result (2026-11-10, Cashew 760089/760090 training, 760121/760122 paired comparison; data `docs/fpe_report/data/{growth_train,paired_d34_growth}_f{1,2}.json`)
+Held-out storms only unless marked. Fold 1 trains on A029+B001 and tests on A030+B002; fold 2 the swap. 600 steps, propagator only.
+| | fold 1 (test A030, B002) | fold 2 (test A029, B001) |
+|---|---|---|
+| window growth loss, train storms | 1.17 → 0.011 | 0.92 → 0.017 |
+| window growth loss, held-out | 0.92 → 0.50 (−45%) | 1.17 → 0.65 (−44%) |
+| median log-growth slope per step, held-out (CM1 ~0.10) | 0.005 → 0.044 | −0.027 → −0.001 |
+| anchor MSE (decoded control rollout), held-out | 0.104 → 0.136 (+30%) | 0.128 → 0.158 (+23%) |
+| leading Lyapunov 15-30 min, held-out storms, before → after (/min) | A030 −0.010 → 0.060; B002 0.023 → 0.068 | A029 0.025 → 0.135; B001 −0.017 → −0.003 |
+| leading Lyapunov 15-30 min, train storms, after | A029 0.115, B001 0.107 | A030 0.004, B002 0.053 |
+| leading Lyapunov 0-15 min, all storms | −0.035…−0.043 → −0.023…−0.002 | same pattern |
+| response amplitude ratio at 15 min (median over cases) | 0.057-0.09 → 0.055-0.087 | 0.057-0.09 → 0.046-0.07 |
+| response pattern correlation at 15 min, held-out | A030 0.37 → 0.62; B002 0.54 → 0.62 | A029 0.28 → 0.37; B001 0.89 → 0.47 |
+- **Reading against the rule stated before the run:** growth counted as learned only with (i) held-out growth loss down by ≥50%, (ii) held-out Lyapunov at 15-30 min ≥0.06 in both folds, (iii) anchor up by <20%. (i) is not met (44-45%), (iii) is not met (23-30%), (ii) is met for 3 of 4 held-out storms (fold medians 0.064 and 0.066, but B001 stays at −0.003). So the pre-registered criterion is **not met**.
+- **What did move.** The leading exponent over 15-30 min rises on every held-out storm (by 0.05-0.11 /min), to 0.06-0.135 /min, the lower end of CM1's 0.12-0.25. The rise is concentrated in 15-30 min, which is where CM1's own growth is concentrated (CM1 rates: 0.06-0.15 at 5-15, 0.12-0.25 at 15-30, 0.03-0.09 at 30-60), so the model has picked up some of the timing of the growth, not a uniform exponent. Over 0-15 min the exponent is still negative.
+- **What did not.** Training-storm window loss falls to ~0.01, held-out only to ~0.5: the fit is mostly memorisation of two storms. The train-storm Lyapunov is not uniformly high either (A030 0.004 in fold 2). Response amplitude is unchanged (the autoencoder floor), and pattern correlation moves both ways (+0.25 on A030, −0.42 on B001). The control forecast gets worse on held-out storms by 23-30%.
+- **Prediction check:** held-out loss fell by 20-50% ✓ (44-45%); anchor up <20% ✗ (23-30%); held-out Lyapunov stayed below 0.06 ✗ (3 of 4 reached it, median over the four 0.064); amplitude ratios stayed below 0.5 ✓.
+**Reading.** A finite-size growth target can be partly trained into the propagator, and it appears as a larger tangent-space exponent on storms it never saw, so the earlier deficit is not forced by the autoencoder. But with four storms and 600 steps it costs forecast accuracy and does not transfer reliably (B001). Whether more storms would fix both is untested; the paired data cannot supply them, and each new storm needs the CM1 restart pair on the supercomputer. Exploratory: one model, four storms, one seed per fold.
