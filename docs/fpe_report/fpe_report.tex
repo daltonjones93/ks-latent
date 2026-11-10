@@ -146,12 +146,42 @@ The law says (Fig.~\ref{fig:fig_law_physical}a):
 \item \textbf{Is the $\theta'$ dependence density-current-like?} The rule required $c_0 < 0$, $c_1 > 0$ with a CI excluding zero, $c_1$ within a factor 3 of the density-current prediction $d|c|/d|\theta'| = |c|/(2|\theta'|) = 0.014$\,km\,min$^{-1}$\,K$^{-1}$, the test value inside the training CI, and agreement for an independently trained autoencoder. The sign of $c_1$, the test agreement and the seed-1 agreement (same signs, $c_1$ within a factor 2) are met; but $c_0$ is positive (ambient air moves the other way), and $c_1$ is 3.5$\times$ the density-current value (2.7--4.4$\times$ over the bounds on $s$; 3.3$\times$ for seed 1). \textbf{Not met.}
 \end{enumerate}
 
+\subsection{Mixed-derivative (BBM-type) laws}\label{sec:mixed}
+Allowing products of time and space derivatives, $(1 - \ell^2\partial_x^2)\,\partial_t z = F(z)$, with $\ell^2 \in \{0.1, 0.3, 1\}$\,sites$^2$ fixed in the sparse fit, two libraries, two thresholds and $k = 1, 2, 4$ (all 36 fits) plus one fit at $k = 8$ (the remaining $k=8$ fits did not finish within the job's time limit). Three results (Fig.~\ref{fig:fig_mixed}).
+\begin{itemize}
+\item \textbf{The one-step law is not a good simulator; the rollout refit is.} Closed 30-minute rollouts of the one-step laws beat persistence in only 5 of the 37 fits; after refitting the coefficients to closed rollouts, 35 of 37 do (the exceptions: one fit above persistence, one blow-up), with a $z_0$ error of 0.067--0.18 against 0.196 for persistence.
+\item \textbf{No systematic gain over the ordinary PDE libraries.} The ordinary libraries reach 0.076--0.19 after the same refit for $k \le 4$. The mixed operator does stabilise one case: the four-derivative library at $k = 4$, threshold 0.03, blows up without it and gives 0.067--0.087 with it.
+\item \textbf{$\ell^2$ is a fitting knob, not a length scale.} After the refit, channel~0's $\ell^2$ is 0.51\,sites$^2$ at the median (range 0.08--3.6, i.e.\ $\ell \approx 1.4$\,km), is within a factor 2 of its starting value in only 40\% of the fits, is uncorrelated with it ($r = 0.2$ on the logarithms) and with rollout skill ($r = 0.09$). (Only channel~0's $\ell^2$ was stored; the choice of $\ell^2$ is also scored on test storms, so it is exploratory.)
+\end{itemize}
+\fig{fig_mixed}{Mixed-derivative laws. (a) Channel~0's $\ell^2$ after the rollout refit against the value fixed in the sparse fit; dotted line: unchanged. (b) $z_0$ error of closed 30-minute rollouts after the refit against the number of channels in the law (dashed: persistence; cross: a blown-up fit).}
+
+\section{Learning the law together with the propagator}\label{sec:joint}
+The trained propagator is itself an explicit PDE, but a dense one. Three ways of getting a short law out of it were tried; the decision rules were fixed before each run.
+
+\paragraph{Distilling a law from the propagator.} Fitting the four-term channel-0 law to the propagator's own tendency (exact in time, no finite differences) gives held-out $R^2 = 0.19$, the same as against the data (0.21), and 0.26 on states perturbed off the data: the short law's ceiling is not noise but closure. The propagator's channel-0 terms in $z_0$ alone explain $R^2 = 0.002$ of its channel-0 tendency; channel~0's evolution runs through coupling to other channels. The advection slope is the same as from the data ($c_1 = +0.049$\,km\,min$^{-1}$\,K$^{-1}$, bootstrap 95\% interval 0.047--0.052), but the sign of $\nu$ flips: $+2900$\,m$^2$\,s$^{-1}$ from the propagator against $-614$ from the data, so the anti-diffusion of Section~\ref{sec:units} comes from the finite-difference target.
+
+\paragraph{Forcing channel~0 to be closed.} Restricting channel~0's row of the propagator to a short law in $z_0$ alone, trained jointly with a free encoder, gives a law the data do not follow (data $R^2$ 0.11, against 0.19 before), because rollout training satisfies the constraint by smoothing channel~0 ($\nu \approx 6000$\,m$^2$\,s$^{-1}$) and moving the advection into the other channels; forecast displacement error is 32--37\% worse. Not met.
+
+\paragraph{A closed PDE for the four leading channels, with a representation loss.} A separate PDE $g$ on channels $0$--$3$ is trained jointly with the dense propagator $F$ by adding $w\,\|F_{<4} - g\|^2 / \|F_{<4}\|^2$ to the Stage B and C losses; the autoencoder is free in Stage C. Without the loss, a four-channel library already explains 45\% of $F_{<4}$ on held-out storms (channel~0 alone: 19\%). With it:
+\begin{itemize}
+\item closure rises to 0.92 ($w = 0.1$) and 0.999 ($w = 1$) (Fig.~\ref{fig:fig_closure}, left);
+\item but $F$'s agreement with the data's one-step change falls (channel~0: 0.48 to 0.39 and $-0.21$; channel~2: 0.53 to $-0.09$ and $-0.14$), and the 60-minute displacement error rises by 37\% and 58\% (limit 25\%);
+\item the data-fidelity rule (head against data $\ge 0.4$) fails at both weights (mean 0.21 and $-0.22$).
+\end{itemize}
+Closure is therefore bought partly by detaching the model from what the data do: a closed four-channel law for the \emph{model's} leading channels exists, but it is not yet a law for CM1.
+\fig{fig_closure}{Closure against fidelity for the dense propagator without the loss and with it ($w = 0.1, 1$), test storms. Left: held-out $R^2$ of each leading channel's tendency on a library of channels 0--3 only. Middle: held-out $R^2$ of the propagator's tendency against the data's one-step change. Right: 60-minute displacement error against mean closure; dotted: the pre-registered limit.}
+
+\paragraph{What the leading channels carry.} The correlation of $z_0, \dots, z_3$ with site means of physical fields (Fig.~\ref{fig:fig_channels}) identifies $z_0$ as a cold-pool/precipitation-core amplitude (surface $\theta'$ $+0.82$, condensate $-0.83$, updraft $-0.69$), $z_1$ as a surface-outflow pattern ($\theta'$ $-0.51$, $u'_\mathrm{sfc}$ $-0.50$), and $z_3$ as a $\theta'$--$q_v$ pattern; they are partly mixed, so these are labels, not definitions. In the learned four-channel PDE ($w = 0.1$) channel~0's tendency is mostly diffusion and advection of $z_0$ together with advective coupling to $z_1$ and $z_2$ ($z_1\dx z_2$, $z_0\dx z_2$, $z_0\dx z_1$); the $z_0$-only terms explain only 9.5\% of it. The $\theta'$ dependence of the speed read from the $z_0$-only terms is not stable: $c_1 = +0.007$ at $w = 0.1$, $-0.005$ at $w = 1$.
+\fig[0.8\textwidth]{fig_channels}{Correlation of each leading channel with site means of physical fields over the training storms (the four-channel model with $w = 0.1$; $w = 1$ agrees to $\pm 0.04$).}
+
 \section{Summary}
 \begin{itemize}
 \item A local latent field (32 channels per 2\,km site) with storm-centred training emulates CM1 squall lines; its own dynamics is an explicit, but dense, 32-channel PDE.
 \item Nested dropout gives an importance-ordered latent at no cost in accuracy. Its channel~0 alone carries 70\% of the column variance and is a cold-pool/convection coordinate; without the ordering no channel has a physical meaning.
-\item The leading channel's evolution is transport. In physical units its shortest law is an advection with a speed linear in the cold-pool deficit, a reproducible slope, the right mean front speed, and anti-diffusion.
+\item The leading channel's evolution is transport. In physical units its shortest law is an advection with a speed linear in the cold-pool deficit, a reproducible slope, the right mean front speed, and a negative diffusion that comes from the finite-difference target (fitted to the propagator it is positive).
 \item The coefficients do not pass the stricter physical tests: they do not track storm-to-storm speed differences, and the $\theta'$ dependence is not density-current scaling. The law is an effective, gauge-fixed description of how the latent front moves, not a recovered physical equation.
+\item Fitting the law to the trained propagator instead of the data gives the same advection slope, a positive diffusion, and no better fit: the short law's limit is closure, not noise. A four-channel law is much more closed (0.45), and a representation loss pushes closure to 0.92--0.999, but at the cost of fidelity to the data and of forecast skill; no law that is both closed and faithful has been found.
+\item Mixed-derivative laws improve closed rollouts only after a rollout refit and add no systematic gain; their length scale $\ell^2$ is a fitting knob.
 \end{itemize}
 
 \end{document}
