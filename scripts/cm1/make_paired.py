@@ -30,7 +30,7 @@ def set_nl(text, key, val):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", required=True); ap.add_argument("--cache", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--detector", default="edge1"); ap.add_argument("--offsets-km", default="-20,-10,0,10")
+    ap.add_argument("--detector", default="min"); ap.add_argument("--offsets-km", default="-20,-10,0,10")
     ap.add_argument("--amp", type=float, default=0.5); ap.add_argument("--small-amp", type=float, default=0.05)
     a = ap.parse_args()
     base, out = Path(a.base).expanduser(), Path(a.out).expanduser()
@@ -59,7 +59,10 @@ def main():
             for g in bd.iterdir():
                 if g.name.startswith("cm1out") or g.name in ("cm1.done", "cm1.log", "cm1_config.txt", "cm1.queued", "cm1.failed"):
                     continue
-                shutil.copy2(g, D / g.name)
+                if g.stat().st_size > 20_000_000:        # big static tables (P3, RRTMG, ...): link, don't copy
+                    (D / g.name).symlink_to(g.resolve())
+                else:
+                    shutil.copy2(g, D / g.name)
             s = (D / "namelist.input").read_text()
             for k, v in (("irst", 1), ("rstnum", 1), ("timax", 10800.0), ("rstfrq", -900.0), ("tapfrq", 60.0)):
                 s = set_nl(s, k, v)

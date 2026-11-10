@@ -29,6 +29,8 @@ def site_theta(m, t, lev=0):
 def detect(th, kind, halo=6):
     P = th.shape[0]
     lo, hi = halo, P - halo
+    if kind == "min":                        # cold-pool core: the deepest site-mean theta' (calibration fallback, 5k)
+        return int(np.argmin(np.where((np.arange(P) >= lo) & (np.arange(P) < hi), th, np.inf)))
     if kind == "grad":
         g = np.abs(np.gradient(th)); g[:lo] = 0; g[hi:] = 0
         return int(np.argmax(g))
