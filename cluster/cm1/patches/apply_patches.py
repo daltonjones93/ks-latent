@@ -23,6 +23,10 @@ two_storms_var2 (init3d.F, iinit = 8 only): two squall lines in one domain.
   independent draws. CM1 stops if the thermals overlap (|var2| < 2*bhrad) or leave the domain.
   var2 = 0 leaves CM1 bit-for-bit unchanged (the bubble code path and the random stream are untouched).
 
+bump_restart_var5 (cm1.F, restarts only): non-zero var5 adds a Gaussian theta' bump (amplitude var5 K, centre cell var6,
+  sigma var10 m, lowest nint(var11) levels with linear taper) right after a restart is read, for paired runs. var5 = 0 leaves
+  CM1 bit-for-bit unchanged.
+
 tiny_pert_var3 (init3d.F, any iinit): a tiny extra theta perturbation for twin runs (error growth).
   With var3 non-zero, a field uniform in [-var3, var3] K is added to the initial theta perturbation tha
   at every grid point of the domain (k = 1..nk, all heights, like irandp's +-0.25 K noise). It is added
@@ -142,10 +146,75 @@ TINY_PATCH = f"""      {TINY_MARK}: non-zero var3 adds a tiny theta field, unifo
 
 """ + TINY_ANCHOR
 
+
+# --- bump_restart_var5 -------------------------------------------------------------------------------
+# A Gaussian theta' bump (var5) and/or a tiny hashed theta field (var3) added right after a restart is read (paired runs: same restart, with and without a
+# bump). tha is CM1's theta perturbation; the weight is 1 - (k-1)/nlev on the lowest nlev levels (k = 1 lowest).
+BUMP_MARK = "! latent_DA patch bump_restart_var5"
+BUMP_ANCHOR = "        if(dowr) write(outfile,*) '  Using the following: '\n"
+BUMP_PATCH = f"""        {BUMP_MARK}: on a restart, non-zero var5 adds var5 K * (1-(k-1)/nlev) *
+        ! exp(-0.5 ((cell-var6)*dx/var10)**2) to theta' on levels k = 1..nlev, nlev = nint(var11);
+        ! var6 = centre in 0-based cell index, var10 = sigma (m). var5 = 0: unchanged CM1.
+        IF( irst.eq.1 .and. var5.ne.0.0 )THEN
+          BLOCK
+            integer :: ib2,jb2,kb2,nl2,ig2
+            real :: wz2,wx2
+            nl2 = max(1,nint(var11))
+            do kb2=1,min(nl2,nk)
+              wz2 = 1.0 - real(kb2-1)/real(nl2)
+              do jb2=jb,je
+              do ib2=ib,ie
+                ig2 = ib2 + myi1 - 1
+                wx2 = exp( -0.5*( (real(ig2-1)-var6)*dx/var10 )**2 )
+                tha(ib2,jb2,kb2) = tha(ib2,jb2,kb2) + var5*wz2*wx2
+              enddo
+              enddo
+            enddo
+          END BLOCK
+          if(dowr) write(outfile,*) '  latent_DA: bump added after restart: amp,cell,sigma(m),nlev = ',var5,var6,var10,var11
+        ENDIF
+        ! tiny field after a restart (same hash as tiny_pert_var3): non-zero var3 adds a uniform [-var3,var3] K field to
+        ! theta' at every point (var4 = seed, 0: default), for finite-size error growth from a mature storm
+        IF( irst.eq.1 .and. var3.ne.0.0 )THEN
+          BLOCK
+            integer(8) :: hsh2,hkey2(4)
+            integer :: ip2,jp2,kp2,ig3,jg3,m2
+            hkey2(1) = 1013904223_8
+            if( nint(var4).ne.0 ) hkey2(1) = int(nint(var4),8)
+            do kp2=1,nk
+            do jp2=jb,je
+            do ip2=ib,ie
+              ig3 = ip2 + myi1 - 1
+              jg3 = jp2 + myj1 - 1
+              IF( ig3.ge.1 .and. ig3.le.nx .and. jg3.ge.1 .and. jg3.le.ny )THEN
+                hkey2(2) = int(ig3,8)
+                hkey2(3) = int(jg3,8)
+                hkey2(4) = int(kp2,8)
+                hsh2 = 0_8
+                do m2=1,4
+                  hsh2 = iand( ieor(hsh2,hkey2(m2)), 4294967295_8 )
+                  hsh2 = ieor( hsh2, ishft(hsh2,-16) )
+                  hsh2 = iand( hsh2*13613_8 + ishft(iand(hsh2*32747_8,65535_8),16), 4294967295_8 )
+                  hsh2 = ieor( hsh2, ishft(hsh2,-15) )
+                  hsh2 = iand( hsh2*42635_8 + ishft(iand(hsh2*33900_8,65535_8),16), 4294967295_8 )
+                  hsh2 = ieor( hsh2, ishft(hsh2,-16) )
+                enddo
+                tha(ip2,jp2,kp2) = tha(ip2,jp2,kp2)    &
+                    + var3*real( 2.0d0*(dble(hsh2)+0.5d0)/4294967296.0d0 - 1.0d0 )
+              ENDIF
+            enddo
+            enddo
+            enddo
+          END BLOCK
+          if(dowr) write(outfile,*) '  latent_DA: tiny perturbation added after restart, amplitude ', var3, ' seed ', var4
+        ENDIF
+""" + BUMP_ANCHOR
+
 PATCHES = [  # (name, file, marker, anchor, replacement)
     ("seed_var1", "init3d.F", SEED_MARK, SEED_ANCHOR, SEED_PATCH),
     ("two_storms_var2", "init3d.F", STORM_MARK, STORM_ANCHOR, STORM_PATCH),
     ("tiny_pert_var3", "init3d.F", TINY_MARK, TINY_ANCHOR, TINY_PATCH),
+    ("bump_restart_var5", "cm1.F", BUMP_MARK, BUMP_ANCHOR, BUMP_PATCH),
 ]
 
 
