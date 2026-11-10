@@ -1208,3 +1208,16 @@ Complete for k = 1, 2, 4 (36 fits), one k = 8 fit; the remaining k = 8 fits (abo
 - **Refit ℓ² (channel 0 only; other channels' ℓ² were not saved):** median 0.51 sites² (ℓ ≈ 1.4 km), IQR 0.19-0.82, range 0.08-3.6 over 35 fits; within a factor 2 of the starting value in 40%; correlation with the start 0.20 (logs), with refit skill 0.09. **Pre-registered reading (5d): ℓ² is a stability / fitting knob, not a physical scale.** The choice of ℓ² is scored on test storms, so exploratory.
 - Terms most often among the top 6 of channel 0's refit law (35 fits): d2tz0 (33), z0 ∂x z0 (18), z0 ∂²x z0 (15), z1 ∂²x z1 (15), ∂x z0 (13), ∂²x z0 (11).
 - Data copied to the Mac: only the small result JSONs (`docs/fpe_report/data/`); figures from `scripts/cm1/fpg_report_figs.py`.
+
+### FPe control (2026-11-10): the channel-0 library fitted directly to site-mean surface θ′
+Rule stated before the run: the latent adds nothing if its c1 lies inside the θ′ fit's bootstrap 95% CI and the R² values are within ~0.05; it differs if c1 lies outside the CI or its R² is clearly higher. `scripts/cm1/law_theta_control.py` (Saidie job 9217, CPU, 236 s): same storms, frames, interior sites, centred-difference target, library [1, ∂x θ′, θ′∂x θ′, ∂²x θ′], 1000-storm bootstrap.
+
+| | R² train / test | c0 | c1 (km/min per K) | ν (m²/s) | c_eff (km/min) |
+|---|---|---|---|---|---|
+| θ′ directly | 0.26 / 0.28 | +0.065 (CI 0.029, 0.104) | +0.103 (CI 0.096, 0.110) | −2344 (CI −2574, −2140) | −0.41 (CI −0.45, −0.37) |
+| latent channel 0 (FPe-U) | 0.19 / 0.21 | +0.202 | +0.049 (CI 0.046, 0.052) | −614 | −0.277 |
+
+- **Verdict by the rule: the latent differs.** Same signs and form (c1 > 0, anti-diffusive one-step ν), but c1 is 2.1× larger on θ′ directly, the CIs are far apart, and θ′ R² is higher (0.26 vs 0.19).
+- **Not a statement about which is right.** The θ′ c_eff (−0.41) overshoots the measured cold-pool centroid speed (−0.29, FPe-S); the latent's (−0.277) matches it. z0 carries only r² ≈ 0.65 of θ′, so errors-in-variables and the latent's smoothing both bias the latent's c1 low; I have not separated these.
+- **Consequence:** c1 = +0.049 is a property of the latent coordinate expressed in θ′ units, not of θ′. The only claim the control supports is that the qualitative form (speed increasing with cold-pool strength) appears in both.
+- Exploratory: one autoencoder, one seed.
