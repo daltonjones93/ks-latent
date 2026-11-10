@@ -1221,3 +1221,31 @@ Rule stated before the run: the latent adds nothing if its c1 lies inside the θ
 - **Not a statement about which is right.** The θ′ c_eff (−0.41) overshoots the measured cold-pool centroid speed (−0.29, FPe-S); the latent's (−0.277) matches it. z0 carries only r² ≈ 0.65 of θ′, so errors-in-variables and the latent's smoothing both bias the latent's c1 low; I have not separated these.
 - **Consequence:** c1 = +0.049 is a property of the latent coordinate expressed in θ′ units, not of θ′. The only claim the control supports is that the qualitative form (speed increasing with cold-pool strength) appears in both.
 - Exploratory: one autoencoder, one seed.
+
+## Interpreting the propagator through what it does to physical fields (2026-11-10)
+Why: term-level PDE fitting has reached its ceiling. Channel 0's own terms explain 0.002 of its propagator tendency (closure-limited), and the θ′ control shows the channel-0 coefficients belong to the latent coordinate, not to θ′. The physics is in the coupling between channels, so the interpretation has to be done on the propagator's action in physical space, which is gauge-free (decode ∘ propagate ∘ encode). Five analyses, in order of priority:
+1. **Physical response function (Green's function).** Perturb a real state by a small physical θ′ bump, encode, roll the propagator, decode, subtract the unperturbed rollout. Gives spreading speed, amplification, decay and linearity as a function of distance and lag, and of where the bump sits relative to the gust front. Truth side: the data's front speed and ambient advection; paired CM1 perturbation runs would be the real truth and are not available yet.
+2. **Linearisation and modes.** Jacobian of the one-step latent map at a storm state; eigenvalues in physical units (growth rate, frequency), eigenvectors decoded to θ′, phase speed ω/k. Truth side: DMD of the encoded data over the same window, compared in the data's POD subspace.
+3. **Jacobian Lyapunov spectrum against ensemble spread.** The propagator's exponents are gauge-invariant; compare with how fast the truth ensemble members diverge (ens_A and ens_A2: same environment, different noise).
+4. **Adjoint sensitivity.** Gradient of a physical outcome (storm speed, front position at +30 min) with respect to the initial physical field through the decoder; check against squall-line theory (RKW balance).
+5. **Channel clamping.** Hold channel k fixed during a rollout and decode, to see which physical fields lose their dynamics; the physical counterpart of the dropout ordering.
+Status: 1 and 2 are run now (`scripts/cm1/prop_response.py`, pre-registered below); 3-5 queued.
+
+### G0 addendum 5j (2026-11-10, before the run): propagator response function and linearisation
+Model `fpc_nested_stagec`; the 10 test storms; base frames t0 ∈ {120, 180, 240} (mature line). A case is used only if the surface θ′ minimum is below −2 K (a cold pool exists) and the perturbation sits clear of the halo.
+**Experiment 1.**
+- Perturbation: Gaussian bump of σ = 2 km in θ′ over the lowest 6 levels with linear taper, amplitudes ±0.5 K and ±0.1 K, at offsets {−40, −20, −10, −4, 0, +4, +10, +20, +40} km from the gust front x_f (steepest |∂x θ′_sfc| of the truth; negative offset = ahead, since the storm moves toward −x). The bump amplitude is in K at the surface level; the 6-level taper is my choice and is not tuned.
+- Response R(x, k) = site-mean surface θ′ of the perturbed minus the unperturbed rollout (halo held at the true state in both), lags k up to 60 min. Lag 0 is the autoencoder's own round trip, so gain G(k) = ‖R(k)‖/‖R(0)‖ uses the decoded lag-0 difference, not the input amplitude.
+- Metrics: response centroid velocity (linear fit of the |R|-weighted centroid over k = 5-30 min), gain, linearity L = ‖R₊ + R₋‖/‖R₊ − R₋‖ at k = 15, and amplitude scaling S = (‖R(0.5)‖/0.5)/(‖R(0.1)‖/0.1) at k = 15.
+- Truth reference: the data's front speed v_f (linear fit of the steepest-gradient position over t0..t0+30 min).
+- **Pre-registered readings:**
+  - (a) At the front (offset 0), the response centroid velocity is within 30% of v_f in at least 70% of cases. Met means the propagator moves a front perturbation with the front.
+  - (b) Linear: median L < 0.3 and median S in 0.7-1.4.
+  - (c) Reported without a pass mark, since no paired truth exists: gain G(k), response speed ahead of and behind the front, and spreading width. Paired CM1 runs (same member, one bump) on Cashew would be the truth for these; they are not run here.
+  - Failing (a): the propagator does not carry front perturbations with the front, whatever its forecast skill.
+**Experiment 2.**
+- Jacobian J of the one-step latent map over the interior sites (halo fixed at truth) at z(t0), same storms and frames; eigenvalues λ → growth rate σ = ln|λ|/Δt and frequency ω = arg λ/Δt per minute; top-10 modes by σ decoded to θ′ (small-amplitude difference), dominant wavenumber by FFT, phase speed |ω|/(2π k), localisation by participation ratio.
+- Truth: exact DMD of the encoded data over [t0, t0+30 min], POD rank r = 8; the tangent operator is projected onto the same POD basis, Ĵ = ΦᵀJΦ, and the 4 leading DMD eigenvalues (by mode amplitude) are matched to the nearest Ĵ eigenvalue.
+- **Pre-registered reading:** matched with |Δσ| < 0.05 /min and |Δω| < 0.05 rad/min for at least 70% of the leading modes, and a median match distance |λ_J − λ_DMD| below 0.5 × the distance of the persistence null (λ = 1). Met means the propagator's linearisation reproduces the data's slow linear dynamics in its dominant subspace.
+- **Limit I know about in advance:** DMD describes the trajectory, J the tangent map; they coincide only for the slowly translating part of the flow. Failure therefore does not show that the dynamics are wrong; success shows the translation/slow-decay structure is right. Also reported with no pass mark: number of unstable eigenvalues, maximum growth rate, e-folding time.
+Exploratory: one autoencoder and propagator, one seed; test storms only.
