@@ -1320,3 +1320,23 @@ Same paired storms, same scripts (5k `paired_compare.py`, 5l `prop_sensitivity.p
 - **Prediction, stated before the run:** the lag-0 retention rises (from ~0.05) but stays well below 0.5; the response amplitude ratio at 15 min stays below 0.5 in most cases (so (b) still not met); the leading Lyapunov exponent at 15-30 min stays within the same order as before (0.01-0.04 /min, not within a factor 2 of CM1's 0.12-0.25); pattern correlation (a) stays about 0.5.
 - **Reading:** a change counts only if the median retention at least doubles AND the response/sensitivity ratios scale with it (ratio per unit retention within 30% of the 16-channel model's). Otherwise the amplitude shortfall is not a channel-count effect. Growth counts as changed only if the 15-30 min Lyapunov median reaches 0.06 /min (half CM1's lowest).
 Exploratory: one more model, same four storms.
+
+### 5m result (2026-11-10, Cashew 760009 / 760010, `d34_c32_kuniform` against `ens_A_cpu_k45`; data `docs/fpe_report/data/{paired,sens}_d34.json`)
+| | 16 channels (k45) | 32 channels (d34) |
+|---|---|---|
+| lag-0 retention of the bump (median) | 0.047 | **0.184** (3.9×) |
+| response amplitude ratio at 15 min (5k b) | 0.053, none in [0.5, 2] | 0.089, none in [0.5, 2] |
+| response ratio per unit retention | 0.68 | 0.54 (−21%) |
+| pattern correlation at 15 min (5k a) | 0.52 | 0.46 |
+| median \|Δ centroid speed\| (5k c) | 0.28 km/min | 0.23 |
+| leading Lyapunov, 15-30 min (median; per storm) | 0.015 (0.040, 0.015, 0.010, 0.016) | **0.006** (0.025, −0.010, −0.017, 0.023) /min |
+| sensitivity O1: sign agreement / ratio (in [0.5, 2]) | 0.92 / 0.050 (0 of 13) | 0.85 / 0.195 (2 of 13) |
+| sensitivity O1 ratio per unit retention | 1.07 | 1.06 |
+| sensitivity O2: sign / ratio | 1.00 / 0.037 | 0.93 / 0.066 |
+| sensitivity O2 ratio per unit retention | 0.79 | 0.36 |
+| model control centroid vs CM1 (km) | within 1.3 | within 6.7 (storm memB001: 129.7 against 123.0) |
+- **Reading under 5m.** Retention rose 3.9× (the "at least doubles" condition is met). The ratios scale with it for the response amplitude (per-retention −21%, inside 30%) and the O1 sensitivity (1.07 vs 1.06) but not for the O2 sensitivity (0.79 → 0.36). So most of the amplitude shortfall behaves like an autoencoder floor: with the retained amplitude as the unit, the propagator transmits about 0.5-1 of it in both models. But even at retention 0.18 the absolute ratios stay below 0.2, so (b) is still not met by either model.
+- **Growth: not changed.** The 15-30 min Lyapunov median is 0.006 /min, far below the 0.06 mark (CM1 0.12-0.25); two of four storms are negative. The deficit is not a channel-count effect. The model's own tiny-field growth was 0.056 and 0.035 in two storms and ~0 in the others, a different measure that I do not read as growth.
+- **The sign structure of the sensitivity is not stable across models.** S_O1 at the +10 km position is negative in all 4 storms for the 16-channel model and positive in all 4 for the 32-channel one; at the core it is mixed in both; at −20 and −10 km it is positive in both, and larger (0.03-0.22 vs 0.005-0.056 km/K) for 32 channels. The maximum |S_O1| is still 46-68 km ahead of the cold-pool minimum. Pattern correlation falls from 0.52 to 0.46, so (a) is no longer met.
+- **Prediction check (stated before the run):** retention rose but stayed below 0.5 ✓; response ratio stayed below 0.5 ✓; Lyapunov stayed in the same order ✓; pattern correlation stayed near 0.5 ✓ (0.46, slightly lower).
+**Reading.** The amplitude gap is largely the autoencoder, and wider latents shrink it only in proportion; the growth gap and the unstable sign structure are properties of the dynamics models, not of the bottleneck. Exploratory: two models, four storms.
