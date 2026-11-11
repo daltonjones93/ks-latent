@@ -63,6 +63,7 @@ class ColumnAEConfig:
     env_raw_dim: int = 0        # > 0: environment features per member (env.py, 3*Z) given to the encoder (D11)
     env_dim: int = 16           # their learned projection, broadcast along x as extra input channels
     kind: str = "conv"          # "conv": ColumnFieldAE; "pca": PCAColumnAE (fixed linear baseline, I-PCA)
+    prefix_m: int = 0           # > 0: latent channels >= prefix_m are a constant (`prefix_fill`): a pruned latent (5s)
 
     @property
     def reach_sites(self) -> int:
@@ -117,8 +118,22 @@ class ColumnFieldAE(nn.Module):
         if pm.shape != (C,):
             raise ValueError(f"positive_mask shape {tuple(pm.shape)} != ({C},)")
         self.register_buffer("positive_mask", pm)
+        if cfg.prefix_m:
+            self.register_buffer("prefix_fill", torch.zeros(c))
+
+    def set_prefix(self, m: int, fill: torch.Tensor) -> None:
+        """Prune the latent to its first `m` channels; the others become the constant `fill` (c,)."""
+        self.cfg.prefix_m = m
+        self.register_buffer("prefix_fill", fill.detach().clone().to(self.positive_mask.device, torch.float32))
 
     def encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
+        z = self._encode(u, env)
+        if self.cfg.prefix_m:
+            m = self.cfg.prefix_m
+            z = torch.cat([z[..., :m], self.prefix_fill[m:].expand(*z.shape[:-1], -1)], -1)
+        return z
+
+    def _encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
         """`env` (B, env_raw_dim): required when the model is environment-conditioned (D11)."""
         if (env is None) != (self.env_proj is None):
             raise ValueError("pass env exactly when the autoencoder is environment-conditioned")
@@ -249,6 +264,8 @@ def build_autoencoder(cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = 
     if cfg.kind == "conv":
         return ColumnFieldAE(cfg, positive_mask)
     if cfg.kind == "pca":
+        if cfg.prefix_m:
+            raise ValueError("prefix_m is not supported for the PCA autoencoder")
         return PCAColumnAE(cfg, positive_mask)
     raise ValueError(f"unknown autoencoder kind {cfg.kind!r}")
 
@@ -286,6 +303,7 @@ class StencilPropConfig:
     # leading-channel tendency toward closure in the leading channels. 0 = off.
     law_head_n: int = 0
     law_head_weight: float = 0.0
+    prefix_m: int = 0                 # > 0: channels >= prefix_m are a constant (`prefix_fill`) in input and output (5s)
 
     @property
     def reach_sites(self) -> int:
@@ -550,6 +568,8 @@ class StencilPropagator(nn.Module):
             raise ValueError("n_hist >= 1 and noise_channels >= 0 required")
         self.cfg = cfg
         c, H, r = cfg.latent_channels, cfg.hidden, cfg.radius
+        if cfg.prefix_m:
+            self.register_buffer("prefix_fill", torch.zeros(c))
         n_in = c * cfg.n_hist + cfg.noise_channels
         if cfg.body == "conv":
             dims = [n_in] + [H] * (cfg.layers - 1)
@@ -579,8 +599,21 @@ class StencilPropagator(nn.Module):
             return self.law.penalty(self.cfg.law_l1, self.cfg.law_res_weight, self.cfg.law_head_weight)
         return next(self.parameters()).new_zeros(())
 
+    def set_prefix(self, m: int, fill: torch.Tensor) -> None:
+        self.cfg.prefix_m = m
+        self.register_buffer("prefix_fill", fill.detach().clone().to(next(self.parameters()).device, torch.float32))
+
     def forward(self, z: torch.Tensor, eps: torch.Tensor | None = None,
                 gen: torch.Generator | None = None) -> torch.Tensor:
+        m = self.cfg.prefix_m
+        if not m:
+            return self._forward(z, eps, gen)
+        z = torch.cat([z[..., :m], self.prefix_fill[m:].expand(*z.shape[:-1], -1)], -1)       # the dropped channels are the fill
+        out = self._forward(z, eps, gen)
+        return torch.cat([out[..., :m], self.prefix_fill[m:].expand(*out.shape[:-1], -1)], -1)
+
+    def _forward(self, z: torch.Tensor, eps: torch.Tensor | None = None,
+                 gen: torch.Generator | None = None) -> torch.Tensor:
         if self.cfg.body == "law":
             return self.law(z[:, -1] if z.dim() == 4 else z)
         if self.cfg.n_hist == 1:

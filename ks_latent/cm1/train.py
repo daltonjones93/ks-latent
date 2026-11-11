@@ -473,6 +473,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         u0 = u[:, Hh - 1]
         l_rec = F.mse_loss(_interior(ae.decode(nested_truncate(z[:, Hh - 1], cfg.nested_frac, g)), m), _interior(u0, m))
         zs = _interior(z[:, Hh - 1], m_sites, dim=1).reshape(-1, z.shape[-1])
+        if ae.cfg.prefix_m:
+            zs = zs[:, :ae.cfg.prefix_m]                                          # the pruned (constant) channels carry no variance
         _, l_var = decorr_var_loss(zs)
         l_ld = logdet_barrier_loss(zs, eps=cfg.logdet_eps)
         loss = l_roll + cfg.w_rec * l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld + _penalty(prop)

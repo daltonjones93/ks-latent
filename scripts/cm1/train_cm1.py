@@ -319,6 +319,8 @@ def main():
     ap.add_argument("--c-law-prune-every", type=int, default=0, help="FPd: sequential thresholding period (steps)")
     ap.add_argument("--c-law-prune-rel", type=float, default=0.02,
                     help="FPd: prune terms below this fraction of the largest coupling")
+    ap.add_argument("--prefix-m", type=int, default=0,
+                    help="5s: with --init-from and Stage C, prune the latent to its first M channels (the others become their training mean)")
     ap.add_argument("--c-freeze-ae", action="store_true", help="Stage C updates the propagator only (M3: shared latent)")
     ap.add_argument("--c-site-smooth", type=float, default=0.0,
                     help="FPd: weight of the latent's second difference over sites (physical space, not channel index)")
@@ -464,6 +466,15 @@ def main():
         ra = json.loads((src / "history_a.json").read_text())
         rb = json.loads((src / "history_b.json").read_text())
         log(f"[cm1] loaded ae.pt and prop.pt from {src}")
+        if a.prefix_m:
+            if not a.init_from or cfg.ae.prefix_m:
+                raise ValueError("--prefix-m needs --init-from an unpruned run")
+            zt = torch.cat([x[60:].reshape(-1, x.shape[-1]) for x in encode_members(ae, data["train"])])
+            fill = zt.mean(0).cpu()
+            ae.set_prefix(a.prefix_m, fill); prop.set_prefix(a.prefix_m, fill)
+            ae.to(dev); prop.to(dev)
+            (out / "config.json").write_text(json.dumps(dataclasses.asdict(cfg), indent=1))
+            log(f"[cm1] 5s: latent pruned to the first {a.prefix_m} of {fill.numel()} channels; the rest fixed at their training mean")
         if a.init_from and a.stage_c_steps:
             from ks_latent.cm1.train import StageCConfig, train_stage_c
             sc = StageCConfig(window_sites=max(cfg.stage_b.window_sites, 4 * cfg.stage_b.halo_sites + 8),
