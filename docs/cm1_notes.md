@@ -1443,3 +1443,18 @@ Caveats: the pruned runs get 8000 extra Stage C steps the unpruned model did not
 (b) Distill then fine-tune (`fpc_nested_p{4,8,12,16}_dft`): prune to m (as 5s), 4000 Stage C steps whose targets are the UNPRUNED model's outputs (its decoded forced-halo rollout from the same true windows, and its reconstruction of the first frame; autoencoder and propagator trained), then the same 8000 CM1 Stage C steps as 5s `full`. The checkpoint after the distillation phase is saved (ae_distilled.pt, prop_distilled.pt) and evaluated as `<run>:distilled`. All use the 5r cases (30 cases), error ratio to the unpruned model's free rollout, lags 5/15/30.
 Predictions. (i) Control: the unpruned model's error changes by less than 3% at every lag (it was already trained 15000 steps), so 5s stands. (ii) Distilled checkpoint (before CM1 fine-tune), vs 5r no-fine-tune: better at every lag and m; vs 5s whole: worse at lag 30 (it never sees the truth, so cannot do better than the teacher, whose own lag-30 error is the reference 1.0) - i.e. ratio >= 1.0 at lag 30 for every m. (iii) Distill+CM1 vs CM1 only (5s whole): no better than 0.03 absolute in the ratio at lag 30 for any m; any gain is at lag 5 for m <= 8 (reconstruction floor), >= 0.05 there for at least one of m = 4, 8. (iv) For m = 16 distill+CM1 stays within 1.07 +/- 0.03 at lag 30. Differences smaller than the bootstrap spread over the 30 cases (computed in the analysis, resampling members) are reported as ties.
 Not tested: different distillation lengths or losses (latent-space targets, mixed truth+teacher); a from-scratch model at m.
+
+### 5t result (data docs/fpe_report/data/prefix_dft.json; cluster/saidie/prefix_dft.sh, prefix_eval_dft.slurm)
+Error ratio to the unpruned model's free rollout, 30 cases, lags 5 / 15 / 30 (bootstrap sd over the 10 members in brackets, lag 5 / 30).
+Control (unpruned model, 8000 more Stage C steps): whole 0.980 / 0.994 / 1.004 (0.005 / 0.007); propagator only 0.984 / 0.979 / 1.001. So extra training changes the unpruned error by <= 2.1%; 5s's recovery is not an extra-training artefact (its ratios would move by at most 2%).
+
+| m | distilled only (no CM1 data) | distill, then CM1 (5t) | CM1 only (5s whole) |
+|---|---|---|---|
+| 4  | 1.78 / 1.48 / 1.29 (0.033 / 0.020) | 1.66 / 1.41 / 1.25 | 1.70 / 1.43 / 1.26 |
+| 8  | 1.41 / 1.28 / 1.18 (0.014 / 0.015) | 1.29 / 1.22 / 1.15 | 1.33 / 1.25 / 1.16 |
+| 12 | 1.25 / 1.19 / 1.12 (0.014 / 0.012) | 1.15 / 1.14 / 1.08 | 1.17 / 1.16 / 1.10 |
+| 16 | 1.16 / 1.13 / 1.08 (0.012 / 0.010) | 1.09 / 1.07 / 1.06 | 1.11 / 1.10 / 1.07 |
+
+Predictions: (i) met (control within 2.1%). (ii) met: distilled beats the no-fine-tune 5r numbers at every lag and m, and is >= 1.0 at lag 30 for every m (1.07-1.29). (iii) lag-30 half met (gain over CM1-only 0.013-0.020 for every m, below 0.03); lag-5 half NOT met (gain 0.041 at m = 4, 0.037 at m = 8, below the 0.05 threshold). (iv) met: m = 16 at lag 30 is 1.057.
+Findings: (a) distillation alone, with no CM1 data after pruning, reaches within 0.03 of the CM1 fine-tune at lag 30 for every m (e.g. m = 16: 1.075 vs 1.070; m = 8: 1.18 vs 1.16); at lag 5 it is worse by 0.04-0.12. (b) distill-then-CM1 is lower than CM1-only in all 12 (m, lag) cells, by 0.01-0.04, comparable to the bootstrap sd of a single ratio (0.01-0.03), so it is a small, consistent, not clearly significant gain; it also uses 4000 more steps (control: extra steps alone are worth <= 2%).
+Caveats: one seed; teacher = the unpruned model itself; distillation targets only the decoded rollout and first-frame reconstruction; the bootstrap treats the 10 members as independent.
