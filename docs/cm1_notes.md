@@ -1422,3 +1422,18 @@ Only the first m channels evolve; channels >= m held at their dataset mean (MEAN
 Question: how much of the 5r truncation penalty (no-fine-tune error 1.6-2x the full model at m = 16, 2x at m = 8, lag 30) is recovered by training for the pruned latent? Pruned = channels >= m replaced by their training mean in the autoencoder output (`ColumnAEConfig.prefix_m`) and in the propagator's input and output (`StencilPropConfig.prefix_m`); the logdet/variance terms see only the first m channels. From fpc_nested_stagec, Stage C recipe (8000 steps, k 45, w_sfc_th 2, nested_frac 0.5), m = 4, 8, 12, 16, two variants: `prop` (autoencoder frozen, `--c-freeze-ae`) and `full` (autoencoder and propagator). Runs fpc_nested_p{m}_{prop,full}; evaluated on the 5r cases by scripts/cm1/prefix_eval.py against the 5r table (error ratio to the full 32-channel free rollout, mean over variables, lags 5/15/30).
 Predictions: (i) `prop` improves on 5r at lag 30 for every m but is bounded below by the 5r truncation floor (m=8: 0.39x, m=16: 0.24x at lag 30; 0.85x and 0.53x at lag 5) - ratios at lag 5 stay > 1.0 for m <= 8. (ii) `full` beats `prop` at lag 5 for m <= 8 (the autoencoder can move information into the prefix) and is within 1.3x of the full model at lag 30 for m = 16. (iii) No m < 12 reaches 1.0x at any lag. (iv) A pruned model that beats persistence (0.67 at lag 30) at m = 4.
 Not tested here: a model trained at m from scratch; different step counts; the effect on the physical-variable (w) error specifically.
+
+### 5s result (data docs/fpe_report/data/prefix_ft.json; scripts/cm1/prefix_eval.py, cluster/saidie/prefix_ft.sh)
+Error of the free rollout relative to the unpruned model (0.115 / 0.196 / 0.259 at lags 5 / 15 / 30; persistence 0.51 / 0.59 / 0.67), same 30 cases as 5r, mean over 7 variables. Lags 5 / 15 / 30:
+
+| m | no fine-tune (5r) | propagator only | whole model (Stage C) | truncation floor, whole model |
+|---|---|---|---|---|
+| 4  | 2.64 / 2.11 / 2.01 | 2.09 / 1.61 / 1.35 | 1.70 / 1.43 / 1.26 | 1.11 / 0.65 / 0.52 |
+| 8  | 2.04 / 1.92 / 1.83 | 1.55 / 1.35 / 1.23 | 1.33 / 1.25 / 1.16 | 0.72 / 0.41 / 0.33 |
+| 12 | 1.82 / 1.74 / 1.71 | 1.36 / 1.27 / 1.17 | 1.17 / 1.16 / 1.10 | 0.56 / 0.32 / 0.25 |
+| 16 | 1.58 / 1.58 / 1.57 | 1.25 / 1.18 / 1.12 | 1.11 / 1.10 / 1.07 | 0.48 / 0.27 / 0.21 |
+
+w error (lag 30): 1.03-1.07 for the whole-model runs, 1.04-1.10 for propagator only.
+Predictions: (i) met - propagator-only improves lag 30 for every m and stays above the floor, lag-5 ratio > 1 for m <= 8. (ii) met - whole model beats propagator-only at lag 5 for m <= 8 (1.70 vs 2.09, 1.33 vs 1.55) and is 1.07x the full model at lag 30 for m = 16. (iii) met - no m < 12 reaches 1.0 (best 1.16-1.26 at lag 30). (iv) met - m = 4 beats persistence at every lag (0.33 vs 0.67 at lag 30).
+Reading: fine-tuning recovers most of the pruning penalty; the whole-model variant recovers more because the autoencoder moves information into the prefix (floor at m = 8 falls from 0.85 to 0.72 at lag 5). At lag 30 m = 16 is within 7% and m = 8 within 16% of the 32-channel model.
+Caveats: the pruned runs get 8000 extra Stage C steps the unpruned model did not, so part of the recovery may be extra training, not the pruning (control: 8000 more steps on the unpruned model - not run); one seed; test members only; fine-tuning is of this model, not a model trained at m from scratch.
