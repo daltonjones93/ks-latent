@@ -393,13 +393,16 @@ def site_smoothness(z: torch.Tensor) -> torch.Tensor:
 
 
 def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnData, data_va: ColumnData,
-                  cfg: StageCConfig, log=print) -> dict:
+                  cfg: StageCConfig, log=print, teacher: tuple | None = None) -> dict:
     """Windows of true columns over H + k frames are encoded, rolled k steps with the true (encoded) halo,
     decoded, and scored against the true columns on the window interior (halo + decoder reach excluded),
     plus reconstruction of the first frame and the latent anti-collapse terms. Both models are updated.
     With `crps_samples` S > 1 the (stochastic) propagator is rolled S times per window with independent
     noise and the decoded samples are scored with the fair CRPS instead of the MSE: an MSE would train
-    the noise away, CRPS rewards a sharp, calibrated sample ensemble. Validation uses the same loss."""
+    the noise away, CRPS rewards a sharp, calibrated sample ensemble. Validation uses the same loss.
+    With `teacher = (ae_t, prop_t)` (frozen, deterministic, not environment-conditioned) the targets are the
+    teacher's: the decoded forced-halo rollout of the teacher from the same true windows, and the teacher's
+    reconstruction of the first frame, instead of the true columns (5t: distillation of a pruned student)."""
     dev = next(ae.parameters()).device
     p, Hh = ae.cfg.patch, prop.cfg.n_hist
     h, Pw = cfg.halo_sites, cfg.window_sites
@@ -415,6 +418,13 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         raise ValueError("w_energy / w_spectral need crps_samples >= 2 (they score samples)")
     if Ms and (Ms < 2 or not prop.cfg.noise_channels):
         raise ValueError("Stage C CRPS needs crps_samples >= 2 and a stochastic propagator (noise_channels > 0)")
+    if teacher is not None:
+        if Ms or prop.cfg.noise_channels:
+            raise ValueError("distillation is for deterministic propagators")
+        ae_t, prop_t = teacher
+        ae_t.eval(); prop_t.eval()
+        for q in list(ae_t.parameters()) + list(prop_t.parameters()):
+            q.requires_grad_(False)
     wch = torch.ones(C, device=dev)
     if cfg.w_sfc_th > 0:
         ith = VARS.index("th") * Zl
@@ -451,6 +461,13 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         pred = forced_halo_rollout(prop, zr, k, h, gen=gen)                      # (S*B, k, Pw, c)
         dec = ae.decode(pred.reshape(S * B * k, Pw, -1)).reshape(S, B, k, C, W)[..., m:W - m]
         tgt = u[:, Hh:Hh + k][..., m:W - m]
+        if teacher is not None:
+            if env is not None:
+                raise ValueError("distillation does not support environment conditioning")
+            with torch.no_grad():
+                zt = ae_t.encode(u.reshape(B * F_, C, W)).reshape(B, F_, Pw, -1)
+                pt = forced_halo_rollout(prop_t, zt, k, h)
+                tgt = ae_t.decode(pt.reshape(B * k, Pw, -1)).reshape(B, k, C, W)[..., m:W - m]
         e = crps_elements(dec, tgt) if S > 1 else (dec[0] - tgt) ** 2             # CRPS (stochastic) or MSE
         if weighted:
             e = e * wch[None, None, :, None]
@@ -471,6 +488,9 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         u, env = draw(data_tr, Hh + k, g)                                          # (B, H+k, C, W)
         l_roll, z = rollout_err(u, env, k, True, g)
         u0 = u[:, Hh - 1]
+        if teacher is not None:
+            with torch.no_grad():
+                u0 = ae_t.decode(ae_t.encode(u0))
         l_rec = F.mse_loss(_interior(ae.decode(nested_truncate(z[:, Hh - 1], cfg.nested_frac, g)), m), _interior(u0, m))
         zs = _interior(z[:, Hh - 1], m_sites, dim=1).reshape(-1, z.shape[-1])
         if ae.cfg.prefix_m:

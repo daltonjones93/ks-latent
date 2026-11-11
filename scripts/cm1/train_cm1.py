@@ -321,6 +321,8 @@ def main():
                     help="FPd: prune terms below this fraction of the largest coupling")
     ap.add_argument("--prefix-m", type=int, default=0,
                     help="5s: with --init-from and Stage C, prune the latent to its first M channels (the others become their training mean)")
+    ap.add_argument("--distill-steps", type=int, default=0,
+                    help="5t: with --prefix-m, first this many Stage C steps against the UNPRUNED model's rollouts (teacher), then the normal Stage C on CM1 data")
     ap.add_argument("--c-freeze-ae", action="store_true", help="Stage C updates the propagator only (M3: shared latent)")
     ap.add_argument("--c-site-smooth", type=float, default=0.0,
                     help="FPd: weight of the latent's second difference over sites (physical space, not channel index)")
@@ -469,6 +471,9 @@ def main():
         if a.prefix_m:
             if not a.init_from or cfg.ae.prefix_m:
                 raise ValueError("--prefix-m needs --init-from an unpruned run")
+            if a.distill_steps:
+                import copy
+                teacher = (copy.deepcopy(ae).eval(), copy.deepcopy(prop).eval())
             zt = torch.cat([x[60:].reshape(-1, x.shape[-1]) for x in encode_members(ae, data["train"])])
             fill = zt.mean(0).cpu()
             ae.set_prefix(a.prefix_m, fill); prop.set_prefix(a.prefix_m, fill)
@@ -487,6 +492,17 @@ def main():
                               w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
+            if a.distill_steps:
+                if not a.prefix_m:
+                    raise ValueError("--distill-steps needs --prefix-m")
+                import dataclasses as _dc
+                sd = _dc.replace(sc, steps=a.distill_steps, val_every=max(1, a.distill_steps // 8))
+                log(f"[D] distillation against the unpruned model: {a.distill_steps} steps")
+                rd = train_stage_c(ae, prop, data["train"], data["val"], sd, log=log, teacher=teacher)
+                (out / "history_distill.json").write_text(json.dumps(rd, indent=1))
+                torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae_distilled.pt")
+                torch.save({"state_dict": prop.state_dict(), "cfg": dataclasses.asdict(cfg.prop)}, out / "prop_distilled.pt")
+                del teacher
             rcst = train_stage_c(ae, prop, data["train"], data["val"], sc, log=log)
             (out / "history_c.json").write_text(json.dumps(rcst, indent=1))
             for mod, f, c_ in ((ae, "ae.pt", cfg.ae), (prop, "prop.pt", cfg.prop)):

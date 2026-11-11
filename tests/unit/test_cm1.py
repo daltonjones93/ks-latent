@@ -613,3 +613,24 @@ def test_pca_stage_fit_clamps_condensate_and_trains_only_the_propagator_in_stage
     ae2 = build_autoencoder(ColumnAEConfig(**__import__("dataclasses").asdict(ae.cfg)), positive_channel_mask(Z))
     ae2.load_state_dict(ae.state_dict())                                           # checkpoint round trip
     torch.testing.assert_close(ae2.encode(tr.full(0, 0)), ae.encode(tr.full(0, 0)))
+
+
+def test_stage_c_distillation_targets_the_teacher_and_a_perfect_student_has_zero_loss():
+    """5t: with teacher = (copy of the student), the decoded-rollout and reconstruction targets equal the student's own outputs,
+    so the first validation loss (before any step, lr ~ 0) is ~0; with the true columns as targets it is not."""
+    import copy
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    torch.manual_seed(0)
+    ms = [_member(f"m{i}", T=10, seed=i) for i in range(3)]
+    nrm = Normalizer.fit(ms)
+    tr, va = ColumnData(ms[:2], nrm, torch.device("cpu")), ColumnData(ms[2:], nrm, torch.device("cpu"))
+    ae = ColumnFieldAE(ColumnAEConfig(n_channels=V * Z, n_levels=Z, patch=PATCH, hidden=16, latent_channels=3), positive_channel_mask(Z))
+    prop = StencilPropagator(StencilPropConfig(latent_channels=3, hidden=8, layers=1, radius=1))
+    with torch.no_grad():
+        for q in prop.parameters():
+            q.normal_(0, 0.05)
+    cfg = StageCConfig(window_sites=14, halo_sites=1, batch=2, steps=1, k_max=3, val_every=1, warmup=1, lr=1e-12, lr_min_factor=1.0)
+    teacher = (copy.deepcopy(ae), copy.deepcopy(prop))
+    r_t = train_stage_c(ae, prop, tr, va, cfg, log=lambda s: None, teacher=teacher)
+    r_d = train_stage_c(copy.deepcopy(ae), copy.deepcopy(prop), tr, va, cfg, log=lambda s: None)
+    assert r_t["best_val_decoded_rollout_mse"] < 1e-6 < r_d["best_val_decoded_rollout_mse"]
