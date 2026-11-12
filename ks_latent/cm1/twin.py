@@ -64,6 +64,7 @@ import torch
 
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer
 from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis_torch
+from ks_latent.cm1.pff_site import PFFSiteConfig, pff_site_analysis
 from ks_latent.cm1.models import ColumnFieldAE, StencilPropagator
 from ks_latent.cm1.verify import displacement_km, fss, main_pool_front_km
 
@@ -78,6 +79,8 @@ class TwinConfig:
     obs_every_cells: int = 8      # observe surface theta' every this many grid cells (8 = 2 km)
     sigma_obs: float = 0.5        # K
     letkf: LETKFConfig = field(default_factory=LETKFConfig)
+    analysis_method: str = "letkf"          # "letkf" or "pff_site" (E6b: domain-localized natural-gradient particle flow)
+    pff: PFFSiteConfig = field(default_factory=PFFSiteConfig)
     halo: int = 3
     model_noise: float = 0.0      # std of additive latent noise per forecast step (latent units)
     assim_theta: bool = True      # assimilate surface theta'
@@ -138,7 +141,9 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
         if torch.is_tensor(amp) or model_noise > 0:
             Z = Z + amp * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
             pm = 0 if props[0] is None else getattr(getattr(props[0], "cfg", None), "prefix_m", 0)
-            if pm:                            # a pruned latent: the dropped channels stay at their fill (no noise there)
+            if props[0] is not None and hasattr(props[0], "project_latent"):   # two-scale model: its own projection
+                Z = props[0].project_latent(Z)
+            elif pm:                            # a pruned latent: the dropped channels stay at their fill (no noise there)
                 Z = torch.cat([Z[..., :pm], props[0].prefix_fill[pm:].to(Z).expand(*Z.shape[:-1], -1)], -1)
         if halo > 0:
             zt = z_truth[t + j + 1 if hold is None else hold].expand(Z.shape[0], -1, -1)
@@ -402,20 +407,24 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
         _stash(rec, "prior", cfg, o, NXp)
         if assimilate:
             dec = ae.decode(Z) if dec_prior is None else dec_prior
-            Ys, ys, rs, xs = [], [], [], []
+            Ys, ys, rs, xs, ops = [], [], [], [], []
             if cfg.assim_theta and "th" in cfg.surface_vars:
-                Ys.append((dec[:, ith, obs_cols] * s_th).double().cpu().numpy()); ys.append(y)
+                ops.append(lambda d_, ith=ith, s_th=s_th: d_[:, ith, obs_cols] * s_th)
+                Ys.append(ops[-1](dec).double().cpu().numpy()); ys.append(y)
                 rs.append(r_var); xs.append(x_obs)
             for v in sfc_extra:
                 iv, sv = VARS.index(v) * Zl, float(norm.scale[VARS.index(v)])
                 yv = (u_true[iv, obs_cols] * sv).double().cpu().numpy() + rng.normal(0.0, sig_sfc[v], obs_cols.size)
-                Ys.append((dec[:, iv, obs_cols] * sv).double().cpu().numpy()); ys.append(yv)
+                ops.append(lambda d_, iv=iv, sv=sv: d_[:, iv, obs_cols] * sv)
+                Ys.append(ops[-1](dec).double().cpu().numpy()); ys.append(yv)
                 rs.append(np.full(obs_cols.size, sig_sfc[v] ** 2)); xs.append(x_obs)
             if cfg.refl_every_cells:
-                Ys.append(refl_head(dec)[:, refl_cols].double().cpu().numpy()); ys.append(y_refl)
+                ops.append(lambda d_: refl_head(d_)[:, refl_cols])
+                Ys.append(ops[-1](dec).double().cpu().numpy()); ys.append(y_refl)
                 rs.append(np.full(refl_cols.size, cfg.sigma_refl ** 2)); xs.append(x_refl)
             if vr_op is not None:
-                Ys.append(vr_op._from_columns(dec).double().cpu().numpy()); ys.append(y_vr)
+                ops.append(lambda d_: vr_op._from_columns(d_))
+                Ys.append(ops[-1](dec).double().cpu().numpy()); ys.append(y_vr)
                 rs.append(np.full(y_vr.size, cfg.sigma_vr ** 2)); xs.append(vr_op.x_km)
             Yall, yall, rall, xall = np.concatenate(Ys, 1), np.concatenate(ys), np.concatenate(rs), np.concatenate(xs)
             if cfg.adaptive_noise != "none" and cfg.ensemble_mode == "cycled":
@@ -429,6 +438,13 @@ def run_twin(ae: ColumnFieldAE, prop, truth: ColumnData, z_truth: torch.Tensor,
                 rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, dec=Ua, **sk)
                 _stash(rec, "analysis", cfg, o, NXp)
                 U_mean = Ua.mean(0)
+            elif cfg.analysis_space == "latent" and cfg.analysis_method == "pff_site":
+                m_pf = ae.cfg.prefix_m or None                          # a pruned latent: only the kept channels are updated
+                obs_fn = lambda z_: torch.cat([op(ae.decode(z_[None])) for op in ops], 1)[0]
+                Z, pinfo = pff_site_analysis(Z, obs_fn, yall, rall, x_site, xall, cfg.pff, m=m_pf, gen=gen)
+                rec["pff"] = {"n_iterations": pinfo["n_iterations"], "n_obs_per_site_max": pinfo["n_obs_per_site_max"]}
+                rec["analysis"] = _scores(ae, Z, u_true, obs_cols, y, norm, Zl, **sk)
+                _stash(rec, "analysis", cfg, o, NXp)
             elif cfg.analysis_space == "latent":
                 Za = letkf_analysis_torch(Z.double().cpu().numpy(), Yall, yall, rall, x_site, xall, cfg.letkf, device=dev)
                 Z = torch.as_tensor(Za, dtype=Z.dtype, device=dev)

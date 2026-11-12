@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, _natural_key, load_member  # noqa: E402
 from ks_latent.cm1.letkf import LETKFConfig  # noqa: E402
+from ks_latent.cm1.pff_site import PFFSiteConfig  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import TwinConfig, run_twin, summarize_twin  # noqa: E402
 from ks_latent.utils.device import get_device  # noqa: E402
@@ -108,6 +109,11 @@ def main():
     ap.add_argument("--sigma-obs", type=float, default=0.5)
     ap.add_argument("--loc-km", type=float, default=5.0)
     ap.add_argument("--rtps", type=float, default=0.9)
+    ap.add_argument("--analysis", choices=["letkf", "pff_site"], default="letkf",
+                    help="latent analysis: the LETKF, or the domain-localized particle flow filter (ks_latent/cm1/pff_site.py)")
+    ap.add_argument("--pff-loc-km", type=float, default=3.0); ap.add_argument("--pff-taper-km", type=float, default=4.0)
+    ap.add_argument("--pff-half-width", type=int, default=6); ap.add_argument("--pff-steps", type=int, default=12)
+    ap.add_argument("--pff-rtps", type=float, default=0.0)
     ap.add_argument("--model-noise", type=float, default=0.05)
     ap.add_argument("--refl-km", type=float, default=2.0)
     ap.add_argument("--sigma-refl", type=float, default=5.0)
@@ -197,7 +203,10 @@ def main():
                 vr_tilts=tuple(a.vr_tilts) if "vr" in a.obs_set else (), sigma_vr=a.sigma_vr, radar_x_km=a.radar_x_km,
                 vr_every_cells=int(round(a.vr_km / 0.25)), adaptive_noise=a.adaptive_noise, adapt_gamma=a.adapt_gamma,
                 forecast_from=tuple(a.forecast_from), forecast_frames=int(round(a.forecast_minutes * 60 / dt)),
-                letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary=a.boundary)
+                letkf=LETKFConfig(loc_km=a.loc_km, rtps=a.rtps), boundary=a.boundary,
+                analysis_method=a.analysis,
+                pff=PFFSiteConfig(loc_km=a.pff_loc_km, taper_km=a.pff_taper_km, half_width=a.pff_half_width,
+                                  n_steps=a.pff_steps, rtps=a.pff_rtps))
     analog = None
     if "analog" in a.modes:   # archive: every training storm the surrogate was trained on (same data budget)
         from ks_latent.cm1.analog import AnalogConfig, AnalogPropagator

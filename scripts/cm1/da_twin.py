@@ -49,6 +49,9 @@ def member_files(source: str) -> dict:
 
 
 def load_run(run: Path, dev):
+    if (run / "twoscale.json").exists():             # 6a: two-scale model (large run + small-scale model)
+        from ks_latent.cm1.twoscale import load_twoscale
+        return load_twoscale(run, dev, load_run)
     cfg = json.loads((run / "config.json").read_text())
     norm = Normalizer.from_dict(json.loads((run / "normalizer.json").read_text()))
     acfg, pcfg = ColumnAEConfig(**cfg["ae"]), StencilPropConfig(**cfg["prop"])
