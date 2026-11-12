@@ -27,5 +27,8 @@ for f in sys.argv[1:]:
         print(f"-- paired {rn}")
         for st, rec in per.items():
             cm = np.array(rec.get("cm1_tiny1e-3", [np.nan] * 61)); md = np.array(rec.get("model_divergence", [np.nan] * 61))
+            for k0, c_ in rec.get("common_noise", {}).items():
+                print(f"  {st} common-noise {k0}: log-growth/min 15-30: model {c_['slope_model_15_30']:+.3f} cm1 {c_['slope_cm1_15_30']:+.3f}; "
+                      f"D_model(0)={c_['D_model'][0]:.4f} D_model(30)={c_['D_model'][30]:.4f}; D_model/D_cm1 at 30 = {c_['D_model_over_cm1_at_30']:.1f}")
             print(f"  {st}: D at 5/15/30/60 min  cm1 " + " ".join(f"{cm[k]:.3f}" for k in (5, 15, 30, 60))
                   + "  model " + " ".join(f"{md[k]:.3f}" for k in (5, 15, 30, 60)))

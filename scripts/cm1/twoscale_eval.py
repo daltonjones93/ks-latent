@@ -172,6 +172,23 @@ def main():
                             dk = ae.decode(traj[k])[..., mar:-mar]
                             Dm.append(float(torch.stack([(dk[i] - dk[j]).pow(2).mean() for i in range(S) for j in range(i + 1, S)]).mean().sqrt() / np.sqrt(2)))
                         rec["model_divergence"] = Dm
+                # common-noise growth: ctrl and tiny-perturbation states, identical noise draws, from lags k0
+                with torch.no_grad():
+                    cn = {}
+                    for amp in ("tiny1e-3",):
+                        if amp not in br:
+                            continue
+                        dm = ColumnData([br[amp]], norm, dev)
+                        u_t = torch.stack([u_c[0]] + [dm.full(0, frame_at(br[amp], T0 + k * dt))[0] for k in range(1, n + 1)])
+                        zt = torch.cat([ae.encode(u_t[i:i + 8]) for i in range(0, n + 1, 8)])
+                        D_cm1 = ((u_t - u_c)[..., mar:-mar] ** 2).mean((1, 2)).sqrt().numpy()
+                        for k0 in (10, 20, 30):
+                            a_ = rollout(prop, z, k0, 30, halo, 1, seed=100 + k0); b_ = rollout(prop, zt, k0, 30, halo, 1, seed=100 + k0)
+                            Dj = [float((ae.decode(a_[j]) - ae.decode(b_[j]))[..., mar:-mar].pow(2).mean().sqrt()) for j in range(31)]
+                            lg = lambda D: float((np.log(D[30] + 1e-12) - np.log(D[15] + 1e-12)) / 15)
+                            cn[f"k0={k0}"] = {"D_model": Dj, "slope_model_15_30": lg(Dj), "slope_cm1_15_30": lg(D_cm1[k0:k0 + 31]),
+                                              "D_model_over_cm1_at_30": Dj[30] / float(D_cm1[k0 + 30] + 1e-12)}
+                    rec["common_noise"] = cn
                 per[short] = rec
                 print(f"[ts_eval] paired {rn} {short} ({time.time() - t_start:.0f}s)", flush=True)
             ch[rn] = per
