@@ -31,3 +31,14 @@ def test_prefix_state_dict_roundtrip():
     ae, p = _models(3)
     ae2, p2 = _models(3)
     ae2.load_state_dict(ae.state_dict()); p2.load_state_dict(p.state_dict())
+
+
+def test_twin_forecast_noise_does_not_touch_pruned_channels():
+    from ks_latent.cm1.twin import _forecast
+    _, p = _models(3)
+    fill = torch.arange(6.0); p.set_prefix(3, fill)
+    Z = torch.randn(5, 20, 6); Z[..., 3:] = fill[3:]
+    zt = torch.randn(30, 20, 6)
+    out = _forecast(p, Z, zt, 0, 3, 2, model_noise=0.3, gen=torch.Generator().manual_seed(0))
+    assert torch.allclose(out[:, 2:-2, 3:], fill[3:].expand_as(out[:, 2:-2, 3:]))
+    assert out[:, 2:-2, :3].std(0).min() > 0          # the kept channels do get the noise

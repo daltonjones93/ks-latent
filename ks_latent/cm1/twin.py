@@ -137,6 +137,9 @@ def _forecast(prop: StencilPropagator, Z: torch.Tensor, z_truth: torch.Tensor, t
             Z = Zn
         if torch.is_tensor(amp) or model_noise > 0:
             Z = Z + amp * torch.randn(Z.shape, generator=gen, device="cpu").to(Z.device, Z.dtype)
+            pm = 0 if props[0] is None else getattr(getattr(props[0], "cfg", None), "prefix_m", 0)
+            if pm:                            # a pruned latent: the dropped channels stay at their fill (no noise there)
+                Z = torch.cat([Z[..., :pm], props[0].prefix_fill[pm:].to(Z).expand(*Z.shape[:-1], -1)], -1)
         if halo > 0:
             zt = z_truth[t + j + 1 if hold is None else hold].expand(Z.shape[0], -1, -1)
             Z = torch.cat([zt[:, :halo], Z[:, halo:P - halo], zt[:, P - halo:]], dim=1)
