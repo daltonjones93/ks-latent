@@ -45,3 +45,23 @@ def test_twoscale_ae_and_step():
     Zp = prop.project_latent(Zn)
     assert torch.allclose(Zp[..., 3:6], torch.arange(3.0, 6.0).expand_as(Zp[..., 3:6]))
     assert torch.allclose(Zp[..., :3], Zn[..., :3]) and torch.allclose(Zp[..., 6:], Zn[..., 6:])
+
+
+def test_filter_split_and_feedback():
+    from ks_latent.cm1.twoscale import FeedbackNet, FilterTwoScaleAE, gaussian_lowpass
+    ae_l, ae_s, pl, sm = _models()
+    ae = FilterTwoScaleAE(ae_l, ae_s, sigma_km=1.0)
+    u = torch.rand(2, 14, 64)
+    ul = gaussian_lowpass(u, 1.0)
+    assert torch.allclose(ae.encode(u)[..., :6], ae_l.encode(ul)) and torch.allclose(ae.encode(u)[..., 6:], ae_s.encode(u - ul))
+    assert torch.allclose(gaussian_lowpass(torch.ones(1, 3, 64), 1.0), torch.ones(1, 3, 64), atol=1e-6)      # unit-sum kernel
+    fb = FeedbackNet(4, 3)
+    prop0, prop1 = TwoScaleProp(pl, sm), TwoScaleProp(pl, sm, fb)
+    z = ae.encode(u)
+    g = lambda: torch.Generator().manual_seed(0)
+    assert torch.allclose(prop0(z, gen=g()), prop1(z, gen=g()))                  # zero-initialized feedback: identical step
+    with torch.no_grad():
+        for q in fb.parameters():
+            q.normal_(0, 0.3)
+    o0, o1 = prop0(z, gen=g()), prop1(z, gen=g())
+    assert not torch.allclose(o0[..., :3], o1[..., :3]) and torch.allclose(o0[..., 3:6], o1[..., 3:6])   # only the kept channels

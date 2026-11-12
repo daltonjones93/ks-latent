@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -108,9 +109,9 @@ class TwoScaleProp(nn.Module):
     """One step of the coupled model on z = [z_L, z_S]: z_L <- P_L(z_L) (deterministic, frozen large model), then
     z_S <- g(z_S, z_L(t), z_L(t+1), noise)."""
 
-    def __init__(self, prop_l: nn.Module, small: SmallProp):
+    def __init__(self, prop_l: nn.Module, small: SmallProp, fb: "FeedbackNet | None" = None):
         super().__init__()
-        self.prop_l, self.small = prop_l, small
+        self.prop_l, self.small, self.fb = prop_l, small, fb
         self.cl = prop_l.cfg.latent_channels
         self.ck = small.cfg.cond_channels
         self.cfg = SimpleNamespace(latent_channels=self.cl + small.cfg.small_channels, n_hist=1,
@@ -122,6 +123,9 @@ class TwoScaleProp(nn.Module):
             z = z[:, -1]
         zl, zs = z[..., :self.cl], z[..., self.cl:]
         zl1 = self.prop_l(zl)
+        if self.fb is not None:                                    # feedback: small scales act on the kept large-scale channels
+            d = self.fb(zs, zl[..., :self.ck])
+            zl1 = torch.cat([zl1[..., :self.ck] + d, zl1[..., self.ck:]], -1)
         return torch.cat([zl1, self.small(zs, zl[..., :self.ck], zl1[..., :self.ck], gen=gen, eps=eps)], -1)
 
     def project_latent(self, Z: torch.Tensor) -> torch.Tensor:
@@ -136,8 +140,56 @@ class TwoScaleProp(nn.Module):
         return next(self.small.parameters()).new_zeros(())
 
 
-def save_twoscale(out: Path, large_run: Path, ae_s: nn.Module, small: SmallProp, extra: dict | None = None) -> None:
+def gaussian_lowpass(x: torch.Tensor, sigma_km: float, dx_km: float = 0.25) -> torch.Tensor:
+    """Gaussian low-pass G along the last axis (open edges: reflect padding); the filter is a positive kernel with unit sum, so
+    non-negative fields stay non-negative. Half-power wavelength = 2 pi sigma / sqrt(ln 2) ~ 7.5 sigma."""
+    s = sigma_km / dx_km
+    r = int(np.ceil(3 * s))
+    k = torch.exp(-0.5 * (torch.arange(-r, r + 1, dtype=x.dtype, device=x.device) / s) ** 2)
+    k = k / k.sum()
+    sh = x.shape
+    y = F.pad(x.reshape(-1, 1, sh[-1]), (r, r), mode="reflect")
+    return F.conv1d(y, k.view(1, 1, -1)).reshape(sh)
+
+
+class FeedbackNet(nn.Module):
+    """Small -> large: increment of the leading `cond_channels` of z_L from [z_S, z_L(:cond)]; zero-initialized head."""
+
+    def __init__(self, small_channels: int, cond_channels: int, hidden: int = 128, layers: int = 2, radius: int = 1):
+        super().__init__()
+        self.cfg = SimpleNamespace(small_channels=small_channels, cond_channels=cond_channels, hidden=hidden, layers=layers, radius=radius)
+        dims = [small_channels + cond_channels] + [hidden] * (layers - 1)
+        self.convs = nn.ModuleList(nn.Conv1d(a, hidden, 2 * radius + 1, padding=radius, padding_mode="replicate") for a in dims)
+        self.head = nn.Conv1d(hidden, cond_channels, 1)
+        nn.init.zeros_(self.head.weight); nn.init.zeros_(self.head.bias)
+
+    def forward(self, zs: torch.Tensor, zl_k: torch.Tensor) -> torch.Tensor:
+        h = torch.cat([zs, zl_k], -1).transpose(1, 2)
+        for conv in self.convs:
+            h = F.gelu(conv(h))
+        return self.head(h).transpose(1, 2)
+
+
+class FilterTwoScaleAE(TwoScaleAE):
+    """Filter-based split: z_L = E_L(G u), z_S = E_S(u - G u); decode = D_L(z_L) + D_S(z_S), condensate clamped."""
+
+    def __init__(self, ae_l: nn.Module, ae_s: nn.Module, sigma_km: float):
+        super().__init__(ae_l, ae_s)
+        self.sigma_km = sigma_km
+        self.cfg.kind = "twoscale_filter"
+
+    def encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
+        ul = gaussian_lowpass(u, self.sigma_km)
+        return torch.cat([self.ae_l.encode(ul, env), self.ae_s.encode(u - ul)], -1)
+
+
+def save_twoscale(out: Path, large_run: Path, ae_s: nn.Module, small: SmallProp, extra: dict | None = None,
+                  fb: "FeedbackNet | None" = None, prop_l: nn.Module | None = None) -> None:
     out.mkdir(parents=True, exist_ok=True)
+    if fb is not None:
+        torch.save({"state_dict": fb.state_dict(), "cfg": vars(fb.cfg)}, out / "fb.pt")
+    if prop_l is not None:
+        torch.save({"state_dict": prop_l.state_dict()}, out / "prop_l.pt")
     torch.save({"state_dict": ae_s.state_dict(), "cfg": asdict(ae_s.cfg)}, out / "ae_s.pt")
     torch.save({"state_dict": small.state_dict(), "cfg": asdict(small.cfg)}, out / "small_prop.pt")
     (out / "twoscale.json").write_text(json.dumps({"large_run": str(large_run), **(extra or {})}, indent=1))
@@ -156,7 +208,17 @@ def load_twoscale(run: Path, dev, load_large):
     ae_s.load_state_dict(cka["state_dict"])
     small = SmallProp(SmallPropConfig(**ckp["cfg"])).to(dev)
     small.load_state_dict(ckp["state_dict"])
-    ae, prop = TwoScaleAE(ae_l, ae_s).eval(), TwoScaleProp(prop_l, small).eval()
+    if (run / "prop_l.pt").exists():                       # a jointly fine-tuned large-scale propagator
+        prop_l.load_state_dict(torch.load(run / "prop_l.pt", map_location=dev)["state_dict"])
+    fb = None
+    if (run / "fb.pt").exists():
+        ckf = torch.load(run / "fb.pt", map_location=dev)
+        fb = FeedbackNet(**ckf["cfg"]).to(dev); fb.load_state_dict(ckf["state_dict"]); fb.eval()
+    if meta.get("split") == "filter":
+        ae = FilterTwoScaleAE(ae_l, ae_s, float(meta["sigma_km"])).eval()
+    else:
+        ae = TwoScaleAE(ae_l, ae_s).eval()
+    prop = TwoScaleProp(prop_l, small, fb).eval()
     cfg = json.loads(json.dumps(cfg))
     cfg["stage_b"]["halo_sites"] = max(cfg["stage_b"]["halo_sites"], prop.cfg.reach_sites)
     return ae, prop, norm, cfg, split
