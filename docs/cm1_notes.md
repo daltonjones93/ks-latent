@@ -1509,3 +1509,41 @@ Predictions: (i) the filter split fixes T-large without feedback: `tf_v1_nofb` l
 
 ### 6a result, version 2 (`ts_cpu_v2`: 32 small-scale channels, w_spec 1.0, 8000 + 6000 steps; exploratory, changed after v1; data docs/fpe_report/data/ts_eval_v2.json)
 Worse than v1 on the pre-registered tests. 30 cases, 8 samples. CRPS 0.139 / 0.188 / 0.229 / 0.266 at 5 / 15 / 30 / 60 min (v1: 0.113 / 0.156 / 0.192 / 0.218; large-only MAE 0.219 at 30, 0.244 at 60: now FAILS T-prob's CRPS condition); spread / RMSE 0.43 / 0.37 / 0.38 / 0.43; low-pass RMSE vs large-only 1.16 / 1.28 / 1.33 / 1.44 (v1: 0.91 / 1.04 / 1.08 / 1.12): the large-scale leak is larger. Spectra at 30 min (2-5 / 5-10 / 10-20 km): u 1.08 / 0.73 / 0.61, w 0.77 / 0.23 / 0.28, th 0.84 / 0.78 / 0.50, qliq 0.99 / 0.34 / 0.38: the 2-5 km band is now close to truth (w 0.77, th 0.84, qliq 0.99) but 5-20 km is still low, and the power below 2 km overshoots and grows with lead (w 0.5-2 km: 1.75 / 1.98 / 2.58 / 5.49 at 5 / 15 / 30 / 60 min; at 60 min the 2-5 km band also overshoots, 1.4-1.8 for u, w, th, qliq): spurious small-scale power accumulating in the one-way rollout. More channels and a heavier spectral weight did not fix the residual-split design; they traded the dissipation for a growth of unphysical power.
+
+## 7a. Global coupling of the leading channels in the one-model stochastic system (pre-registration, 2026-11-13)
+Request (advisor, via user): the original one-model system with global coupling, e.g. nested dropout plus coupling between the most important channels of each patch. The two-scale line (6a/6b) is closed as negative: the filter split restores 5-10 km power, but the small scales come out as smeared texture and the samples barely spread, because the frozen deterministic large model carries the uncertainty (figures docs/fpe_report/figs_tf/).
+
+**Design.** Every arm uses the same frozen nested-dropout autoencoder (`fpc_nested_stagec`; channels ordered by importance, 5q), so all arms forecast the same latent and differ only in the propagator. Propagator: the stochastic conv stencil of `full_v1_crps` (4 noise channels, fair CRPS, reach 3 sites = 6 km per 1-min step), plus an optional global module (`StencilPropConfig.global_kind`, ks_latent/cm1/models.py). The module takes the first k channels at every site and returns 16 features per site, appended to the stencil input. Two kinds:
+- `attn`: 2 layers of full self-attention over all sites, with a signed, log-binned relative-position bias. It has no per-site parameters and runs on any width.
+- `mean`: an MLP of the domain mean, broadcast to every site.
+
+The stencil's weights on the global features start at 0, so each arm starts as the local model. Pipeline: Stage B (20k steps), then Stage C decoded CRPS (15k steps, k ≤ 45, autoencoder frozen). Tests are in tests/unit/test_cm1_global.py.
+
+| arm | global | k | window (sites) | seed |
+|---|---|---|---|---|
+| g_local48 | none | - | 48 (recipe) | 0 |
+| g_local128, g_local128_s1 | none | - | 128 | 0, 1 |
+| g_mean8 | mean | 8 | 128 | 0 |
+| g_attn4 | attn | 4 | 128 | 0 |
+| g_attn8, g_attn8_s1 | attn | 8 | 128 | 0, 1 |
+| g_attn32 | attn | 32 (all) | 128 | 0 |
+
+**Evaluation** (cluster/saidie/global_eval.slurm): twoscale_eval on the 30 test cases with 8 samples (CRPS, spread/RMSE, band spectra, low-pass RMSE, front error at 5/15/30/60 min) against `full_v1_stagec_crps` and `ts_v1`. The same is repeated with persistence boundaries (halo held at t0) and with the global features zeroed at inference (`@globaloff`). scripts/cm1/global_diag.py measures:
+- the share of the one-step Jacobian norm beyond the stencil reach (exactly 0 for a local model; checked on full_v1_stagec_crps);
+- the attention mass by distance.
+
+**Prior.** Two reasons to expect a small effect:
+- Deep gravity waves (30-50 m/s, 2-3 km per step) fit inside the 6 km reach per step. The anelastic pressure response is the only instantaneous long-range coupling, and the latent may encode it implicitly.
+- FPc arm 4 (domain mean of all channels in the law) gave 1.5-2% skill, which is close to noise.
+
+Expected: CRPS gain under 5%.
+
+**Decision rules** (CRPS averaged over all variables, at 30 and 60 min):
+1. *Global coupling helps* if g_attn8 and g_attn8_s1 both beat both g_local128 seeds, and the mean gain is ≥ 3% and larger than the larger seed spread.
+2. *It is coupling, not capacity:* the share beyond reach is ≥ 0.05 and `@globaloff` loses ≥ 3% CRPS. A gain without these is attributed to training, not distant information.
+3. *Not boundary leakage:* the gain persists (≥ 2/3 of it) with persistence boundaries.
+4. *Leading channels suffice* (the advisor's hypothesis) if g_attn4 or g_attn8 is within the seed spread of g_attn32. If g_attn32 is better by more than the spread, the global information is not confined to the leading channels.
+5. *Structure vs summary:* g_mean8 against g_attn8.
+6. *Window effect:* g_local48 against g_local128, which is a confound check for all of the above.
+
+The Jacobian and attention distance profiles are read for a characteristic coupling length, for example upstream gravity-wave or pressure scales of 20-50 km.

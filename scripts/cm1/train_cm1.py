@@ -147,7 +147,9 @@ def build_config(a, dt: float | None) -> RunConfig:
                              law_global=a.law_global, law_cap=a.law_cap, law_lead=a.law_lead,
                              law_lead_nu_pos=a.law_lead_nu_pos,
                              law_head_n=a.law_head_n, law_head_weight=a.law_head_weight,
-                             radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels)
+                             radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels,
+                             global_kind=a.global_kind, global_k=a.global_k, global_hidden=a.global_hidden,
+                             global_layers=a.global_layers, global_heads=a.global_heads, global_feat=a.global_feat)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
                       val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac)
@@ -302,6 +304,13 @@ def main():
                     help="FPc: nested dropout (importance-ordered channels) in Stages A and C: share of samples truncated")
     ap.add_argument("--prop-heads", type=int, default=4)
     ap.add_argument("--prop-hidden", type=int, default=0, help="propagator width (0: --hidden, which also sets the autoencoder's)")
+    ap.add_argument("--global-kind", choices=["", "attn", "mean"], default="",
+                    help="7a: global coupling of the leading channels (conv body); train with a wide --window-b")
+    ap.add_argument("--global-k", type=int, default=8, help="7a: leading channels the global module sees")
+    ap.add_argument("--global-hidden", type=int, default=64)
+    ap.add_argument("--global-layers", type=int, default=2)
+    ap.add_argument("--global-heads", type=int, default=4)
+    ap.add_argument("--global-feat", type=int, default=16, help="7a: global features appended to the stencil input per site")
     ap.add_argument("--noise-channels", type=int, default=0, help="stochastic propagator noise channels (D14c)")
     ap.add_argument("--crps-samples", type=int, default=0, help="train the stochastic propagator with fair CRPS")
     ap.add_argument("--eval-samples", type=int, default=8, help="samples averaged when evaluating a stochastic propagator")

@@ -304,6 +304,17 @@ class StencilPropConfig:
     law_head_n: int = 0
     law_head_weight: float = 0.0
     prefix_m: int = 0                 # > 0: channels >= prefix_m are a constant (`prefix_fill`) in input and output (5s)
+    # 7a (2026-11-13): global coupling of the leading channels (body "conv" only). The first `global_k` channels of every
+    # site (the most important ones under nested dropout) feed a domain-wide module whose `global_feat` per-site outputs
+    # are extra inputs of the local stencil. "attn": full self-attention over all sites with a signed, log-binned relative
+    # position bias (no per-site parameters, any domain width); "mean": an MLP of the domain mean broadcast to every
+    # site. The stencil's weights on these inputs start at zero, so at init the model is the local one. "" = off.
+    global_kind: str = ""
+    global_k: int = 8
+    global_hidden: int = 64
+    global_layers: int = 2
+    global_heads: int = 4
+    global_feat: int = 16
 
     @property
     def reach_sites(self) -> int:
@@ -338,6 +349,69 @@ class _WindowAttention(nn.Module):
         a = torch.softmax(q @ k.transpose(-1, -2) / (H // self.h) ** 0.5 + bias[None], dim=-1)
         x = x + self.proj((a @ v).transpose(1, 2).reshape(B, P, H))
         return x + self.mlp(self.n2(x))
+
+
+_REL_EDGES = (0, 1, 2, 3, 5, 9, 17, 33, 65, 129)          # |offset| bins (sites): 0, 1, 2, 3-4, 5-8, ..., 65-128, >= 129
+
+
+def _rel_bin(off: torch.Tensor) -> torch.Tensor:
+    """Signed log-binned relative offset -> index in [0, 2 * len(_REL_EDGES) - 1)."""
+    edges = torch.tensor(_REL_EDGES, device=off.device)
+    b = torch.bucketize(off.abs(), edges, right=True) - 1                        # 0 .. n-1
+    n = len(_REL_EDGES)
+    return torch.where(off >= 0, n - 1 + b, n - 1 - b)
+
+
+class _GlobalAttention(nn.Module):
+    """Pre-norm full self-attention over all sites (open domain, any width) with a learned signed relative-position bias
+    per head and log-spaced distance bin, shared by all sites, then a 2x MLP. `record` keeps the last attention weights."""
+
+    def __init__(self, H: int, heads: int):
+        super().__init__()
+        if H % heads:
+            raise ValueError(f"hidden {H} not divisible by {heads} heads")
+        self.h = heads
+        self.n1, self.n2 = nn.LayerNorm(H), nn.LayerNorm(H)
+        self.qkv, self.proj = nn.Linear(H, 3 * H), nn.Linear(H, H)
+        self.rel = nn.Parameter(torch.zeros(heads, 2 * len(_REL_EDGES) - 1))
+        self.mlp = nn.Sequential(nn.Linear(H, 2 * H), nn.GELU(), nn.Linear(2 * H, H))
+        self.record, self.last_attn = False, None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:            # (B, P, H)
+        B, P, H = x.shape
+        q, k, v = self.qkv(self.n1(x)).reshape(B, P, 3, self.h, H // self.h).permute(2, 0, 3, 1, 4)
+        i = torch.arange(P, device=x.device)
+        bias = self.rel[:, _rel_bin(i[None, :] - i[:, None])]          # (heads, P, P)
+        a = torch.softmax(q @ k.transpose(-1, -2) / (H // self.h) ** 0.5 + bias[None], dim=-1)
+        if self.record:
+            self.last_attn = a.detach()
+        x = x + self.proj((a @ v).transpose(1, 2).reshape(B, P, H))
+        return x + self.mlp(self.n2(x))
+
+
+class GlobalCoupling(nn.Module):
+    """7a: domain-wide features from the first k latent channels of every site, (B, P, c) -> (B, P, G)."""
+
+    def __init__(self, kind: str, k: int, H: int, layers: int, heads: int, G: int):
+        super().__init__()
+        self.kind, self.k = kind, k
+        if kind == "attn":
+            self.embed = nn.Linear(k, H)
+            self.blocks = nn.ModuleList(_GlobalAttention(H, heads) for _ in range(layers))
+            self.out = nn.Sequential(nn.LayerNorm(H), nn.Linear(H, G))
+        elif kind == "mean":
+            self.out = nn.Sequential(nn.Linear(k, H), nn.GELU(), nn.Linear(H, G))
+        else:
+            raise ValueError(f"unknown global coupling {kind!r}")
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        x = z[..., :self.k]
+        if self.kind == "mean":
+            return self.out(x.mean(-2, keepdim=True)).expand(*x.shape[:-1], -1)
+        h = self.embed(x)
+        for b in self.blocks:
+            h = b(h)
+        return self.out(h)
 
 
 def _d1_d2(z: torch.Tensor) -> tuple:
@@ -571,10 +645,22 @@ class StencilPropagator(nn.Module):
         if cfg.prefix_m:
             self.register_buffer("prefix_fill", torch.zeros(c))
         n_in = c * cfg.n_hist + cfg.noise_channels
+        self.global_off = False                       # 7a ablation: True feeds zeros in place of the global features
+        if cfg.global_kind and cfg.body != "conv":
+            raise ValueError("global coupling (7a) is implemented for body 'conv' only")
+        if cfg.global_kind:
+            if not 1 <= cfg.global_k <= c:
+                raise ValueError(f"global_k must be in 1..{c}")
+            self.glob = GlobalCoupling(cfg.global_kind, cfg.global_k, cfg.global_hidden, cfg.global_layers,
+                                       cfg.global_heads, cfg.global_feat)
+            n_in += cfg.global_feat
         if cfg.body == "conv":
             dims = [n_in] + [H] * (cfg.layers - 1)
             self.convs = nn.ModuleList(nn.Conv1d(a, H, 2 * r + 1, padding=r, padding_mode=cfg.padding_mode)
                                        for a in dims)
+            if cfg.global_kind:                       # the stencil starts blind to the global features
+                with torch.no_grad():
+                    self.convs[0].weight[:, n_in - cfg.global_feat:].zero_()
             self.head = nn.Conv1d(H, c, 1)
         elif cfg.body == "law":         # FPc: explicit latent PDE (Markovian, deterministic)
             if cfg.n_hist != 1 or cfg.noise_channels:
@@ -631,6 +717,11 @@ class StencilPropagator(nn.Module):
                 eps = torch.randn((x.shape[0], self.cfg.noise_channels, x.shape[2]), generator=gen,
                                   device="cpu").to(x.device, x.dtype)
             x = torch.cat([x, eps], dim=1)
+        if self.cfg.global_kind:
+            g = self.glob(last)                                                # (B, P, G)
+            if self.global_off:
+                g = torch.zeros_like(g)
+            x = torch.cat([x, g.transpose(1, 2)], dim=1)
         if self.cfg.body == "attention":
             h = self.embed(x.transpose(1, 2))                                  # (B, P, H)
             for blk in self.blocks:

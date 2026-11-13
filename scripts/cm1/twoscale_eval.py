@@ -109,6 +109,9 @@ def main():
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--paired", default=None, help="manifest.json of the paired runs (T-chaos)")
     ap.add_argument("--base", default=None); ap.add_argument("--branches", default=None)
+    ap.add_argument("--global-off", action="store_true", help="7a: also score each globally coupled run with its global features zeroed")
+    ap.add_argument("--boundary", choices=["truth", "persistence"], default="truth",
+                    help="halo after t0: the true state (default) or held at t0 (nothing after t0 known)")
     a = ap.parse_args()
     torch.set_num_threads(a.threads); t_start = time.time(); dev = torch.device(a.device)
     out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
@@ -116,7 +119,9 @@ def main():
     models = {}
     for r in a.runs:
         r = Path(r).expanduser(); models[r.name] = load_run(r, dev)
-    res = {"vars": list(VARS), "bands_km": BANDS, "lags": lags, "runs": {}}
+        if a.global_off and getattr(models[r.name][1].cfg, "global_kind", ""):
+            m2 = load_run(r, dev); m2[1].global_off = True; models[r.name + "@globaloff"] = m2
+    res = {"vars": list(VARS), "bands_km": BANDS, "lags": lags, "boundary": a.boundary, "runs": {}}
     if a.source:
         files = member_files(a.source)
         names = next(iter(models.values()))[4]["test"][: a.n_test]
@@ -133,7 +138,8 @@ def main():
                 for t0 in [int(x) for x in a.t0.split(",")]:
                     if t0 + n + 1 > z.shape[0]:
                         continue
-                    traj = rollout(prop, z, t0, n, halo, S, seed=t0)
+                    zb = z if a.boundary == "truth" else torch.cat([z[:t0 + 1], z[t0:t0 + 1].expand(z.shape[0] - t0 - 1, -1, -1)])
+                    traj = rollout(prop, zb, t0, n, halo, S, seed=t0)
                     case = {"member": nm, "t0": t0, "lags": {}}
                     with torch.no_grad():
                         for L in lags:
