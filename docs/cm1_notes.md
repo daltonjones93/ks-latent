@@ -1577,9 +1577,16 @@ Tests are in tests/unit/test_cm1_vit.py: size, locality, shift equivariance, pos
 - `v_glob`: 200 M global, trained on whole-domain windows (200 sites) in all stages.
 - `v_small`: windowed, d = 512, about 37 M parameters.
 
+Added the same day (cluster/saidie/vit_pilot_add.sh): the scaled-up original local model, with the original propagator.
+- `c_wide`: `ColumnFieldAE`, hidden 3840, 2 mixing convs, reach 2 sites as in the original, 204 M.
+- `c_deep`: hidden 2048, 7 mixing convs, reach 7 sites, close to the windowed ViT's 8, 191 M.
+
+Both use the original propagator (conv stencil, hidden 256, 3 layers, radius 1, 4 noise channels, CRPS), so only the autoencoder differs from g_local48. `v_win_attn`'s attention propagator now has SwiGLU FFNs (4×). The ViT blocks have had SwiGLU with a 4× up-projection from the start.
+
 Evaluation (vit_eval.slurm): twoscale_eval at lags 0 (reconstruction), 5, 15, 30 and 60 min, against g_local48_stagec and full_v1_stagec_crps.
 
 **Decision rules:**
+0. *Scaled-up conv vs ViT:* if c_wide or c_deep is within 3% of the best ViT in 30-min CRPS, the conv model is kept as the simpler, already validated design. Otherwise the best ViT is kept.
 1. *Windowed vs global:* take the windowed model unless global is better by more than 5% in 30-min CRPS. Below that margin the local-field property (DA localization, the transfer results) is worth more.
 2. *Capacity:* if v_small is within 3% of v_win at 30 and 60 min on the 121 storms, the large model is data-limited at this size. The data-scaling step then decides.
 3. *Propagator:* keep the body with the lowest 30-min CRPS. The conv stencil wins ties within 3%, as the simplest.

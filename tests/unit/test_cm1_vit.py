@@ -121,3 +121,12 @@ def test_memmapped_members_match_loaded(tmp_path):
     assert we.shape == wl.shape and torch.allclose(we, wl, rtol=2e-3, atol=2e-3)   # eager stores normalized float16
     assert torch.allclose(de.full(1, slice(1, 4)), dl.full(1, slice(1, 4)), rtol=2e-3, atol=2e-3)
     assert dl.full(0, 2).shape == (1, de.C, 64)
+
+
+def test_attention_propagator_swiglu():
+    from ks_latent.cm1.models import StencilPropagator, StencilPropConfig
+    p = StencilPropagator(StencilPropConfig(latent_channels=5, hidden=16, layers=2, radius=1, body="attention",
+                                            heads=4, attn_swiglu=True, noise_channels=1))
+    assert isinstance(p.blocks[0].mlp, SwiGLU) and p.blocks[0].mlp.w3.weight.shape == (16, 64)
+    z = torch.randn(2, 12, 5)
+    assert torch.equal(p(z), z)

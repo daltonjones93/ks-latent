@@ -409,6 +409,7 @@ class StencilPropConfig:
     body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a), "law" (FPc: structured latent PDE) or "mlp"
                              # (8a: a dense SwiGLU MLP per site on the flattened neighbourhood of layers x radius sites)
     mlp_ratio: float = 4.0   # body "mlp": SwiGLU hidden = mlp_ratio x hidden
+    attn_swiglu: bool = False  # body "attention": SwiGLU FFN (hidden = mlp_ratio x hidden) instead of the 2x GELU MLP
     heads: int = 4           # attention heads (body = "attention")
     # body = "law" (FPc): dz/dt = A0 z + A1 d1z + A2 d2z + b + Q [z_i z_j, z_i d1z_j] + R(z, d1z, d2z), integrated
     # over one frame; see LatentLaw. Penalties are applied by `StencilPropagator.penalty()` in Stages B / C.
@@ -457,7 +458,7 @@ class _WindowAttention(nn.Module):
     window is truncated at the edges), with a learned relative-position bias per head and offset, shared by
     every site (so the block is translation-equivariant away from the edges), then a 2x MLP."""
 
-    def __init__(self, H: int, heads: int, radius: int):
+    def __init__(self, H: int, heads: int, radius: int, swiglu_ratio: float = 0.0):
         super().__init__()
         if H % heads:
             raise ValueError(f"hidden {H} not divisible by {heads} heads")
@@ -465,7 +466,8 @@ class _WindowAttention(nn.Module):
         self.n1, self.n2 = nn.LayerNorm(H), nn.LayerNorm(H)
         self.qkv, self.proj = nn.Linear(H, 3 * H), nn.Linear(H, H)
         self.rel = nn.Parameter(torch.zeros(heads, 2 * radius + 1))
-        self.mlp = nn.Sequential(nn.Linear(H, 2 * H), nn.GELU(), nn.Linear(2 * H, H))
+        self.mlp = (SwiGLU(H, int(round(swiglu_ratio * H))) if swiglu_ratio > 0      # 8a: SwiGLU FFN
+                    else nn.Sequential(nn.Linear(H, 2 * H), nn.GELU(), nn.Linear(2 * H, H)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:            # (B, P, H)
         B, P, H = x.shape
@@ -807,7 +809,8 @@ class StencilPropagator(nn.Module):
             self.head = nn.Linear(H, c)
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
-            self.blocks = nn.ModuleList(_WindowAttention(H, cfg.heads, r) for _ in range(cfg.layers))
+            self.blocks = nn.ModuleList(_WindowAttention(H, cfg.heads, r, cfg.mlp_ratio if cfg.attn_swiglu else 0.0)
+                                        for _ in range(cfg.layers))
             self.norm = nn.LayerNorm(H)
             self.head = nn.Linear(H, c)
         else:
