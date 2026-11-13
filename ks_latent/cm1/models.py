@@ -62,12 +62,26 @@ class ColumnAEConfig:
     vertical_kernel: int = 5
     env_raw_dim: int = 0        # > 0: environment features per member (env.py, 3*Z) given to the encoder (D11)
     env_dim: int = 16           # their learned projection, broadcast along x as extra input channels
-    kind: str = "conv"          # "conv": ColumnFieldAE; "pca": PCAColumnAE (fixed linear baseline, I-PCA)
+    kind: str = "conv"          # "conv": ColumnFieldAE; "pca": PCAColumnAE (fixed linear baseline, I-PCA); "vit": ViTColumnAE
     prefix_m: int = 0           # > 0: latent channels >= prefix_m are a constant (`prefix_fill`): a pruned latent (5s)
+    # kind = "vit" (8a, 2026-11-13): site tokens (one 2 km patch of all columns each), pre-RMSNorm transformer blocks with
+    # SwiGLU MLPs (hidden = vit_mlp_ratio x vit_dim) and a learned relative-position bias; vit_layers blocks in the encoder
+    # and as many in the decoder. vit_radius > 0: attention within vit_radius sites (local field, reach layers x radius);
+    # 0: attention over every site of the window (global), with vit_global_reach as the nominal edge margin.
+    vit_dim: int = 1216
+    vit_layers: int = 4
+    vit_heads: int = 19
+    vit_mlp_ratio: float = 4.0
+    vit_radius: int = 2
+    vit_global_reach: int = 4
 
     @property
     def reach_sites(self) -> int:
-        return 0 if self.kind == "pca" else self.n_mix * self.mix_radius
+        if self.kind == "pca":
+            return 0
+        if self.kind == "vit":
+            return self.vit_layers * self.vit_radius if self.vit_radius > 0 else self.vit_global_reach
+        return self.n_mix * self.mix_radius
 
 
 class _Mixer(nn.Module):
@@ -259,10 +273,123 @@ class PCAColumnAE(nn.Module):
         return self.decode(z), z
 
 
+class SwiGLU(nn.Module):
+    """x -> W3 (silu(W1 x) * (W2 x)), hidden width `h` (the up-projection)."""
+
+    def __init__(self, d: int, h: int):
+        super().__init__()
+        self.w12 = nn.Linear(d, 2 * h, bias=False)
+        self.w3 = nn.Linear(h, d, bias=False)
+
+    def forward(self, x):
+        a, b = self.w12(x).chunk(2, dim=-1)
+        return self.w3(F.silu(a) * b)
+
+
+class _ViTBlock(nn.Module):
+    """Pre-RMSNorm block over site tokens: multi-head attention with a learned relative-position bias per head (radius > 0:
+    one entry per offset within the window, -inf outside; radius 0: global, signed log-binned offsets), then SwiGLU.
+    No per-site parameters, so the block is translation-equivariant away from the edges and runs on any width."""
+
+    def __init__(self, d: int, heads: int, mlp_hidden: int, radius: int):
+        super().__init__()
+        if d % heads:
+            raise ValueError(f"vit_dim {d} not divisible by {heads} heads")
+        self.h, self.r = heads, radius
+        self.n1, self.n2 = nn.RMSNorm(d), nn.RMSNorm(d)
+        self.qkv, self.proj = nn.Linear(d, 3 * d, bias=False), nn.Linear(d, d, bias=False)
+        self.rel = nn.Parameter(torch.zeros(heads, 2 * radius + 1 if radius > 0 else 2 * len(_REL_EDGES) - 1))
+        self.mlp = SwiGLU(d, mlp_hidden)
+
+    def bias(self, P: int, device) -> torch.Tensor:
+        i = torch.arange(P, device=device)
+        off = i[None, :] - i[:, None]                                    # key - query
+        if self.r > 0:
+            b = self.rel[:, off.clamp(-self.r, self.r) + self.r]
+            return b.masked_fill((off.abs() > self.r)[None], float("-inf"))
+        return self.rel[:, _rel_bin(off)]
+
+    def forward(self, x):                                                # (B, P, d)
+        B, P, d = x.shape
+        q, k, v = self.qkv(self.n1(x)).reshape(B, P, 3, self.h, d // self.h).permute(2, 0, 3, 1, 4)
+        a = F.scaled_dot_product_attention(q, k, v, attn_mask=self.bias(P, x.device)[None].to(q.dtype))
+        x = x + self.proj(a.transpose(1, 2).reshape(B, P, d))
+        return x + self.mlp(self.n2(x))
+
+
+class ViTColumnAE(nn.Module):
+    """8a: `u` (B, C, NX) -> site tokens (B, P, C*patch) -> Linear -> vit_layers blocks -> RMSNorm -> Linear (no bias) -> `z`
+    (B, P, c); the decoder mirrors it (Linear c -> d, blocks, RMSNorm, Linear d -> C*patch, unpatchify, positivity).
+    Same interface as ColumnFieldAE (encode / decode / forward / set_prefix, prefix_m), so propagators, rollouts and DA
+    run unchanged. Environment conditioning is not supported."""
+
+    def __init__(self, cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = None):
+        super().__init__()
+        if cfg.env_raw_dim or cfg.groups != 1 or cfg.vertical_channels:
+            raise ValueError("the ViT autoencoder does not support env conditioning, groups or the vertical front end")
+        self.cfg = cfg
+        C, p, c, d = cfg.n_channels, cfg.patch, cfg.latent_channels, cfg.vit_dim
+        hm = int(round(cfg.vit_mlp_ratio * d))
+        mk = lambda: nn.ModuleList(_ViTBlock(d, cfg.vit_heads, hm, cfg.vit_radius) for _ in range(cfg.vit_layers))
+        self.enc_in, self.enc_blocks, self.enc_norm = nn.Linear(C * p, d), mk(), nn.RMSNorm(d)
+        self.enc_out = nn.Linear(d, c, bias=False)
+        self.dec_in, self.dec_blocks, self.dec_norm = nn.Linear(c, d), mk(), nn.RMSNorm(d)
+        self.dec_out = nn.Linear(d, C * p)
+        self.apply(self._init)
+        for blk in list(self.enc_blocks) + list(self.dec_blocks):     # residual branches scaled by depth
+            for w in (blk.proj.weight, blk.mlp.w3.weight):
+                nn.init.normal_(w, std=0.02 / (2 * cfg.vit_layers) ** 0.5)
+        pm = torch.zeros(C, dtype=torch.bool) if positive_mask is None else positive_mask.bool()
+        if pm.shape != (C,):
+            raise ValueError(f"positive_mask shape {tuple(pm.shape)} != ({C},)")
+        self.register_buffer("positive_mask", pm)
+        if cfg.prefix_m:
+            self.register_buffer("prefix_fill", torch.zeros(c))
+
+    @staticmethod
+    def _init(m):
+        if isinstance(m, nn.Linear):
+            nn.init.normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+
+    def set_prefix(self, m: int, fill: torch.Tensor) -> None:
+        self.cfg.prefix_m = m
+        self.register_buffer("prefix_fill", fill.detach().clone().to(self.positive_mask.device, torch.float32))
+
+    def encode(self, u: torch.Tensor, env: torch.Tensor | None = None) -> torch.Tensor:
+        if env is not None:
+            raise ValueError("the ViT autoencoder is not environment-conditioned")
+        h = self.enc_in(_patchify(u, self.cfg.patch))
+        for b in self.enc_blocks:
+            h = b(h)
+        z = self.enc_out(self.enc_norm(h))
+        if self.cfg.prefix_m:
+            m = self.cfg.prefix_m
+            z = torch.cat([z[..., :m], self.prefix_fill[m:].expand(*z.shape[:-1], -1)], -1)
+        return z
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        h = self.dec_in(z)
+        for b in self.dec_blocks:
+            h = b(h)
+        out = _unpatchify(self.dec_out(self.dec_norm(h)), self.cfg.n_channels, self.cfg.patch)
+        if self.positive_mask.any():
+            pos = F.softplus(out, beta=self.cfg.positive_beta)
+            out = torch.where(self.positive_mask[None, :, None], pos, out)
+        return out
+
+    def forward(self, u, env: torch.Tensor | None = None):
+        z = self.encode(u, env)
+        return self.decode(z), z
+
+
 def build_autoencoder(cfg: ColumnAEConfig, positive_mask: torch.Tensor | None = None) -> nn.Module:
     """The autoencoder named by `cfg.kind` (every loader goes through here)."""
     if cfg.kind == "conv":
         return ColumnFieldAE(cfg, positive_mask)
+    if cfg.kind == "vit":
+        return ViTColumnAE(cfg, positive_mask)
     if cfg.kind == "pca":
         if cfg.prefix_m:
             raise ValueError("prefix_m is not supported for the PCA autoencoder")
@@ -279,7 +406,9 @@ class StencilPropConfig:
     padding_mode: str = "replicate"
     n_hist: int = 1          # frames of history the step sees (D13); 1 = Markovian
     noise_channels: int = 0  # random input channels per site (D14c stochastic propagator); 0 = deterministic
-    body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a) or "law" (FPc: structured latent PDE)
+    body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a), "law" (FPc: structured latent PDE) or "mlp"
+                             # (8a: a dense SwiGLU MLP per site on the flattened neighbourhood of layers x radius sites)
+    mlp_ratio: float = 4.0   # body "mlp": SwiGLU hidden = mlp_ratio x hidden
     heads: int = 4           # attention heads (body = "attention")
     # body = "law" (FPc): dz/dt = A0 z + A1 d1z + A2 d2z + b + Q [z_i z_j, z_i d1z_j] + R(z, d1z, d2z), integrated
     # over one frame; see LatentLaw. Penalties are applied by `StencilPropagator.penalty()` in Stages B / C.
@@ -669,6 +798,13 @@ class StencilPropagator(nn.Module):
                                  cfg.law_global, cfg.law_cap, cfg.law_lead, cfg.law_lead_nu_pos,
                                  cfg.law_head_n)
             return
+        elif cfg.body == "mlp":         # 8a: dense MLP on the whole neighbourhood (same reach as the conv body)
+            R = cfg.layers * r
+            self.mlp_in = nn.Linear(n_in * (2 * R + 1), H)
+            self.mlp_blocks = nn.ModuleList(nn.ModuleDict({"n": nn.RMSNorm(H), "f": SwiGLU(H, int(round(cfg.mlp_ratio * H)))})
+                                            for _ in range(max(1, cfg.layers - 1)))
+            self.norm = nn.RMSNorm(H)
+            self.head = nn.Linear(H, c)
         elif cfg.body == "attention":   # M1a: same reach (layers x radius), input-dependent neighbour weights
             self.embed = nn.Linear(n_in, H)
             self.blocks = nn.ModuleList(_WindowAttention(H, cfg.heads, r) for _ in range(cfg.layers))
@@ -722,6 +858,14 @@ class StencilPropagator(nn.Module):
             if self.global_off:
                 g = torch.zeros_like(g)
             x = torch.cat([x, g.transpose(1, 2)], dim=1)
+        if self.cfg.body == "mlp":
+            R = self.cfg.layers * self.cfg.radius
+            xp = F.pad(x, (R, R), mode=self.cfg.padding_mode)                  # (B, n_in, P + 2R)
+            nb = xp.unfold(2, 2 * R + 1, 1)                                    # (B, n_in, P, 2R+1)
+            h = self.mlp_in(nb.permute(0, 2, 1, 3).reshape(x.shape[0], x.shape[2], -1))
+            for blk in self.mlp_blocks:
+                h = h + blk["f"](blk["n"](h))
+            return last + self.head(self.norm(h))
         if self.cfg.body == "attention":
             h = self.embed(x.transpose(1, 2))                                  # (B, P, H)
             for blk in self.blocks:

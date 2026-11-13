@@ -77,9 +77,33 @@ def save_member(m: CM1Member, path: Path) -> None:
     np.savez(path, X=m.X, cref=m.cref, t=m.t, name=m.name)
 
 
-def load_member(path: Path) -> CM1Member:
+def _npz_memmap(path: Path, key: str) -> np.memmap:
+    """Memory-map array `key` of an uncompressed .npz (np.savez) in place: locate the entry's data in the zip archive and
+    read its .npy header. Raises if the entry is compressed (np.savez_compressed)."""
+    import struct
+    import zipfile
+    with zipfile.ZipFile(path) as zf:
+        info = zf.getinfo(key + ".npy")
+    if info.compress_type != zipfile.ZIP_STORED:
+        raise ValueError(f"{path}: {key} is compressed; memory mapping needs np.savez (uncompressed)")
+    with open(path, "rb") as f:
+        f.seek(info.header_offset)
+        sig, *_, n_name, n_extra = struct.unpack("<IHHHHHIIIHH", f.read(30))
+        if sig != 0x04034B50:
+            raise ValueError(f"{path}: bad zip local header for {key}")
+        f.seek(info.header_offset + 30 + n_name + n_extra)
+        version = np.lib.format.read_magic(f)
+        read = np.lib.format.read_array_header_1_0 if version == (1, 0) else np.lib.format.read_array_header_2_0
+        shape, fortran, dtype = read(f)
+        offset = f.tell()
+    return np.memmap(path, dtype=dtype, mode="r", shape=shape, order="F" if fortran else "C", offset=offset)
+
+
+def load_member(path: Path, mmap: bool = False) -> CM1Member:
+    """`mmap=True`: X is memory-mapped from the file (8a: datasets larger than memory); cref and t are loaded."""
     d = np.load(path)
-    return CM1Member(name=str(d["name"]), X=d["X"], cref=d["cref"], t=d["t"])
+    X = _npz_memmap(Path(path), "X") if mmap else d["X"]
+    return CM1Member(name=str(d["name"]), X=X, cref=d["cref"], t=d["t"])
 
 
 @dataclass
@@ -161,13 +185,22 @@ class ColumnData:
         self.NX, self.V, self.Z, self.C = NX, V, Z, V * Z
         self.device = device
         s = torch.tensor(norm.channel_scale(Z), dtype=torch.float32)
+        # 8a: memory-mapped members (load_member(mmap=True)) stay on disk in physical units; windows and frames are read
+        # and normalized on demand, so the dataset need not fit in memory
+        self.lazy = isinstance(members[0].X, np.memmap)
+        self._s = s.numpy()
         self.u = []
         self.active = []  # per member: (n_active, 2) int64 (t, x) of storm columns
         for m in members:
             if m.X.shape[1:] != (NX, V, Z):
                 raise ValueError(f"{m.name}: shape {m.X.shape} differs from {members[0].X.shape}")
-            x = torch.from_numpy(m.X.astype(np.float32)).reshape(m.X.shape[0], NX, V * Z) / s
-            self.u.append(x.to(torch.float16).to(device))
+            if self.lazy != isinstance(m.X, np.memmap):
+                raise ValueError("mix of memory-mapped and loaded members")
+            if self.lazy:
+                self.u.append(m.X)
+            else:
+                x = torch.from_numpy(m.X.astype(np.float32)).reshape(m.X.shape[0], NX, V * Z) / s
+                self.u.append(x.to(torch.float16).to(device))
             self.active.append(torch.from_numpy(np.argwhere(m.cref > active_dbz)))
         self.T = [x.shape[0] for x in self.u]
         self.cref = [torch.from_numpy(m.cref) for m in members]
@@ -203,12 +236,25 @@ class ColumnData:
             else:
                 t0[b] = torch.randint(0, Tm, (1,), generator=gen)
                 x0[b] = torch.randint(0, self.NX - width + 1, (1,), generator=gen)
+        if self.lazy:
+            out = torch.from_numpy(np.stack([self._read(int(m), slice(int(t), int(t) + n_frames), int(x), width)
+                                             for m, t, x in zip(mem, t0, x0)])).to(self.device)
+            return out.permute(0, 1, 3, 2).contiguous(), mem, t0, x0
         out = torch.stack([self.u[int(m)][int(t):int(t) + n_frames, int(x):int(x) + width]
                            for m, t, x in zip(mem, t0, x0)])  # (B, F, width, C)
         return out.float().permute(0, 1, 3, 2).contiguous(), mem, t0, x0
 
+    def _read(self, m: int, t, x0: int = 0, width: int | None = None) -> np.ndarray:
+        """Lazy members: frames `t` (slice or int), columns x0 .. x0+width, normalized float32 (T', width, C)."""
+        a = np.asarray(self.u[m][t, x0:None if width is None else x0 + width], dtype=np.float32)
+        if a.ndim == 3:
+            a = a[None]
+        return a.reshape(a.shape[0], a.shape[1], self.C) / self._s
+
     def full(self, m: int, t: slice | int = slice(None), device: torch.device | None = None) -> torch.Tensor:
         """Whole domain of member `m`: `(T', C, NX)` float32, on `device` (default: the data's device)."""
+        if self.lazy:
+            return torch.from_numpy(self._read(m, t)).to(device or self.device).permute(0, 2, 1).contiguous()
         x = self.u[m][t]
         if x.dim() == 2:
             x = x[None]
@@ -228,13 +274,13 @@ def _natural_key(s: str):
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s)]
 
 
-def load_cached_members(directory, pattern: str = "*.npz") -> list[CM1Member]:
+def load_cached_members(directory, pattern: str = "*.npz", mmap: bool = False) -> list[CM1Member]:
     """Members saved by `save_member` (the float16 cache `train_cm1.py` writes), in natural order of
-    member name. Raises if none match."""
+    member name. Raises if none match. `mmap`: memory-map X (8a)."""
     files = list(Path(directory).glob(pattern))
     if not files:
         raise FileNotFoundError(f"no cached members matching {pattern!r} in {directory}")
-    members = [load_member(f) for f in files]
+    members = [load_member(f, mmap) for f in files]
     names = [m.name for m in members]
     if len(set(names)) != len(names):
         raise ValueError(f"duplicate member names in {directory} ({pattern}): narrow the pattern")

@@ -72,7 +72,7 @@ class RunConfig:
     eval_every_min: float
 
 
-def load_source(source: str, cache: Path, max_frames: int, log) -> list:
+def load_source(source: str, cache: Path, max_frames: int, log, mmap: bool = False) -> list:
     if source == "synthetic" or source.startswith("cache:"):
         if source == "synthetic":
             log("  WARNING: synthetic data (code-path test only; never report these numbers)")
@@ -81,7 +81,7 @@ def load_source(source: str, cache: Path, max_frames: int, log) -> list:
             members = []
             for part in source[len("cache:"):].replace("+", ",").split(","):
                 d, _, pattern = part.partition(":")
-                got = load_cached_members(d, pattern or "*.npz")
+                got = load_cached_members(d, pattern or "*.npz", mmap=mmap)
                 log(f"  {len(got)} members from {d}")
                 members += got
             names = [m.name for m in members]
@@ -139,7 +139,10 @@ def build_config(a, dt: float | None) -> RunConfig:
     reach = layers * radius
     ae = ColumnAEConfig(patch=patch, hidden=(7 * 5 if a.encoder_groups > 1 else 32) if smoke else a.hidden,
                         latent_channels=a.latent_channels, n_mix=a.n_mix, mix_radius=1, groups=a.encoder_groups,
-                        vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel, kind=a.ae_kind)
+                        vertical_channels=a.vertical_channels, vertical_kernel=a.vertical_kernel, kind=a.ae_kind,
+                        vit_dim=64 if smoke else a.vit_dim, vit_layers=2 if smoke else a.vit_layers,
+                        vit_heads=4 if smoke else a.vit_heads, vit_mlp_ratio=a.vit_mlp_ratio, vit_radius=a.vit_radius,
+                        vit_global_reach=a.vit_global_reach)
     prop = StencilPropConfig(latent_channels=a.latent_channels, hidden=32 if smoke else (a.prop_hidden or a.hidden), layers=layers,
                              body=a.prop_body, heads=a.prop_heads, law_quadratic=not a.law_no_quadratic,
                              law_residual_hidden=a.law_residual_hidden, law_integrator=a.law_integrator,
@@ -149,10 +152,12 @@ def build_config(a, dt: float | None) -> RunConfig:
                              law_head_n=a.law_head_n, law_head_weight=a.law_head_weight,
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels,
                              global_kind=a.global_kind, global_k=a.global_k, global_hidden=a.global_hidden,
-                             global_layers=a.global_layers, global_heads=a.global_heads, global_feat=a.global_feat)
+                             global_layers=a.global_layers, global_heads=a.global_heads, global_feat=a.global_feat,
+                             mlp_ratio=a.prop_mlp_ratio)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
-                      val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac)
+                      val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac, lr=a.lr_a,
+                      warmup=a.warmup_a)
     sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
                       steps=a.steps_b, k_max=k_max, k_sampling=a.k_sampling, val_every=max(1, a.steps_b // 20),
                       seed=a.seed, crps_samples=a.crps_samples)
@@ -253,8 +258,18 @@ def main():
     ap.add_argument("--hidden", type=int, default=256)
     ap.add_argument("--latent-channels", type=int, default=16)
     ap.add_argument("--n-mix", type=int, default=2)
-    ap.add_argument("--ae-kind", choices=["conv", "pca"], default="conv",
-                    help="pca: fixed local PCA of each site's column block instead of the autoencoder (I-PCA)")
+    ap.add_argument("--ae-kind", choices=["conv", "pca", "vit"], default="conv",
+                    help="pca: fixed local PCA of each site's column block instead of the autoencoder (I-PCA); "
+                         "vit: transformer over site tokens with SwiGLU MLPs (8a)")
+    ap.add_argument("--vit-dim", type=int, default=1216)
+    ap.add_argument("--vit-layers", type=int, default=4, help="blocks in the encoder, and as many in the decoder")
+    ap.add_argument("--vit-heads", type=int, default=19)
+    ap.add_argument("--vit-mlp-ratio", type=float, default=4.0, help="SwiGLU hidden width / vit_dim (the up-projection)")
+    ap.add_argument("--vit-radius", type=int, default=2, help="attention radius in sites; 0 = global over the window")
+    ap.add_argument("--vit-global-reach", type=int, default=4, help="edge margin (sites) for a global ViT")
+    ap.add_argument("--tf32", action="store_true", help="TF32 matmuls on GPU (8a; off by default so earlier recipes are unchanged)")
+    ap.add_argument("--lr-a", type=float, default=1e-3, help="Stage A peak learning rate")
+    ap.add_argument("--warmup-a", type=int, default=200, help="Stage A warmup steps")
     ap.add_argument("--encoder-groups", type=int, default=1,
                     help="1: joint column encoder; 7: one encoder/decoder per variable (ablation)")
     ap.add_argument("--prop-reach", type=int, default=0, help="sites per step; 0 = from the frame interval")
@@ -282,7 +297,8 @@ def main():
                     help="Stage C with a stochastic propagator: fair CRPS over this many decoded rollouts")
     ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM2: weight of the energy score in Stage C")
     ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
-    ap.add_argument("--prop-body", choices=["conv", "attention", "law"], default="conv",
+    ap.add_argument("--prop-mlp-ratio", type=float, default=4.0, help="8a: SwiGLU up-projection of the 'mlp' propagator body")
+    ap.add_argument("--prop-body", choices=["conv", "attention", "law", "mlp"], default="conv",
                     help="propagator body: stencil convolutions, windowed self-attention (M1a), or an explicit latent "
                          "PDE (FPc: linear + quadratic terms + penalized residual)")
     ap.add_argument("--law-l1", type=float, default=0.0, help="FPc: L1 weight on the law's coefficients")
@@ -341,8 +357,13 @@ def main():
     ap.add_argument("--average-props", nargs="*", default=[],
                     help="run dirs whose propagators share this autoencoder: evaluate the averaged forecast (D14a)")
     ap.add_argument("--eval-only", action="store_true", help="load ae.pt/prop.pt from --out, skip training")
+    ap.add_argument("--mmap", action="store_true",
+                    help="8a: memory-map cached members and read windows on demand (datasets larger than memory)")
     ap.add_argument("--data-device", default="same", help="'same' as the model, or 'cpu' (data in host memory)")
     a = ap.parse_args()
+    if a.tf32:
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
     defaults = {"smoke": (6, 6), "local": (4000, 4000), "full": (20000, 20000)}[a.profile]
     a.steps_a = a.steps_a or defaults[0]
     a.steps_b = a.steps_b or defaults[1]
@@ -363,7 +384,7 @@ def main():
     dev = get_device(a.device)
     log(f"[cm1] profile {a.profile}, source {a.source}, device {dev}, out {out}")
 
-    members = load_source(a.source, Path(a.cache), a.max_frames, log)
+    members = load_source(a.source, Path(a.cache), a.max_frames, log, mmap=a.mmap)
     if a.profile == "smoke":
         members = members[:3]
     names = [m.name for m in members]
