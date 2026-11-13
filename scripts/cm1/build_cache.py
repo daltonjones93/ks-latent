@@ -18,12 +18,17 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--format", choices=["grads", "netcdf"], default="grads")
     ap.add_argument("--split", action="store_true", help="condensate by species: qc, qr, qi, qs, qg (D15)")
+    ap.add_argument("--shard", type=int, nargs=2, default=(0, 1), metavar=("K", "N"),
+                    help="process only members with index %% N == K (parallel cache jobs never touch the same member)")
     a = ap.parse_args()
     ens, out = Path(a.ens).resolve(), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     tag = ens.name
     n_new = n_old = n_skip = 0
-    for mdir in sorted(ens.glob("members/mem*")):
+    k, n_sh = a.shard
+    for i, mdir in enumerate(sorted(ens.glob("members/mem*"))):
+        if i % n_sh != k:
+            continue
         f = out / f"{tag}__{mdir.name}.npz"
         if f.exists():
             n_old += 1

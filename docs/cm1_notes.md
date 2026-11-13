@@ -1547,3 +1547,42 @@ Expected: CRPS gain under 5%.
 6. *Window effect:* g_local48 against g_local128, which is a confound check for all of the above.
 
 The Jacobian and attention distance profiles are read for a characteristic coupling length, for example upstream gravity-wave or pressure scales of 20-50 km.
+
+## 8a. More data and a 200 M-parameter ViT autoencoder (plan and pre-registration, 2026-11-13)
+Request (user and advisor): a much larger training set and a much larger model. The model is a ViT-style encoder and decoder with SwiGLU nonlinearities and a decent up-projection, about 4 layers and about 200 M parameters. The propagator may be a transformer, a dense MLP or the current stencil, and tests should decide.
+
+Context: the small conv autoencoder (2.6 M parameters) stopped improving at about 28 storms (D5). Either data or capacity could be the limit, so the plan tests both.
+
+**Data (Cashew, existing kit, GrADS output; noise-seed offsets chosen so no seed repeats an earlier ensemble):**
+- `ens_C`: 360 storms, random boundary-layer moisture −2.0…+0.25 g/kg and shear ×0.6…1.4 (ens_B's range), seeds 10001-10360.
+- `ens_D`: 120 storms in the original environment, seeds 11001-11120.
+
+About 1.6-1.9 h per storm, in 16 jobs of 32 CPUs. Caches: one 8-shard `build_cache.py` job per ensemble after the CM1 jobs finish, writing ~/cm1_cache_C and ~/cm1_cache_D on Cashew (about 0.5 GB per storm). These are then pulled to Saidie by rsync, as before. In total 601 storms, against 121.
+
+**Loading:** training memory-maps the uncompressed .npz caches (`--mmap`; `load_member(mmap=True)`, `ColumnData` lazy mode reads and normalizes windows on demand). 600 storms are about 300 GB in float16, which does not fit in a shared job.
+
+**Model** (`ColumnAEConfig.kind = "vit"`, `ViTColumnAE`, ks_latent/cm1/models.py):
+- Tokens are the 2 km sites (8 columns × 434 channels).
+- 4 encoder and 4 decoder blocks, each pre-RMSNorm attention plus SwiGLU with hidden = 4 × d, at d = 1216 with 19 heads.
+- A learned relative-position bias per head, and no per-site parameters.
+- The latent is still 32 channels per site, so every propagator, rollout and DA path runs unchanged.
+- 197.8 M parameters.
+- Attention is either windowed (radius 2 sites per layer, reach 8 sites = 16 km, so the latent stays a local field) or global (every site of the window).
+
+Tests are in tests/unit/test_cm1_vit.py: size, locality, shift equivariance, positivity, mmap equivalence, and the MLP propagator. A dense-MLP propagator body (`body = "mlp"`) has been added: a per-site SwiGLU MLP on the flattened neighbourhood, with the same 3-site reach as the conv stencil and zero-initialized.
+
+**Pilot on the existing 121 storms** (cluster/saidie/vit_pilot.sh, same split as the full run). Every arm uses nested dropout 0.5, Stage A 40k steps at lr 3e-4, then Stage B (stochastic CRPS, 4 noise channels), then Stage C decoded CRPS with the autoencoder frozen. This is the recipe of 7a's `g_local48` (conv autoencoder), the control.
+- `v_win`: 200 M windowed, conv stencil propagator.
+- `v_win_attn`, `v_win_mlp`: the same autoencoder with the windowed-attention and dense-MLP propagator bodies.
+- `v_glob`: 200 M global, trained on whole-domain windows (200 sites) in all stages.
+- `v_small`: windowed, d = 512, about 37 M parameters.
+
+Evaluation (vit_eval.slurm): twoscale_eval at lags 0 (reconstruction), 5, 15, 30 and 60 min, against g_local48_stagec and full_v1_stagec_crps.
+
+**Decision rules:**
+1. *Windowed vs global:* take the windowed model unless global is better by more than 5% in 30-min CRPS. Below that margin the local-field property (DA localization, the transfer results) is worth more.
+2. *Capacity:* if v_small is within 3% of v_win at 30 and 60 min on the 121 storms, the large model is data-limited at this size. The data-scaling step then decides.
+3. *Propagator:* keep the body with the lowest 30-min CRPS. The conv stencil wins ties within 3%, as the simplest.
+4. Reconstruction at lag 0 must be no worse than the conv autoencoder's. Otherwise the large autoencoder is not doing its job, whatever the forecast scores.
+
+**Then data scaling,** once the caches are on Saidie: the chosen autoencoder and propagator trained on 93 (the current training set), about 280, and about 560 training storms, with the same 22 test storms plus ~20 held-out ens_C/ens_D storms. This shows whether the large model keeps improving with data, where the small one stopped at about 28 storms.
