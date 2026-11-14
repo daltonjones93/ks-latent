@@ -1706,3 +1706,19 @@ Same frozen conv autoencoder (fpc_nested_stagec, lag-0 reconstruction identical)
 
 Reading against the pre-registration: m128 beats the control by more than 3% at both 30 and 60 min with calibration intact (0.97): the rule is met, at 1.7x the stencil's size, inside the 1-2x preference. m256 is no better than m128 (−5.1 / −3.6% against −4.4 / −3.9%): the gain is the structure (separate linear spatial mixing and wide per-site SwiGLU MLP), not capacity. The dense MLP over the 7-site neighbourhood is as good at 30 min and better at 60 min (−5.8%, about 3 control-seed spreads; 2.2x the size of m128). On the same conv autoencoder these propagators gain more (−4 to −6%) than the large ViT autoencoder with the dense MLP and Stage C unfrozen gained over the same control (−4.1 / −1.6%): the propagator structure is a larger lever than autoencoder size so far.
 Queued next (cluster/saidie/mixer_unfrozen.sh, jobs 9435-9441): m128 with Stage C unfrozen on the conv 2.6 M, ViT 75 M (w75) and ViT 198 M (v_win) autoencoders (um_local, um_w75, um_win), evaluated into v_eval_mixer_unfrozen with u_win_mlp, u_local48 and m128.
+
+### 8a result: prediction term in Stage A, 75 M windowed ViT (2026-11-14; Saidie 9424, 30 test cases; data docs/fpe_report/data/v_eval_75.json)
+Original stochastic stencil propagator, Stage C unfrozen; each arm differs from the matched control `w75` only in Stage A. CRPS relative to `w75` (and to g_local48), lag-0 reconstruction RMSE relative to g_local48 and w75:
+
+| arm | pred weight, steps | recon vs w75 | CRPS 15 | CRPS 30 | CRPS 60 | spread/RMSE at 60 |
+|---|---|---|---|---|---|---|
+| w75 (control) | none | 0% (−26% vs g_local48) | −0.1% | +2.7% | +4.8% | 0.99 |
+| p75_k1 | 1, 1 step | +1.9% | −5.0% (−5.0% vs w75) | −2.6% vs w75 | −3.2% vs w75 | 0.95 |
+| p75_k4 | 1, 4 steps | +8.1% | −8.0% (−7.9% vs w75) | −4.9% vs w75 | −2.3% vs w75 | 0.93 |
+| p75_k4w5 | 5, 4 steps | +15% | −7.5% | −4.7% vs w75 | −3.0% vs w75 | 0.92 |
+| p75_k8 | 1, 8 steps | +12.6% | −6.3% | −4.0% vs w75 | −0.7% vs w75 | 0.88 |
+| p75_k16 | 1, 16 steps | +19.7% | −4.6% | −4.0% vs w75 | −1.8% vs w75 | 0.85 |
+(`u_win`, the 198 M ViT with the same stencil and unfrozen Stage C, equals w75 within 0.5%: 75 M is as good as 198 M here.)
+
+Reading against the pre-registration (an arm helps if it beats w75 by more than 3% at both 30 and 60 min and keeps reconstruction within 10%): no arm meets both. k = 1 (the cheapest, +1.9% reconstruction) gives −2.6% / −3.2%, just short at 30 min; k = 4 gives −4.9% / −2.3%, short at 60 min, +8% reconstruction; w = 5 and k = 16 fail the reconstruction guard (+15%, +20%). Longer rollouts or a heavier weight do not help beyond k = 4: they cost reconstruction and calibration (spread/RMSE 0.85-0.88 at k = 8 and 16). All prediction arms improve the 15- and 30-min CRPS by 3-8% relative to w75, and the 60-min CRPS by 1-3%, against a control seed spread of about 0.6%: the term helps at short lead, not at 60 min. The stencil propagator remains the limit: no arm beats the original g_local48 at 60 min (the best, k = 1, +1.5%).
+Next: the mixer propagator on these autoencoders (um_w75, um_win queued) and, if wanted, the Stage A term together with the mixer.
