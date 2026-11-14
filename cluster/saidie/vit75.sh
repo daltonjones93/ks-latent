@@ -23,8 +23,8 @@ lane() {
     IFS='|' read -r n w k pb <<< "$spec"
     local dep=${prev:+--dependency=afterany:$prev} jb ex=""
     [ "$w" != "0" ] && ex="--w-pred-a $w --pred-k-a $k --pred-batch-a $pb"
-    jb=$(sbatch --parsable --time=04:00:00 ${dep:-} --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $A $ex" cluster/saidie/train_cm1.slurm)
-    prev=$(sbatch --parsable --time=04:00:00 --dependency=afterok:$jb --job-name=${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
+    jb=$(sbatch --parsable --time=02:00:00 ${dep:-} --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $A $ex" cluster/saidie/train_cm1.slurm)
+    prev=$(sbatch --parsable --time=01:15:00 --dependency=afterok:$jb --job-name=${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
     echo "$n: A+B $jb, C $prev"; ALL="$ALL:$prev"
   done
 }

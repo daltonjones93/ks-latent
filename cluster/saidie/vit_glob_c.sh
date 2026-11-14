@@ -13,6 +13,6 @@ R=$HOME/cm1_runs
 BASE="--latent-channels 32 --k-max 45 --k-sampling uniform --val-members $VAL --test-members $TEST --noise-channels 4 --crps-samples 4 --eval-samples 8 --tf32"
 C="--stage-c-steps 15000 --stage-c-k 45 --w-sfc-th 2 --stage-c-crps 4 --stage-c-batch 2 --c-freeze-ae"
 rm -rf "$R/v_glob_stagec"
-jc=$(sbatch --parsable --time=05:00:00 --job-name=v_glob_c2 --mem=200G --export=ALL,DATA="$DATA",RUN=v_glob_stagec,EXTRA="$BASE --init-from $R/v_glob --reuse-ae $R/v_glob $C" cluster/saidie/train_cm1.slurm)
+jc=$(sbatch --parsable --time=01:30:00 --job-name=v_glob_c2 --mem=200G --export=ALL,DATA="$DATA",RUN=v_glob_stagec,EXTRA="$BASE --init-from $R/v_glob --reuse-ae $R/v_glob $C" cluster/saidie/train_cm1.slurm)
 je=$(sbatch --parsable --dependency=afterok:$jc --export=ALL,RUNS="v_glob_stagec" cluster/saidie/vit_eval.slurm)
 echo "v_glob_stagec: $jc, eval $je"

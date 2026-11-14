@@ -20,8 +20,8 @@ C="--stage-c-steps 15000 --stage-c-k 45 --w-sfc-th 2 --stage-c-crps 4 --stage-c-
 ALL=""
 for spec in "m128|--prop-body mixer --prop-hidden 128" "m256|--prop-body mixer --prop-hidden 256" "mlp256|--prop-body mlp --prop-hidden 256"; do
   n=${spec%%|*}; x=${spec#*|}
-  jb=$(sbatch --parsable --time=02:00:00 --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE --reuse-ae $AE --window-b 48 $x" cluster/saidie/train_cm1.slurm)
-  jc=$(sbatch --parsable --time=02:00:00 --dependency=afterok:$jb --job-name=${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
+  jb=$(sbatch --parsable --time=00:50:00 --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE --reuse-ae $AE --window-b 48 $x" cluster/saidie/train_cm1.slurm)
+  jc=$(sbatch --parsable --time=01:15:00 --dependency=afterok:$jb --job-name=${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
   echo "$n: B $jb, C $jc"; ALL="$ALL:$jc"
 done
 je=$(sbatch --parsable --dependency=afterany$ALL --export=ALL,OUT=v_eval_mixer,RUNS="m128_stagec m256_stagec mlp256_stagec" cluster/saidie/vit_eval.slurm)

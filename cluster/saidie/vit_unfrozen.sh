@@ -25,7 +25,7 @@ lane() {
   for spec in "$@"; do
     IFS='|' read -r n src lr <<< "$spec"
     local dep=${prev:+--dependency=afterany:$prev}
-    prev=$(sbatch --parsable --time=05:00:00 ${dep:-} --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$src --reuse-ae $R/$src $C --stage-c-lr $lr" cluster/saidie/train_cm1.slurm)
+    prev=$(sbatch --parsable --time=01:15:00 ${dep:-} --job-name=$n --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$src --reuse-ae $R/$src $C --stage-c-lr $lr" cluster/saidie/train_cm1.slurm)
     echo "$n: $prev"; ALL="$ALL:$prev"
   done
 }
