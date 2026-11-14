@@ -5,6 +5,8 @@
 #   a_k1     weight 1, one step ahead (1 min)
 #   a_k4     weight 1, four steps ahead
 #   a_k4w5   weight 5, four steps ahead (a heavier penalty)
+# Part 2 (cluster/saidie/vit_stagea_pred2.sh): longer rollouts, k = 8 and 16 (windows with the extra frames per batch cut so the
+# encoder's memory stays about the same: 8 x 8 and 4 x 16).
 #   ssh saidie 'cd ~/latent_DA && bash -l cluster/saidie/vit_stagea_pred.sh'
 set -euo pipefail
 cd "$HOME/latent_DA"
