@@ -1735,3 +1735,17 @@ Next: the mixer propagator on these autoencoders (um_w75, um_win queued) and, if
 
 The 10 km low-pass RMSE is not better for the deterministic model (+30 min: 0.1262 against 0.1212, +60 min: 0.1763 against 0.1690), so its mean-error advantage is in the small scales, where it predicts the conditional mean. Power relative to truth at +30 min: w 0.02 / 0.02 / 0.07 / 0.33 (bands 0.5-2 / 2-5 / 5-10 / 10-20 km) against 0.64 / 0.71 / 1.05 / 1.21 for the stochastic model; liquid 0.02 / 0.02 / 0.08 / 0.38 against 0.51 / 0.72 / 1.02 / 1.10. The sections (`det/fig_compare_sections.png`) show a smooth forecast with the updrafts, liquid and ice cores washed out, and no spread. CRPS is not comparable (the deterministic value is a mean absolute error: 0.1748 at +30 min against 0.1170).
 Reading: the noise channels cost little mean skill here (2-3%, against the 12% of the earlier conv stencil comparison), buy all the power below 10 km, calibrated spread and the sharp convective cores, and are kept. A deterministic model remains the choice for a pure mean forecast, with ensemble spread from added model noise.
+
+### 8b result: the mixer with Stage C unfrozen on three autoencoders (2026-11-14; Saidie 9441, 30 test cases; data docs/fpe_report/data/v_eval_mixer_unfrozen.json)
+Mixer propagator (width 128, 0.75 M), Stage C autoencoder unfrozen. CRPS relative to `g_local48` (stencil, conv 2.6 M, frozen); power / truth at +30 min.
+
+| arm | autoencoder | CRPS 15 | CRPS 30 | CRPS 60 | spread/RMSE at 60 | w 2-5 km | theta' 2-5 km |
+|---|---|---|---|---|---|---|---|
+| **um_local** | conv 2.6 M | −7.3% | **−5.4%** | **−5.3%** | 0.90 | 0.73 | 1.12 |
+| um_w75 | ViT 75 M | −7.7% | −2.6% | +0.2% | 0.92 | 0.97 | 1.52 |
+| um_win | ViT 198 M | −6.8% | −2.5% | +0.7% | 0.93 | 0.82 | 1.10 |
+| u_win_mlp | ViT 198 M, dense MLP | −8.4% | −4.1% | −1.6% | 0.94 | 0.71 | 0.62 |
+| m128 (mixer, frozen conv) | conv 2.6 M | −6.2% | −4.4% | −3.9% | 0.97 | 0.72 | 0.46 |
+| u_local48 (stencil, unfrozen) | conv 2.6 M | −1.6% | −1.3% | −0.1% | 0.92 | 0.35 | 0.30 |
+
+Reading: the best CRPS overall is the small autoencoder with the mixer and Stage C unfrozen (−5.4% / −5.3% at 30 / 60 min, about 5% ahead of the previous best full_v1_stagec_crps), with a 2.6 M autoencoder and a 0.75 M propagator. The mixer's gain stacks a little with unfreezing on the conv model (m128 −4.4 / −3.9% to −5.4 / −5.3%), but it does not stack with the large ViT autoencoders: um_w75 and um_win are about 3% worse at 30 min and at the control level at 60 min, and over-produce theta' power at 2-5 km (1.5x and 1.1x truth). Consistent with the earlier data-limited reading (D5: skill saturates near 28 storms): at 121 storms the large autoencoders reconstruct 25% better and forecast no better. The new data are the real test of the large models.
