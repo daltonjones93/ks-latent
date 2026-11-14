@@ -166,3 +166,10 @@ def test_stage_a_prediction_term():
     assert not torch.equal(ax.head.weight, h0)
     assert any(not torch.equal(p, q) for p, q in zip(ae.parameters(), a1.parameters()))
     assert "train_pred" in out["history"][-1] and out["history"][-1]["train_pred"] > 0
+
+
+def test_75M_configuration():
+    from ks_latent.cm1.models import ColumnAEConfig, ViTColumnAE
+    cfg = ColumnAEConfig(n_channels=434, n_levels=62, latent_channels=32, kind="vit", vit_dim=736, vit_heads=23)
+    n = sum(p.numel() for p in ViTColumnAE(cfg).parameters())
+    assert 73e6 < n < 76e6, n
