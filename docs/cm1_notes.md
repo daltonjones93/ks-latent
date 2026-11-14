@@ -1640,3 +1640,7 @@ Reference `g_local48_stagec` (2.6 M conv autoencoder, nested dropout, original s
 - *Rule 1 (windowed vs global):* open (v_glob). Its Stage A validation reconstruction is 0.0163 against 0.0273 for the windowed ViT (windows of 200 vs 64 sites, so not matched).
 
 **Conclusion.** A much larger autoencoder reconstructs 25-28% better but does not forecast better at 121 storms. The forecast is not limited by the autoencoder at this data size. The data-scaling step with the new storms is the real test.
+
+### 8a follow-up: Stage C with the autoencoder unfrozen (queued 2026-11-14; cluster/saidie/vit_unfrozen.sh)
+The pilot froze the autoencoder in Stage C (copied from 7a). The original best model, full_v1_stagec_crps, ran Stage C with it free, so its latent was fine-tuned to be forecastable; the pilot's ViT latent never was. Reruns of Stage C from the pilot's Stage B outputs, autoencoder unfrozen, nested dropout 0.5 kept, batch 4, lr 5e-5 (200 M models) or 1e-4 (control): u_win (ViT + stencil), u_win_mlp (ViT + dense MLP), u_wide (conv 204 M + stencil), u_local48 (control, conv 2.6 M). Evaluated with vit_eval into ~/cm1_da/v_eval_unfrozen against the frozen-Stage-C results.
+Pre-registered reading: if u_win closes the gap to u_local48 (within 3% at 30 and 60 min), the ViT autoencoder with the original stencil is viable and the pilot's gap was the frozen latent. If it stays worse by more than 3%, the ViT latent is harder to forecast and the pairing is rejected. If a run runs out of GPU memory, rerun with a smaller batch.
