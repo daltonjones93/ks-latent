@@ -5,7 +5,7 @@
 #SBATCH --partition=general
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
-#SBATCH --time=10:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/g_eval_%j.out
 set -euo pipefail
 REPO=$HOME/latent_DA

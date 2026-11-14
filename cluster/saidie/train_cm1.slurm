@@ -10,7 +10,7 @@
 #SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
-#SBATCH --time=12:00:00
+#SBATCH --time=03:00:00   # default; sbatch --time overrides (the 7a jobs took 19-63 min; a 12 h request slows backfill scheduling)
 #SBATCH --output=logs/cm1train_%j.out
 set -euo pipefail
 # Saidie shows every GPU to every job; only CUDA_VISIBLE_DEVICES keeps torch on the GPU Slurm gave us.

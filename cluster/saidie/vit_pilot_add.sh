@@ -25,8 +25,8 @@ lane() {
     IFS='|' read -r n x reuse <<< "$spec"
     local dep=${prev:+--dependency=afterany:$prev} jb
     local src=${reuse:+--reuse-ae $R/$reuse}
-    jb=$(sbatch --parsable ${dep:-} --job-name=v_$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $x $src" cluster/saidie/train_cm1.slurm)
-    prev=$(sbatch --parsable --dependency=afterok:$jb --job-name=v_${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
+    jb=$(sbatch --parsable --time=${TB:-05:00:00} ${dep:-} --job-name=v_$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $x $src" cluster/saidie/train_cm1.slurm)
+    prev=$(sbatch --parsable --time=${TC:-04:00:00} --dependency=afterok:$jb --job-name=v_${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
     echo "$n: B $jb, C $prev"; ALL="$ALL:$prev"
   done
 }

@@ -21,8 +21,8 @@ lane() {   # arm specs "name|extra" run one after another on one GPU
   for spec in "$@"; do
     local n=${spec%%|*} x=${spec#*|} dep
     dep=${prev:+--dependency=afterany:$prev}
-    local jb; jb=$(sbatch --parsable ${dep:-} --job-name=g_$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE --reuse-ae $AE $x" cluster/saidie/train_cm1.slurm)
-    prev=$(sbatch --parsable --dependency=afterok:$jb --job-name=g_${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
+    local jb; jb=$(sbatch --parsable --time=02:00:00 ${dep:-} --job-name=g_$n --mem=200G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE --reuse-ae $AE $x" cluster/saidie/train_cm1.slurm)
+    prev=$(sbatch --parsable --time=02:00:00 --dependency=afterok:$jb --job-name=g_${n}_c --mem=200G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
     echo "$n: B $jb, C $prev"; ALL="$ALL:$prev"
   done
 }
