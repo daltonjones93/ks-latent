@@ -50,6 +50,13 @@ class StageAConfig:
     val_batches: int = 8
     seed: int = 0
     nested_frac: float = 0.0   # FPc: share of samples decoded from only their first k channels (k uniform)
+    # 8a: prediction term in Stage A (the autoencoder alone has none). A small deterministic auxiliary propagator, trained jointly
+    # and discarded after Stage A, rolls `pred_k` steps from the encoded first frame with the true encoded halo and is scored in
+    # PHYSICAL space (decoded vs true columns; latent targets would invite collapse). Only the first `pred_batch` windows of each
+    # batch carry the extra frames, so the reconstruction path is unchanged.
+    w_pred: float = 0.0
+    pred_k: int = 1
+    pred_batch: int = 8
 
 
 def _penalty(prop) -> torch.Tensor | float:
@@ -139,7 +146,10 @@ def fit_pca_stage(ae: PCAColumnAE, data_tr: ColumnData, data_va: ColumnData, log
 
 
 def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, cfg: StageAConfig,
-                  log=print) -> dict:
+                  log=print, aux: StencilPropagator | None = None) -> dict:
+    """`aux`: the auxiliary propagator of the prediction term (required iff `cfg.w_pred > 0`); it is trained here and not saved."""
+    if (cfg.w_pred > 0) != (aux is not None):
+        raise ValueError("w_pred > 0 needs an auxiliary propagator (aux), and aux needs w_pred > 0")
     dev = next(ae.parameters()).device  # the model's device; data may live elsewhere
     p, reach = ae.cfg.patch, ae.cfg.reach_sites
     mask_sites = 2 * reach  # encoder + decoder reach
@@ -148,18 +158,24 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
         raise ValueError(f"window of {cfg.window_sites} sites leaves no interior after masking {mask_sites} per side")
     g = torch.Generator().manual_seed(cfg.seed)
     vg = torch.Generator().manual_seed(cfg.seed + 12345)
-    def draw(data, gen):
-        u, mem, _, _ = data.windows(cfg.batch, W, 1, gen, cfg.active_frac)
+    nf = 1 + (cfg.pred_k if aux is not None else 0)
+    def draw(data, gen, n=1):
+        u, mem, _, _ = data.windows(cfg.batch, W, n, gen, cfg.active_frac)
         e = data.env_of(mem)
-        return u[:, 0].to(dev), (None if e is None else e.to(dev))
+        return (u[:, 0] if n == 1 else u).to(dev), (None if e is None else e.to(dev))
     val = [draw(data_va, vg) for _ in range(cfg.val_batches)]
-    opt = torch.optim.AdamW(ae.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+    halo = aux.cfg.reach_sites if aux is not None else 0
+    if aux is not None and cfg.window_sites <= 2 * (halo + mask_sites):
+        raise ValueError("window too narrow for the auxiliary propagator's halo")
+    opt = torch.optim.AdamW(list(ae.parameters()) + (list(aux.parameters()) if aux is not None else []), lr=cfg.lr,
+                            weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: warmup_cosine(s, cfg.steps, cfg.warmup, cfg.lr_min_factor))
     m = mask_sites * p
     hist, best, best_state, t0 = [], float("inf"), None, time.time()
     for step in range(cfg.steps):
         ae.train()
-        u, env = draw(data_tr, g)                                                  # (B, C, W)
+        u_all, env = draw(data_tr, g, nf)                                          # (B, C, W) or (B, nf, C, W)
+        u = u_all if nf == 1 else u_all[:, 0]
         z = ae.encode(u, env)
         uh = ae.decode(nested_truncate(z, cfg.nested_frac, g))
         l_rec = F.mse_loss(_interior(uh, m), _interior(u, m))
@@ -167,9 +183,19 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
         _, l_var = decorr_var_loss(zs)
         l_ld = logdet_barrier_loss(zs, eps=cfg.logdet_eps)
         loss = l_rec + cfg.w_var * l_var + cfg.w_logdet * l_ld
+        l_pred = None
+        if aux is not None:
+            aux.train()
+            n = min(cfg.pred_batch, u.shape[0]); k = cfg.pred_k
+            zt = torch.cat([z[:n, None], ae.encode(u_all[:n, 1:].reshape(n * k, *u.shape[1:])).reshape(n, k, *z.shape[1:])], 1)
+            pred = forced_halo_rollout(aux, zt, k, halo)                           # (n, k, P, c), halo true
+            dec = ae.decode(pred.reshape(n * k, *z.shape[1:])).reshape(n, k, *u.shape[1:])
+            mp = (halo + mask_sites) * p
+            l_pred = F.mse_loss(dec[..., mp:W - mp], u_all[:n, 1:][..., mp:W - mp])
+            loss = loss + cfg.w_pred * l_pred
         opt.zero_grad(set_to_none=True)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(ae.parameters(), cfg.grad_clip)
+        torch.nn.utils.clip_grad_norm_(list(ae.parameters()) + (list(aux.parameters()) if aux is not None else []), cfg.grad_clip)
         opt.step()
         sched.step()
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
@@ -178,9 +204,12 @@ def train_stage_a(ae: ColumnFieldAE, data_tr: ColumnData, data_va: ColumnData, c
                 v = sum(F.mse_loss(_interior(ae(x, e)[0], m), _interior(x, m)).item() for x, e in val) / len(val)
             rec = {"step": step + 1, "train_recon": l_rec.item(), "l_var": l_var.item(), "l_logdet": l_ld.item(),
                    "val_recon": v, "wall_s": time.time() - t0}
+            if l_pred is not None:
+                rec["train_pred"] = l_pred.item()
             hist.append(rec)
             log(f"  [A] step {step + 1}/{cfg.steps} recon {rec['train_recon']:.5f} val {v:.5f} "
-                f"var {rec['l_var']:.3f} logdet {rec['l_logdet']:.3f} [{rec['wall_s']:.0f}s]")
+                f"var {rec['l_var']:.3f} logdet {rec['l_logdet']:.3f}"
+                + (f" pred {rec['train_pred']:.5f}" if l_pred is not None else "") + f" [{rec['wall_s']:.0f}s]")
             if v < best:
                 best, best_state = v, {k: t.detach().clone() for k, t in ae.state_dict().items()}
     ae.load_state_dict(best_state)

@@ -157,7 +157,7 @@ def build_config(a, dt: float | None) -> RunConfig:
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
                       val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac, lr=a.lr_a,
-                      warmup=a.warmup_a)
+                      warmup=a.warmup_a, w_pred=a.w_pred_a, pred_k=a.pred_k_a, pred_batch=a.pred_batch_a)
     sb = StageBConfig(window_sites=max(a.window_b, 4 * reach + 4), halo_sites=reach, batch=4 if smoke else a.batch,
                       steps=a.steps_b, k_max=k_max, k_sampling=a.k_sampling, val_every=max(1, a.steps_b // 20),
                       seed=a.seed, crps_samples=a.crps_samples)
@@ -268,6 +268,10 @@ def main():
     ap.add_argument("--vit-radius", type=int, default=2, help="attention radius in sites; 0 = global over the window")
     ap.add_argument("--vit-global-reach", type=int, default=4, help="edge margin (sites) for a global ViT")
     ap.add_argument("--tf32", action="store_true", help="TF32 matmuls on GPU (8a; off by default so earlier recipes are unchanged)")
+    ap.add_argument("--w-pred-a", type=float, default=0.0,
+                    help="8a: weight of a decoded k-step prediction term in Stage A (jointly trained auxiliary stencil propagator, discarded)")
+    ap.add_argument("--pred-k-a", type=int, default=1, help="8a: rollout steps of the Stage A prediction term (1 = one step ahead)")
+    ap.add_argument("--pred-batch-a", type=int, default=8, help="8a: windows per batch that carry the extra frames")
     ap.add_argument("--lr-a", type=float, default=1e-3, help="Stage A peak learning rate")
     ap.add_argument("--warmup-a", type=int, default=200, help="Stage A warmup steps")
     ap.add_argument("--encoder-groups", type=int, default=1,
@@ -558,7 +562,13 @@ def main():
             ra = fit_pca_stage(ae, data["train"], data["val"], log=log)
         else:
             log(f"[A] autoencoder: {sum(p.numel() for p in ae.parameters()) / 1e6:.2f} M parameters")
-            ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log)
+            aux = None
+            if cfg.stage_a.w_pred > 0:      # throwaway deterministic propagator of the Stage A prediction term
+                aux = StencilPropagator(dataclasses.replace(cfg.prop, noise_channels=0, body="conv", n_hist=1, prefix_m=0,
+                                                            global_kind="")).to(dev)
+                log(f"[A] prediction term: weight {cfg.stage_a.w_pred}, {cfg.stage_a.pred_k} step(s), auxiliary propagator "
+                    f"{sum(p.numel() for p in aux.parameters()) / 1e6:.2f} M parameters (discarded after Stage A)")
+            ra = train_stage_a(ae, data["train"], data["val"], cfg.stage_a, log=log, aux=aux)
         torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae.pt")
         write_provenance(out / "ae.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - ta)
         (out / "history_a.json").write_text(json.dumps(ra, indent=1))

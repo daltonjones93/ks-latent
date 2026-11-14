@@ -130,3 +130,39 @@ def test_attention_propagator_swiglu():
     assert isinstance(p.blocks[0].mlp, SwiGLU) and p.blocks[0].mlp.w3.weight.shape == (16, 64)
     z = torch.randn(2, 12, 5)
     assert torch.equal(p(z), z)
+
+
+def test_stage_a_prediction_term():
+    """8a: Stage A's prediction term trains the auxiliary propagator, sends gradient to the autoencoder, needs aux, and leaves
+    w_pred = 0 runs unchanged."""
+    import copy
+    from ks_latent.cm1.data import ColumnData, Normalizer, synthetic_members
+    from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder
+    from ks_latent.cm1.train import StageAConfig, train_stage_a
+    ms = synthetic_members(3, T=12, NX=64 * 4, Z=4)
+    norm = Normalizer.fit(ms)
+    d = ColumnData(ms, norm, torch.device("cpu"))
+    def build():
+        torch.manual_seed(0)
+        cfg = ColumnAEConfig(n_channels=d.C, n_levels=4, patch=4, hidden=16, latent_channels=6, n_mix=1)
+        return build_autoencoder(cfg, None)
+    def aux_():
+        torch.manual_seed(1)
+        return StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1))
+    kw = dict(window_sites=24, batch=4, steps=6, val_every=3, val_batches=1, warmup=1)
+    # w_pred = 0: identical to a run without aux
+    a1, a2 = build(), build()
+    train_stage_a(a1, d, d, StageAConfig(**kw), log=lambda *_: None)
+    train_stage_a(a2, d, d, StageAConfig(**kw), log=lambda *_: None)
+    assert all(torch.equal(p, q) for p, q in zip(a1.parameters(), a2.parameters()))
+    with pytest.raises(ValueError):
+        train_stage_a(build(), d, d, StageAConfig(w_pred=1.0, **kw), log=lambda *_: None)
+    with pytest.raises(ValueError):
+        train_stage_a(build(), d, d, StageAConfig(**kw), log=lambda *_: None, aux=aux_())
+    # with the term: the auxiliary propagator learns (its zero-init head moves), the autoencoder differs from the no-term run
+    ae, ax = build(), aux_()
+    h0 = ax.head.weight.detach().clone()
+    out = train_stage_a(ae, d, d, StageAConfig(w_pred=1.0, pred_k=2, pred_batch=2, **kw), log=lambda *_: None, aux=ax)
+    assert not torch.equal(ax.head.weight, h0)
+    assert any(not torch.equal(p, q) for p, q in zip(ae.parameters(), a1.parameters()))
+    assert "train_pred" in out["history"][-1] and out["history"][-1]["train_pred"] > 0
