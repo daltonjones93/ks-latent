@@ -39,6 +39,7 @@ def main():
     ap.add_argument("ens"); ap.add_argument("out")
     ap.add_argument("--shard", type=int, nargs=2, default=(0, 1), metavar=("K", "N"))
     ap.add_argument("--keep-raw", action="store_true")
+    ap.add_argument("--no-build", action="store_true", help="only verify existing caches and delete their raw output (no new writes)")
     ap.add_argument("--frames", type=int, default=361)
     a = ap.parse_args()
     ens, out = Path(a.ens).resolve(), Path(a.out)
@@ -52,6 +53,8 @@ def main():
         name = f"{ens.name}_{mdir.name}"
         f = out / f"{ens.name}__{mdir.name}.npz"
         raws = [p for p in mdir.glob("cm1out_*.dat")]
+        if not f.exists() and a.no_build:
+            continue
         if not f.exists():
             if not raws:
                 print(f"{name}: no cache and no raw output", flush=True); n_bad += 1; continue

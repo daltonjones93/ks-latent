@@ -1617,3 +1617,26 @@ Fair CRPS averaged over variables, at 15 / 30 / 60 min, and relative to the matc
 6. *Rule 6 (window effect):* g_local48 is 2.6% worse than g_local128 at 30 min: a longer training window alone buys about as much as any global arm.
 
 **Conclusion.** Global coupling of the leading channels does not improve the one-model forecast; it slightly hurts the 30-60 min CRPS and the calibration. Coupling all 32 channels helps by 3-6%, mainly at short lead and with true boundaries, on one seed. Next steps if pursued: a seed repeat of g_attn32, and its persistence-boundary result is the figure to trust. The result is a negative for the advisor's hypothesis as stated (leading channels only) and a weak positive for coupling every channel.
+
+### 8a pilot result (2026-11-14; 121 storms, Saidie v_eval 9392, 30 test cases, 8 samples; data docs/fpe_report/data/v_eval.json)
+Reference `g_local48_stagec` (2.6 M conv autoencoder, nested dropout, original stochastic stencil; the 7a control). CRPS relative to it; reconstruction is the RMSE of decode(encode(u)) at lag 0, averaged over variables.
+
+| arm | autoencoder | propagator | recon RMSE | CRPS 15 | CRPS 30 | CRPS 60 |
+|---|---|---|---|---|---|---|
+| v_win | ViT 198 M, windowed | conv stencil | −28% | +6.3% | +7.7% | +8.5% |
+| v_win_attn | same | attention (SwiGLU) | −28% | −0.9% | +3.5% | +4.8% |
+| v_win_mlp | same | dense SwiGLU MLP | −28% | −0.3% | +3.4% | +6.5% |
+| v_small | ViT 37 M, windowed | conv stencil | −27% | +6.0% | +6.6% | +7.3% |
+| c_wide | conv 204 M, reach 2 | original stencil | −25% | −1.2% | **−0.8%** | +0.6% |
+| c_deep | conv 191 M, reach 7 | original stencil | −25% | +5.0% | +5.0% | +5.7% |
+| full_v1_stagec_crps | conv, no nested dropout | original stencil | −12% | −3.4% | −2.3% | 0.0% |
+| v_glob | ViT 198 M, global | conv stencil | Stage C ran out of GPU memory; rerun queued (9393, eval 9394) | | | |
+
+**Reading against the pre-registration.** (Single seed per arm; the seed spread of the control is about 0.6%.)
+- *Rule 4 (reconstruction no worse):* met by every large model: −25 to −28%.
+- *Rule 0 (scaled conv within 3% of the best ViT):* the conv model is better. c_wide at 30 min is 0.1211 against the best ViT's 0.1262, and equals the original. The conv model is kept.
+- *Rule 2 (capacity):* v_small (37 M) is as good as v_win (198 M) in reconstruction (−27% vs −28%) and in CRPS (+6.6% vs +7.7%): at 121 storms, the ViT gains nothing from 5× more parameters. The scaled conv does gain in reconstruction (−25% from 2.6 M to 204 M).
+- *Rule 3 (propagator body):* on the ViT latent, the windowed-attention and dense-MLP bodies are about 4% better than the conv stencil at 30 min (3.5% and 3.4% against 7.7%); neither beats the original model.
+- *Rule 1 (windowed vs global):* open (v_glob). Its Stage A validation reconstruction is 0.0163 against 0.0273 for the windowed ViT (windows of 200 vs 64 sites, so not matched).
+
+**Conclusion.** A much larger autoencoder reconstructs 25-28% better but does not forecast better at 121 storms. The forecast is not limited by the autoencoder at this data size. The data-scaling step with the new storms is the real test.
