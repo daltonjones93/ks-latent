@@ -15,4 +15,4 @@ cd "$REPO"
 SRC="cache:$HOME/cm1_cache+$HOME/cm1_cache_A2+$HOME/cm1_cache_B"
 R=$HOME/cm1_runs
 L=""; for r in ${RUNS:?} g_local48_stagec full_v1_stagec_crps; do [ -f "$R/$r/prop.pt" ] && L="$L $R/$r" || echo "missing $r"; done
-python scripts/cm1/twoscale_eval.py --runs $L --source "$SRC" --out "$HOME/cm1_da/${OUT:-v_eval}" --lags 0,5,15,30,60 --threads 16
+python scripts/cm1/twoscale_eval.py --runs $L --source "$SRC" --out "$HOME/cm1_da/${OUT:-v_eval}" --lags 0,5,15,30,60 --threads 16 ${EXTRA_EVAL:-}

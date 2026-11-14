@@ -109,6 +109,9 @@ def main():
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--paired", default=None, help="manifest.json of the paired runs (T-chaos)")
     ap.add_argument("--base", default=None); ap.add_argument("--branches", default=None)
+    ap.add_argument("--ref-norm-run", default=None,
+                    help="8a: run dir whose normalizer.json defines the units: per-variable metrics of models with another normalizer "
+                         "(trained on other storms) are converted to these units before averaging (power by the square)")
     ap.add_argument("--global-off", action="store_true", help="7a: also score each globally coupled run with its global features zeroed")
     ap.add_argument("--boundary", choices=["truth", "persistence"], default="truth",
                     help="halo after t0: the true state (default) or held at t0 (nothing after t0 known)")
@@ -122,6 +125,9 @@ def main():
         if a.global_off and getattr(models[r.name][1].cfg, "global_kind", ""):
             m2 = load_run(r, dev); m2[1].global_off = True; models[r.name + "@globaloff"] = m2
     res = {"vars": list(VARS), "bands_km": BANDS, "lags": lags, "boundary": a.boundary, "runs": {}}
+    ref_scale = None
+    if a.ref_norm_run:
+        ref_scale = np.array(json.loads((Path(a.ref_norm_run).expanduser() / "normalizer.json").read_text())["scale"], dtype=float)
     if a.source:
         files = member_files(a.source)
         names = next(iter(models.values()))[4]["test"][: a.n_test]
@@ -144,7 +150,14 @@ def main():
                     with torch.no_grad():
                         for L in lags:
                             u = d.full(0, t0 + L)[0]
-                            case["lags"][str(L)] = score_case(ae, ae.decode(traj[L]), u, d.Z, slice(mar, u.shape[-1] - mar), norm, a.lowpass_km)
+                            sc = score_case(ae, ae.decode(traj[L]), u, d.Z, slice(mar, u.shape[-1] - mar), norm, a.lowpass_km)
+                            if ref_scale is not None:        # this model's normalized units -> the reference model's
+                                f = np.array(norm.scale, dtype=float) / ref_scale
+                                for k in ("rmse", "crps", "spread", "rmse_lowpass"):
+                                    sc[k] = (np.array(sc[k]) * f).tolist()
+                                for k in ("power", "power_truth"):
+                                    sc[k] = (np.array(sc[k]) * (f ** 2)[:, None]).tolist()
+                            case["lags"][str(L)] = sc
                     cases.append(case)
                 print(f"[ts_eval] {rn} {nm} ({time.time() - t_start:.0f}s)", flush=True)
             res["runs"][rn] = {"samples": S, "cases": cases}
