@@ -70,7 +70,8 @@ def energy_spectrum(traj: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--tag", choices=list(MODELS), required=True)
+    p.add_argument("--tag", required=True, help="a key of MODELS, or any label with --ae-ckpt / --prop-ckpt")
+    p.add_argument("--ae-ckpt", default=None); p.add_argument("--prop-ckpt", default=None)
     p.add_argument("--L", type=float, nargs="+", required=True)
     p.add_argument("--ic-seed", type=int, default=0)
     p.add_argument("--ic", choices=["normalized", "raw"], default="normalized")
@@ -79,7 +80,7 @@ def main() -> None:
     p.add_argument("--tangent-dtype", choices=["float32", "float64"], default="float32")
     args = p.parse_args()
 
-    ae_path, prop_path = MODELS[args.tag]
+    ae_path, prop_path = (args.ae_ckpt, args.prop_ckpt) if args.ae_ckpt else MODELS[args.tag]
     with h5py.File(DATASET, "r") as f:
         mean = float(f["metadata"].attrs["normalization_mean"])
         std = float(f["metadata"].attrs["normalization_std"])
