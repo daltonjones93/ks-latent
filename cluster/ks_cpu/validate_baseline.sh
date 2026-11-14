@@ -7,10 +7,10 @@ set -uo pipefail
 mkdir -p $A/experiments/crop
 which=${1:-kolm}
 if [ "$which" = kolm ]; then
-  for sc in 1 2 3; do s0=$(date +%s)
+  for ic in ${ICS:-0}; do for sc in 1 2 3; do s0=$(date +%s)
     python scripts/exp_crop_eval.py --ae-ckpt $A/stage1_ae_kolmogorov_crop_k_xs01_v2.pt --prop-ckpt $A/stage2_prop_kolmogorov_crop_k_xs01_v2.pt \
-      --scale $sc --seed 0 --tag val_k_xs01_v2_x${sc}_seed0 2>&1 | tail -3
-    echo "EVAL kolm x$sc: $(( $(date +%s) - s0 )) s"; done
+      --scale $sc --seed $ic --tag val_k_xs01_v2_x${sc}_seed$ic 2>&1 | tail -3
+    echo "EVAL kolm x$sc IC$ic: $(( $(date +%s) - s0 )) s"; done; done
 else
   AE=$A/stage1_ae_kolmogorov_crop_r13_C2_ks2d_s44big_k48_seed0.pt; PR=$A/stage2_prop_kolmogorov_crop_r13_C2_ks2d_s44big_k48_seed0.pt
   for sc in 1.0 1.5 2.0; do s0=$(date +%s)
