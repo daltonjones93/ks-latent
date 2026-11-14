@@ -1663,3 +1663,28 @@ New body `StencilPropConfig.body = "mixer"` (ks_latent/cm1/models.py, `_MixerBlo
 
 Arms (cluster/saidie/mixer_run.sh), on the same frozen autoencoder as the control `g_local48` (fpc_nested_stagec, nested dropout), same recipe (Stage B stochastic CRPS, Stage C decoded CRPS with the autoencoder frozen): `m128` (width 128, 0.75 M, 1.7x the stencil: the main arm, per the guidance to keep the propagator at 1-2x), `m256` (3.0 M, capacity check), `mlp256` (dense SwiGLU MLP on the 7-site neighbourhood, 1.65 M). Evaluated with vit_eval into v_eval_mixer.
 Decision rule: the mixer helps if m128 beats g_local48 by more than 3% in CRPS at both 30 and 60 min (seed spread of a control about 0.6%) without losing spread/RMSE calibration (g_local48: 0.93-0.95); it is the better propagator structure only if it also does not lose at 15 min. If m256 helps and m128 does not, the gain is capacity, not structure, and conflicts with the simplicity preference. This is the AE-fixed test on the conv latent; the ViT latent is a later step.
+
+### 8a follow-up result: Stage C with the autoencoder unfrozen (2026-11-14; Saidie 9399, 30 test cases, 8 samples; data docs/fpe_report/data/v_eval_unfrozen.json, v_eval_glob.json)
+CRPS relative to `g_local48` (frozen Stage C, original stencil, 2.6 M conv autoencoder); reconstruction is RMSE at lag 0. Single seed per arm; control seed spread about 0.6%.
+
+| arm | autoencoder | propagator | Stage C | recon | CRPS 15 | CRPS 30 | CRPS 60 |
+|---|---|---|---|---|---|---|---|
+| g_local48 | conv 2.6 M | stencil | frozen | 0% | 0% | 0% | 0% |
+| u_local48 | conv 2.6 M | stencil | unfrozen | −3% | −1.6% | −1.3% | −0.1% |
+| v_win | ViT 198 M | stencil | frozen | −28% | +6.3% | +7.7% | +8.5% |
+| u_win | ViT 198 M | stencil | unfrozen | −25% | −1.9% | +2.6% | +5.3% |
+| v_win_mlp | ViT 198 M | dense MLP | frozen | −28% | −0.3% | +3.4% | +6.5% |
+| **u_win_mlp** | ViT 198 M | dense MLP | unfrozen | −26% | **−8.4%** | **−4.1%** | **−1.6%** |
+| c_wide | conv 204 M | stencil | frozen | −25% | −1.2% | −0.8% | +0.6% |
+| u_wide | conv 204 M | stencil | unfrozen | −23% | −6.0% | −3.4% | −1.9% |
+| v_glob | ViT 198 M global | stencil | frozen | −25% | +5.3% | +5.3% | +7.6% |
+| full_v1_stagec_crps | conv, no nested dropout | stencil | unfrozen | −12% | −3.4% | −2.3% | 0.0% |
+
+**Reading against the pre-registration.**
+- *The frozen autoencoder was a confound:* unfreezing Stage C improves every large arm (u_win vs v_win at 30 min −4.7%, u_win_mlp vs v_win_mlp −7.3%, u_wide vs c_wide −2.6%); the small control gains only 1.3%.
+- *u_win (the pairing asked about) is not viable:* it stays 4.0% and 5.3% worse than the matched unfrozen control u_local48 at 30 and 60 min (the rule: within 3%). The stencil propagator is the weak link on the ViT latent.
+- *Best arm: u_win_mlp* (ViT 198 M + dense SwiGLU MLP propagator, unfrozen): −4.1% / −1.6% at 30 / 60 min against g_local48, −2.8% / −1.6% against u_local48, and −1.9% / −1.7% against the previous best (full_v1_stagec_crps). u_wide is next. The margin over the unfrozen control is modest at 60 min and single seed.
+- Spread/RMSE at 60 min is 0.92-0.96 for all unfrozen arms, no calibration loss.
+- *Windowed vs global (rule 1):* v_glob is 5.3% / 7.6% worse than the control, no better than the windowed v_win (+7.7 / +8.5%): the windowed (local) autoencoder is kept. v_glob's reconstruction is −25%.
+- Reconstruction cost of unfreezing: the first-frame training reconstruction rises (ViT 0.016 -> 0.066, under nested dropout), while lag-0 test RMSE barely moves (-28% -> -25%).
+Pending: the 75 M ViT arms (Stage A prediction term) and the mixer propagator arms (8b).
