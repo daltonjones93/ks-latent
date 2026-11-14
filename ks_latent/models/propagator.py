@@ -818,6 +818,29 @@ def _build_local_attention_mask(n_tokens: int, window: int | None) -> torch.Tens
     return build_local_attention_mask(n_tokens, window)
 
 
+class _SwiGLUFFN(nn.Module):
+    """Bias-free SwiGLU feed-forward: W3 (silu(W1 x) * W2 x), hidden width `h` (CM1 mixer, 2026-11-14)."""
+
+    def __init__(self, d: int, h: int):
+        super().__init__()
+        self.w12 = nn.Linear(d, 2 * h, bias=False)
+        self.w3 = nn.Linear(h, d, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        a, b = self.w12(x).chunk(2, dim=-1)
+        return self.w3(F.silu(a) * b)
+
+
+def _mixer_norm_and_mlp(variant: str, d_model: int, mlp_ratio: int):
+    """(norm factory, MLP) for a local-mixer block: the published LayerNorm + GELU MLP, or RMSNorm + SwiGLU of equal size."""
+    if variant == "gelu_ln":
+        return nn.LayerNorm, nn.Sequential(nn.Linear(d_model, mlp_ratio * d_model), nn.GELU(),
+                                           nn.Linear(mlp_ratio * d_model, d_model))
+    if variant == "swiglu_rms":
+        return nn.RMSNorm, _SwiGLUFFN(d_model, int(round(2 * mlp_ratio * d_model / 3)))
+    raise ValueError(f"unknown mixer_variant {variant!r}")
+
+
 class _LocalMixerBlock(nn.Module):
     """One block of `backbone="local_mlp"`: a LOCAL, UNCONSTRAINED linear
     token-mixer (circular `nn.Conv1d`, kernel width `2*window+1`, no
@@ -828,18 +851,15 @@ class _LocalMixerBlock(nn.Module):
     the only thing that changes is the token-mixing mechanism itself. See
     `_LocalMLPDeltaBody`'s docstring for the motivation."""
 
-    def __init__(self, d_model: int, window: int, mlp_ratio: int, dropout: float):
+    def __init__(self, d_model: int, window: int, mlp_ratio: int, dropout: float, variant: str = "gelu_ln"):
         super().__init__()
-        self.norm1 = nn.LayerNorm(d_model)
+        norm, mlp = _mixer_norm_and_mlp(variant, d_model, mlp_ratio)
+        self.norm1 = norm(d_model)
         self.mix = nn.Conv1d(
             d_model, d_model, kernel_size=2 * window + 1, padding=window, padding_mode="circular"
         )
-        self.norm2 = nn.LayerNorm(d_model)
-        self.mlp = nn.Sequential(
-            nn.Linear(d_model, mlp_ratio * d_model),
-            nn.GELU(),
-            nn.Linear(mlp_ratio * d_model, d_model),
-        )
+        self.norm2 = norm(d_model)
+        self.mlp = mlp
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -898,6 +918,7 @@ class _LocalMLPDeltaBody(nn.Module):
         dropout: float,
         zero_init: bool,
         token_window: int | None = None,
+        variant: str = "gelu_ln",
     ):
         super().__init__()
         if d_latent % n_tokens != 0:
@@ -907,9 +928,9 @@ class _LocalMLPDeltaBody(nn.Module):
         self.token_window = token_window if token_window is not None else self.chunk_size
         self.token_embed = nn.Linear(self.token_window, d_model)
         self.blocks = nn.ModuleList(
-            [_LocalMixerBlock(d_model, window, mlp_ratio, dropout) for _ in range(n_layers)]
+            [_LocalMixerBlock(d_model, window, mlp_ratio, dropout, variant) for _ in range(n_layers)]
         )
-        self.norm = nn.LayerNorm(d_model)
+        self.norm = _mixer_norm_and_mlp(variant, d_model, mlp_ratio)[0](d_model)
         self.token_unembed = nn.Linear(d_model, self.chunk_size)
         if zero_init:
             nn.init.zeros_(self.token_unembed.weight)
@@ -1000,18 +1021,15 @@ class _LocalMixerBlock2D(nn.Module):
     are exactly `_LocalMixerBlock`'s own (per-token pointwise operations,
     genuinely unchanged by how many spatial axes the token grid has)."""
 
-    def __init__(self, d_model: int, window: int, mlp_ratio: int, dropout: float):
+    def __init__(self, d_model: int, window: int, mlp_ratio: int, dropout: float, variant: str = "gelu_ln"):
         super().__init__()
-        self.norm1 = nn.LayerNorm(d_model)
+        norm, mlp = _mixer_norm_and_mlp(variant, d_model, mlp_ratio)
+        self.norm1 = norm(d_model)
         self.mix = nn.Conv2d(
             d_model, d_model, kernel_size=2 * window + 1, padding=window, padding_mode="circular"
         )
-        self.norm2 = nn.LayerNorm(d_model)
-        self.mlp = nn.Sequential(
-            nn.Linear(d_model, mlp_ratio * d_model),
-            nn.GELU(),
-            nn.Linear(mlp_ratio * d_model, d_model),
-        )
+        self.norm2 = norm(d_model)
+        self.mlp = mlp
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, Px: int, Py: int) -> torch.Tensor:
@@ -1044,6 +1062,7 @@ class _LocalMLPDeltaBody2D(nn.Module):
     def __init__(
         self, n_sites_x: int, n_sites_y: int, local_channels: int,
         token_d_model: int, n_layers: int, mlp_ratio: int, window: int, dropout: float, zero_init: bool,
+        variant: str = "gelu_ln",
     ):
         super().__init__()
         self.n_sites_x = n_sites_x
@@ -1051,9 +1070,9 @@ class _LocalMLPDeltaBody2D(nn.Module):
         self.local_channels = local_channels
         self.token_embed = nn.Linear(local_channels, token_d_model)
         self.blocks = nn.ModuleList(
-            [_LocalMixerBlock2D(token_d_model, window, mlp_ratio, dropout) for _ in range(n_layers)]
+            [_LocalMixerBlock2D(token_d_model, window, mlp_ratio, dropout, variant) for _ in range(n_layers)]
         )
-        self.norm = nn.LayerNorm(token_d_model)
+        self.norm = _mixer_norm_and_mlp(variant, token_d_model, mlp_ratio)[0](token_d_model)
         self.token_unembed = nn.Linear(token_d_model, local_channels)
         if zero_init:
             nn.init.zeros_(self.token_unembed.weight)
@@ -4295,7 +4314,7 @@ class LatentPropagator(nn.Module):
                 # enforce attn_window is not None for this backbone.
                 self.body = _LocalMLPDeltaBody(
                     d, cfg.n_tokens, cfg.token_d_model, cfg.token_n_layers, cfg.token_mlp_ratio,
-                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.token_window,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.token_window, cfg.mixer_variant,
                 )
             elif cfg.backbone == "multiscale_local_mlp":
                 # __post_init__ already enforces d_latent == sum of the
@@ -4425,7 +4444,7 @@ class LatentPropagator(nn.Module):
                 self.body = _LocalMLPDeltaBody2D(
                     cfg.local_mlp2d_n_sites_x, cfg.local_mlp2d_n_sites_y, cfg.local_mlp2d_local_channels,
                     cfg.local_mlp2d_token_d_model, cfg.local_mlp2d_n_layers, cfg.token_mlp_ratio,
-                    cfg.attn_window, cfg.dropout, cfg.zero_init,
+                    cfg.attn_window, cfg.dropout, cfg.zero_init, cfg.mixer_variant,
                 )
             elif cfg.backbone == "local_mlp_2d_biotsavart":
                 # Same sizing fields as "local_mlp_2d" (reused, not

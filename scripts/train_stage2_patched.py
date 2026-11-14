@@ -158,6 +158,10 @@ def main() -> None:
         "(Stage2TrainingConfig's docstring).",
     )
     parser.add_argument(
+        "--mixer-variant", choices=["gelu_ln", "swiglu_rms"], default="gelu_ln",
+        help="local_mlp blocks: the published LayerNorm + GELU MLP, or RMSNorm + SwiGLU of equal size (CM1 mixer)",
+    )
+    parser.add_argument(
         "--backbone",
         choices=[
             "mlp", "transformer", "vit", "fno_vit", "fno_mlp", "fourier_mlp",
@@ -1210,7 +1214,7 @@ def main() -> None:
                 token_nhead=args.prop_token_nhead, token_n_layers=args.prop_token_n_layers,
                 attn_window=args.attn_window, pos_encoding=args.pos_encoding, delta_cap=args.delta_cap,
                 n_history=args.n_history, token_window=args.token_window,
-                fno_modes=args.fno_modes, fno_n_layers=args.fno_n_layers,
+                fno_modes=args.fno_modes, fno_n_layers=args.fno_n_layers, mixer_variant=args.mixer_variant,
             )
         elif args.backbone == "masked_mlp":
             member_cfg = PropagatorConfig(

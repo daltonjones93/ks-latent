@@ -2053,6 +2053,11 @@ class AuxPropagatorConfig:
     token_nhead: int = 2
     token_n_layers: int = 2
     token_mlp_ratio: int = 4  # "vit" backbone only
+    # `local_mlp` / `local_mlp_2d` blocks only (added 2026-11-14, user-directed: the CM1 mixer's details on the Paper I/II models):
+    # "gelu_ln" = the published block (LayerNorm, GELU MLP of width `token_mlp_ratio` x d); "swiglu_rms" = RMSNorm and a
+    # bias-free SwiGLU MLP whose hidden width is (2/3) x `token_mlp_ratio` x d, which has the same parameter count as the GELU
+    # MLP (3 d h = 8 d^2 at ratio 4). The default leaves every earlier checkpoint and config unchanged.
+    mixer_variant: str = "gelu_ln"
     # None = full (global) attention among tokens ("transformer"/"vit"/
     # "fno_vit" backbones). "local_mlp" backbone (added 2026-08-30,
     # user-directed -- see docs/PHASE2_ARCHITECTURE_EXPERIMENTS.md Section
@@ -3116,6 +3121,11 @@ class PropagatorConfig:
     token_nhead: int = 2
     token_n_layers: int = 2
     token_mlp_ratio: int = 4  # "vit" backbone only
+    # `local_mlp` / `local_mlp_2d` blocks only (added 2026-11-14, user-directed: the CM1 mixer's details on the Paper I/II models):
+    # "gelu_ln" = the published block (LayerNorm, GELU MLP of width `token_mlp_ratio` x d); "swiglu_rms" = RMSNorm and a
+    # bias-free SwiGLU MLP whose hidden width is (2/3) x `token_mlp_ratio` x d, which has the same parameter count as the GELU
+    # MLP (3 d h = 8 d^2 at ratio 4). The default leaves every earlier checkpoint and config unchanged.
+    mixer_variant: str = "gelu_ln"
     attn_window: int | None = None  # "local_mlp" backbone: reused as its conv kernel radius, required (not None) -- see AuxPropagatorConfig's docstring
     pos_encoding: str = "circular"  # "vit" backbone only; see AuxPropagatorConfig's docstring
     delta_cap: float | None = None

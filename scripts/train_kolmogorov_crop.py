@@ -67,6 +67,8 @@ def main() -> None:
     p.add_argument("--local-channels", type=int, default=3)
     p.add_argument("--backbone", choices=["local_mlp_2d", "local_mlp_2d_consensus", "local_mlp_2d_biotsavart"],
                    default="local_mlp_2d")
+    p.add_argument("--mixer-variant", choices=["gelu_ln", "swiglu_rms"], default="gelu_ln",
+                   help="local_mlp_2d block: the published LayerNorm + GELU MLP, or RMSNorm + SwiGLU of equal size (CM1 mixer)")
     p.add_argument("--consensus-n-iter", type=int, default=4)
     p.add_argument("--consensus-radius", type=int, default=1)
     p.add_argument("--w-rank", type=float, default=0.0)
@@ -297,6 +299,7 @@ def main() -> None:
         local_mlp2d_n_sites_x=Pu, local_mlp2d_n_sites_y=bank_tr.shape[3], local_mlp2d_local_channels=c,
         local_mlp2d_token_d_model=32, local_mlp2d_n_layers=args.prop_layers,
         consensus_n_iter=args.consensus_n_iter, consensus_radius=args.consensus_radius, **extra_cfg,
+        mixer_variant=args.mixer_variant,
     )
     prop = AuxPropagator(prop_cfg).to(dev)
     if args.init_prop is not None:
