@@ -1722,3 +1722,16 @@ Original stochastic stencil propagator, Stage C unfrozen; each arm differs from 
 
 Reading against the pre-registration (an arm helps if it beats w75 by more than 3% at both 30 and 60 min and keeps reconstruction within 10%): no arm meets both. k = 1 (the cheapest, +1.9% reconstruction) gives −2.6% / −3.2%, just short at 30 min; k = 4 gives −4.9% / −2.3%, short at 60 min, +8% reconstruction; w = 5 and k = 16 fail the reconstruction guard (+15%, +20%). Longer rollouts or a heavier weight do not help beyond k = 4: they cost reconstruction and calibration (spread/RMSE 0.85-0.88 at k = 8 and 16). All prediction arms improve the 15- and 30-min CRPS by 3-8% relative to w75, and the 60-min CRPS by 1-3%, against a control seed spread of about 0.6%: the term helps at short lead, not at 60 min. The stencil propagator remains the limit: no arm beats the original g_local48 at 60 min (the best, k = 1, +1.5%).
 Next: the mixer propagator on these autoencoders (um_w75, um_win queued) and, if wanted, the Stage A term together with the mixer.
+
+### 8a result: the dense-MLP propagator without noise channels (2026-11-14; Saidie 9434, 30 test cases; data docs/fpe_report/data/v_eval_det.json; figures docs/fpe_report/figs_vit/det/)
+`d_win_mlp`: same ViT 198 M autoencoder (v_win), same dense SwiGLU MLP body, no noise inputs, MSE loss in latent space in Stage B and in decoded space in Stage C (autoencoder unfrozen as `u_win_mlp`). One forecast per case, against the mean of 8 samples of `u_win_mlp` (RMSE of the forecast mean, normalized units):
+
+| lead | deterministic | stochastic (mean of 8) | difference | original g_local48 |
+|---|---|---|---|---|
+| +5 min | 0.2442 | 0.2715 | −10.1% | 0.2917 |
+| +15 min | 0.3584 | 0.3677 | −2.5% | 0.3793 |
+| +30 min | 0.4368 | 0.4497 | −2.9% | 0.4511 |
+| +60 min | 0.4866 | 0.4982 | −2.3% | 0.4948 |
+
+The 10 km low-pass RMSE is not better for the deterministic model (+30 min: 0.1262 against 0.1212, +60 min: 0.1763 against 0.1690), so its mean-error advantage is in the small scales, where it predicts the conditional mean. Power relative to truth at +30 min: w 0.02 / 0.02 / 0.07 / 0.33 (bands 0.5-2 / 2-5 / 5-10 / 10-20 km) against 0.64 / 0.71 / 1.05 / 1.21 for the stochastic model; liquid 0.02 / 0.02 / 0.08 / 0.38 against 0.51 / 0.72 / 1.02 / 1.10. The sections (`det/fig_compare_sections.png`) show a smooth forecast with the updrafts, liquid and ice cores washed out, and no spread. CRPS is not comparable (the deterministic value is a mean absolute error: 0.1748 at +30 min against 0.1170).
+Reading: the noise channels cost little mean skill here (2-3%, against the 12% of the earlier conv stencil comparison), buy all the power below 10 km, calibrated spread and the sharp convective cores, and are kept. A deterministic model remains the choice for a pure mean forecast, with ensemble spread from added model noise.
