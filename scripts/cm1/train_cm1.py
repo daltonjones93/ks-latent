@@ -303,7 +303,7 @@ def main():
     ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
     ap.add_argument("--prop-mlp-ratio", type=float, default=4.0, help="8a: SwiGLU up-projection of the 'mlp' propagator body")
     ap.add_argument("--prop-attn-swiglu", action="store_true", help="8a: SwiGLU FFN in the attention propagator's blocks")
-    ap.add_argument("--prop-body", choices=["conv", "attention", "law", "mlp"], default="conv",
+    ap.add_argument("--prop-body", choices=["conv", "attention", "law", "mlp", "mixer"], default="conv",
                     help="propagator body: stencil convolutions, windowed self-attention (M1a), or an explicit latent "
                          "PDE (FPc: linear + quadratic terms + penalized residual)")
     ap.add_argument("--law-l1", type=float, default=0.0, help="FPc: L1 weight on the law's coefficients")

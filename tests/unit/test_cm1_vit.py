@@ -173,3 +173,24 @@ def test_75M_configuration():
     cfg = ColumnAEConfig(n_channels=434, n_levels=62, latent_channels=32, kind="vit", vit_dim=736, vit_heads=23)
     n = sum(p.numel() for p in ViTColumnAE(cfg).parameters())
     assert 73e6 < n < 76e6, n
+
+
+def test_mixer_propagator():
+    """8a: the Paper I/II local_mlp block as the CM1 propagator: identity at init, reach layers x radius, stochastic, ~0.75 M."""
+    from ks_latent.cm1.models import StencilPropagator, StencilPropConfig
+    torch.manual_seed(0)
+    p = StencilPropagator(StencilPropConfig(latent_channels=5, hidden=16, layers=3, radius=1, body="mixer", noise_channels=2))
+    z = torch.randn(2, 30, 5)
+    assert torch.equal(p(z), z)
+    with torch.no_grad():
+        p.head.weight.normal_()
+    eps = torch.randn(2, 2, 30)
+    z2 = z.clone(); z2[:, 20:] += 4.0                              # beyond the reach (3 sites) of sites <= 16
+    assert torch.allclose(p(z, eps=eps)[:, :17], p(z2, eps=eps)[:, :17], atol=1e-5)
+    assert not torch.allclose(p(z, eps=eps)[:, 17:], p(z2, eps=eps)[:, 17:])
+    assert not torch.allclose(p(z), p(z))
+    big = StencilPropagator(StencilPropConfig(latent_channels=32, hidden=128, layers=3, radius=1, body="mixer", noise_channels=4))
+    n = sum(q.numel() for q in big.parameters())
+    base = sum(q.numel() for q in StencilPropagator(StencilPropConfig(latent_channels=32, hidden=256, layers=3, radius=1,
+                                                                       noise_channels=4)).parameters())
+    assert 1.5 * base < n < 2.2 * base, (n, base)

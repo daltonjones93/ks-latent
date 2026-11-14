@@ -406,8 +406,11 @@ class StencilPropConfig:
     padding_mode: str = "replicate"
     n_hist: int = 1          # frames of history the step sees (D13); 1 = Markovian
     noise_channels: int = 0  # random input channels per site (D14c stochastic propagator); 0 = deterministic
-    body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a), "law" (FPc: structured latent PDE) or "mlp"
-                             # (8a: a dense SwiGLU MLP per site on the flattened neighbourhood of layers x radius sites)
+    body: str = "conv"       # "conv" (stencil convolutions), "attention" (M1a), "law" (FPc: structured latent PDE), "mlp"
+                             # (8a: a dense SwiGLU MLP per site on the flattened neighbourhood of layers x radius sites) or
+                             # "mixer" (8a: the Paper I/II local_mlp block: per block a pre-norm windowed LINEAR token mixer
+                             # (conv, radius `radius`, no nonlinearity) then a pre-norm per-site SwiGLU MLP of width
+                             # mlp_ratio x hidden, both residual; `layers` blocks, reach layers x radius sites)
     mlp_ratio: float = 4.0   # body "mlp": SwiGLU hidden = mlp_ratio x hidden
     attn_swiglu: bool = False  # body "attention": SwiGLU FFN (hidden = mlp_ratio x hidden) instead of the 2x GELU MLP
     heads: int = 4           # attention heads (body = "attention")
@@ -451,6 +454,24 @@ class StencilPropConfig:
         if self.body == "law":
             return (2 if self.law_integrator == "heun" else 1) * self.law_substeps
         return self.layers * self.radius
+
+
+class _MixerBlock(nn.Module):
+    """The Paper I/II `local_mlp` block (ks_latent/models/propagator.py `_LocalMixerBlock`) on site tokens (B, P, H): pre-norm
+    windowed LINEAR mixer (Conv1d H -> H, kernel 2r + 1, open edges: `padding_mode`, no softmax, no nonlinearity) + residual,
+    then pre-norm per-site SwiGLU MLP (hidden = ratio x H) + residual. Linear spatial mixing and the nonlinearity are separate."""
+
+    def __init__(self, H: int, r: int, padding_mode: str, ratio: float):
+        super().__init__()
+        if padding_mode == "circular":
+            raise ValueError("circular padding is wrong for CM1 (open lateral boundaries)")
+        self.n1, self.n2 = nn.RMSNorm(H), nn.RMSNorm(H)
+        self.mix = nn.Conv1d(H, H, 2 * r + 1, padding=r, padding_mode=padding_mode)
+        self.mlp = SwiGLU(H, int(round(ratio * H)))
+
+    def forward(self, x):
+        x = x + self.mix(self.n1(x).transpose(1, 2)).transpose(1, 2)
+        return x + self.mlp(self.n2(x))
 
 
 class _WindowAttention(nn.Module):
@@ -800,6 +821,11 @@ class StencilPropagator(nn.Module):
                                  cfg.law_global, cfg.law_cap, cfg.law_lead, cfg.law_lead_nu_pos,
                                  cfg.law_head_n)
             return
+        elif cfg.body == "mixer":       # 8a: Paper I/II local_mlp block (linear windowed mixer + per-site SwiGLU), noise as input
+            self.mx_in = nn.Linear(n_in, H)
+            self.mx_blocks = nn.ModuleList(_MixerBlock(H, r, cfg.padding_mode, cfg.mlp_ratio) for _ in range(cfg.layers))
+            self.norm = nn.RMSNorm(H)
+            self.head = nn.Linear(H, c)
         elif cfg.body == "mlp":         # 8a: dense MLP on the whole neighbourhood (same reach as the conv body)
             R = cfg.layers * r
             self.mlp_in = nn.Linear(n_in * (2 * R + 1), H)
@@ -861,6 +887,11 @@ class StencilPropagator(nn.Module):
             if self.global_off:
                 g = torch.zeros_like(g)
             x = torch.cat([x, g.transpose(1, 2)], dim=1)
+        if self.cfg.body == "mixer":
+            h = self.mx_in(x.transpose(1, 2))                                  # (B, P, H)
+            for blk in self.mx_blocks:
+                h = blk(h)
+            return last + self.head(self.norm(h))
         if self.cfg.body == "mlp":
             R = self.cfg.layers * self.cfg.radius
             xp = F.pad(x, (R, R), mode=self.cfg.padding_mode)                  # (B, n_in, P + 2R)
