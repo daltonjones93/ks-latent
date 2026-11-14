@@ -1593,3 +1593,27 @@ Evaluation (vit_eval.slurm): twoscale_eval at lags 0 (reconstruction), 5, 15, 30
 4. Reconstruction at lag 0 must be no worse than the conv autoencoder's. Otherwise the large autoencoder is not doing its job, whatever the forecast scores.
 
 **Then data scaling,** once the caches are on Saidie: the chosen autoencoder and propagator trained on 93 (the current training set), about 280, and about 560 training storms, with the same 22 test storms plus ~20 held-out ens_C/ens_D storms. This shows whether the large model keeps improving with data, where the small one stopped at about 28 storms.
+
+### 7a result (2026-11-14; Saidie 9370, 30 test cases each, 8 samples; data docs/fpe_report/data/g_eval.json, g_eval_pers.json, g_diag.json)
+Fair CRPS averaged over variables, at 15 / 30 / 60 min, and relative to the matched local control `g_local128` (seed 0: 0.0980 / 0.1189 / 0.1434; the other control seed is within 0.6%).
+
+| arm | 15 min | 30 min | 60 min | spread/RMSE at 60 | share of Jacobian beyond 6 km |
+|---|---|---|---|---|---|
+| g_local48 (recipe window) | +1.5% | +2.6% | +1.2% | 0.95 | 0 |
+| g_local128_s1 | −0.6% | +0.6% | −0.3% | 0.95 | 0 |
+| g_mean8 | −0.7% | +3.5% | +4.2% | 0.94 | 0.07 |
+| g_attn4 | +0.6% | +3.4% | +5.8% | 0.90 | 0.19 |
+| g_attn8 | −1.5% | +2.6% | +5.5% | 0.92 | 0.19 |
+| g_attn8_s1 | −2.7% | +1.1% | +3.6% | 0.92 | 0.18 |
+| g_attn32 | **−5.6%** | **−3.0%** | **−2.9%** | 0.96 | 0.19 |
+| full_v1_stagec_crps (original) | −2.0% | +0.3% | +1.2% | 0.92 | 0 |
+
+**Reading against the pre-registration.**
+1. *Rule 1 (global coupling helps) fails.* g_attn8 does not beat both local controls on either seed at 30 or 60 min; it is better only at 15 min. The Stage C validation gains (2-4.6%) did not transfer to test CRPS; validation was 6 storms with decoded k = 45 error, not CRPS.
+2. *Rule 2 (it is coupling, not capacity):* the models do use distant information (13-19% of the one-step Jacobian norm lies beyond the 6 km stencil reach, nearly all of it beyond 60 km; g_mean8 7%). That did not buy skill. The switch-off ablation (global features zeroed at inference) costs +40% to +155% CRPS, but this is out of distribution for a model trained with the features present, so it shows dependence, not benefit. A fairer ablation would substitute the features' data mean.
+3. *Rule 3 (not boundary leakage):* the only winner, g_attn32, loses most of its gain with persistence boundaries (30 min: −3.0% true, −0.8% persistence; 60 min: −2.9% → −0.3%). Its gain is mostly at 15 min and partly from the true lateral boundaries.
+4. *Rule 4 (leading channels suffice):* no. attn4 and attn8 are worse than local at 30-60 min, attn32 is better, by more than the seed spread; but attn32 has one seed.
+5. *Rule 5 (structure vs summary):* g_mean8 (+3.5 / +4.2%) is about the same as g_attn8 (+2.6 / +5.5 / seed 1: +1.1 / +3.6%). The attention adds nothing over a domain mean.
+6. *Rule 6 (window effect):* g_local48 is 2.6% worse than g_local128 at 30 min: a longer training window alone buys about as much as any global arm.
+
+**Conclusion.** Global coupling of the leading channels does not improve the one-model forecast; it slightly hurts the 30-60 min CRPS and the calibration. Coupling all 32 channels helps by 3-6%, mainly at short lead and with true boundaries, on one seed. Next steps if pursued: a seed repeat of g_attn32, and its persistence-boundary result is the figure to trust. The result is a negative for the advisor's hypothesis as stated (leading channels only) and a weak positive for coupling every channel.
