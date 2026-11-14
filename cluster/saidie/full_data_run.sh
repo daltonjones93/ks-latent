@@ -6,6 +6,8 @@
 #       (weight 1, 1 step ahead): the best ViT recipe of 8a
 #   F2  the same without the Stage A prediction term (isolates it)
 #   F3  conv 2.6 M autoencoder + mixer propagator (0.75 M): the best CRPS so far on 121 storms, as the small-model control on the same data
+# Time limits (measured on the first run: the memory-mapped reads run Stage A at ~15 steps/s for the ViTs, so Stage A + B takes
+# ~2.5-3.5 h; a first 2.5 h limit was too short and F1 was resubmitted): A+B 4 h (ViTs) / 2.5 h (conv), Stage C 2.5 h.
 # Steps are doubled against the 121-storm pilot (Stage A 80k, Stage B 40k, Stage C 30k; F3: Stage A 60k).
 #   ssh saidie 'cd ~/latent_DA && CACHES="cache:..." bash -l cluster/saidie/full_data_run.sh'
 set -euo pipefail
@@ -21,14 +23,14 @@ BASE="--latent-channels 32 --k-max 45 --k-sampling uniform --val-members $VAL --
 VIT="--ae-kind vit --vit-dim 736 --vit-heads 23 --vit-radius 2 --window-a 64 --nested-frac 0.5 --steps-a 80000 --lr-a 3e-4 --warmup-a 1000"
 C="--stage-c-steps 30000 --stage-c-k 45 --w-sfc-th 2 --stage-c-crps 4 --stage-c-batch 4 --nested-frac 0.5"
 ALL=""
-arm() {   # name, stage A+B extra args, stage C lr, AE args for the Stage C reuse
-  local n=$1 x=$2 lr=$3 ae=$4 jb jc
-  jb=$(sbatch --parsable --time=02:30:00 --job-name=$n --mem=128G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $x" cluster/saidie/train_cm1.slurm)
-  jc=$(sbatch --parsable --time=01:45:00 --dependency=afterok:$jb --job-name=${n}_c --mem=128G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C --stage-c-lr $lr" cluster/saidie/train_cm1.slurm)
+arm() {   # name, stage A+B extra args, stage C lr, stage A+B time limit
+  local n=$1 x=$2 lr=$3 tl=${4:-04:00:00} jb jc
+  jb=$(sbatch --parsable --time=$tl --job-name=$n --mem=128G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $x" cluster/saidie/train_cm1.slurm)
+  jc=$(sbatch --parsable --time=02:30:00 --dependency=afterok:$jb --job-name=${n}_c --mem=128G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE --init-from $R/$n --reuse-ae $R/$n $C --stage-c-lr $lr" cluster/saidie/train_cm1.slurm)
   echo "$n: A+B $jb, C $jc"; ALL="$ALL:$jc"
 }
 arm F1_vit75_mlp_pred "$VIT --prop-body mlp --prop-hidden 256 --w-pred-a 1 --pred-k-a 1" 5e-5
 arm F2_vit75_mlp      "$VIT --prop-body mlp --prop-hidden 256" 5e-5
-arm F3_conv_mixer     "--ae-kind conv --nested-frac 0.5 --steps-a 60000 --prop-body mixer --prop-hidden 128 --window-b 48" 1e-4
+arm F3_conv_mixer     "--ae-kind conv --nested-frac 0.5 --steps-a 60000 --prop-body mixer --prop-hidden 128 --window-b 48" 1e-4 02:30:00
 je=$(sbatch --parsable --time=01:00:00 --dependency=afterany$ALL --export=ALL,OUT=v_eval_full,RUNS="F1_vit75_mlp_pred_stagec F2_vit75_mlp_stagec F3_conv_mixer_stagec um_local_stagec u_win_mlp_stagec g_local48_stagec full_v1_stagec_crps",EXTRA_EVAL="--ref-norm-run \$HOME/cm1_runs/um_local_stagec" cluster/saidie/vit_eval.slurm)
 echo "eval: $je"
