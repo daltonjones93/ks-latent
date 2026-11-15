@@ -36,3 +36,19 @@ Trainings finished: Kolmogorov and 2D KS, both variants, seeds 0-2 (2.4-2.6 h an
 | 1D KS L = 200 | 44.68 +- 0.10, 1.7% | 44.46 +- 0.06, 2.2% | 45.46 |
 | 1D KS L = 400 | 89.24 +- 0.11, 0.2% | 89.08 +- 0.16, 0.4% | 89.46 |
 Interim reading (not yet the pre-registered one, which needs all seeds): 2D KS, the variant is closer to the truth at every size by 0.6-1.2 points of mean error, differences about one seed spread; Kolmogorov, the control's spread (sd 0.9-3.1) is larger than any difference and the variant has one seed so far; 1D, both are within 2.2% and the control is 0.4-0.5 points closer at L = 100 and 200 with different seed counts. The cold-start controls reproduce the paper's published numbers: Kolmogorov 15.3 / 32.9 / 51.1 (paper 16.0 / 32.7 / 52.1), 2D KS 81.2 / 182.3 / 325.0 (paper 81.5 / 183.9 / 328.7).
+
+## Results for Kolmogorov and 2D KS, all 3 seeds x 3 ICs (2026-11-15; Cashew 767594-767598, 768454-768456)
+Model D_KY, mean over the 9 (seed, IC) evaluations (sd), mean absolute error against the truth, and the error of each training seed's 3 ICs:
+| system, size | control gelu_ln | variant swiglu_rms |
+|---|---|---|
+| 2D KS 44^2 | 81.23 (0.97), 2.1% [2.2, 1.4, 2.6] | 81.93 (0.52), 1.3% [1.6, 1.3, 0.9] |
+| 2D KS 66^2 | 182.28 (1.31), 3.3% [3.0, 2.8, 4.0] | 183.13 (1.32), 2.8% [3.1, 2.4, 3.1] |
+| 2D KS 88^2 | 324.96 (1.45), 4.0% [3.4, 3.7, 4.9] | 326.81 (1.68), 3.2% [2.7, 2.9, 3.9] |
+| Kolmogorov 1x | 15.25 (0.85), 6.0% [5.3, 7.5, 5.3] | 14.46 (0.39), 8.9% [8.6, 9.0, 9.2] |
+| Kolmogorov 2x | 32.87 (2.26), 8.7% [10.3, 10.5, 5.2] | 30.99 (1.48), 4.5% [3.1, 5.7, 4.6] |
+| Kolmogorov 3x | 51.07 (3.05), 9.7% [5.0, 10.7, 13.3] | 48.86 (1.46), 13.3% [13.0, 14.4, 12.4] |
+Mean over sizes of the per-seed errors: 2D KS control 3.12% (seed sd 0.5-0.65), variant 2.43%; Kolmogorov control 8.12%, variant 8.90%.
+Reading against the pre-registered rule (the variant helps if its mean error over the sizes is lower than the control's by more than the control's seed spread, and it loses at no size by more than that spread):
+- **2D KS: a marginal pass.** The variant is closer at every size (0.8, 0.5 and 0.8 points) and its mean error is 0.69 points lower, against a control seed sd of 0.53-0.65: at the edge of the rule, with three seeds each and a shared autoencoder. A small, consistent improvement, not a decisive one.
+- **Kolmogorov: no.** The variant is better at 2x (4.5 against 8.7%) but worse at 1x (8.9 against 6.0%) and 3x (13.3 against 9.7%), and worse overall (8.90 against 8.12%). It is much more consistent across seeds and initial conditions (sd 0.4-1.5 against 0.9-3.1) but biased low (14.5 against 15.9 truth at 1x; 48.9 against 56.4 at 3x). The control's spread across seeds (up to 8 points of error at one size) is larger than any systematic difference at 1x and 3x.
+- **1D KS:** trainings timed out twice (a seed takes about 2.5 h, not 1 h: epochs run 25-33 s, and the first benchmark used the cheap early epochs); resubmitted with 3 h limits and periodic checkpoints (768931-768934). Interim: control seeds 0-1 and variant seed 0 are within 0.2-2.2% at L = 100 / 200 / 400.
