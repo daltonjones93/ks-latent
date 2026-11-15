@@ -1764,3 +1764,25 @@ Launch log (2026-11-14): 232 ens_C caches (109 GB, verified on Saidie) copied fr
 What the stored results say (CRPS / RMSE of the sample mean relative to the original g_local48, 30 / 60 min): conv 2.6 M + mixer 0.75 M with Stage C unfrozen (um_local) is the best on 121 storms: CRPS −5.4 / −5.3%, RMSE −3.5 / −3.9%. A bigger mixer on the same autoencoder (frozen) did not help (3.0 M against 0.75 M: −5.1 / −3.6% against −4.4 / −3.9% CRPS; RMSE −2.8% for both at 30 min). A 204 M conv autoencoder with the stencil gained about 2% over the small one in CRPS (unfrozen: −3.4 / −1.9% against −1.3 / −0.1%) and nothing in RMSE; the large ViT autoencoders with the mixer were worse than the small conv (um_w75, um_win: −2.6 / +0.2%).
 Test: a 2x2 grid with a fresh Stage A each, conv hidden 256 (2.6 M) or 416 (5.2 M, twice the parameters) x mixer width 128 (0.75 M) or 512 (about 12 M), nested dropout 0.5, Stage C unfrozen as um_local; evaluated into v_eval_convscale with um_local and u_local48. `cs_h256_m128` is the matched control (um_local reused an autoencoder already adapted by an earlier law Stage C).
 Prior: no gain from the bigger mixer (the m128 / m256 result); at most a small gain from the doubled autoencoder (the conv 204 M result), and none if the data limit binds (the 325-storm F3 run answers that separately). Reading: a corner helps if it beats cs_h256_m128 by more than 3% in CRPS at both 30 and 60 min or lowers the RMSE of the mean by more than 2% (control seed spread about 0.6%).
+
+### 8c result: full-data runs (325 training storms; Saidie 9458; data docs/fpe_report/data/v_eval_full.json)
+CRPS relative to g_local48 at 15 / 30 / 60 min (units converted to the old normalizer); lag-0 reconstruction; RMSE of the mean at 30 / 60; spread/RMSE at 60; power / truth at 2-5 km, +30 min (w, theta').
+| arm | recon | CRPS 15 / 30 / 60 | RMSE 30 / 60 | sp/rm | w, th power |
+|---|---|---|---|---|---|
+| F1 ViT 75 M + dense MLP + Stage A prediction term | −31% | −14.2 / −8.4 / −4.9 | −1.9 / −0.5 | 0.97 | 0.77, 0.76 |
+| F2 ViT 75 M + dense MLP | −32% | −9.8 / −4.5 / −1.4 | −1.0 / +0.5 | 0.94 | 0.67, 0.60 |
+| F3 conv 2.6 M + mixer | −7% | −8.2 / −6.3 / −4.0 | −3.3 / −2.4 | 0.91 | 0.74, 1.01 |
+| um_local (121 storms) | −3% | −7.3 / −5.4 / −5.3 | −3.5 / −3.9 | 0.90 | 0.73, 1.12 |
+| u_win_mlp (198 M ViT, 121 storms) | −26% | −8.4 / −4.1 / −1.6 | −0.3 / +0.7 | 0.94 | 0.71, 0.62 |
+Reading against the pre-registration: the ViT arms do not beat F3 by more than 3% at both 30 and 60 min (F1 against F3: −2.2% and −0.9%), so the data-limited hypothesis is not supported as stated. More storms and steps (121 to 325, doubled steps) gave little: F2 equals u_win_mlp (−4.5 against −4.1 at 30 min) and F3 gains about 1 point at 15 and 30 min over um_local and loses 1.3 points at 60. The one clear gain is the Stage A prediction term: F1 against F2, −4.8 / −4.0 / −3.5 points at 15 / 30 / 60 min, the same size as on the 121 storms (p75_k1). F1 is the best CRPS at 15 and 30 min and has the best calibration (0.97) and the most small-scale theta' power; um_local and F3 keep the best mean error and the best 60-min CRPS.
+
+### 8d result: conv size x mixer size (Saidie 9469; data docs/fpe_report/data/v_eval_convscale.json)
+Relative to u_local48; fresh Stage A each; the matched control is cs_h256_m128.
+| arm | conv | mixer | CRPS 15 / 30 / 60 | RMSE 30 / 60 | vs control CRPS 30 / 60 |
+|---|---|---|---|---|---|
+| cs_h256_m128 (control) | 2.6 M | 0.75 M | −4.3 / −2.2 / −2.2 | −0.6 / −2.4 | 0 / 0 |
+| cs_h416_m128 | 5.2 M | 0.75 M | −7.0 / −5.2 / −5.1 | −3.3 / −3.6 | −3.1% / −3.0% |
+| cs_h256_m512 | 2.6 M | ~12 M | −8.1 / −4.8 / −4.4 | −2.7 / −3.3 | −2.7% / −2.3% |
+| **cs_h416_m512** | 5.2 M | ~12 M | **−9.9 / −6.0 / −6.2** | −2.7 / −4.2 | **−3.9% / −4.1%** |
+Answer to the question: yes, doubling the conv autoencoder and making the mixer much larger helps, each a little (about −3% and −2.5% in CRPS) and the two together −4% at 30 and 60 min, past the pre-registered 3% bar and above the control seed spread (about 0.6%); single seed each. Against the original g_local48 (+1.4 / +0.1 against u_local48 at 30 / 60): about −11% / −7% / −6% at 15 / 30 / 60 min, the best 30- and 60-min CRPS on 121 storms (um_local: −5.4 / −5.3; F1 on 325 storms: −8.4 / −4.9). All the mixer-conv arms over-produce theta' power at 2-5 km (1.3-1.5 times truth); the larger ones have w power 0.77-0.84.
+Next (launched below): the best of this grid on the 325-storm data, with and without the Stage A prediction term (F4, F5).
