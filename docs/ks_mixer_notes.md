@@ -21,3 +21,18 @@ Change to the pre-registered check, made after seeing this result: the criterion
 
 ## Pipeline check, 2D KS (2026-11-14, Cashew 767593; IC 0)
 Published r13_C2 seed 0 on the CPU against the paper's own saved IC-0 runs (model D_KY / lambda_1): 44^2 81.32 / 0.223 (Mac 81.92 / 0.212, 0.7% apart), 66^2 182.02 / 0.221 (Mac 185.08 / 0.215, 1.7%), 88^2 324.3 / 0.226 (Mac 328.68 / 0.219, 1.3%); error against the IC-0 truths (81.77, 192.50, 338.3): 0.5%, 5.4%, 4.1% (the paper's 3-IC means: 1.0, 2.5, 2.8%). All three sizes reproduce the paper's run within 2%: the 2D KS pipeline check passes. Evaluations took 1.1 / 2.4 / 2.7 minutes. (For Kolmogorov the IC-0 comparison differs at 2x, see above.)
+
+## Partial results, 2026-11-15 (Cashew CPU; ICs 0-2 each; model D_KY mean +- sd over the finished seeds and ICs; mean absolute error against the truth)
+Trainings finished: Kolmogorov and 2D KS, both variants, seeds 0-2 (2.4-2.6 h and 1.7-1.8 h per 3 seeds); 1D: the control seeds 0-1 and the variant seed 0 (the 3-h limit was too short for 3 seeds at ~1 h each; the missing 1D seeds are rerun, jobs 768457-768459). Evaluations: the 2.5-h limit was too short (I had not multiplied by 3 ICs x 6 models), so the variant's evaluations are incomplete; the rest are resubmitted with skip-finished (768454-768456, 768460).
+| system, size | control (gelu_ln) | variant (swiglu_rms) | truth |
+|---|---|---|---|
+| 2D KS 44^2 | 81.23 +- 0.97 (n 9), 2.1% | 82.04 +- 0.41 (n 7), 1.3% | 82.0 |
+| 2D KS 66^2 | 182.28 +- 1.31 (n 9), 3.3% | 183.34 +- 1.48 (n 6), 2.7% | 188.5 |
+| 2D KS 88^2 | 324.96 +- 1.45 (n 9), 4.0% | 327.57 +- 0.94 (n 6), 2.8% | 338.3 |
+| Kolmogorov 1x | 15.25 +- 0.85 (n 9), 6.0% | 14.51 +- 0.39 (n 3, seed 0 only), 8.6% | 15.88 |
+| Kolmogorov 2x | 32.87 +- 2.26 (n 9), 8.7% | 31.27 +- 0.42 (n 3, seed 0), 3.1% | 30.34 |
+| Kolmogorov 3x | 51.07 +- 3.05 (n 9), 9.7% | 49.79 +- 0.98 (n 2, seed 0), 11.6% | 56.35 |
+| 1D KS L = 100 | 22.31 +- 0.08 (n 6, seeds 0-1), 0.7% | 22.22 +- 0.10 (n 3, seed 0), 1.1% | 22.47 |
+| 1D KS L = 200 | 44.68 +- 0.10, 1.7% | 44.46 +- 0.06, 2.2% | 45.46 |
+| 1D KS L = 400 | 89.24 +- 0.11, 0.2% | 89.08 +- 0.16, 0.4% | 89.46 |
+Interim reading (not yet the pre-registered one, which needs all seeds): 2D KS, the variant is closer to the truth at every size by 0.6-1.2 points of mean error, differences about one seed spread; Kolmogorov, the control's spread (sd 0.9-3.1) is larger than any difference and the variant has one seed so far; 1D, both are within 2.2% and the control is 0.4-0.5 points closer at L = 100 and 200 with different seed counts. The cold-start controls reproduce the paper's published numbers: Kolmogorov 15.3 / 32.9 / 51.1 (paper 16.0 / 32.7 / 52.1), 2D KS 81.2 / 182.3 / 325.0 (paper 81.5 / 183.9 / 328.7).
