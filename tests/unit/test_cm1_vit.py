@@ -194,3 +194,19 @@ def test_mixer_propagator():
     base = sum(q.numel() for q in StencilPropagator(StencilPropConfig(latent_channels=32, hidden=256, layers=3, radius=1,
                                                                        noise_channels=4)).parameters())
     assert 1.5 * base < n < 2.2 * base, (n, base)
+
+
+def test_mixer_variants_same_size_and_identity():
+    from ks_latent.cm1.models import StencilPropagator, StencilPropConfig
+    def mk(v):
+        torch.manual_seed(0)
+        return StencilPropagator(StencilPropConfig(latent_channels=32, hidden=128, layers=3, radius=1, body="mixer", noise_channels=4, mixer_variant=v))
+    a, b = mk("swiglu_rms"), mk("gelu_ln")
+    na, nb = sum(p.numel() for p in a.parameters()), sum(p.numel() for p in b.parameters())
+    assert abs(nb / na - 1) < 0.03, (na, nb)
+    z = torch.randn(2, 30, 32)
+    assert torch.equal(a(z), z) and torch.equal(b(z), z)                  # zero-init head: identity at init
+    assert isinstance(b.mx_blocks[0].n1, torch.nn.LayerNorm) and isinstance(a.mx_blocks[0].n1, torch.nn.RMSNorm)
+    import pytest
+    with pytest.raises(ValueError):
+        mk("nope")

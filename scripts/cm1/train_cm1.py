@@ -153,7 +153,7 @@ def build_config(a, dt: float | None) -> RunConfig:
                              radius=radius, n_hist=a.n_hist, noise_channels=a.noise_channels,
                              global_kind=a.global_kind, global_k=a.global_k, global_hidden=a.global_hidden,
                              global_layers=a.global_layers, global_heads=a.global_heads, global_feat=a.global_feat,
-                             mlp_ratio=a.prop_mlp_ratio, attn_swiglu=a.prop_attn_swiglu)
+                             mlp_ratio=a.prop_mlp_ratio, attn_swiglu=a.prop_attn_swiglu, mixer_variant=a.mixer_variant)
     k_max = a.k_max or (4 if smoke else max(8, int(round(40 * 60 / dt)) if dt >= 300 else 20))
     sa = StageAConfig(window_sites=a.window_a, batch=4 if smoke else a.batch, steps=a.steps_a,
                       val_every=max(1, a.steps_a // 20), seed=a.seed, nested_frac=a.nested_frac, lr=a.lr_a,
@@ -302,6 +302,8 @@ def main():
     ap.add_argument("--stage-c-energy", type=float, default=0.0, help="SM2: weight of the energy score in Stage C")
     ap.add_argument("--stage-c-spectral", type=float, default=0.0, help="SM3: weight of the spectral term in Stage C")
     ap.add_argument("--prop-mlp-ratio", type=float, default=4.0, help="8a: SwiGLU up-projection of the 'mlp' propagator body")
+    ap.add_argument("--mixer-variant", choices=["swiglu_rms", "gelu_ln"], default="swiglu_rms",
+                    help="8b ablation: the mixer propagator's RMSNorm + SwiGLU, or LayerNorm + GELU MLP of the same size (the Paper I/II block)")
     ap.add_argument("--prop-attn-swiglu", action="store_true", help="8a: SwiGLU FFN in the attention propagator's blocks")
     ap.add_argument("--prop-body", choices=["conv", "attention", "law", "mlp", "mixer"], default="conv",
                     help="propagator body: stencil convolutions, windowed self-attention (M1a), or an explicit latent "

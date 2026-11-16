@@ -413,6 +413,8 @@ class StencilPropConfig:
                              # mlp_ratio x hidden, both residual; `layers` blocks, reach layers x radius sites)
     mlp_ratio: float = 4.0   # body "mlp": SwiGLU hidden = mlp_ratio x hidden
     attn_swiglu: bool = False  # body "attention": SwiGLU FFN (hidden = mlp_ratio x hidden) instead of the 2x GELU MLP
+    mixer_variant: str = "swiglu_rms"  # body "mixer": "swiglu_rms" (RMSNorm + SwiGLU, hidden mlp_ratio x H) or "gelu_ln" (LayerNorm + GELU MLP of
+                                       # the same parameter count, hidden 1.5 x mlp_ratio x H: the Paper I/II block's details, 8b ablation)
     heads: int = 4           # attention heads (body = "attention")
     # body = "law" (FPc): dz/dt = A0 z + A1 d1z + A2 d2z + b + Q [z_i z_j, z_i d1z_j] + R(z, d1z, d2z), integrated
     # over one frame; see LatentLaw. Penalties are applied by `StencilPropagator.penalty()` in Stages B / C.
@@ -459,15 +461,23 @@ class StencilPropConfig:
 class _MixerBlock(nn.Module):
     """The Paper I/II `local_mlp` block (ks_latent/models/propagator.py `_LocalMixerBlock`) on site tokens (B, P, H): pre-norm
     windowed LINEAR mixer (Conv1d H -> H, kernel 2r + 1, open edges: `padding_mode`, no softmax, no nonlinearity) + residual,
-    then pre-norm per-site SwiGLU MLP (hidden = ratio x H) + residual. Linear spatial mixing and the nonlinearity are separate."""
+    then a pre-norm per-site MLP + residual. `variant`: "swiglu_rms" (RMSNorm, SwiGLU of hidden ratio x H) or "gelu_ln" (LayerNorm,
+    GELU MLP of hidden 1.5 x ratio x H, the same parameter count: 2 H h = 3 H h_swiglu). Linear spatial mixing and the
+    nonlinearity are separate."""
 
-    def __init__(self, H: int, r: int, padding_mode: str, ratio: float):
+    def __init__(self, H: int, r: int, padding_mode: str, ratio: float, variant: str = "swiglu_rms"):
         super().__init__()
         if padding_mode == "circular":
             raise ValueError("circular padding is wrong for CM1 (open lateral boundaries)")
-        self.n1, self.n2 = nn.RMSNorm(H), nn.RMSNorm(H)
+        if variant == "swiglu_rms":
+            norm, self.mlp = nn.RMSNorm, SwiGLU(H, int(round(ratio * H)))
+        elif variant == "gelu_ln":
+            h = int(round(1.5 * ratio * H))
+            norm, self.mlp = nn.LayerNorm, nn.Sequential(nn.Linear(H, h), nn.GELU(), nn.Linear(h, H))
+        else:
+            raise ValueError(f"unknown mixer_variant {variant!r}")
+        self.n1, self.n2 = norm(H), norm(H)
         self.mix = nn.Conv1d(H, H, 2 * r + 1, padding=r, padding_mode=padding_mode)
-        self.mlp = SwiGLU(H, int(round(ratio * H)))
 
     def forward(self, x):
         x = x + self.mix(self.n1(x).transpose(1, 2)).transpose(1, 2)
@@ -823,8 +833,9 @@ class StencilPropagator(nn.Module):
             return
         elif cfg.body == "mixer":       # 8a: Paper I/II local_mlp block (linear windowed mixer + per-site SwiGLU), noise as input
             self.mx_in = nn.Linear(n_in, H)
-            self.mx_blocks = nn.ModuleList(_MixerBlock(H, r, cfg.padding_mode, cfg.mlp_ratio) for _ in range(cfg.layers))
-            self.norm = nn.RMSNorm(H)
+            self.mx_blocks = nn.ModuleList(_MixerBlock(H, r, cfg.padding_mode, cfg.mlp_ratio, cfg.mixer_variant)
+                                           for _ in range(cfg.layers))
+            self.norm = nn.RMSNorm(H) if cfg.mixer_variant == "swiglu_rms" else nn.LayerNorm(H)
             self.head = nn.Linear(H, c)
         elif cfg.body == "mlp":         # 8a: dense MLP on the whole neighbourhood (same reach as the conv body)
             R = cfg.layers * r
