@@ -1794,3 +1794,14 @@ Scheduling: the Saidie jobs of this session asked for too much (time and memory)
 
 ### CM1 training speed on Cashew's CPU (2026-11-17; Cashew 775259, 16 CPUs, 121 storms, conv 2.6 M + mixer 0.75 M)
 Stage A: 200 steps in 9 s (0.045 s/step: 30k steps about 22 min). Stage B: 60 steps in 147 s with k ramping to 43 (about 2.5 s/step at the average k of about 20: 20k steps about 14 h on 16 CPUs; the real ramp is similar once k reaches its range). Stage C was not timed (the in-process Stage C did not run in this invocation); it unrolls up to 45 decoded steps with 4 CRPS samples per step and is heavier than Stage B per step. So a full small-model arm is about 1.5 days on 16 CPUs against about 1 hour on a GPU; the CPU is not a practical substitute for the rollout stages (Stage A alone is fine on the CPU). Cashew's GPU node (1 GPU) is held by a 1-day job with a queue behind it (first estimated free slot 17:28 on 2026-11-17).
+
+### 8b ablation result: SwiGLU + RMSNorm do not matter on CM1 (Saidie 9519; data docs/fpe_report/data/v_eval_ablation.json)
+CRPS relative to u_local48 at 15 / 30 / 60 min, RMSE of the mean at 30 / 60; each GELU + LayerNorm arm has the same parameter count as its SwiGLU + RMSNorm twin.
+| arm | CRPS | RMSE | w, theta' power 2-5 km |
+|---|---|---|---|
+| cs_h256_m128 (SwiGLU + RMSNorm) | −4.3 / −2.2 / −2.2 | −0.6 / −2.4 | 0.70, 1.46 |
+| ab_h256_m128_gelu (GELU + LayerNorm) | −4.2 / −3.0 / −2.8 | −2.0 / −1.6 | 0.65, 1.30 |
+| cs_h416_m512 (SwiGLU + RMSNorm) | −9.9 / −6.0 / −6.2 | −2.7 / −4.2 | 0.84, 1.26 |
+| **ab_h416_m512_gelu (GELU + LayerNorm)** | **−12.1 / −7.7 / −6.8** | **−4.5 / −4.8** | 0.79, 1.57 |
+SwiGLU + RMSNorm against their GELU + LayerNorm twins (CRPS, 15 / 30 / 60 min): small −0.1 / +0.8 / +0.7%, large +2.4 / +1.9 / +0.7% (worse). They do not matter (the rule needed a gain of more than 3% at 30 and 60 min); on the large pair the Paper I/II block's own details are slightly better. As on the KS and Kolmogorov models, the gain over the stencil comes from the block's structure (separate linear mixing and wide per-site MLP), not from SwiGLU or RMSNorm. The best 121-storm model is now the large conv + large mixer with GELU + LayerNorm: CRPS −12.1 / −7.7 / −6.8% against u_local48, about −14 / −9 / −7% against the original g_local48; RMSE −4.5 / −4.8%.
+F4 / F5 (launched with the SwiGLU mixer, before this result) hit their shortened time limits (F4 in Stage B at 36000 / 40000, F5 in the end-of-run report after finishing Stages A and B): my limits of 2 h 10 min and 1 h 55 min were below the need (F4: A 52 min + B about 75 min + encoding; F5: A 29 min + B about 79 min). Resubmitted: F5 Stage C only (9526), F4 Stage B on its saved autoencoder (9527) then Stage C (9528), evaluation 9529. A GELU + LayerNorm twin of F4 would be the next arm.
