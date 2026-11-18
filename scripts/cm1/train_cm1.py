@@ -282,6 +282,7 @@ def main():
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--steps-a", type=int, default=None)
     ap.add_argument("--steps-b", type=int, default=None)
+    ap.add_argument("--stage-a-only", action="store_true", help="9b: train and save the autoencoder, then stop (Stage B follows as a job with --reuse-ae)")
     ap.add_argument("--k-max", type=int, default=0)
     ap.add_argument("--k-sampling", choices=["max", "uniform"], default="max",
                     help="rollout length per batch: always the curriculum maximum, or uniform in [2, max]")
@@ -585,6 +586,9 @@ def main():
         torch.save({"state_dict": ae.state_dict(), "cfg": dataclasses.asdict(cfg.ae)}, out / "ae.pt")
         write_provenance(out / "ae.pt", config=cfg, seed=a.seed, device=str(dev), wall_time_s=time.time() - ta)
         (out / "history_a.json").write_text(json.dumps(ra, indent=1))
+        if a.stage_a_only:
+            log("[cm1] --stage-a-only: autoencoder saved; stopping before Stage B")
+            return
 
         # ---- Stage B (always run) ----
         z = {k: encode_members(ae, d) for k, d in data.items()}
