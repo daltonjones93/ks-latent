@@ -43,9 +43,12 @@ def main():
     files = member_files(a.source); zk = BaseState.from_sounding().z / 1000.0
     loaded = {nm: load_run(paths[nm], dev) for nm in names}
     norm0 = loaded[names[0]][2]
-    for nm in names:
-        if not np.allclose(loaded[nm][2].scale, norm0.scale):
-            raise ValueError(f"{nm}: different normalizer")
+    for nm in names:      # models trained on other storms have slightly different normalizers: report it, convert per model below
+        r = np.abs(loaded[nm][2].scale / norm0.scale - 1).max()
+        if r > 0.1:
+            raise ValueError(f"{nm}: normalizer differs by {r:.0%}")
+        if r > 1e-9:
+            print(f"[figs] {nm}: normalizer differs from {names[0]}'s by up to {r:.1%}; fields are converted with each model's own", flush=True)
     best = names[-1]
     for storm in a.storms:
         fc, truth, t0 = {}, {}, None
@@ -62,11 +65,13 @@ def main():
                 dec = {30: torch.stack([ae.decode(lat[29, s:s + 1])[0] for s in range(S)]),
                        60: torch.stack([ae.decode(lat[59, s:s + 1])[0] for s in range(S)])}
                 hov = torch.cat([ae.decode(lat[j:j + 20, 0]) for j in range(0, n, 20)])                   # (n, C, NX), sample 0
-            fc[nm] = {"dec": dec, "hov": hov}
-            truth = {30: d.full(0, t0 + 30)[0], 60: d.full(0, t0 + 60)[0], "hov": d.full(0, slice(t0 + 1, t0 + 1 + n))}
+            fc[nm] = {"dec": dec, "hov": hov, "norm": norm}
+            if nm == names[0]:        # the truth in the first model's units; every model's own fields are converted with its own normalizer
+                truth = {30: d.full(0, t0 + 30)[0], 60: d.full(0, t0 + 60)[0], "hov": d.full(0, slice(t0 + 1, t0 + 1 + n))}
         x = (np.arange(NX) + 0.5) * 0.25
         W = min(fc[nm]["dec"][30].shape[-1] for nm in names)
-        P = lambda f, v: phys(f, norm0, Z, v)
+        P = lambda f, v: phys(f, norm0, Z, v)                           # truth (first model's units)
+        PM = lambda nm, f, v: phys(f, fc[nm]["norm"], Z, v)             # a model's own fields
 
         # sections
         vs = ["w", "th", "qliq", "qice"]; ncol = 1 + len(names)
@@ -76,7 +81,7 @@ def main():
                 c0 = h * ncol
                 section(axs[r, c0], P(truth[lag], v), x, zk, v, title=f"truth +{lag} min" if r == 0 else "")
                 for k, nm in enumerate(names):
-                    mm = section(axs[r, c0 + 1 + k], P(fc[nm]["dec"][lag][0], v), x, zk, v, title=wrap(text[nm]) if r == 0 else "")
+                    mm = section(axs[r, c0 + 1 + k], PM(nm, fc[nm]["dec"][lag][0], v), x, zk, v, title=wrap(text[nm]) if r == 0 else "")
             fig.colorbar(mm, ax=axs[r], shrink=0.9, label=STYLE[v][0]); axs[r, 0].set_ylabel("z (km)")
             for ax in axs[r]:
                 ax.set_xlim(100, 300)
@@ -87,13 +92,13 @@ def main():
 
         # hovmoller
         tt = (t0 + 1 + np.arange(n)) * dtm / 60
-        sfc = lambda u: phys(u, norm0, Z, "th")[..., 0, :]
-        cond = lambda u: np.sqrt(phys(u, norm0, Z, "qliq") + phys(u, norm0, Z, "qice")).max(axis=-2) ** 2
-        cols = [("truth", truth["hov"])] + [(wrap(text[nm], 24), fc[nm]["hov"]) for nm in names]
+        sfc = lambda u, nrm: phys(u, nrm, Z, "th")[..., 0, :]
+        cond = lambda u, nrm: np.sqrt(phys(u, nrm, Z, "qliq") + phys(u, nrm, Z, "qice")).max(axis=-2) ** 2
+        cols = [("truth", truth["hov"], norm0)] + [(wrap(text[nm], 24), fc[nm]["hov"], fc[nm]["norm"]) for nm in names]
         fig, axs = plt.subplots(2, len(cols), figsize=(2.6 * len(cols), 5.2), sharex=True, sharey=True, constrained_layout=True)
-        for c, (lab, u_) in enumerate(cols):
-            m1 = axs[0, c].pcolormesh(x, tt, sfc(u_), cmap="RdBu_r", vmin=-8, vmax=8, shading="auto", rasterized=True)
-            m2 = axs[1, c].pcolormesh(x, tt, cond(u_), cmap="Blues", vmin=0, vmax=4, shading="auto", rasterized=True)
+        for c, (lab, u_, nrm) in enumerate(cols):
+            m1 = axs[0, c].pcolormesh(x, tt, sfc(u_, nrm), cmap="RdBu_r", vmin=-8, vmax=8, shading="auto", rasterized=True)
+            m2 = axs[1, c].pcolormesh(x, tt, cond(u_, nrm), cmap="Blues", vmin=0, vmax=4, shading="auto", rasterized=True)
             axs[0, c].set_title(lab, fontsize=7); axs[1, c].set_xlabel("x (km)")
         axs[0, 0].set_ylabel("t (h)"); axs[1, 0].set_ylabel("t (h)")
         fig.colorbar(m1, ax=axs[0], label="surface θ′ (K)", shrink=0.85); fig.colorbar(m2, ax=axs[1], label="column-max condensate (g/kg)", shrink=0.85)
@@ -106,7 +111,7 @@ def main():
             vs2 = ["w", "qliq"]; k_show = 4
             fig, axs = plt.subplots(len(vs2), 3 + k_show, figsize=(2.5 * (3 + k_show), 5.0), sharex=True, sharey=True, constrained_layout=True)
             for r, v in enumerate(vs2):
-                fs = np.stack([P(fc[best]["dec"][30][s], v) for s in range(S)]); tr = P(truth[30], v)
+                fs = np.stack([PM(best, fc[best]["dec"][30][s], v) for s in range(S)]); tr = P(truth[30], v)
                 lab, cmap, (lo, hi), _ = STYLE[v]
                 panels = [("truth", tr, cmap, lo, hi), ("|ensemble mean − truth|", np.abs(fs.mean(0) - tr), "magma", 0, hi / 2),
                           ("ensemble std", fs.std(0, ddof=1), "magma", 0, hi / 2)] + [(f"sample {s}", fs[s], cmap, lo, hi) for s in range(k_show)]
