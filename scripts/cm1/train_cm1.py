@@ -355,6 +355,14 @@ def main():
                     help="5s: with --init-from and Stage C, prune the latent to its first M channels (the others become their training mean)")
     ap.add_argument("--distill-steps", type=int, default=0,
                     help="5t: with --prefix-m, first this many Stage C steps against the UNPRUNED model's rollouts (teacher), then the normal Stage C on CM1 data")
+    ap.add_argument("--c-tw-weight", type=float, default=0.0, help="9a: threshold-weighted absolute error on w and condensate (deterministic Stage C)")
+    ap.add_argument("--c-tw-w-thresh", type=float, default=2.0, help="m/s")
+    ap.add_argument("--c-tw-q-thresh", type=float, default=0.1, help="g/kg")
+    ap.add_argument("--c-pool-weight", type=float, default=0.0, help="9a: neighbourhood-pooled exceedance absolute error")
+    ap.add_argument("--c-pool-scales-km", default="2,4,8,16")
+    ap.add_argument("--c-lp-weight", type=float, default=0.0, help="9a: low-pass (large-scale) squared error")
+    ap.add_argument("--c-lp-sigma-km", type=float, default=10.0)
+    ap.add_argument("--c-select-last", action="store_true", help="9a: keep the last Stage C state, not the best decoded-MSE one")
     ap.add_argument("--c-freeze-ae", action="store_true", help="Stage C updates the propagator only (M3: shared latent)")
     ap.add_argument("--c-site-smooth", type=float, default=0.0,
                     help="FPd: weight of the latent's second difference over sites (physical space, not channel index)")
@@ -526,7 +534,10 @@ def main():
                               val_every=max(1, a.stage_c_steps // 16), nested_frac=a.nested_frac,
                               law_l1=a.c_law_l1, law_res_weight_end=a.c_law_res_end,
                               law_prune_every=a.c_law_prune_every, law_prune_rel=a.c_law_prune_rel,
-                              w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae)
+                              w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae,
+                              tw_weight=a.c_tw_weight, tw_w_thresh=a.c_tw_w_thresh, tw_q_thresh=a.c_tw_q_thresh,
+                              pool_weight=a.c_pool_weight, pool_scales_km=tuple(float(x) for x in a.c_pool_scales_km.split(",")),
+                              lp_weight=a.c_lp_weight, lp_sigma_km=a.c_lp_sigma_km, select_last=a.c_select_last)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
             if a.distill_steps:

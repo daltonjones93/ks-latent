@@ -27,6 +27,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
+from ks_latent.cm1 import cell_losses as cl  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, load_member  # noqa: E402
 from ks_latent.cm1.models import _with_true_halo  # noqa: E402
 from ks_latent.cm1.train import crps_elements, encode_members  # noqa: E402
@@ -86,6 +87,30 @@ def score_case(ae, dec, u_true, Zl, sl, norm, lowpass_km):
     out = {"rmse": per((mean - u) ** 2).sqrt().tolist(),
            "crps": per(crps_elements(d, u) if S > 1 else (d[0] - u).abs()).tolist(),
            "spread": per(d.var(0, unbiased=True) if S > 1 else torch.zeros_like(u)).sqrt().tolist()}
+    # 9a: threshold-weighted CRPS (physical units: w in m/s, condensate as sqrt(g/kg)) and neighbourhood fractions skill score
+    sc = torch.as_tensor(norm.channel_scale(Zl), dtype=torch.float64, device=d.device)[:, None]
+    dp, up_ = d * sc, u * sc
+    fd = cl.exceed_fields(dp, Zl, 2.0, float(np.sqrt(0.1))); ft = cl.exceed_fields(up_, Zl, 2.0, float(np.sqrt(0.1)))
+    tw = []
+    for a_, b_ in zip(fd, ft):                                   # up, down, liquid, ice exceedances: (S, Z, W) against (Z, W)
+        e = crps_elements(a_, b_) if S > 1 else (a_[0] - b_).abs()
+        tw.append(float(e.mean()))
+    out["tw_crps"] = {"w_up": tw[0], "w_down": tw[1], "liquid": tw[2], "ice": tw[3], "mean": float(np.mean(tw))}
+    fss = {}
+    for name, fa, fb, thr in (("w", dp[:, cl.var_slice("w", Zl)].abs(), up_[cl.var_slice("w", Zl)].abs(), 3.0),
+                              ("q", dp[:, cl.var_slice("qliq", Zl)] ** 2 + dp[:, cl.var_slice("qice", Zl)] ** 2,
+                               up_[cl.var_slice("qliq", Zl)] ** 2 + up_[cl.var_slice("qice", Zl)] ** 2, 0.5)):
+        bo = (fb > thr).double()
+        for r_km in (4, 10, 20):
+            K = int(round(r_km / 0.25))
+            po = torch.nn.functional.avg_pool1d(bo.reshape(-1, 1, bo.shape[-1]), K, 1)
+            vals = []
+            for i in range(fa.shape[0]):
+                pf = torch.nn.functional.avg_pool1d((fa[i] > thr).double().reshape(-1, 1, fa.shape[-1]), K, 1)
+                den = float((pf ** 2).mean() + (po ** 2).mean())
+                vals.append(1.0 - float(((pf - po) ** 2).mean()) / den if den > 0 else float("nan"))
+            fss[f"{name}@{r_km}"] = float(np.nanmean(vals)) if not np.all(np.isnan(vals)) else float("nan")
+    out["fss"] = fss
     out["power"] = band_power(d, Zl).mean(0).tolist(); out["power_truth"] = band_power(u, Zl).tolist()
     lm, lu = lowpass(mean, lowpass_km), lowpass(u, lowpass_km)
     out["rmse_lowpass"] = per((lm - lu) ** 2).sqrt().tolist()

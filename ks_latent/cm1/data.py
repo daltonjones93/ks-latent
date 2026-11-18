@@ -185,6 +185,7 @@ class ColumnData:
         self.NX, self.V, self.Z, self.C = NX, V, Z, V * Z
         self.device = device
         s = torch.tensor(norm.channel_scale(Z), dtype=torch.float32)
+        self.chan_scale = s.clone()      # (C,) per-channel normalizer scale (9a: thresholds in physical units)
         # 8a: memory-mapped members (load_member(mmap=True)) stay on disk in physical units; windows and frames are read
         # and normalized on demand, so the dataset need not fit in memory
         self.lazy = isinstance(members[0].X, np.memmap)

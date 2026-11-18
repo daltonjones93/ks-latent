@@ -26,6 +26,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from ks_latent.cm1 import cell_losses as cl
 from ks_latent.cm1.data import VARS, ColumnData
 from ks_latent.cm1.models import ColumnFieldAE, PCAColumnAE, StencilPropagator, _patchify, forced_halo_rollout
 from ks_latent.training.crop import warmup_cosine
@@ -398,6 +399,15 @@ class StageCConfig:
     nested_frac: float = 0.0    # FPc: nested dropout on the reconstruction term (keeps the channel ordering)
     w_energy: float = 0.0       # SM2: + w * energy score of the decoded samples (spatial structure); needs samples
     w_spectral: float = 0.0     # SM3: + w * log-spectrum mismatch of each sample; needs samples
+    # 9a (2026-11-18): "when and where do cells form" terms for a DETERMINISTIC propagator (ks_latent/cm1/cell_losses.py), added to the decoded loss
+    tw_weight: float = 0.0            # threshold-weighted absolute error (the point-forecast threshold-weighted CRPS)
+    tw_w_thresh: float = 2.0          # m/s (updrafts above, downdrafts below minus this)
+    tw_q_thresh: float = 0.1          # g/kg (liquid and ice above this)
+    pool_weight: float = 0.0          # absolute error of the neighbourhood-pooled exceedances
+    pool_scales_km: tuple = (2.0, 4.0, 8.0, 16.0)
+    lp_weight: float = 0.0            # squared error after a Gaussian low-pass along x
+    lp_sigma_km: float = 10.0
+    select_last: bool = False         # keep the last state instead of the best decoded-MSE one (the MSE would pick the blurriest)
     # FPd (law propagator only): shape the latent so the explicit law closes
     law_l1: float = -1.0              # >= 0: override the law's L1 weight for this stage
     law_res_weight_end: float = -1.0  # >= 0: ramp the residual-share weight linearly to this value ...
@@ -454,6 +464,12 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         ae_t.eval(); prop_t.eval()
         for q in list(ae_t.parameters()) + list(prop_t.parameters()):
             q.requires_grad_(False)
+    use_cell = bool(cfg.tw_weight or cfg.pool_weight or cfg.lp_weight)
+    if use_cell:
+        if Ms or prop.cfg.noise_channels:
+            raise ValueError("the tw / pool / lp terms (9a) are for a deterministic propagator")
+        sc_v = data_tr.chan_scale[::Zl].cpu().numpy()                             # per-variable scale (channels are variable-major)
+        tau_w, tau_q = cl.tau_norm(sc_v, cfg.tw_w_thresh, cfg.tw_q_thresh)
     wch = torch.ones(C, device=dev)
     if cfg.w_sfc_th > 0:
         ith = VARS.index("th") * Zl
@@ -481,6 +497,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
     res0 = prop.cfg.law_res_weight if is_law else 0.0
     prune_start = int(cfg.law_prune_start_frac * cfg.steps)
 
+    last_terms: dict = {}
+
     def rollout_err(u, env, k, weighted, gen):
         B, F_ = u.shape[:2]
         e = None if env is None else env.repeat_interleave(F_, dim=0)
@@ -501,6 +519,16 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         if weighted:
             e = e * wch[None, None, :, None]
         loss = e.mean()
+        if use_cell and weighted:
+            terms = {}
+            if cfg.tw_weight:
+                terms["tw"] = cl.tw_mae(dec[0], tgt, Zl, tau_w, tau_q)
+            if cfg.pool_weight:
+                terms["pool"] = cl.pooled_exceed_mae(dec[0], tgt, Zl, tau_w, tau_q, cfg.pool_scales_km)
+            if cfg.lp_weight:
+                terms["lp"] = cl.lowpass_mse(dec[0], tgt, cfg.lp_sigma_km)
+            loss = loss + sum(getattr(cfg, f"{kk}_weight") * vv for kk, vv in terms.items())
+            last_terms.clear(); last_terms.update({kk: float(vv) for kk, vv in terms.items()})
         if S > 1 and cfg.w_energy:
             loss = loss + cfg.w_energy * energy_score(dec, tgt)
         if S > 1 and cfg.w_spectral:
@@ -546,6 +574,7 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                         for x, e in val) / len(val)
             rec = {"step": step + 1, "k": k, "l_roll": l_roll.item(), "l_rec": l_rec.item(), "l_logdet": l_ld.item(),
                    "val_decoded_rollout_mse": v, "wall_s": time.time() - t0}
+            rec.update({f"term_{kk}": vv for kk, vv in last_terms.items()})
             if not (np.isfinite(v) and np.isfinite(rec["l_roll"])):
                 raise FloatingPointError(f"Stage C diverged at step {step + 1} (k {k}): rollout loss {rec['l_roll']}, "
                                          f"val (k={cfg.k_max}) {v}")
@@ -554,7 +583,7 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             hist.append(rec)
             log(f"  [C] step {step + 1}/{cfg.steps} k {k} roll {rec['l_roll']:.4f} rec {rec['l_rec']:.4f} "
                 f"val (decoded, k={cfg.k_max}) {v:.4f} [{rec['wall_s']:.0f}s]")
-            if v < best:
+            if cfg.select_last or v < best:
                 best = v
                 best_state = ({kk: t.detach().clone() for kk, t in ae.state_dict().items()},
                               {kk: t.detach().clone() for kk, t in prop.state_dict().items()})
