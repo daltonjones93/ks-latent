@@ -78,8 +78,9 @@ def gaussian_kernel(sigma_cols: float, device, dtype) -> torch.Tensor:
     return k / k.sum()
 
 
-def lowpass_x(x: torch.Tensor, sigma_km: float) -> torch.Tensor:
-    """Gaussian low-pass along the last axis (reflect padding; the radius is limited to the window)."""
+def lowpass_x(x: torch.Tensor, sigma_km: float, chunk: int = 4096) -> torch.Tensor:
+    """Gaussian low-pass along the last axis (reflect padding; the radius is limited to the window). The signals are processed in chunks of
+    `chunk` rows: one convolution over ~80 000 signals exceeds a CUDA grid limit ("invalid configuration argument")."""
     W = x.shape[-1]
     s = sigma_km / DX_KM
     k = gaussian_kernel(s, x.device, x.dtype)
@@ -87,8 +88,9 @@ def lowpass_x(x: torch.Tensor, sigma_km: float) -> torch.Tensor:
     if r >= W:
         raise ValueError(f"low-pass radius {r} columns does not fit a window of {W} columns")
     sh = x.shape
-    y = F.pad(x.reshape(-1, 1, W), (r, r), mode="reflect")
-    return F.conv1d(y, k.view(1, 1, -1)).reshape(sh)
+    flat = x.reshape(-1, 1, W)
+    out = [F.conv1d(F.pad(flat[i:i + chunk], (r, r), mode="reflect"), k.view(1, 1, -1)) for i in range(0, flat.shape[0], chunk)]
+    return torch.cat(out, 0).reshape(sh)
 
 
 def lowpass_mse(d: torch.Tensor, t: torch.Tensor, sigma_km: float) -> torch.Tensor:

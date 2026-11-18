@@ -19,5 +19,5 @@ CA="--ae-kind conv --hidden 416 --prop-body mixer --prop-hidden 512 --window-b 4
 C="--stage-c-steps 30000 --stage-c-k 45 --w-sfc-th 2 --stage-c-crps 4 --stage-c-batch 4 --nested-frac 0.5 --stage-c-lr 1e-4"
 jb=$(sbatch --parsable --time=02:45:00 --job-name=F6_AB --mem=48G --export=ALL,DATA="$DATA",RUN=$n,EXTRA="$BASE $CA --nested-frac 0.5 --steps-a 60000 --w-pred-a 1 --pred-k-a 1" cluster/saidie/train_cm1.slurm)
 jc=$(sbatch --parsable --time=01:50:00 --dependency=afterok:$jb --job-name=F6_C --mem=48G --export=ALL,DATA="$DATA",RUN=${n}_stagec,EXTRA="$BASE $CA --init-from $R/$n --reuse-ae $R/$n $C" cluster/saidie/train_cm1.slurm)
-je=$(sbatch --parsable --time=00:25:00 --dependency=afterany:$jc --export=ALL,OUT=v_eval_f6,RUNS="${n}_stagec F4_conv416_mixer512_pred_stagec F5_conv416_mixer512_stagec F1_vit75_mlp_pred_stagec F3_conv_mixer_stagec um_local_stagec g_local48_stagec",EXTRA_EVAL="--ref-norm-run \$HOME/cm1_runs/um_local_stagec" cluster/saidie/vit_eval.slurm)
+je=$(sbatch --parsable --time=00:25:00 --dependency=afterany:$jc --export=ALL,OUT=v_eval_f6,RUNS="${n}_stagec F4_conv416_mixer512_pred_stagec F5_conv416_mixer512_stagec F1_vit75_mlp_pred_stagec F3_conv_mixer_stagec um_local_stagec g_local48_stagec",EXTRA_EVAL="--ref-norm-run ${HOME}/cm1_runs/um_local_stagec" cluster/saidie/vit_eval.slurm)
 echo "F6: A+B $jb, C $jc, eval $je"

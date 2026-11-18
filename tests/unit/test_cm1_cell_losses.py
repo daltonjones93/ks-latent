@@ -72,3 +72,9 @@ def test_stage_c_with_the_terms_runs_and_logs_them():
     out = train_stage_c(ae, prop, d, d, cfg, log=logs.append)
     assert all(np.isfinite(h["l_roll"]) for h in out["history"])
     assert {"term_tw", "term_pool", "term_lp"} <= set(out["history"][-1])
+
+
+def test_lowpass_chunks_give_the_same_result():
+    x = torch.randn(3, 11, C, W)
+    a, b = cl.lowpass_x(x, 2.0, chunk=7), cl.lowpass_x(x, 2.0, chunk=10 ** 6)
+    assert torch.allclose(a, b, atol=1e-6)
