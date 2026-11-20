@@ -176,3 +176,50 @@ def test_stage_c_with_feature_cross_entropy_both_kinds():
         assert np.isfinite(h["l_roll"]) and h["term_feat_up"] > 0 and h["term_feat_down"] > 0
     with pytest.raises(ValueError):
         train_stage_c(ae, prop, d, d, StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=2, k_max=4, w_mse_scale=0.0), log=lambda *_: None)
+
+
+def test_feature_specs_units_groups_and_errors():
+    """9e: thresholds and widths go to normalized stored units (condensate as sqrt(q)); a variable name expands to its group."""
+    from ks_latent.cm1.data import VARS
+    scale = np.arange(1, len(VARS) + 1, dtype=float)
+    sp = {s[0]: s for s in cl.feature_specs("th,qliq+", scale)}
+    assert set(sp) == {"th-", "th+", "qliq+"}
+    i_th, i_l = VARS.index("th") + 1, VARS.index("qliq") + 1
+    assert sp["th-"][2] == -1.0 and abs(sp["th-"][3] - 2.0 / i_th) < 1e-12 and abs(sp["th+"][3] - 5.0 / i_th) < 1e-12
+    assert abs(sp["qliq+"][3] - np.sqrt(0.5) / i_l) < 1e-12 and abs(sp["qliq+"][4] - cl.FEATURE_SOFT["qliq"] / i_l) < 1e-12
+    assert len(cl.feature_specs(",".join(cl.FEATURE_GROUPS), scale)) == len(cl.FEATURES)
+    with pytest.raises(ValueError):
+        cl.feature_specs("vorticity", scale)
+    with pytest.raises(ValueError):
+        cl.feature_specs("th,th-", scale)
+
+
+def test_feature_scores_match_the_w_pair_and_score_other_variables():
+    from ks_latent.cm1.data import VARS
+    torch.manual_seed(0)
+    scale = np.ones(len(VARS))
+    t = torch.randn(2, 3, C, W) * 3
+    for d in (t[None] + 0.5 * torch.randn(1, 2, 3, C, W), t[None] + 0.5 * torch.randn(4, 2, 3, C, W)):     # deterministic and ensemble
+        ws = cl.feature_scores(d, t, Z, cl.feature_specs("w", scale))
+        bu, bd = cl.feature_log_score(d, t, Z, 2.0, 1.5, 0.5)
+        assert abs(float(ws["w+"]) - float(bu)) < 1e-6 and abs(float(ws["w-"]) - float(bd)) < 1e-6
+    sp = cl.feature_specs("th", scale)
+    cold = torch.zeros(1, C, W); cold[:, cl.var_slice("th", Z), 10:20] = -4.0
+    good = cl.feature_scores(cold[None], cold, Z, sp)["th-"]
+    miss = cl.feature_scores(torch.zeros(1, 1, C, W), cold, Z, sp)["th-"]
+    assert float(good) < 0.2 * float(miss)        # with the cold pool beats without (the soft tail leaves ~0.06 nats on quiet points)
+
+
+def test_stage_c_with_named_features_both_kinds():
+    from ks_latent.cm1.data import ColumnData, Normalizer, synthetic_members
+    from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    ms = synthetic_members(3, T=60, NX=96 * 4, Z=Z)
+    norm = Normalizer.fit(ms); d = ColumnData(ms, norm, torch.device("cpu"))
+    kw = dict(window_sites=40, halo_sites=2, batch=2, steps=4, k_max=4, val_every=2, val_batches=1, warmup=1, feat_weight=1.0, feat_names="th,qliq")
+    for noise, extra in ((0, {}), (2, {"crps_samples": 3})):
+        torch.manual_seed(0)
+        ae = build_autoencoder(ColumnAEConfig(n_channels=d.C, n_levels=Z, patch=4, hidden=16, latent_channels=6, n_mix=1), None)
+        prop = StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1, noise_channels=noise))
+        h = train_stage_c(ae, prop, d, d, StageCConfig(**kw, **extra), log=lambda *_: None)["history"][-1]
+        assert np.isfinite(h["l_roll"]) and {"term_feat_th-", "term_feat_th+", "term_feat_qliq+"} <= set(h)

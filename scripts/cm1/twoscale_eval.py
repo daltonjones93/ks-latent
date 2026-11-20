@@ -113,10 +113,13 @@ def score_case(ae, dec, u_true, Zl, sl, norm, lowpass_km):
     out["fss"] = fss
     # 9d: updraft (w > 2 m/s) and downdraft (w < -1.5 m/s) presence: the ensemble fraction as the probability
     feat = {}
-    wsl = cl.var_slice("w", Zl)
-    for name, sign, thr in (("up", 1.0, 2.0), ("down", -1.0, 1.5)):
-        fm = (sign * dp[:, wsl] > thr).double()                       # (S, Z, W) member masks
-        y = (sign * up_[wsl] > thr).double()
+    # 9e: every feature of cell_losses.FEATURES (stored units: condensate thresholds as sqrt(q)); "up" / "down" kept as the w pair
+    flist = [("up", "w", 1.0, 2.0), ("down", "w", -1.0, 1.5)] + [
+        (k, v, sg, float(np.sqrt(th)) if v in ("qliq", "qice") else th) for k, (v, sg, th) in cl.FEATURES.items() if v != "w"]
+    for name, fv, sign, thr in flist:
+        fsl = cl.var_slice(fv, Zl)
+        fm = (sign * dp[:, fsl] > thr).double()                       # (S, Z, W) member masks
+        y = (sign * up_[fsl] > thr).double()
         pr = fm.mean(0)
         base = float(y.mean())
         fa_ = pr >= 0.5

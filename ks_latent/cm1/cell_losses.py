@@ -122,6 +122,61 @@ def feature_log_score(d: torch.Tensor, t: torch.Tensor, Z: int, tau_up: float, t
     return tuple(out)
 
 
+# 9e: presence features of every variable (scripts/cm1/feature_calibration_all.py on 30 training storms; thresholds in physical units of the
+# variable, condensate in g/kg; base rate = fraction of all domain points). Rule: a round physical threshold with a base rate of about
+# 1.5-7% and at least 5 reconstruction errors from zero; theta' and p' are perturbations from the initial sounding and drift (median
+# theta' +0.5 K, median p' +0.9 hPa), so their warm / high thresholds sit beyond the drift.
+FEATURES = {
+    "u+": ("u", 1.0, 10.0),      # strong positive u' (outflow / front-to-rear jet), 3.6%
+    "u-": ("u", -1.0, 10.0),     # strong negative u' (inflow / rear-inflow jet), 2.8%
+    "w+": ("w", 1.0, 2.0),       # updraft, 1.6%
+    "w-": ("w", -1.0, 1.5),      # downdraft, 1.7%
+    "th-": ("th", -1.0, 2.0),    # cold pool / cold anomaly below -2 K, 6.6%
+    "th+": ("th", 1.0, 5.0),     # warm core above +5 K (latent heating), 2.5%
+    "qv+": ("qv", 1.0, 1.0),     # moist anomaly above +1 g/kg, 2.8%
+    "qv-": ("qv", -1.0, 3.0),    # dry anomaly below -3 g/kg (downdraft / cold-pool air), 3.7%
+    "prs+": ("prs", 1.0, 3.0),   # mesohigh above +3 hPa, ~3%
+    "prs-": ("prs", -1.0, 1.0),  # mesolow below -1 hPa, 1.7%
+    "qliq+": ("qliq", 1.0, 0.5),  # liquid core above 0.5 g/kg, 2.5%
+    "qice+": ("qice", 1.0, 1.0),  # ice above 1 g/kg, 3.4%
+}
+# sigmoid width per variable in STORED units (sqrt(g/kg) for condensate): twice the domain-mean reconstruction error (F7 / F4, lag 0)
+FEATURE_SOFT = {"u": 1.25, "w": 0.5, "th": 0.7, "qv": 0.3, "prs": 0.12, "qliq": 0.07, "qice": 0.075}
+FEATURE_GROUPS = {"u": "u+,u-", "w": "w+,w-", "th": "th-,th+", "qv": "qv+,qv-", "prs": "prs+,prs-", "qliq": "qliq+", "qice": "qice+"}
+
+
+def feature_specs(names: str, scale) -> list[tuple]:
+    """Comma list of FEATURES keys (or a variable name: its group) -> [(name, var, sign, tau, soft)] in NORMALIZED stored units, with `scale`
+    the per-variable normalizer scale (array over VARS or dict)."""
+    sc = {v: float(scale[VARS.index(v)]) for v in VARS} if not isinstance(scale, dict) else scale
+    out = []
+    for nm in [x.strip() for x in names.split(",") if x.strip()]:
+        for key in FEATURE_GROUPS.get(nm, nm).split(","):
+            if key not in FEATURES:
+                raise ValueError(f"unknown feature {key!r}; known: {sorted(FEATURES)} or variables {sorted(FEATURE_GROUPS)}")
+            v, sign, thr = FEATURES[key]
+            stored = float(np.sqrt(thr)) if v in ("qliq", "qice") else thr
+            out.append((key, v, sign, stored / sc[v], FEATURE_SOFT[v] / sc[v]))
+    if len({o[0] for o in out}) != len(out):
+        raise ValueError(f"duplicate features in {names!r}")
+    return out
+
+
+def feature_scores(d: torch.Tensor, t: torch.Tensor, Z: int, specs: list, eps: float = 1e-4) -> dict:
+    """{name: mean binary cross-entropy} for each spec; `d` forecast samples (S, ..., C, W), S = 1 deterministic (logits), else the log score of
+    the ensemble probability (member mean); `t` truth (..., C, W). As `feature_log_score`, generalized to any variable."""
+    out = {}
+    for name, v, sign, tau, soft in specs:
+        sl = var_slice(v, Z)
+        y = (sign * t[..., sl, :] > tau).to(t.dtype)
+        lg = (sign * d[..., sl, :] - tau) / soft
+        if d.shape[0] == 1:
+            out[name] = F.binary_cross_entropy_with_logits(lg[0], y)
+        else:
+            out[name] = F.binary_cross_entropy(torch.sigmoid(lg).mean(0).clamp(eps, 1 - eps), y)
+    return out
+
+
 def gaussian_kernel(sigma_cols: float, device, dtype) -> torch.Tensor:
     r = int(np.ceil(3 * sigma_cols))
     k = torch.exp(-0.5 * (torch.arange(-r, r + 1, device=device, dtype=dtype) / sigma_cols) ** 2)
