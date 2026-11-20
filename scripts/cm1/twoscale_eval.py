@@ -167,6 +167,7 @@ def main():
     ap.add_argument("--t0", default="120,180,240"); ap.add_argument("--lags", default="5,15,30,60")
     ap.add_argument("--lowpass-km", type=float, default=10.0); ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--split", choices=["test", "val"], default="test", help="9g: score the validation storms (to choose cutoffs) or the test storms")
     ap.add_argument("--paired", default=None, help="manifest.json of the paired runs (T-chaos)")
     ap.add_argument("--base", default=None); ap.add_argument("--branches", default=None)
     ap.add_argument("--ref-norm-run", default=None,
@@ -190,9 +191,9 @@ def main():
         ref_scale = np.array(json.loads((Path(a.ref_norm_run).expanduser() / "normalizer.json").read_text())["scale"], dtype=float)
     if a.source:
         files = member_files(a.source)
-        names = next(iter(models.values()))[4]["test"][: a.n_test]
+        names = next(iter(models.values()))[4][a.split][: a.n_test]
         for rn, (ae, prop, norm, cfg, split) in models.items():
-            if split["test"][: a.n_test] != names:
+            if split[a.split][: a.n_test] != names:
                 print(f"[ts_eval] {rn}: different test split, skipped"); continue
             halo, p = cfg["stage_b"]["halo_sites"], ae.cfg.patch
             mar = (halo + ae.cfg.reach_sites) * p

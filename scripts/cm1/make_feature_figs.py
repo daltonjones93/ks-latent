@@ -132,7 +132,8 @@ def scores(a, out):
         ax.set_title(f"reliability of P({NICE.get(feat, feat)}), +30 min", fontsize=8)
         ax.set_xlabel("forecast probability"); ax.set_ylabel("observed frequency"); ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.grid(alpha=0.25)
     axs[0, 0].legend(fontsize=6.5, loc="best")
-    fig.suptitle("Feature presence on the 22 unseen storms (deterministic models: P is 0 or 1; the reliability panel shows the "
+    nst = len({c["member"] for c in r["runs"][runs[0]]["cases"]}); ncs = len(r["runs"][runs[0]]["cases"])
+    fig.suptitle(f"Feature presence on {nst} unseen storms x {ncs // max(nst, 1)} start times (deterministic models: P is 0 or 1; the reliability panel shows the "
                  "8-member ensembles only)", fontsize=9)
     fig.savefig(out / f"fig_feat_scores_{a.tag}.png", dpi=130); plt.close(fig)
 
