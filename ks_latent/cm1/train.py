@@ -404,6 +404,7 @@ class StageCConfig:
     tw_w_thresh: float = 2.0          # m/s (updrafts above, downdrafts below minus this)
     tw_q_thresh: float = 0.1          # g/kg (liquid and ice above this)
     pool_weight: float = 0.0          # absolute error of the neighbourhood-pooled exceedances
+    pool_crps_weight: float = 0.0     # 9c: fair CRPS of the ensemble's neighbourhood-pooled exceedances (stochastic propagators)
     pool_scales_km: tuple = (2.0, 4.0, 8.0, 16.0)
     lp_weight: float = 0.0            # squared error after a Gaussian low-pass along x
     lp_sigma_km: float = 10.0
@@ -470,6 +471,11 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             raise ValueError("the tw / pool / lp terms (9a) are for a deterministic propagator")
         sc_v = data_tr.chan_scale[::Zl].cpu().numpy()                             # per-variable scale (channels are variable-major)
         tau_w, tau_q = cl.tau_norm(sc_v, cfg.tw_w_thresh, cfg.tw_q_thresh)
+    if cfg.pool_crps_weight:
+        if Ms < 2:
+            raise ValueError("pool_crps_weight needs crps_samples >= 2 (it scores the ensemble)")
+        sc_v = data_tr.chan_scale[::Zl].cpu().numpy()
+        tau_w, tau_q = cl.tau_norm(sc_v, cfg.tw_w_thresh, cfg.tw_q_thresh)
     wch = torch.ones(C, device=dev)
     if cfg.w_sfc_th > 0:
         ith = VARS.index("th") * Zl
@@ -529,6 +535,10 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                 terms["lp"] = cl.lowpass_mse(dec[0], tgt, cfg.lp_sigma_km)
             loss = loss + sum(getattr(cfg, f"{kk}_weight") * vv for kk, vv in terms.items())
             last_terms.clear(); last_terms.update({kk: float(vv) for kk, vv in terms.items()})
+        if S > 1 and cfg.pool_crps_weight and weighted:
+            pc = cl.pooled_exceed_crps(dec, tgt, Zl, tau_w, tau_q, cfg.pool_scales_km)
+            loss = loss + cfg.pool_crps_weight * pc
+            last_terms["pool_crps"] = float(pc)
         if S > 1 and cfg.w_energy:
             loss = loss + cfg.w_energy * energy_score(dec, tgt)
         if S > 1 and cfg.w_spectral:

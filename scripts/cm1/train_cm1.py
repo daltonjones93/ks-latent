@@ -360,6 +360,7 @@ def main():
     ap.add_argument("--c-tw-w-thresh", type=float, default=2.0, help="m/s")
     ap.add_argument("--c-tw-q-thresh", type=float, default=0.1, help="g/kg")
     ap.add_argument("--c-pool-weight", type=float, default=0.0, help="9a: neighbourhood-pooled exceedance absolute error")
+    ap.add_argument("--c-pool-crps-weight", type=float, default=0.0, help="9c: weight of the fair CRPS of the ensemble's pooled exceedances (stochastic Stage C)")
     ap.add_argument("--c-pool-scales-km", default="2,4,8,16")
     ap.add_argument("--c-lp-weight", type=float, default=0.0, help="9a: low-pass (large-scale) squared error")
     ap.add_argument("--c-lp-sigma-km", type=float, default=10.0)
@@ -537,7 +538,7 @@ def main():
                               law_prune_every=a.c_law_prune_every, law_prune_rel=a.c_law_prune_rel,
                               w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae,
                               tw_weight=a.c_tw_weight, tw_w_thresh=a.c_tw_w_thresh, tw_q_thresh=a.c_tw_q_thresh,
-                              pool_weight=a.c_pool_weight, pool_scales_km=tuple(float(x) for x in a.c_pool_scales_km.split(",")),
+                              pool_weight=a.c_pool_weight, pool_crps_weight=a.c_pool_crps_weight, pool_scales_km=tuple(float(x) for x in a.c_pool_scales_km.split(",")),
                               lp_weight=a.c_lp_weight, lp_sigma_km=a.c_lp_sigma_km, select_last=a.c_select_last)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()

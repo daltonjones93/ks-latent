@@ -1,5 +1,6 @@
 """9a: threshold-weighted, pooled and low-pass terms for convective cells (ks_latent/cm1/cell_losses.py) and their use in Stage C."""
 import numpy as np
+import pytest
 import torch
 
 from ks_latent.cm1 import cell_losses as cl
@@ -78,3 +79,40 @@ def test_lowpass_chunks_give_the_same_result():
     x = torch.randn(3, 11, C, W)
     a, b = cl.lowpass_x(x, 2.0, chunk=7), cl.lowpass_x(x, 2.0, chunk=10 ** 6)
     assert torch.allclose(a, b, atol=1e-6)
+
+
+def test_pooled_crps_scores_the_ensemble_not_just_the_mean():
+    """9c: an ensemble that brackets the truth's cell positions scores better than a sharp ensemble at a wrong position, and the term is zero-free
+    of the quiet region; gradients reach the members."""
+    torch.manual_seed(0)
+    tw, tq = 2.0, 0.6
+    t = torch.zeros(2, 3, C, W); t[..., cl.var_slice("w", Z), 20:24] = 6.0
+    S = 4
+    shift = lambda k: torch.roll(t, k, dims=-1)
+    sharp_wrong = torch.stack([shift(8)] * S)                              # all members put the cell 8 columns away
+    spread_ok = torch.stack([shift(k) for k in (-3, -1, 1, 3)])           # members scattered around the truth
+    a = float(cl.pooled_exceed_crps(sharp_wrong, t, Z, tw, tq, (4.0,)))
+    b = float(cl.pooled_exceed_crps(spread_ok, t, Z, tw, tq, (4.0,)))
+    assert b < a
+    assert float(cl.pooled_exceed_crps(torch.stack([t] * S), t, Z, tw, tq)) < 1e-6
+    d = spread_ok.clone().requires_grad_(True)
+    cl.pooled_exceed_crps(d, t, Z, tw, tq).backward()
+    assert d.grad.abs().sum() > 0
+
+
+def test_stage_c_stochastic_with_pooled_crps():
+    from ks_latent.cm1.data import ColumnData, Normalizer, synthetic_members
+    from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    ms = synthetic_members(3, T=60, NX=96 * 4, Z=Z)
+    norm = Normalizer.fit(ms); d = ColumnData(ms, norm, torch.device("cpu"))
+    torch.manual_seed(0)
+    ae = build_autoencoder(ColumnAEConfig(n_channels=d.C, n_levels=Z, patch=4, hidden=16, latent_channels=6, n_mix=1), None)
+    prop = StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1, noise_channels=2))
+    cfg = StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=4, k_max=4, val_every=2, val_batches=1, warmup=1,
+                       crps_samples=3, pool_crps_weight=1.0)
+    out = train_stage_c(ae, prop, d, d, cfg, log=lambda *_: None)
+    assert all(np.isfinite(h["l_roll"]) for h in out["history"])
+    assert "term_pool_crps" in out["history"][-1] and out["history"][-1]["term_pool_crps"] > 0
+    with pytest.raises(ValueError):
+        train_stage_c(ae, prop, d, d, StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=2, k_max=4, pool_crps_weight=1.0), log=lambda *_: None)

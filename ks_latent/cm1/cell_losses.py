@@ -72,6 +72,24 @@ def pooled_exceed_mae(d: torch.Tensor, t: torch.Tensor, Z: int, tau_w: float, ta
     return torch.stack(out).mean()
 
 
+def pooled_exceed_crps(d: torch.Tensor, t: torch.Tensor, Z: int, tau_w: float, tau_q: float,
+                       scales_km: tuple = (2.0, 4.0, 8.0, 16.0)) -> torch.Tensor:
+    """9c, the stochastic version of `pooled_exceed_mae`: `d` is the ensemble (S, ..., C, W), `t` the truth (..., C, W). The |w| and condensate
+    exceedances of every member are pooled over r-km windows and scored against the pooled truth with the fair CRPS (a proper score of the
+    ensemble's distribution of neighbourhood exceedance amplitudes: it rewards a calibrated spread of cell positions within r km, not just a
+    good mean)."""
+    from ks_latent.cm1.train import crps_elements
+    ud, dd, ld, id_ = exceed_fields(d, Z, tau_w, tau_q)
+    ut, dt, lt, it = exceed_fields(t, Z, tau_w, tau_q)
+    ad, at, qd, qt = ud + dd, ut + dt, ld + id_, lt + it
+    W = d.shape[-1]
+    out = []
+    for s in scales_km:
+        K = int(min(max(1, round(s / DX_KM)), W))
+        out.append((crps_elements(_pool_x(ad, K), _pool_x(at, K)).mean() + crps_elements(_pool_x(qd, K), _pool_x(qt, K)).mean()) / 2)
+    return torch.stack(out).mean()
+
+
 def gaussian_kernel(sigma_cols: float, device, dtype) -> torch.Tensor:
     r = int(np.ceil(3 * sigma_cols))
     k = torch.exp(-0.5 * (torch.arange(-r, r + 1, device=device, dtype=dtype) / sigma_cols) ** 2)
