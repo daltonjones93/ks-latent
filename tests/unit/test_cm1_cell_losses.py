@@ -116,3 +116,63 @@ def test_stage_c_stochastic_with_pooled_crps():
     assert "term_pool_crps" in out["history"][-1] and out["history"][-1]["term_pool_crps"] > 0
     with pytest.raises(ValueError):
         train_stage_c(ae, prop, d, d, StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=2, k_max=4, pool_crps_weight=1.0), log=lambda *_: None)
+
+
+def _w_field(vals):
+    """A (C, W) column field with w = vals at every level, other variables 0."""
+    x = torch.zeros(C, W); x[cl.var_slice("w", Z)] = torch.as_tensor(vals, dtype=torch.float32)
+    return x
+
+
+def test_feature_masks_separate_updrafts_and_downdrafts():
+    w = torch.zeros(W); w[5:9] = 3.0; w[20:24] = -2.0; w[30] = 1.9; w[31] = -1.4
+    yu, yd = cl.feature_masks(_w_field(w), Z, 2.0, 1.5)
+    assert yu[0].nonzero().flatten().tolist() == [5, 6, 7, 8]
+    assert yd[0].nonzero().flatten().tolist() == [20, 21, 22, 23]
+
+
+def test_feature_log_score_deterministic_rewards_sharp_correct_cells():
+    """9d: the cross-entropy prefers a sharp cell in the right place to the blurred (spread-out, sub-threshold) version an MSE favours under
+    position uncertainty, and has the right gradient sign at a missed cell and in the quiet region."""
+    truth = torch.zeros(W); truth[20:24] = 4.0
+    t = _w_field(truth)
+    sharp = _w_field(truth)
+    blur = _w_field(torch.nn.functional.conv1d(truth.view(1, 1, -1), torch.full((1, 1, 9), 1 / 9), padding=4).flatten())
+    bs = sum(cl.feature_log_score(sharp[None], t, Z, 2.0, 1.5, 0.5))
+    bb = sum(cl.feature_log_score(blur[None], t, Z, 2.0, 1.5, 0.5))
+    assert bs < bb
+    d = torch.zeros(1, C, W, requires_grad=True)                     # a forecast that misses the cell
+    sum(cl.feature_log_score(d, t, Z, 2.0, 1.5, 0.5)).backward()
+    g = d.grad[0, cl.var_slice("w", Z)]
+    assert (g[:, 20:24] < 0).all()                                   # descent raises w at the missed cell
+    assert g[:, 40:].abs().max() < g[:, 20:24].abs().min()           # the quiet region at w = 0 is already near-certain
+
+
+def test_feature_log_score_ensemble_is_proper_not_per_member():
+    """An ensemble whose member fraction matches the event frequency scores better than a collapsed ensemble at the wrong answer; members that
+    disagree get the ensemble probability, not individual penalties."""
+    t1 = _w_field(torch.full((W,), 4.0))                              # updraft everywhere
+    S = 4
+    half = torch.stack([_w_field(torch.full((W,), 4.0)) if i < 2 else _w_field(torch.zeros(W)) for i in range(S)])
+    none = torch.stack([_w_field(torch.zeros(W))] * S)
+    assert sum(cl.feature_log_score(half, t1, Z, 2.0, 1.5, 0.5)) < sum(cl.feature_log_score(none, t1, Z, 2.0, 1.5, 0.5))
+    u, _ = cl.feature_log_score(half, t1, Z, 2.0, 1.5, 0.5)
+    assert abs(float(u) - np.log(1 / 0.5)) < 0.05                    # p = 0.5 -> log 2
+
+
+def test_stage_c_with_feature_cross_entropy_both_kinds():
+    from ks_latent.cm1.data import ColumnData, Normalizer, synthetic_members
+    from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    ms = synthetic_members(3, T=60, NX=96 * 4, Z=Z)
+    norm = Normalizer.fit(ms); d = ColumnData(ms, norm, torch.device("cpu"))
+    kw = dict(window_sites=40, halo_sites=2, batch=2, steps=4, k_max=4, val_every=2, val_batches=1, warmup=1, feat_weight=1.0, feat_up=0.5, feat_down=0.5)
+    for noise, extra in ((0, {"w_mse_scale": 0.0}), (2, {"crps_samples": 3})):
+        torch.manual_seed(0)
+        ae = build_autoencoder(ColumnAEConfig(n_channels=d.C, n_levels=Z, patch=4, hidden=16, latent_channels=6, n_mix=1), None)
+        prop = StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1, noise_channels=noise))
+        out = train_stage_c(ae, prop, d, d, StageCConfig(**kw, **extra), log=lambda *_: None)
+        h = out["history"][-1]
+        assert np.isfinite(h["l_roll"]) and h["term_feat_up"] > 0 and h["term_feat_down"] > 0
+    with pytest.raises(ValueError):
+        train_stage_c(ae, prop, d, d, StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=2, k_max=4, w_mse_scale=0.0), log=lambda *_: None)

@@ -404,6 +404,11 @@ class StageCConfig:
     tw_w_thresh: float = 2.0          # m/s (updrafts above, downdrafts below minus this)
     tw_q_thresh: float = 0.1          # g/kg (liquid and ice above this)
     pool_weight: float = 0.0          # absolute error of the neighbourhood-pooled exceedances
+    feat_weight: float = 0.0          # 9d: cross-entropy of updraft / downdraft presence (deterministic or stochastic)
+    feat_up: float = 2.0              # updraft: w above this (m/s); calibrated in scripts/cm1/feature_calibration.py
+    feat_down: float = 1.5            # downdraft: w below minus this (m/s)
+    feat_soft: float = 0.5            # sigmoid width (m/s), about twice the domain-mean reconstruction error of w
+    w_mse_scale: float = 1.0          # weight of the w channels in the decoded MSE / CRPS (0: the cross-entropy replaces it for w)
     pool_crps_weight: float = 0.0     # 9c: fair CRPS of the ensemble's neighbourhood-pooled exceedances (stochastic propagators)
     pool_scales_km: tuple = (2.0, 4.0, 8.0, 16.0)
     lp_weight: float = 0.0            # squared error after a Gaussian low-pass along x
@@ -476,10 +481,18 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             raise ValueError("pool_crps_weight needs crps_samples >= 2 (it scores the ensemble)")
         sc_v = data_tr.chan_scale[::Zl].cpu().numpy()
         tau_w, tau_q = cl.tau_norm(sc_v, cfg.tw_w_thresh, cfg.tw_q_thresh)
+    if cfg.feat_weight:
+        sw_ = float(data_tr.chan_scale[VARS.index("w") * Zl])
+        f_up, f_dn, f_s = cfg.feat_up / sw_, cfg.feat_down / sw_, cfg.feat_soft / sw_
     wch = torch.ones(C, device=dev)
     if cfg.w_sfc_th > 0:
         ith = VARS.index("th") * Zl
         wch[ith:ith + cfg.sfc_levels] += cfg.w_sfc_th
+    if cfg.w_mse_scale != 1.0:
+        if cfg.w_mse_scale < 0 or (cfg.w_mse_scale == 0 and not cfg.feat_weight):
+            raise ValueError("w_mse_scale = 0 leaves w untrained unless feat_weight > 0")
+        iw_ = VARS.index("w") * Zl
+        wch[iw_:iw_ + Zl] *= cfg.w_mse_scale
     wch = wch / wch.mean()
     g = torch.Generator().manual_seed(cfg.seed)
     vg = torch.Generator().manual_seed(cfg.seed + 999)
@@ -535,10 +548,14 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                 terms["lp"] = cl.lowpass_mse(dec[0], tgt, cfg.lp_sigma_km)
             loss = loss + sum(getattr(cfg, f"{kk}_weight") * vv for kk, vv in terms.items())
             last_terms.clear(); last_terms.update({kk: float(vv) for kk, vv in terms.items()})
+        if cfg.feat_weight and weighted:
+            bu, bd = cl.feature_log_score(dec, tgt, Zl, f_up, f_dn, f_s)
+            loss = loss + cfg.feat_weight * (bu + bd) / 2
+            last_terms["feat_up"] = bu.detach(); last_terms["feat_down"] = bd.detach()   # converted at logging (no per-step sync)
         if S > 1 and cfg.pool_crps_weight and weighted:
             pc = cl.pooled_exceed_crps(dec, tgt, Zl, tau_w, tau_q, cfg.pool_scales_km)
             loss = loss + cfg.pool_crps_weight * pc
-            last_terms["pool_crps"] = float(pc)
+            last_terms["pool_crps"] = pc.detach()
         if S > 1 and cfg.w_energy:
             loss = loss + cfg.w_energy * energy_score(dec, tgt)
         if S > 1 and cfg.w_spectral:
@@ -584,7 +601,7 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                         for x, e in val) / len(val)
             rec = {"step": step + 1, "k": k, "l_roll": l_roll.item(), "l_rec": l_rec.item(), "l_logdet": l_ld.item(),
                    "val_decoded_rollout_mse": v, "wall_s": time.time() - t0}
-            rec.update({f"term_{kk}": vv for kk, vv in last_terms.items()})
+            rec.update({f"term_{kk}": float(vv) for kk, vv in last_terms.items()})
             if not (np.isfinite(v) and np.isfinite(rec["l_roll"])):
                 raise FloatingPointError(f"Stage C diverged at step {step + 1} (k {k}): rollout loss {rec['l_roll']}, "
                                          f"val (k={cfg.k_max}) {v}")

@@ -6,6 +6,9 @@ w in m/s; condensate in g/kg (the condensate channels hold sqrt(q) / scale, so a
                   the threshold (the quiet region), proper in the sense of Allen, Ginsbourger and Ziegel (2022).
   pooled_exceed_mae  the same exceedance amplitudes averaged over horizontal windows of r km (stride r/2): a cell within r km scores,
                   without demanding the exact column (the displacement double penalty; a fractions-skill-score-like neighbourhood term).
+  feature_log_score  9d: cross-entropy of updraft / downdraft presence (w above tau_up; w below -tau_down): the decoded w becomes a probability
+                  through a sigmoid of width `soft` (calibrated to the reconstruction error of w); an ensemble's probability is the member mean of
+                  the members' probabilities (the log score of the ensemble probability is proper; per-member cross-entropy would collapse the spread).
   lowpass_mse     mean squared error after a Gaussian low-pass along x (large scales; indifferent to where small cells sit).
 """
 from __future__ import annotations
@@ -88,6 +91,35 @@ def pooled_exceed_crps(d: torch.Tensor, t: torch.Tensor, Z: int, tau_w: float, t
         K = int(min(max(1, round(s / DX_KM)), W))
         out.append((crps_elements(_pool_x(ad, K), _pool_x(at, K)).mean() + crps_elements(_pool_x(qd, K), _pool_x(qt, K)).mean()) / 2)
     return torch.stack(out).mean()
+
+
+def feature_masks(t: torch.Tensor, Z: int, tau_up: float, tau_down: float) -> tuple[torch.Tensor, torch.Tensor]:
+    """Truth (updraft, downdraft) presence masks, each (..., Z, W) float: w > tau_up; w < -tau_down. A minimum-width rule (LeMone and Zipser
+    1980, 500 m = 2 columns) was measured to remove under 1.5% of the feature points at 250 m spacing (scripts/cm1/feature_calibration.py), so
+    none is applied."""
+    w = t[..., var_slice("w", Z), :]
+    return (w > tau_up).to(t.dtype), (w < -tau_down).to(t.dtype)
+
+
+def feature_logits(d: torch.Tensor, Z: int, tau_up: float, tau_down: float, soft: float) -> tuple[torch.Tensor, torch.Tensor]:
+    w = d[..., var_slice("w", Z), :]
+    return (w - tau_up) / soft, (-w - tau_down) / soft
+
+
+def feature_log_score(d: torch.Tensor, t: torch.Tensor, Z: int, tau_up: float, tau_down: float, soft: float,
+                      eps: float = 1e-4) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mean binary cross-entropy (nats per point) of updraft and downdraft presence. `d`: forecast samples (S, ..., C, W) (S = 1:
+    deterministic, computed from the logits for stability); `t`: truth (..., C, W). No class reweighting: a weighted cross-entropy is
+    minimized by a biased probability (improper), so a rare class keeps its natural weight."""
+    yu, yd = feature_masks(t, Z, tau_up, tau_down)
+    lu, ld = feature_logits(d, Z, tau_up, tau_down, soft)
+    if d.shape[0] == 1:
+        return (F.binary_cross_entropy_with_logits(lu[0], yu), F.binary_cross_entropy_with_logits(ld[0], yd))
+    out = []
+    for lg, y in ((lu, yu), (ld, yd)):
+        p = torch.sigmoid(lg).mean(0).clamp(eps, 1 - eps)          # ensemble probability
+        out.append(F.binary_cross_entropy(p, y))
+    return tuple(out)
 
 
 def gaussian_kernel(sigma_cols: float, device, dtype) -> torch.Tensor:

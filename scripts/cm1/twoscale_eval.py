@@ -111,6 +111,32 @@ def score_case(ae, dec, u_true, Zl, sl, norm, lowpass_km):
                 vals.append(1.0 - float(((pf - po) ** 2).mean()) / den if den > 0 else float("nan"))
             fss[f"{name}@{r_km}"] = float(np.nanmean(vals)) if not np.all(np.isnan(vals)) else float("nan")
     out["fss"] = fss
+    # 9d: updraft (w > 2 m/s) and downdraft (w < -1.5 m/s) presence: the ensemble fraction as the probability
+    feat = {}
+    wsl = cl.var_slice("w", Zl)
+    for name, sign, thr in (("up", 1.0, 2.0), ("down", -1.0, 1.5)):
+        fm = (sign * dp[:, wsl] > thr).double()                       # (S, Z, W) member masks
+        y = (sign * up_[wsl] > thr).double()
+        pr = fm.mean(0)
+        base = float(y.mean())
+        fa_ = pr >= 0.5
+        hits, miss, fal = float((fa_ & (y > 0)).sum()), float((~fa_ & (y > 0)).sum()), float((fa_ & (y == 0)).sum())
+        kk = torch.round(pr * fm.shape[0]).long().flatten()
+        rel_n = torch.bincount(kk, minlength=fm.shape[0] + 1).tolist()
+        rel_h = torch.bincount(kk, weights=y.flatten(), minlength=fm.shape[0] + 1).tolist()
+        fz = {}
+        for r_km in (4, 10):
+            K = int(round(r_km / 0.25))
+            po = torch.nn.functional.avg_pool1d(y.reshape(-1, 1, y.shape[-1]), K, 1)
+            vals = []
+            for i in range(fm.shape[0]):
+                pf = torch.nn.functional.avg_pool1d(fm[i].reshape(-1, 1, fm.shape[-1]), K, 1)
+                den = float((pf ** 2).mean() + (po ** 2).mean())
+                vals.append(1.0 - float(((pf - po) ** 2).mean()) / den if den > 0 else float("nan"))
+            fz[f"fss@{r_km}"] = float(np.nanmean(vals)) if not np.all(np.isnan(vals)) else float("nan")
+        feat[name] = {"brier": float(((pr - y) ** 2).mean()), "base_rate": base, "csi": hits / max(hits + miss + fal, 1.0),
+                      "bias": float(pr.sum() / max(float(y.sum()), 1.0)), "rel_n": rel_n, "rel_hits": rel_h, **fz}
+    out["feat"] = feat
     out["power"] = band_power(d, Zl).mean(0).tolist(); out["power_truth"] = band_power(u, Zl).tolist()
     lm, lu = lowpass(mean, lowpass_km), lowpass(u, lowpass_km)
     out["rmse_lowpass"] = per((lm - lu) ** 2).sqrt().tolist()
