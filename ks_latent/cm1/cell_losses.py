@@ -162,15 +162,37 @@ def feature_specs(names: str, scale) -> list[tuple]:
     return out
 
 
-def feature_scores(d: torch.Tensor, t: torch.Tensor, Z: int, specs: list, eps: float = 1e-4) -> dict:
-    """{name: mean binary cross-entropy} for each spec; `d` forecast samples (S, ..., C, W), S = 1 deterministic (logits), else the log score of
-    the ensemble probability (member mean); `t` truth (..., C, W). As `feature_log_score`, generalized to any variable."""
+def feature_scores(d: torch.Tensor, t: torch.Tensor, Z: int, specs: list, eps: float = 1e-4, pos_weight: torch.Tensor | None = None,
+                   kind: str = "bce") -> dict:
+    """{name: loss} for each spec; `d` forecast samples (S, ..., C, W), S = 1 deterministic (logits), else the ensemble probability (member
+    mean); `t` truth (..., C, W). As `feature_log_score`, generalized to any variable.
+    9f, the fix for the 9d failure (a cross-entropy-trained deterministic model predicts a feature only where its probability exceeds 0.5,
+    and under position uncertainty that under-forecasts the area: bias 0.5 for updrafts at +30 min):
+      pos_weight  class weight of the feature (broadcast against (..., Z, W), e.g. (k, 1, 1) for one weight per rollout step): the weighted
+                  cross-entropy is minimized by a probability that crosses 0.5 where the true probability exceeds 1 / (1 + pos_weight), so the
+                  model draws the feature down to that probability. The loss is divided by the mean weight, keeping its scale.
+      kind="csi"  soft critical success index, 1 - sum(p y) / (sum p + sum y - sum(p y)) over the batch (Lagerquist and Ebert-Uphoff 2022):
+                  no class weight to calibrate; the optimum covers the area that maximizes CSI."""
+    if kind not in ("bce", "csi"):
+        raise ValueError(f"unknown feature loss {kind!r}")
     out = {}
     for name, v, sign, tau, soft in specs:
         sl = var_slice(v, Z)
         y = (sign * t[..., sl, :] > tau).to(t.dtype)
         lg = (sign * d[..., sl, :] - tau) / soft
-        if d.shape[0] == 1:
+        if kind == "csi":
+            p = torch.sigmoid(lg).mean(0)
+            inter = (p * y).sum()
+            out[name] = 1.0 - inter / (p.sum() + y.sum() - inter + 1.0)
+        elif pos_weight is not None:
+            w_ = pos_weight.to(lg.dtype)
+            if d.shape[0] == 1:
+                l_ = F.binary_cross_entropy_with_logits(lg[0], y, pos_weight=w_, reduction="none")
+            else:
+                p = torch.sigmoid(lg).mean(0).clamp(eps, 1 - eps)
+                l_ = -(w_ * y * torch.log(p) + (1 - y) * torch.log(1 - p))
+            out[name] = l_.mean() / (w_ * y + (1 - y)).mean()
+        elif d.shape[0] == 1:
             out[name] = F.binary_cross_entropy_with_logits(lg[0], y)
         else:
             out[name] = F.binary_cross_entropy(torch.sigmoid(lg).mean(0).clamp(eps, 1 - eps), y)

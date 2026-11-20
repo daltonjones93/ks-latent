@@ -137,7 +137,13 @@ def score_case(ae, dec, u_true, Zl, sl, norm, lowpass_km):
                 den = float((pf ** 2).mean() + (po ** 2).mean())
                 vals.append(1.0 - float(((pf - po) ** 2).mean()) / den if den > 0 else float("nan"))
             fz[f"fss@{r_km}"] = float(np.nanmean(vals)) if not np.all(np.isnan(vals)) else float("nan")
-        feat[name] = {"brier": float(((pr - y) ** 2).mean()), "base_rate": base, "csi": hits / max(hits + miss + fal, 1.0),
+        # 9f: the soft probability a deterministic model's cross-entropy sees, sigmoid((sign*x - thr) / soft), binned in 20 bins
+        # (counts and hits), to calibrate class weights from the model's own probabilities
+        fsoft = cl.FEATURE_SOFT[fv]
+        ps = torch.sigmoid((sign * dp[:, fsl] - thr) / fsoft).mean(0)
+        kb = torch.clamp((ps * 20).long(), max=19).flatten()
+        soft_n = torch.bincount(kb, minlength=20).tolist(); soft_h = torch.bincount(kb, weights=y.flatten(), minlength=20).tolist()
+        feat[name] = {"soft_n": soft_n, "soft_hits": soft_h, "brier": float(((pr - y) ** 2).mean()), "base_rate": base, "csi": hits / max(hits + miss + fal, 1.0),
                       "bias": float(pr.sum() / max(float(y.sum()), 1.0)), "rel_n": rel_n, "rel_hits": rel_h, **fz}
     out["feat"] = feat
     out["power"] = band_power(d, Zl).mean(0).tolist(); out["power_truth"] = band_power(u, Zl).tolist()

@@ -223,3 +223,81 @@ def test_stage_c_with_named_features_both_kinds():
         prop = StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1, noise_channels=noise))
         h = train_stage_c(ae, prop, d, d, StageCConfig(**kw, **extra), log=lambda *_: None)["history"][-1]
         assert np.isfinite(h["l_roll"]) and {"term_feat_th-", "term_feat_th+", "term_feat_qliq+"} <= set(h)
+
+
+def _fit_constant_forecast(y, pos_weight=None, kind="bce", steps=600):
+    """Fit one deterministic w value to many truths (a cell present with frequency mean(y) at this point) by minimizing the feature loss."""
+    from ks_latent.cm1.data import VARS
+    sp = cl.feature_specs("w+", np.ones(len(VARS)))
+    t = torch.zeros(len(y), C, W); t[:, cl.var_slice("w", Z)] = torch.where(torch.as_tensor(y)[:, None, None] > 0, 4.0, 0.0)
+    a = torch.zeros(1, requires_grad=True)
+    opt = torch.optim.Adam([a], lr=0.05)
+    for _ in range(steps):
+        d = torch.zeros(1, len(y), C, W); d[0, :, cl.var_slice("w", Z)] = a
+        loss = cl.feature_scores(d, t, Z, sp, pos_weight=pos_weight, kind=kind)["w+"]
+        opt.zero_grad(); loss.backward(); opt.step()
+    return float(a)
+
+
+def test_class_weight_moves_the_decision_threshold():
+    """9f: a feature present 20% of the time at a point. Unweighted, the optimal deterministic w stays below the 2 m/s threshold (p* = 0.2,
+    no feature drawn: the 9d failure); with pos_weight 6, p* = 6 x 0.2 / (6 x 0.2 + 0.8) = 0.6 and the feature is drawn."""
+    rng = np.random.default_rng(0)
+    y = (rng.random(400) < 0.2).astype(np.float32)
+    q = y.mean()
+    a1 = _fit_constant_forecast(y)
+    a6 = _fit_constant_forecast(y, pos_weight=torch.tensor(6.0))
+    p1, p6 = 1 / (1 + np.exp(-(a1 - 2.0) / 0.5)), 1 / (1 + np.exp(-(a6 - 2.0) / 0.5))
+    assert a1 < 2.0 < a6
+    assert abs(p1 - q) < 0.02 and abs(p6 - 6 * q / (6 * q + 1 - q)) < 0.02
+
+
+def test_class_weight_per_step_and_scale():
+    from ks_latent.cm1.data import VARS
+    sp = cl.feature_specs("w", np.ones(len(VARS)))
+    torch.manual_seed(0)
+    t = torch.randn(2, 4, C, W) * 3; d = t[None] + torch.randn(1, 2, 4, C, W)
+    base = cl.feature_scores(d, t, Z, sp)
+    one = cl.feature_scores(d, t, Z, sp, pos_weight=torch.ones(4, 1, 1))
+    assert all(abs(float(base[k]) - float(one[k])) < 1e-6 for k in base)            # weight 1 = unweighted
+    q = torch.zeros(2, 4, C, W)                                                     # no feature anywhere: weights are irrelevant
+    assert abs(float(cl.feature_scores(d, q, Z, sp, pos_weight=torch.full((4, 1, 1), 9.0))["w+"])
+               - float(cl.feature_scores(d, q, Z, sp)["w+"])) < 1e-6
+    ens = cl.feature_scores(t[None] + torch.randn(3, 2, 4, C, W), t, Z, sp, pos_weight=torch.linspace(1, 4, 4).view(4, 1, 1))
+    assert all(torch.isfinite(v) for v in ens.values())
+
+
+def test_soft_csi_loss():
+    from ks_latent.cm1.data import VARS
+    sp = cl.feature_specs("w+", np.ones(len(VARS)))
+    t = torch.zeros(1, C, W); t[:, cl.var_slice("w", Z), 10:30] = 6.0
+    good = cl.feature_scores(t[None] + 0.0, t, Z, sp, kind="csi")["w+"]
+    miss = cl.feature_scores(torch.zeros(1, 1, C, W), t, Z, sp, kind="csi")["w+"]
+    assert float(good) < 0.05 and float(miss) > 0.95
+    d = torch.zeros(1, 1, C, W, requires_grad=True)
+    cl.feature_scores(d, t, Z, sp, kind="csi")["w+"].backward()
+    g = d.grad[0, 0, cl.var_slice("w", Z)]
+    assert (g[:, 10:30] < 0).all()                                                  # raises w at the missed cell
+    with pytest.raises(ValueError):
+        cl.feature_scores(d, t, Z, sp, kind="dice")
+    # unlike the unweighted cross-entropy, the CSI optimum draws a 20%-frequency feature (CSI 0.2 against 0 for drawing nothing)
+    y = (np.random.default_rng(1).random(400) < 0.2).astype(np.float32)
+    assert _fit_constant_forecast(y, kind="csi") > 2.0
+
+
+def test_stage_c_with_weighted_and_csi_features():
+    from ks_latent.cm1.data import ColumnData, Normalizer, synthetic_members
+    from ks_latent.cm1.models import ColumnAEConfig, StencilPropagator, StencilPropConfig, build_autoencoder
+    from ks_latent.cm1.train import StageCConfig, train_stage_c
+    ms = synthetic_members(3, T=60, NX=96 * 4, Z=Z)
+    norm = Normalizer.fit(ms); d = ColumnData(ms, norm, torch.device("cpu"))
+    kw = dict(window_sites=40, halo_sites=2, batch=2, steps=4, k_max=4, val_every=2, val_batches=1, warmup=1, feat_weight=1.0, feat_names="w")
+    for extra in ({"feat_pos_slope": 1 / 7}, {"feat_kind": "csi"}):
+        torch.manual_seed(0)
+        ae = build_autoencoder(ColumnAEConfig(n_channels=d.C, n_levels=Z, patch=4, hidden=16, latent_channels=6, n_mix=1), None)
+        prop = StencilPropagator(StencilPropConfig(latent_channels=6, hidden=8, layers=2, radius=1))
+        h = train_stage_c(ae, prop, d, d, StageCConfig(**kw, **extra), log=lambda *_: None)["history"][-1]
+        assert np.isfinite(h["l_roll"]) and "term_feat_w+" in h
+    with pytest.raises(ValueError):
+        train_stage_c(ae, prop, d, d, StageCConfig(window_sites=40, halo_sites=2, batch=2, steps=2, k_max=4, feat_weight=1.0, feat_pos_slope=0.1),
+                      log=lambda *_: None)

@@ -408,6 +408,8 @@ class StageCConfig:
     feat_up: float = 2.0              # updraft: w above this (m/s); calibrated in scripts/cm1/feature_calibration.py
     feat_down: float = 1.5            # downdraft: w below minus this (m/s)
     feat_soft: float = 0.5            # sigmoid width (m/s), about twice the domain-mean reconstruction error of w
+    feat_pos_slope: float = 0.0       # 9f: class weight of the features = 1 + slope x rollout step (frames); 0: unweighted
+    feat_kind: str = "bce"            # 9f: "bce" (cross-entropy) or "csi" (soft critical success index)
     feat_names: str = ""              # 9e: comma list of cell_losses.FEATURES keys or variable names (e.g. "th" = th-,th+); empty: the w pair above
     w_mse_scale: float = 1.0          # weight of the w channels in the decoded MSE / CRPS (0: the cross-entropy replaces it for w)
     pool_crps_weight: float = 0.0     # 9c: fair CRPS of the ensemble's neighbourhood-pooled exceedances (stochastic propagators)
@@ -482,6 +484,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             raise ValueError("pool_crps_weight needs crps_samples >= 2 (it scores the ensemble)")
         sc_v = data_tr.chan_scale[::Zl].cpu().numpy()
         tau_w, tau_q = cl.tau_norm(sc_v, cfg.tw_w_thresh, cfg.tw_q_thresh)
+    if (cfg.feat_pos_slope > 0 or cfg.feat_kind != "bce") and not cfg.feat_names:
+        raise ValueError("feat_pos_slope / feat_kind need feat_names (the generalized feature path)")
     if cfg.feat_weight and cfg.feat_names:
         f_specs = cl.feature_specs(cfg.feat_names, data_tr.chan_scale[::Zl].cpu().numpy())
     elif cfg.feat_weight:
@@ -552,7 +556,9 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             loss = loss + sum(getattr(cfg, f"{kk}_weight") * vv for kk, vv in terms.items())
             last_terms.clear(); last_terms.update({kk: float(vv) for kk, vv in terms.items()})
         if cfg.feat_weight and weighted and cfg.feat_names:
-            fs_ = cl.feature_scores(dec, tgt, Zl, f_specs)
+            pw_ = (1.0 + cfg.feat_pos_slope * torch.arange(1, k + 1, device=dec.device, dtype=dec.dtype)).view(k, 1, 1) \
+                if cfg.feat_pos_slope > 0 else None
+            fs_ = cl.feature_scores(dec, tgt, Zl, f_specs, pos_weight=pw_, kind=cfg.feat_kind)
             loss = loss + cfg.feat_weight * torch.stack(list(fs_.values())).mean()
             last_terms.update({f"feat_{kk}": vv.detach() for kk, vv in fs_.items()})
         elif cfg.feat_weight and weighted:
