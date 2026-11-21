@@ -50,6 +50,14 @@ TRUTH, MUTED = "#3B3F45", "#8A8F96"
 MEMBER = "#2A78C2"
 
 
+def K_of(a, key, L):
+    """the cutoff for this feature and lead: the per-feature table (--cutoffs, chosen on the validation storms) or the single --k"""
+    if not getattr(a, "table", None):
+        return a.k
+    t = a.table[key]
+    return t[str(L)] if str(L) in t else t[min(t, key=lambda q: abs(int(q) - L))]
+
+
 def mask(f, key):
     _, sign, thr = FEATURES[key]
     return sign * f > thr
@@ -112,7 +120,8 @@ def walkthrough(a, storm, key, fc, tr, x, zk, out, L=30):
     av.contour(x, zk, y.astype(float), levels=[0.5], colors="#C0392B", linewidths=0.7); lim(av)
     av.set_title("vote count: members with the feature (0-8)\nred: TRUE outline", fontsize=8.5, loc="left"); av.set_ylabel("z (km)")
     fig.colorbar(mv, ax=av, ticks=range(9), shrink=0.9, label="members")
-    for j, (K, ttl) in enumerate(((a.k, f"DECISION: present if ≥ {a.k} of {a.members}"), (1, "for comparison: ≥ 1 (any member)"))):
+    Kc = K_of(a, key, L)
+    for j, (K, ttl) in enumerate(((Kc, f"DECISION: present if ≥ {Kc} of {a.members}"), (1, "for comparison: ≥ 1 (any member)"))):
         ac = fig.add_subplot(bot[1 + j])
         dec = votes >= K
         ac.pcolormesh(x, zk, contingency(dec, y), cmap=CONT, norm=CONT_NORM, shading="auto", rasterized=True); lim(ac)
@@ -126,12 +135,12 @@ def walkthrough(a, storm, key, fc, tr, x, zk, out, L=30):
     sm = np.array([scores(ms[s], y) for s in range(a.members)])
     at.plot(Ks, bc[:, 1], "-o", color=MEMBER, lw=2, ms=4, label="CSI of the vote")
     at.axhline(sm[:, 1].mean(), color=MUTED, lw=1.2, ls="--", label=f"mean CSI of one member ({sm[:, 1].mean():.2f})")
-    at.axvline(a.k, color="0.75", lw=6, zorder=0)
+    at.axvline(Kc, color="0.75", lw=6, zorder=0)
     at.set_xlabel(f"K (present if ≥ K of {a.members})"); at.set_ylabel("CSI"); at.set_xticks(Ks); at.grid(alpha=0.25); at.legend(fontsize=7, loc="lower center")
     for K, (bb, cc) in zip(Ks, bc):
         at.annotate(f"{bb:.1f}", (K, cc), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=6.5, color=TRUTH)
     at.set_title("this case: CSI against K\n(numbers: area / true area)", fontsize=8.5, loc="left")
-    fig.suptitle(f"The {a.k}-of-{a.members} vote, step by step: {NICE[key]}, {storm} (unseen), +{L} min from t = {a.start_min} min, F6 ensemble "
+    fig.suptitle(f"The {Kc}-of-{a.members} vote, step by step: {NICE[key]}, {storm} (unseen), +{L} min from t = {a.start_min} min, F6 ensemble "
                  f"(black outline on every panel: the TRUE feature)", fontsize=10)
     fig.savefig(out / f"fig_vote_walkthrough_{key.replace('+', 'p').replace('-', 'm')}_{storm}.png", dpi=125); plt.close(fig)
 
@@ -141,6 +150,7 @@ def cut(a, storm, key, fc, tr, x, zk, out, L=30, z_km=5.0):
     iz = int(np.argmin(np.abs(zk - z_km)))
     y = mask(tr[L][v], key)[iz]
     ms = np.stack([mask(fc[L][v][s], key)[iz] for s in range(a.members)]); votes = ms.sum(0)
+    Kc = K_of(a, key, L)
     fig, axs = plt.subplots(3, 1, figsize=(13, 7.5), sharex=True, constrained_layout=True, gridspec_kw={"height_ratios": [1.4, 0.8, 0.6]})
     for s in range(a.members):
         axs[0].plot(x, fc[L][v][s][iz], color=MEMBER, lw=0.8, alpha=0.55, label="the 8 members" if s == 0 else None)
@@ -149,11 +159,11 @@ def cut(a, storm, key, fc, tr, x, zk, out, L=30, z_km=5.0):
     axs[0].set_ylabel(STYLE[v][0]); axs[0].legend(fontsize=7.5, ncol=3, loc="upper right"); axs[0].grid(alpha=0.25)
     axs[0].set_title(f"(a) z = {zk[iz]:.1f} km: the members' fields against the truth", fontsize=9, loc="left")
     axs[1].bar(x, votes, width=0.25, color=MEMBER)
-    axs[1].axhline(a.k - 0.5, color="#C0392B", lw=1, ls="--", label=f"cutoff: ≥ {a.k} of {a.members}")
+    axs[1].axhline(Kc - 0.5, color="#C0392B", lw=1, ls="--", label=f"cutoff: ≥ {Kc} of {a.members}")
     axs[1].set_ylim(0, a.members + 0.3); axs[1].set_yticks(range(0, a.members + 1, 2)); axs[1].set_ylabel("members")
     axs[1].legend(fontsize=7.5, loc="upper right"); axs[1].grid(alpha=0.25)
     axs[1].set_title("(b) the vote: how many members have the feature at each point", fontsize=9, loc="left")
-    dec = votes >= a.k
+    dec = votes >= Kc
     cat = contingency(dec[None], y[None])[0]
     xe = np.concatenate([x - 0.125, [x[-1] + 0.125]])
     axs[2].pcolormesh(xe, [0, 1], cat[None], cmap=CONT, norm=CONT_NORM, shading="flat")
@@ -162,13 +172,14 @@ def cut(a, storm, key, fc, tr, x, zk, out, L=30, z_km=5.0):
     axs[2].set_ylim(0, 2.1); axs[2].set_yticks([]); axs[2].set_xlabel("x (km)")
     legend_cont(axs[2], loc="upper right", ncol=3)
     b, c = scores(dec, y)
-    axs[2].set_title(f"(c) the decision (≥ {a.k}) against the truth along this line: area/true area {b:.2f}, CSI {c:.2f}", fontsize=9, loc="left")
+    axs[2].set_title(f"(c) the decision (≥ {Kc}) against the truth along this line: area/true area {b:.2f}, CSI {c:.2f}", fontsize=9, loc="left")
     axs[0].set_xlim(*a.xlim)
     fig.suptitle(f"{NICE[key]}: {storm} (unseen), +{L} min, F6's {a.members} members", fontsize=10)
-    fig.savefig(out / f"fig_vote_cut_{key.replace('+', 'p').replace('-', 'm')}_{storm}.png", dpi=125); plt.close(fig)
+    fig.savefig(out / f"fig_vote_cut_{key.replace('+', 'p').replace('-', 'm')}_{storm}.png", dpi=125, bbox_inches="tight"); plt.close(fig)
 
 
 def leads(a, storm, fc, tr, x, zk, out, key="w+"):
+    """one feature at every lead (the cutoff may change with lead)"""
     v = FEATURES[key][0]
     Ls = sorted(fc)
     fig, axs = plt.subplots(3, len(Ls), figsize=(4.3 * len(Ls), 8.6), sharex=True, sharey=True, constrained_layout=True)
@@ -178,9 +189,9 @@ def leads(a, storm, fc, tr, x, zk, out, key="w+"):
         axs[0, j].contour(x, zk, y.astype(float), levels=[0.5], colors="k", linewidths=0.5)
         mv = axs[1, j].pcolormesh(x, zk, votes, cmap=VOTE, norm=VOTE_NORM, shading="auto", rasterized=True)
         axs[1, j].contour(x, zk, y.astype(float), levels=[0.5], colors="#C0392B", linewidths=0.6); axs[1, j].set_title(f"vote count, +{L} min")
-        dec = votes >= a.k; b, c = scores(dec, y)
+        Kc = K_of(a, key, L); dec = votes >= Kc; b, c = scores(dec, y)
         axs[2, j].pcolormesh(x, zk, contingency(dec, y), cmap=CONT, norm=CONT_NORM, shading="auto", rasterized=True)
-        axs[2, j].set_title(f"≥ {a.k} of {a.members}, +{L} min: area ratio {b:.2f}, CSI {c:.2f}")
+        axs[2, j].set_title(f"≥ {Kc} of {a.members}, +{L} min: area ratio {b:.2f}, CSI {c:.2f}")
     for ax in axs.flat:
         ax.set_xlim(*a.xlim); ax.set_ylim(0, 14)
     for ax in axs[:, 0]:
@@ -190,7 +201,7 @@ def leads(a, storm, fc, tr, x, zk, out, key="w+"):
     fig.colorbar(mv, ax=axs[1], ticks=range(9), shrink=0.8, label="members")
     legend_cont(axs[2, -1], loc="upper right")
     fig.suptitle(f"{NICE[key]} as the lead grows: the members disagree more, the vote count spreads out ({storm}, unseen; red outline: truth)", fontsize=10)
-    fig.savefig(out / f"fig_vote_leads_{storm}.png", dpi=125); plt.close(fig)
+    fig.savefig(out / f"fig_vote_leads_{key.replace('+', 'p').replace('-', 'm')}_{storm}.png", dpi=125); plt.close(fig)
 
 
 def all_features(a, storm, fc, tr, x, zk, out, L=30):
@@ -204,16 +215,17 @@ def all_features(a, storm, fc, tr, x, zk, out, L=30):
         mv = axs[i, 1].pcolormesh(x, zk, votes, cmap=VOTE, norm=VOTE_NORM, shading="auto", rasterized=True)
         axs[i, 1].contour(x, zk, y.astype(float), levels=[0.5], colors="#C0392B", linewidths=0.5)
         axs[i, 1].set_title("vote count", fontsize=7.5, loc="left")
-        dec = votes >= a.k; b, c = scores(dec, y)
+        Kc = K_of(a, key, L); dec = votes >= Kc; b, c = scores(dec, y)
         axs[i, 2].pcolormesh(x, zk, contingency(dec, y), cmap=CONT, norm=CONT_NORM, shading="auto", rasterized=True)
-        axs[i, 2].set_title(f"≥ {a.k} of {a.members}: area ratio {b:.2f}, CSI {c:.2f}", fontsize=7.5, loc="left")
+        axs[i, 2].set_title(f"≥ {Kc} of {a.members}: area ratio {b:.2f}, CSI {c:.2f}", fontsize=7.5, loc="left")
     for ax in axs.flat:
         ax.set_xlim(*a.xlim); ax.set_ylim(0, 14); ax.tick_params(labelsize=6)
     for ax in axs[-1]:
         ax.set_xlabel("x (km)")
     fig.colorbar(mv, ax=axs[:, 1], ticks=range(9), shrink=0.3, label="members")
     legend_cont(axs[0, 2], loc="upper right")
-    fig.suptitle(f"Every feature, +{L} min, {storm} (unseen): truth, vote count of F6's {a.members} members, and the ≥ {a.k} decision", fontsize=10)
+    rule = "per-feature cutoff (chosen on validation storms)" if getattr(a, "table", None) else f"the ≥ {a.k} decision"
+    fig.suptitle(f"Every feature, +{L} min, {storm} (unseen): truth, vote count of F6's {a.members} members, and {rule}", fontsize=10)
     fig.savefig(out / f"fig_vote_features_{storm}.png", dpi=120); plt.close(fig)
 
 
@@ -238,7 +250,13 @@ def cutoff_fig(a, out):
                     if f7 in r["runs"]:
                         c7 = np.mean([c["lags"][L]["feat"][ek]["csi"] for c in r["runs"][f7]["cases"]])
                         ax.plot([a.members + 0.35], [c7], marker="D", color=lead_col[L], ms=4)
-        ax.axvline(a.k, color="0.85", lw=8, zorder=0)
+        if getattr(a, "table", None):
+            for L in ("15", "30", "60"):
+                cs = [c["lags"][L]["feat"][ek] for c in ev["test storms"]["runs"][rn]["cases"]]
+                n = np.sum([c["rel_n"] for c in cs], 0); h = np.sum([c["rel_hits"] for c in cs], 0); Y = h.sum(); K = K_of(a, key, int(L))
+                ax.plot([K], [h[K:].sum() / (n[K:].sum() + Y - h[K:].sum())], marker="*", ms=13, color=lead_col[L], mec="k", mew=0.6, zorder=5)
+        else:
+            ax.axvline(a.k, color="0.85", lw=8, zorder=0)
         ax.set_title(NICE[key], fontsize=8.5); ax.set_xticks(range(1, a.members + 1)); ax.grid(alpha=0.25)
         ax.set_xlim(0.6, a.members + 0.7)
         if i % 4 == 0:
@@ -247,8 +265,41 @@ def cutoff_fig(a, out):
             ax.set_xlabel(f"K: present if ≥ K of {a.members}")
     fig.legend(loc="lower center", ncol=6, fontsize=7.5, bbox_to_anchor=(0.5, -0.02))
     fig.suptitle(f"Choosing K: CSI of the K-of-{a.members} vote. Solid: test storms; dashed: validation storms (where K is chosen); dotted: CSI of "
-                 f"a single member's mask; diamonds: deterministic F7 (2 m/s etc.). Grey band: K = {a.k}", fontsize=9.5)
-    fig.savefig(out / "fig_vote_cutoff.png", dpi=125, bbox_inches="tight"); plt.close(fig)
+                 f"a single member's mask; diamonds: deterministic F7 (2 m/s etc.). "
+                 + ("Stars: the cutoff chosen per feature and lead on the validation storms" if getattr(a, "table", None) else f"Grey band: K = {a.k}"), fontsize=9.5)
+    fig.savefig(out / ("fig_vote_cutoff_perfeature.png" if getattr(a, "table", None) else "fig_vote_cutoff.png"), dpi=125, bbox_inches="tight"); plt.close(fig)
+
+
+def summary_fig(a, out):
+    """test storms: CSI and area ratio of the per-feature cutoff against K = 3, each feature and lead"""
+    rn = "F6_conv416_mixer512_gelu_pred_all_stagec"
+    r = json.load(open(Path(a.test_eval).expanduser()))
+    keys = list(FEATURES); Ls = ("15", "30", "60")
+    fig, axs = plt.subplots(1, 2, figsize=(14, 4.8), constrained_layout=True)
+    xb = np.arange(len(keys)); wd = 0.13
+    for j, L in enumerate(Ls):
+        c3, cK, b3, bK, Ks = [], [], [], [], []
+        for key in keys:
+            cs = [c["lags"][L]["feat"][EVAL_KEY.get(key, key)] for c in r["runs"][rn]["cases"]]
+            n = np.sum([c["rel_n"] for c in cs], 0); h = np.sum([c["rel_hits"] for c in cs], 0); Y = h.sum()
+            f = lambda K: (h[K:].sum() / (n[K:].sum() + Y - h[K:].sum()), n[K:].sum() / Y)
+            K = K_of(a, key, int(L)); Ks.append(K)
+            (c_, b_), (cc, bb) = f(3), f(K); c3.append(c_); b3.append(b_); cK.append(cc); bK.append(bb)
+        col = {"15": "#9DC3E6", "30": "#2A78C2", "60": "#0B3C6E"}[L]
+        off = (j - 1) * 2 * wd
+        axs[0].bar(xb + off - wd / 2, c3, wd, color=col, alpha=0.35, label=f"+{L} min, K = 3" if True else None)
+        axs[0].bar(xb + off + wd / 2, cK, wd, color=col, label=f"+{L} min, per-feature K")
+        axs[1].bar(xb + off - wd / 2, b3, wd, color=col, alpha=0.35)
+        axs[1].bar(xb + off + wd / 2, bK, wd, color=col)
+        for xi, (K, cc) in enumerate(zip(Ks, cK)):
+            axs[0].text(xi + off + wd / 2, cc + 0.01, str(K), ha="center", fontsize=6.5)
+    axs[1].axhline(1.0, color="0.4", lw=0.8, ls="--")
+    for ax, ttl in zip(axs, ("CSI (number above each bar: the cutoff K)", "forecast area / true area (1 is unbiased)")):
+        ax.set_xticks(xb); ax.set_xticklabels([NICE[k] for k in keys], rotation=35, ha="right", fontsize=7.5); ax.set_title(ttl, fontsize=9, loc="left")
+        ax.grid(alpha=0.25, axis="y")
+    axs[0].legend(fontsize=7, ncol=3, loc="upper right")
+    fig.suptitle("Test storms: per-feature cutoff (solid) against the single cutoff K = 3 (pale), F6's 8 members", fontsize=10)
+    fig.savefig(out / "fig_vote_perfeature_summary.png", dpi=125); plt.close(fig)
 
 
 def main():
@@ -259,8 +310,10 @@ def main():
     ap.add_argument("--start-min", type=int, default=60); ap.add_argument("--members", type=int, default=8); ap.add_argument("--k", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0); ap.add_argument("--xlim", type=float, nargs=2, default=(140, 235))
     ap.add_argument("--walk-feats", default="w+,w-,th-,qliq+"); ap.add_argument("--val-eval", default=None); ap.add_argument("--test-eval", default=None)
+    ap.add_argument("--cutoffs", default=None, help="9g: JSON with a per-feature, per-lead cutoff table (vote_cutoffs.json)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    a.table = json.load(open(Path(a.cutoffs).expanduser()))["cutoffs"] if a.cutoffs else None
     out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(16)
     if a.storms:
@@ -272,11 +325,14 @@ def main():
             for key in a.walk_feats.split(","):
                 walkthrough(a, storm, key, fc, tr, x, zk, out)
                 cut(a, storm, key, fc, tr, x, zk, out)
-            leads(a, storm, fc, tr, x, zk, out)
+            for key in a.walk_feats.split(","):
+                leads(a, storm, fc, tr, x, zk, out, key)
             all_features(a, storm, fc, tr, x, zk, out)
             print(f"[vote figs] {storm} done", flush=True)
     if a.val_eval and a.test_eval:
         cutoff_fig(a, out)
+        if a.table:
+            summary_fig(a, out)
 
 
 if __name__ == "__main__":
