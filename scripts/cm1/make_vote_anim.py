@@ -1,0 +1,157 @@
+"""9g: animations of the ensemble vote over the forecast, one per variable (user, 2026-11-21: "an animation showing the evolution of the
+member voting over time like in here but for all variables. one animation per variable"). Run on Saidie.
+
+Each frame is one lead (1-min steps): row 1 the true field and member 1's field with the TRUE feature outlines; one column per feature of
+the variable (cell_losses.FEATURE_GROUPS) for the vote count (0-8 members, red: the true outline) and the decision (present if >= K of 8,
+K from the per-feature cutoff table chosen on the validation storms, nearest lead) as hits / misses / false alarms; bottom: CSI against
+lead for the vote (solid) and a single member (dashed), drawn up to the current lead.
+
+  python scripts/cm1/make_vote_anim.py --run ~/cm1_runs/F6_..._stagec --storm mem029 --cutoffs vote_cutoffs.json --out DIR
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.animation as manim
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).parent))
+from da_twin import load_run, member_files  # noqa: E402
+from ks_latent.cm1.cell_losses import FEATURE_GROUPS, FEATURES  # noqa: E402
+from ks_latent.cm1.data import ColumnData, load_member  # noqa: E402
+from ks_latent.cm1.models import rollout_from  # noqa: E402
+from ks_latent.cm1.physics import BaseState  # noqa: E402
+from ks_latent.cm1.train import encode_members  # noqa: E402
+from make_status_figs import STYLE, phys  # noqa: E402
+from make_vote_figs import CONT, CONT_COLORS, CONT_NORM, NICE, VOTE, VOTE_NORM, contingency, mask, scores  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
+
+FEAT_COLORS = ["#2A78C2", "#B5446E"]
+
+
+def k_of(table, key, L, default=3):
+    if not table:
+        return default
+    t = table[key]
+    return t[str(L)] if str(L) in t else t[min(t, key=lambda q: abs(int(q) - L))]
+
+
+def main():
+    H = Path.home()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", required=True); ap.add_argument("--storm", default="mem029")
+    ap.add_argument("--source", default=f"cache:{H}/cm1_cache+{H}/cm1_cache_A2+{H}/cm1_cache_B")
+    ap.add_argument("--start-min", type=int, default=60); ap.add_argument("--lead-max", type=int, default=90)
+    ap.add_argument("--members", type=int, default=8); ap.add_argument("--cutoffs", default=None)
+    ap.add_argument("--vars", default="u,w,th,qv,prs,qliq,qice"); ap.add_argument("--xlim", type=float, nargs=2, default=(140, 235))
+    ap.add_argument("--fps", type=int, default=6); ap.add_argument("--dpi", type=int, default=100); ap.add_argument("--out", required=True)
+    a = ap.parse_args()
+    import imageio_ffmpeg
+    plt.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+    out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
+    table = json.load(open(Path(a.cutoffs).expanduser()))["cutoffs"] if a.cutoffs else None
+    torch.set_num_threads(16); torch.set_grad_enabled(False)
+    ae, prop, norm, cfg, _ = load_run(Path(a.run).expanduser(), torch.device("cpu"))
+    d = ColumnData([load_member(member_files(a.source)[a.storm])], norm, torch.device("cpu")); Z, NX = d.Z, d.NX
+    t0 = int(round(a.start_min / (d.dt / 60))); leads = list(range(1, a.lead_max + 1))
+    torch.manual_seed(0)
+    lat = rollout_from(prop, encode_members(ae, d)[0], t0, a.lead_max, cfg["stage_b"]["halo_sites"], n_samples=a.members, boundary="persistence")
+    dec = {L: torch.cat([ae.decode(lat[L - 1, s:s + 1]) for s in range(a.members)]) for L in leads}    # (S, C, NX) normalized
+    tru = {L: d.full(0, t0 + L)[0] for L in leads}
+    x = (np.arange(NX) + 0.5) * 0.25; zk = BaseState.from_sounding().z / 1000.0
+    for v in a.vars.split(","):
+        keys = FEATURE_GROUPS[v].split(",")
+        fc = {L: np.stack([phys(dec[L][s], norm, Z, v) for s in range(a.members)]).astype(np.float32) for L in leads}
+        tr = {L: phys(tru[L], norm, Z, v).astype(np.float32) for L in leads}
+        csi = {k: ([], []) for k in keys}                                      # vote, single member
+        stats = {}
+        for L in leads:
+            for k in keys:
+                y = mask(tr[L], k); ms = mask(fc[L], k); K = k_of(table, k, L)
+                b, c = scores(ms.sum(0) >= K, y); _, c1 = scores(ms[0], y)
+                stats[(L, k)] = (K, b, c, ms.sum(0), y, contingency(ms.sum(0) >= K, y), c1)
+        nc = 2
+        fig = plt.figure(figsize=(12.5, 12.0))
+        gs = fig.add_gridspec(4, nc, height_ratios=[1, 1, 1, 0.55], hspace=0.38, wspace=0.12, left=0.06, right=0.9, top=0.93, bottom=0.05)
+        ax_t, ax_m = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+        ax_v = [fig.add_subplot(gs[1, j]) for j in range(nc)]; ax_d = [fig.add_subplot(gs[2, j]) for j in range(nc)]
+        ax_c = fig.add_subplot(gs[3, :])
+        lab, cmap, (lo, hi), _ = STYLE[v]
+        for ax in [ax_t, ax_m] + ax_v + ax_d:
+            ax.set_xlim(*a.xlim); ax.set_ylim(0, 14); ax.tick_params(labelsize=7)
+        for ax in (ax_t, ax_v[0], ax_d[0]):
+            ax.set_ylabel("z (km)", fontsize=8)
+        for ax in ax_d:
+            ax.set_xlabel("x (km)", fontsize=8)
+        mt = ax_t.pcolormesh(x, zk, tr[1], cmap=cmap, vmin=lo, vmax=hi, shading="auto", rasterized=True)
+        mm = ax_m.pcolormesh(x, zk, fc[1][0], cmap=cmap, vmin=lo, vmax=hi, shading="auto", rasterized=True)
+        cax = fig.add_axes([0.915, 0.735, 0.012, 0.19]); fig.colorbar(mt, cax=cax, label=lab)
+        vm, dm = [], []
+        for j in range(nc):
+            if j < len(keys):
+                vm.append(ax_v[j].pcolormesh(x, zk, stats[(1, keys[j])][3], cmap=VOTE, norm=VOTE_NORM, shading="auto", rasterized=True))
+                dm.append(ax_d[j].pcolormesh(x, zk, stats[(1, keys[j])][5], cmap=CONT, norm=CONT_NORM, shading="auto", rasterized=True))
+            else:   # one-feature variables: the second column shows a single member's mask against the truth, for comparison
+                vm.append(None)
+                dm.append(ax_d[j].pcolormesh(x, zk, contingency(mask(fc[1][0], keys[0]), stats[(1, keys[0])][4]), cmap=CONT, norm=CONT_NORM,
+                                             shading="auto", rasterized=True))
+                ax_v[j].axis("off")
+                ax_v[j].text(0.02, 0.5, f"{NICE[keys[0]]}\n\nleft: the vote of {a.members} members\n"
+                             "right, below: ONE member alone,\nfor comparison", transform=ax_v[j].transAxes, fontsize=9, va="center")
+        cax2 = fig.add_axes([0.915, 0.42, 0.012, 0.19]); fig.colorbar(vm[0], cax=cax2, ticks=range(0, 9), label="members with the feature")
+        fig.legend(handles=[Patch(facecolor=c, edgecolor="0.5", label=l) for c, l in zip(CONT_COLORS[1:], ("hit", "miss", "false alarm"))],
+                   loc="center left", bbox_to_anchor=(0.905, 0.2), fontsize=8, frameon=False)
+        contours = []
+        ax_c.set_xlim(0, a.lead_max); ax_c.set_ylim(0, 1); ax_c.set_xlabel("lead (min)", fontsize=8); ax_c.set_ylabel("CSI", fontsize=8)
+        ax_c.grid(alpha=0.25); ax_c.tick_params(labelsize=7)
+        lines = []
+        for j, k in enumerate(keys):
+            l1, = ax_c.plot([], [], "-", color=FEAT_COLORS[j], lw=2, label=f"{NICE[k]}: vote")
+            l2, = ax_c.plot([], [], "--", color=FEAT_COLORS[j], lw=1.2, label=f"{NICE[k]}: one member")
+            lines.append((k, l1, l2))
+        ax_c.legend(fontsize=7, ncol=2, loc="upper right")
+        sup = fig.suptitle("", fontsize=11)
+
+        def frame(i):
+            L = leads[i]
+            for c in contours:
+                c.remove()
+            contours.clear()
+            mt.set_array(tr[L].ravel()); mm.set_array(fc[L][0].ravel())
+            ax_t.set_title(f"TRUTH {lab}, +{L} min", fontsize=9); ax_m.set_title(f"member 1 of {a.members}, +{L} min", fontsize=9)
+            for j, k in enumerate(keys):
+                K, b, c, votes, y, cat, c1 = stats[(L, k)]
+                vm[j].set_array(votes.ravel()); dm[j].set_array(cat.ravel())
+                ax_v[j].set_title(f"vote count: {NICE[k]}", fontsize=9)
+                ax_d[j].set_title(f"present if >= {K} of {a.members}: area ratio {b:.2f}, CSI {c:.2f}", fontsize=9)
+                contours.append(ax_v[j].contour(x, zk, y.astype(float), levels=[0.5], colors="#C0392B", linewidths=0.6))
+                for ax in (ax_t, ax_m):
+                    contours.append(ax.contour(x, zk, y.astype(float), levels=[0.5], colors="k" if j == 0 else "#1B8A4B", linewidths=0.6))
+            if len(keys) == 1:
+                k = keys[0]; y = stats[(L, k)][4]
+                dm[1].set_array(contingency(mask(fc[L][0], k), y).ravel())
+                b1, c1 = scores(mask(fc[L][0], k), y)
+                ax_d[1].set_title(f"ONE member alone: area ratio {b1:.2f}, CSI {c1:.2f}", fontsize=9)
+            for k, l1, l2 in lines:
+                l1.set_data(leads[: i + 1], [stats[(q, k)][2] for q in leads[: i + 1]])
+                l2.set_data(leads[: i + 1], [stats[(q, k)][6] for q in leads[: i + 1]])
+            outl = " / ".join(f"{NICE[k]} ({'black' if j == 0 else 'green'})" for j, k in enumerate(keys))
+            sup.set_text(f"{a.storm} (unseen), F6 {a.members}-member vote, +{L} min from t = {a.start_min} min. True outlines: {outl}")
+            return []
+
+        ani = manim.FuncAnimation(fig, frame, frames=len(leads), blit=False)
+        f = out / f"vote_{v}_{a.storm}.mp4"
+        ani.save(f, writer=manim.FFMpegWriter(fps=a.fps, bitrate=2400, extra_args=["-pix_fmt", "yuv420p"]), dpi=a.dpi)
+        plt.close(fig)
+        print(f"[anim] {f}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
