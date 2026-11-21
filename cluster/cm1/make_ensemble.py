@@ -108,6 +108,12 @@ def max_rh(sfc, rows):
 
 # ---- 10c: environment diagnostics (stdlib only) ----
 EPS, LV = 0.622, 2.5e6
+RH_CAP = 0.90   # 10c pilot 1: a 95% cap with cooling aloft let CM1's random initial noise start clouds all over the domain
+
+
+def min_dthdz(rows, zmin=200.0):
+    """smallest d(theta)/dz (K/km) above zmin: < 0 is a superadiabatic layer that overturns everywhere at t = 0"""
+    return min(1000.0 * (b[1] - a[1]) / (b[0] - a[0]) for a, b in zip(rows, rows[1:]) if a[0] >= zmin)
 
 
 def _qs(T, p):
@@ -184,13 +190,14 @@ def env_stats(sfc, rows, ml_depth=500.0):
         return arr[min(len(arr) - 1, int(round(z / (Z[1] - Z[0]))))]
     rh36 = [Q[i] / _qs(T[i], P[i]) for i in range(len(Z)) if 3000.0 <= Z[i] <= 6000.0]
     pw = sum(Q[i] * (P[i - 1] - P[i]) * 100.0 / G for i in range(1, len(Z)))      # kg/m^2 = mm
-    return {"mlcape": round(cape, 1), "mlcin": round(cin, 1), "lcl_m": lcl, "shear03": round(at(U, 3000.0) - U[0], 2),
+    return {"mlcape": round(cape, 1), "mlcin": round(cin, 1), "lcl_m": lcl, "min_dthdz": round(min_dthdz(rows), 2),
+            "shear03": round(at(U, 3000.0) - U[0], 2),
             "shear06": round(at(U, 6000.0) - U[0], 2), "rh36": round(sum(rh36) / max(1, len(rh36)), 3), "pw_mm": round(pw, 1)}
 
 
 def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zmax, dth_bl=0.0):
     """10c: the environment perturbations of --design lhs, in this order: wind (depth stretch, magnitude, deep-layer increment),
-    boundary-layer temperature at constant relative humidity (dth_bl, K, full below 1 km, tapered to 0 at 1.5 km: a warmer
+    boundary-layer temperature at constant relative humidity (dth_bl, K, full below 1 km, tapered to 0 at 3 km: a warmer
     boundary layer is also moister, the realistic route to high CAPE), free-tropospheric theta, mid-level humidity (capped at 95% RH),
     boundary-layer moisture offset."""
     sfc, rows = list(sfc0), [list(r) for r in rows0]
@@ -204,7 +211,7 @@ def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zm
             thv = r0[1] * (1 + 0.61 * r0[2] / 1000.0)
             pi -= G / CP * (r0[0] - z_prev) * 0.5 * (1 / thv + 1 / thv_prev)
             z_prev, thv_prev = r0[0], thv
-            w = 1.0 if r0[0] <= 1000.0 else max(0.0, 1.0 - (r0[0] - 1000.0) / 500.0)
+            w = 1.0 if r0[0] <= 1000.0 else max(0.0, 1.0 - (r0[0] - 1000.0) / 2000.0)   # taper 1-3 km: keeps d(theta)/dz > 0
             if w > 0:
                 T = r0[1] * pi; p = 1000.0 * pi ** (CP / RD); dT = dth_bl * w * pi
                 r[2] = r0[2] * _qs(T + dT, p) / _qs(T, p)
@@ -236,7 +243,7 @@ def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zm
         pi -= G / CP * (r[0] - z_prev) * 0.5 * (1 / thv + 1 / thv_prev)
         z_prev, thv_prev = r[0], thv
         T = r[1] * pi; p = 1000.0 * pi ** (CP / RD)
-        r[2] = min(q, max(0.95 * 1000.0 * _qs(T, p), r[2])) if r[0] > 1000.0 else q     # never below the unperturbed value
+        r[2] = min(q, max(RH_CAP * 1000.0 * _qs(T, p), r[2])) if r[0] > 1000.0 else q     # never below the unperturbed value
     sfc[2] = max(0.0, sfc[2] + dq)
     return sfc, rows
 
@@ -287,6 +294,8 @@ def main():
     ap.add_argument("--dtheta-bl", type=float, nargs=2, default=[0.0, 0.0], help="10c, lhs: boundary-layer theta change at constant RH (K)")
     ap.add_argument("--cape-range", type=float, nargs=2, default=[0.0, 1e9], help="10c, lhs: accepted mixed-layer CAPE (J/kg)")
     ap.add_argument("--shear06-max", type=float, default=1e9, help="10c, lhs: accepted max 0-6 km bulk shear (m/s)")
+    ap.add_argument("--min-dthdz", type=float, default=-1e9, help="10c, lhs: reject soundings with d(theta)/dz below this (K/km) above 200 m")
+    ap.add_argument("--rh36-max", type=float, default=1e9, help="10c, lhs: reject soundings with mean 3-6 km RH above this")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
     ap.add_argument("--nx", type=int, default=0, help="domain width in cells (0: the template's)")
     ap.add_argument("--two-storms", type=float, default=0.0, help="separation (m) of two initiating thermals (var2)")
@@ -352,6 +361,8 @@ def main():
                     continue
                 st = env_stats(sfc, rows)
                 if not (a.cape_range[0] <= st["mlcape"] <= a.cape_range[1]) or abs(st["shear06"]) > a.shear06_max:
+                    continue
+                if st["min_dthdz"] < a.min_dthdz or st["rh36"] > a.rh36_max:
                     continue
                 accepted.append((dq, ss, dta, rha, dep, ups, dtb, sfc, rows, st))
             if tried > 200 * a.n:
@@ -424,7 +435,7 @@ def main():
         json.dump(meta, f, indent=1)
     with open(os.path.join(a.out, "manifest.csv"), "w", newline="") as f:
         w = csv.writer(f)
-        extra = ["dtheta_bl", "dtheta_aloft", "rh_aloft", "shear_depth_km", "upper_shear", "mlcape", "mlcin", "shear03", "shear06", "rh36", "pw_mm"]
+        extra = ["dtheta_bl", "dtheta_aloft", "rh_aloft", "shear_depth_km", "upper_shear", "mlcape", "mlcin", "min_dthdz", "shear03", "shear06", "rh36", "pw_mm"]
         extra = [k for k in extra if any(k in m for m in manifest)]
         w.writerow(["member", "dtheta_sfc", "qv_offset_gkg", "shear_scale", "max_rh"] + extra)
         for m in manifest:

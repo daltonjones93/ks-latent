@@ -240,6 +240,7 @@ def main():
     ap.add_argument("--cache", default=str(ROOT / "artifacts" / "cm1" / "members"))
     ap.add_argument("--device", default="auto")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--normalizer-from", default=None, help="10b: run dir whose normalizer.json to use instead of refitting (same training split only)")
     ap.add_argument("--n-val", type=int, default=1)
     ap.add_argument("--n-test", type=int, default=2)
     ap.add_argument("--val-members", default="", help="'+'-separated member names for validation (overrides --n-val)")
@@ -455,6 +456,9 @@ def main():
         if not np.allclose(fit.scale, norm.scale, rtol=1e-6) or tuple(fit.vars) != tuple(norm.vars):
             raise ValueError(f"the split given refits a different normalizer ({fit.scale} vs saved {norm.scale}): "
                              "pass the run's own --val-members / --test-members")
+    elif a.normalizer_from:   # 10b: the same training split's normalizer, without re-reading every storm (slow shared storage)
+        norm = Normalizer.from_dict(json.loads((Path(a.normalizer_from).expanduser() / "normalizer.json").read_text()))
+        log(f"[cm1] normalizer taken from {a.normalizer_from} (not refitted)")
     else:
         norm = Normalizer.fit(pick(tr_n))
     dt = members[0].dt
