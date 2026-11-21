@@ -156,6 +156,49 @@ def _theta_e(T, p, q):
     return T * (1000.0 / p) ** (0.2854 * (1 - 0.28e-3 * r)) * math.exp((3.376 / TL - 0.00254) * r * (1 + 0.81e-3 * r))
 
 
+def parcel_cape_cin(Z, P, T, Q, i0, th0, q0):
+    """pseudo-adiabatic parcel from level i0 with potential temperature th0 (K) and qv q0 (kg/kg): CAPE, CIN (J/kg) above i0"""
+    the = _theta_e(th0 * (P[i0] / 1000.0) ** (RD / CP), P[i0], q0)
+    cape = cin = 0.0; sat = False; lfc = False
+    for i in range(i0 + 1, len(Z)):
+        p = P[i]; Td_ = th0 * (p / 1000.0) ** (RD / CP)
+        if _qs(Td_, p) > q0 and not sat:
+            Tp, qp = Td_, q0
+        else:
+            sat = True
+            lo, hi = 150.0, Td_ + 80.0
+            for _ in range(50):
+                mid = 0.5 * (lo + hi)
+                if _theta_e(mid, p, _qs(mid, p)) > the:
+                    hi = mid
+                else:
+                    lo = mid
+            Tp = 0.5 * (lo + hi); qp = _qs(Tp, p)
+        b = G * (Tp * (1 + 0.61 * qp) - T[i] * (1 + 0.61 * Q[i])) / (T[i] * (1 + 0.61 * Q[i])) * (Z[i] - Z[i - 1])
+        if b > 0 and sat:
+            lfc = True; cape += b
+        elif b < 0 and not lfc:
+            cin += b
+    return cape, cin
+
+
+def elevated_min_cin(sfc, rows, z_top=3000.0, dz_src=250.0, min_cape=100.0):
+    """10c pilot 3: the weakest inhibition of any parcel lifted from 0-z_top with CAPE > min_cape. A small value means CM1's +-0.25 K
+    domain-wide initial noise can start convection anywhere (pilots 2-3: elevated, near-saturated layers at 1-3 km)."""
+    Z, P, T, Q, _ = profile(sfc, rows)
+    worst = None
+    step = max(1, int(dz_src / (Z[1] - Z[0])))
+    for i in range(0, len(Z)):
+        if Z[i] > z_top:
+            break
+        if i % step:
+            continue
+        cape, cin = parcel_cape_cin(Z, P, T, Q, i, T[i] * (1000.0 / P[i]) ** (RD / CP), Q[i])
+        if cape > min_cape and (worst is None or -cin < worst[0]):
+            worst = (-cin, Z[i], cape)
+    return worst
+
+
 def env_stats(sfc, rows, ml_depth=500.0):
     """mixed-layer (lowest ml_depth) pseudo-adiabatic parcel: CAPE, CIN (J/kg); bulk shear 0-3 / 0-6 km (m/s, u only: 2D);
     mean RH 3-6 km; precipitable water (mm); LCL height (m)"""
@@ -305,6 +348,7 @@ def main():
     ap.add_argument("--nx", type=int, default=0, help="domain width in cells (0: the template's)")
     ap.add_argument("--two-storms", type=float, default=0.0, help="separation (m) of two initiating thermals (var2)")
     ap.add_argument("--tiny-pert", type=float, default=0.0, help="amplitude (K) of an extra tiny theta field (var3)")
+    ap.add_argument("--noise-band", type=float, default=0.0, help="10c: half-width (m) of the band about the centre that gets CM1's random initial noise (var7; needs the noise_band_var7 patch)")
     a = ap.parse_args()
 
     tmpl = os.path.abspath(a.template)
@@ -325,6 +369,10 @@ def main():
             sys.exit("--two-storms needs a CM1 built with the two_storms_var2 patch (%s not found or lacks it)" % patches)
         if not a.nx:
             sys.exit("--two-storms: give --nx too (two storms need a wider domain)")
+    if a.noise_band:   # an unpatched cm1.exe ignores var7 and keeps the noise everywhere
+        patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")
+        if not (os.path.exists(patches) and "noise_band_var7" in open(patches).read()):
+            sys.exit("--noise-band needs a CM1 built with the noise_band_var7 patch (%s not found or lacks it)" % patches)
     if a.tiny_pert:   # an unpatched cm1.exe ignores var3: the "twin" would be identical to its control
         patches = os.path.join(os.path.dirname(os.path.dirname(exe)), "PATCHES")
         if not (os.path.exists(patches) and "tiny_pert_var3" in open(patches).read()):
@@ -345,6 +393,8 @@ def main():
         nml = set_namelist(nml, "nx", a.nx)
     if a.two_storms:
         nml = set_namelist(nml, "var2", "%.1f" % a.two_storms)
+    if a.noise_band:
+        nml = set_namelist(nml, "var7", "%.1f" % a.noise_band)
 
     sfc0, rows0 = read_sounding(os.path.join(tmpl, "input_sounding"))
     base_rh = max_rh(sfc0, rows0)

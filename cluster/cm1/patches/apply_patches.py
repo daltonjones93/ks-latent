@@ -40,6 +40,12 @@ tiny_pert_var3 (init3d.F, any iinit): a tiny extra theta perturbation for twin r
   exactly the same usual noise and differ only by the tiny field. var3 = 0 leaves CM1 bit-for-bit
   unchanged (the whole code path is skipped).
 
+noise_band_var7 (init3d.F, irandp = 1, testcase = 0): confine CM1's domain-wide +-0.25 K random initial theta noise to
+  |x - centerx| <= var7 (m). Every random number is still drawn (so CM1's stream, and everything drawn after it, is unchanged);
+  outside the band it is just not added. Why (10c, 2026-11-21): with the noise everywhere, environments with CAPE >~ 2400 J/kg
+  start convection across the whole domain within 15-30 min (pilots 2-3), so the run is no longer one squall line from one
+  thermal; in nature something has to trigger convection. var7 = 0 leaves CM1 bit-for-bit unchanged.
+
 Usage: python3 apply_patches.py SRC_DIR
 """
 import sys
@@ -210,11 +216,33 @@ BUMP_PATCH = f"""        {BUMP_MARK}: on a restart, non-zero var5 adds var5 K * 
         ENDIF
 """ + BUMP_ANCHOR
 
+# --- noise_band_var7 ---------------------------------------------------------------------------------
+NOISE_MARK = "! latent_DA patch noise_band_var7"
+NOISE_TAIL = """          enddo
+          enddo
+        enddo
+
+      ELSEIF( testcase.eq.1 .or. testcase.eq.2 .or. testcase.eq.6"""
+NOISE_ANCHOR = """            IF( i.ge.ib .and. i.le.ie .and. j.ge.jb .and. j.le.je )THEN
+              tha(i,j,k)=tha(i,j,k)+amplitude*(2.0*rand-1.0)
+            ENDIF
+""" + NOISE_TAIL
+NOISE_PATCH = f"""            IF( i.ge.ib .and. i.le.ie .and. j.ge.jb .and. j.le.je )THEN
+              {NOISE_MARK}: non-zero var7 = half-width (m) of the band about centerx
+              ! that gets the noise (the random number is drawn either way; var7 = 0: unchanged CM1)
+              if( var7.le.0.0 .or. abs(xh(i)-centerx).le.var7 )then
+                tha(i,j,k)=tha(i,j,k)+amplitude*(2.0*rand-1.0)
+              endif
+            ENDIF
+""" + NOISE_TAIL
+
+
 PATCHES = [  # (name, file, marker, anchor, replacement)
     ("seed_var1", "init3d.F", SEED_MARK, SEED_ANCHOR, SEED_PATCH),
     ("two_storms_var2", "init3d.F", STORM_MARK, STORM_ANCHOR, STORM_PATCH),
     ("tiny_pert_var3", "init3d.F", TINY_MARK, TINY_ANCHOR, TINY_PATCH),
     ("bump_restart_var5", "cm1.F", BUMP_MARK, BUMP_ANCHOR, BUMP_PATCH),
+    ("noise_band_var7", "init3d.F", NOISE_MARK, NOISE_ANCHOR, NOISE_PATCH),
 ]
 
 
