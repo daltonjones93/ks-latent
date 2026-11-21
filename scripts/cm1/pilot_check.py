@@ -1,64 +1,72 @@
-"""B4: does every corner of the ens_B environment range give a storm that stays inside the domain?
+"""10c: checks on a pilot CM1 ensemble before the main one: does a squall line form, stay inside the (moving) domain, and finish?
+For each cached member: peak w (m/s) per hour, the x of the leading gust front (outermost column with surface theta' < -2 K, either side of
+the cold pool) every 30 min, the minimum distance of the cold-pool edges and of any |w| > 2 m/s to the domain edges, and the mean
+front speed relative to the moving grid. Compared against members of a reference ensemble (e.g. ens_C) from the same caches.
 
-For each member of a pilot ensemble (GrADS output): gust-front position (easternmost surface
-theta' < -1 K), the x-extent of composite reflectivity > 20 dBZ, and peak surface rain proxy, every
-10 min. A member fails if any storm echo or the front comes within `--margin-km` of either edge
-(the lateral boundaries are open; the grid moves at a fixed 12.5 m/s, so environments with
-different storm speeds drift). Writes a small JSON for plotting elsewhere.
-Usage: python pilot_check.py ENS_DIR --out pilot.json
+  python scripts/cm1/pilot_check.py --cache ~/cm1_cache_E_pilot --manifest ~/cm1_bundle/ens_E_pilot/manifest.json --ref ~/cm1_cache_C --n-ref 6
 """
 import argparse
-import csv
 import json
 from pathlib import Path
 
 import numpy as np
 
-from ks_latent.cm1.data import VARS
-from ks_latent.cm1.io import load_grads_run
+from ks_latent.cm1.data import VARS, load_member
 
 DX = 0.25
 
 
+def summarize(path):
+    m = load_member(path, mmap=True)
+    X = m.X                                                               # (T, NX, V, Z)
+    T, NX = X.shape[0], X.shape[1]
+    iw, ith = VARS.index("w"), VARS.index("th")
+    out = {"name": m.name, "frames": T}
+    wmax = np.array([float(np.abs(np.asarray(X[t, :, iw, :], np.float32)).max()) for t in range(T)])
+    out["wmax_per_hour"] = [round(float(wmax[h * 60:(h + 1) * 60].max()), 1) for h in range((T + 59) // 60)]
+    fronts, edge_w = [], []
+    for t in range(0, T, 30):
+        sth = np.asarray(X[t, :, ith, 0], np.float32)
+        cold = np.where(sth < -2.0)[0]
+        fronts.append((t, None, None) if cold.size == 0 else (t, round(cold.min() * DX, 1), round(cold.max() * DX, 1)))
+        act = np.where(np.abs(np.asarray(X[t, :, iw, :], np.float32)).max(1) > 2.0)[0]
+        if act.size:
+            edge_w.append(min(act.min(), NX - 1 - act.max()) * DX)
+    out["cold_pool_edges_km"] = fronts
+    lefts = [f[1] for f in fronts if f[1] is not None]; rights = [f[2] for f in fronts if f[2] is not None]
+    out["min_edge_dist_cold_km"] = round(min([min(l, NX * DX - r) for l, r in zip(lefts, rights)] or [np.nan]), 1)
+    out["min_edge_dist_w_km"] = round(min(edge_w or [np.nan]), 1)
+    # front speeds (km/h relative to the grid) over the second half, where the line is mature
+    tt = [f[0] for f in fronts if f[1] is not None and f[0] >= T // 2]
+    if len(tt) >= 2:
+        L = [f[1] for f in fronts if f[1] is not None and f[0] >= T // 2]; R = [f[2] for f in fronts if f[2] is not None and f[0] >= T // 2]
+        hrs = (tt[-1] - tt[0]) / 60.0
+        out["front_speed_kmh_left_right"] = [round((L[-1] - L[0]) / hrs, 1), round((R[-1] - R[0]) / hrs, 1)]
+    out["initiated"] = bool(wmax[:90].max() > 5.0)
+    out["sustained"] = bool(wmax[-60:].max() > 5.0)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("ens")
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--margin-km", type=float, default=30.0)
+    ap.add_argument("--cache", required=True); ap.add_argument("--manifest", default=None)
+    ap.add_argument("--ref", default=None); ap.add_argument("--n-ref", type=int, default=6); ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    ens = Path(a.ens)
-    env = {r["member"]: r for r in csv.DictReader(open(ens / "manifest.csv"))}
-    out = {"margin_km": a.margin_km, "members": {}}
-    for mdir in sorted(ens.glob("members/mem*")):
-        if not (mdir / "cm1.done").exists():
-            print(f"{mdir.name}: not finished, skipped")
-            continue
-        d = load_grads_run(mdir / "cm1out_s.ctl")
-        t = d["t"]
-        sel = np.arange(0, len(t), 10)
-        th_sfc = d["X"][sel, VARS.index("th"), 0]
-        cref = d["cref"][sel]
-        L = cref.shape[1] * DX
-        front, west, east = [], [], []
-        for k in range(len(sel)):
-            cold = np.where(th_sfc[k] < -1.0)[0]
-            front.append(float((cold.max() + 0.5) * DX) if cold.size else None)
-            echo = np.where(cref[k] > 20)[0]
-            west.append(float(echo.min() * DX) if echo.size else None)
-            east.append(float((echo.max() + 1) * DX) if echo.size else None)
-        lo = min([w for w in west if w is not None], default=None)
-        hi = max([e for e in east if e is not None] + [f for f in front if f is not None], default=None)
-        ok = lo is not None and lo >= a.margin_km and hi <= L - a.margin_km
-        r = env.get(mdir.name, {})
-        out["members"][mdir.name] = {"qv_offset_gkg": float(r.get("qv_offset_gkg", "nan")),
-                                     "shear_scale": float(r.get("shear_scale", "nan")),
-                                     "t_h": (t[sel] / 3600).tolist(), "front_km": front, "echo_west_km": west,
-                                     "echo_east_km": east, "min_echo_west_km": lo, "max_east_km": hi,
-                                     "inside_with_margin": bool(ok), "peak_cref_dbz": float(cref.max())}
-        print(f"{mdir.name}: qv {r.get('qv_offset_gkg')} shear {r.get('shear_scale')}  echo spans {lo}-{hi} km "
-              f"(domain 0-{L:.0f})  front at 6 h {front[-1]}  peak cref {cref.max():.0f} dBZ  -> "
-              f"{'OK' if ok else 'TOO CLOSE TO AN EDGE'}")
-    Path(a.out).write_text(json.dumps(out, indent=1))
+    env = {}
+    if a.manifest:
+        for m in json.load(open(Path(a.manifest).expanduser()))["members"]:
+            env[m["member"]] = {k: m.get(k) for k in ("mlcape", "shear03", "shear06", "rh36", "upper_shear", "shear_depth_km")}
+    rows = []
+    for f in sorted(Path(a.cache).expanduser().glob("*.npz")):
+        s = summarize(f); key = s["name"].split("_")[-1]; s["env"] = env.get(key, {}); rows.append(s)
+    ref = [summarize(f) for f in sorted(Path(a.ref).expanduser().glob("*.npz"))[: a.n_ref]] if a.ref else []
+    for s in rows + [dict(r, name="REF " + r["name"]) for r in ref]:
+        e = s.get("env", {})
+        print(f"{s['name'][-22:]:22s} CAPE {e.get('mlcape', '-')!s:>7} sh03 {e.get('shear03', '-')!s:>5} sh06 {e.get('shear06', '-')!s:>5} "
+              f"rh36 {e.get('rh36', '-')!s:>5} | init {s['initiated']!s:5} sust {s['sustained']!s:5} wmax/h {s['wmax_per_hour']} "
+              f"| edge dist cold {s['min_edge_dist_cold_km']} w {s['min_edge_dist_w_km']} km | front speed {s.get('front_speed_kmh_left_right')}")
+    if a.out:
+        Path(a.out).expanduser().write_text(json.dumps({"pilot": rows, "ref": ref}, indent=1))
 
 
 if __name__ == "__main__":

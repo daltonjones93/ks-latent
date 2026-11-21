@@ -892,6 +892,9 @@ class StencilPropagator(nn.Module):
             if eps is None:
                 eps = torch.randn((x.shape[0], self.cfg.noise_channels, x.shape[2]), generator=gen,
                                   device="cpu").to(x.device, x.dtype)
+                t_ = getattr(self, "noise_temp", 1.0)                         # 10b: forecast-time noise temperature (runtime only)
+                if t_ != 1.0:
+                    eps = eps * t_
             x = torch.cat([x, eps], dim=1)
         if self.cfg.global_kind:
             g = self.glob(last)                                                # (B, P, G)

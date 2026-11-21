@@ -44,3 +44,20 @@ def test_ema_validation_and_bad_decay():
     assert all(np.isfinite(h["val_decoded_rollout_mse"]) for h in out["history"])
     with pytest.raises(ValueError):
         train_stage_c(ae, prop, d, d, StageCConfig(**KW, ema=1.0), log=lambda *_: None)
+
+
+def test_noise_temperature():
+    """10b: the runtime noise temperature scales the drawn noise channels; 1 is unchanged, 0 is deterministic."""
+    torch.manual_seed(0)
+    p = StencilPropagator(StencilPropConfig(latent_channels=5, hidden=8, layers=2, radius=1, noise_channels=2))
+    with torch.no_grad():
+        p.head.weight.normal_()
+    z = torch.randn(2, 20, 5)
+    a = p(z, gen=torch.Generator().manual_seed(1))
+    p.noise_temp = 1.0
+    assert torch.equal(a, p(z, gen=torch.Generator().manual_seed(1)))
+    p.noise_temp = 0.0
+    assert torch.equal(p(z, gen=torch.Generator().manual_seed(1)), p(z, gen=torch.Generator().manual_seed(2)))
+    p.noise_temp = 2.0
+    e = torch.randn((2, 2, 20), generator=torch.Generator().manual_seed(1))
+    assert torch.allclose(p(z, gen=torch.Generator().manual_seed(1)), p(z, eps=2.0 * e), atol=1e-6)
