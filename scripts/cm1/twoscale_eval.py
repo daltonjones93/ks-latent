@@ -77,6 +77,57 @@ def band_power(x, Zl):
     return torch.stack([f[..., torch.as_tensor((wl >= lo) & (wl < hi))].sum(-1) for lo, hi in BANDS], -1)
 
 
+def _to_ref(sc, norm, ref_scale):
+    """this model's normalized units -> the reference model's"""
+    if ref_scale is None:
+        return sc
+    f = np.array(norm.scale, dtype=float) / ref_scale
+    for k in ("rmse", "crps", "spread", "rmse_lowpass"):
+        sc[k] = (np.array(sc[k]) * f).tolist()
+    for k in ("power", "power_truth"):
+        sc[k] = (np.array(sc[k]) * (f ** 2)[:, None]).tolist()
+    return sc
+
+
+def pooled_cases(subs, names, files, a, lags, n, ref_scale, dev, t_start, rn):
+    """10a: a multi-model ensemble. Each model (its own autoencoder and propagator) encodes the truth, rolls --samples / len(subs) members and
+    decodes them; the members are converted to the first model's normalized units and scored together as one ensemble."""
+    split0 = subs[0][4][a.split][: a.n_test]
+    for m in subs[1:]:
+        if m[4][a.split][: a.n_test] != split0:
+            raise ValueError(f"pool {rn}: models have different {a.split} splits")
+    ae0, _, norm0, cfg0, _ = subs[0]
+    Sm = a.samples // len(subs)
+    mar = max((m[3]["stage_b"]["halo_sites"] + m[0].cfg.reach_sites) * m[0].cfg.patch for m in subs)
+    cases = []
+    for nm in names:
+        d0 = ColumnData([load_member(files[nm])], norm0, dev)
+        per = []
+        for ae, prop, norm, cfg, _ in subs:
+            if not is_stochastic(prop):
+                raise ValueError(f"pool {rn}: deterministic member model")
+            d = ColumnData([load_member(files[nm])], norm, dev)
+            z = encode_members(ae, d)[0]
+            conv = torch.as_tensor(np.repeat(np.array(norm.scale, float) / np.array(norm0.scale, float), d.Z), dtype=torch.float32, device=dev)[:, None]
+            per.append((ae, prop, cfg["stage_b"]["halo_sites"], z, conv))
+        for t0 in [int(x) for x in a.t0.split(",")]:
+            if t0 + n + 1 > per[0][3].shape[0]:
+                continue
+            trajs = []
+            for j, (ae, prop, halo, z, conv) in enumerate(per):
+                zb = z if a.boundary == "truth" else torch.cat([z[:t0 + 1], z[t0:t0 + 1].expand(z.shape[0] - t0 - 1, -1, -1)])
+                trajs.append(rollout(prop, zb, t0, n, halo, Sm, seed=t0 + 1000 * j))
+            case = {"member": nm, "t0": t0, "lags": {}}
+            with torch.no_grad():
+                for L in lags:
+                    dec = torch.cat([ae.decode(tr[L]) * conv for (ae, _, _, _, conv), tr in zip(per, trajs)])
+                    u = d0.full(0, t0 + L)[0]
+                    case["lags"][str(L)] = _to_ref(score_case(ae0, dec, u, d0.Z, slice(mar, u.shape[-1] - mar), norm0, a.lowpass_km), norm0, ref_scale)
+            cases.append(case)
+        print(f"[ts_eval] {rn} {nm} ({time.time() - t_start:.0f}s)", flush=True)
+    return cases
+
+
 def score_case(ae, dec, u_true, Zl, sl, norm, lowpass_km):
     """dec (S, C, NX), u_true (C, NX) -> dict of per-variable metrics on the interior columns `sl`."""
     V = len(VARS)
@@ -182,6 +233,13 @@ def main():
     lags = [int(x) for x in a.lags.split(",")]; n = max(lags)
     models = {}
     for r in a.runs:
+        if "=" in r:           # 10a: a pooled multi-model ensemble, name=runA+runB+...: each model gives --samples // n members
+            pname, parts = r.split("=", 1)
+            subs = [load_run(Path(q).expanduser(), dev) for q in parts.split("+")]
+            if len(subs) < 2 or a.samples % len(subs):
+                raise ValueError(f"pool {pname}: needs >= 2 models and --samples divisible by their number")
+            models[pname] = ("pool", subs)
+            continue
         r = Path(r).expanduser(); models[r.name] = load_run(r, dev)
         if a.global_off and getattr(models[r.name][1].cfg, "global_kind", ""):
             m2 = load_run(r, dev); m2[1].global_off = True; models[r.name + "@globaloff"] = m2
@@ -191,8 +249,13 @@ def main():
         ref_scale = np.array(json.loads((Path(a.ref_norm_run).expanduser() / "normalizer.json").read_text())["scale"], dtype=float)
     if a.source:
         files = member_files(a.source)
-        names = next(iter(models.values()))[4][a.split][: a.n_test]
-        for rn, (ae, prop, norm, cfg, split) in models.items():
+        first = next(iter(models.values()))
+        names = (first[1][0] if first[0] == "pool" else first)[4][a.split][: a.n_test]
+        for rn, mdl in models.items():
+            if mdl[0] == "pool":
+                res["runs"][rn] = {"samples": a.samples, "pool": len(mdl[1]), "cases": pooled_cases(mdl[1], names, files, a, lags, n, ref_scale, dev, t_start, rn)}
+                continue
+            ae, prop, norm, cfg, split = mdl
             if split[a.split][: a.n_test] != names:
                 print(f"[ts_eval] {rn}: different test split, skipped"); continue
             halo, p = cfg["stage_b"]["halo_sites"], ae.cfg.patch

@@ -408,6 +408,7 @@ class StageCConfig:
     feat_up: float = 2.0              # updraft: w above this (m/s); calibrated in scripts/cm1/feature_calibration.py
     feat_down: float = 1.5            # downdraft: w below minus this (m/s)
     feat_soft: float = 0.5            # sigmoid width (m/s), about twice the domain-mean reconstruction error of w
+    ema: float = 0.0                  # 10a: exponential moving average of the weights (decay, e.g. 0.999); validated, selected and returned
     feat_pos_slope: float = 0.0       # 9f: class weight of the features = 1 + slope x rollout step (frames); 0: unweighted
     feat_kind: str = "bce"            # 9f: "bce" (cross-entropy) or "csi" (soft critical success index)
     feat_names: str = ""              # 9e: comma list of cell_losses.FEATURES keys or variable names (e.g. "th" = th-,th+); empty: the w pair above
@@ -575,6 +576,18 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
             loss = loss + cfg.w_spectral * spectral_loss(dec, tgt)
         return loss, z
 
+    if not 0.0 <= cfg.ema < 1.0:
+        raise ValueError(f"ema decay {cfg.ema} outside [0, 1)")
+    ema_p = [q.detach().clone() for q in params] if cfg.ema > 0 else None
+
+    def _swap(src):
+        """copy `src` into the trained parameters and return what was there (10a: validate / select on the EMA weights)"""
+        with torch.no_grad():
+            old = [q.detach().clone() for q in params]
+            for q, e in zip(params, src):
+                q.copy_(e)
+        return old
+
     hist, best, best_state, t0 = [], float("inf"), None, time.time()
     for step in range(cfg.steps):
         ae.train(); prop.train()
@@ -601,6 +614,10 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
         opt.step(); sched.step()
+        if ema_p is not None:
+            d_ = min(cfg.ema, (1.0 + step) / (10.0 + step))                  # warm-up: early averages do not keep the initial weights
+            with torch.no_grad():
+                torch._foreach_lerp_(ema_p, [q.detach() for q in params], 1.0 - d_)
         if cfg.law_prune_every and step + 1 >= prune_start and (step + 1 - prune_start) % cfg.law_prune_every == 0:
             thr = cfg.law_prune_rel * prop.law.max_coupling()
             kept = prop.law.prune(thr)
@@ -609,6 +626,7 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                 f"{kept} terms kept, residual weight {prop.cfg.law_res_weight:.3g}")
         if (step + 1) % cfg.val_every == 0 or step == cfg.steps - 1:
             ae.eval(); prop.eval()
+            train_w = _swap(ema_p) if ema_p is not None else None
             with torch.no_grad():
                 v = sum(rollout_err(x, e, cfg.k_max, False, torch.Generator().manual_seed(3))[0].item()
                         for x, e in val) / len(val)
@@ -627,6 +645,8 @@ def train_stage_c(ae: ColumnFieldAE, prop: StencilPropagator, data_tr: ColumnDat
                 best = v
                 best_state = ({kk: t.detach().clone() for kk, t in ae.state_dict().items()},
                               {kk: t.detach().clone() for kk, t in prop.state_dict().items()})
+            if train_w is not None:
+                _swap(train_w)                                                  # back to the trained weights
     ae.load_state_dict(best_state[0]); prop.load_state_dict(best_state[1])
     return {"history": hist, "best_val_decoded_rollout_mse": best}
 

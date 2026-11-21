@@ -367,6 +367,7 @@ def main():
     ap.add_argument("--c-feat-soft", type=float, default=0.5, help="9d: sigmoid width (m/s)")
     ap.add_argument("--c-feat-names", default="", help="9e: features for the cross-entropy: comma list of cell_losses.FEATURES keys or variables (u, w, th, qv, prs, qliq, qice); empty = the w pair")
     ap.add_argument("--c-feat-pos-slope", type=float, default=0.0, help="9f: feature class weight = 1 + slope x rollout step (frames)")
+    ap.add_argument("--c-ema", type=float, default=0.0, help="10a: Stage C weight EMA decay (0 = off; e.g. 0.999)")
     ap.add_argument("--c-feat-kind", default="bce", choices=["bce", "csi"], help="9f: cross-entropy or soft CSI")
     ap.add_argument("--c-w-mse-scale", type=float, default=1.0, help="9d: weight of the w channels in the decoded MSE / CRPS (0 = cross-entropy only for w)")
     ap.add_argument("--c-pool-scales-km", default="2,4,8,16")
@@ -547,7 +548,7 @@ def main():
                               w_site_smooth=a.c_site_smooth, freeze_ae=a.c_freeze_ae,
                               tw_weight=a.c_tw_weight, tw_w_thresh=a.c_tw_w_thresh, tw_q_thresh=a.c_tw_q_thresh,
                               pool_weight=a.c_pool_weight, pool_crps_weight=a.c_pool_crps_weight, feat_weight=a.c_feat_weight, feat_up=a.c_feat_up,
-                              feat_down=a.c_feat_down, feat_soft=a.c_feat_soft, feat_names=a.c_feat_names, feat_pos_slope=a.c_feat_pos_slope, feat_kind=a.c_feat_kind, w_mse_scale=a.c_w_mse_scale, pool_scales_km=tuple(float(x) for x in a.c_pool_scales_km.split(",")),
+                              feat_down=a.c_feat_down, feat_soft=a.c_feat_soft, feat_names=a.c_feat_names, feat_pos_slope=a.c_feat_pos_slope, ema=a.c_ema, feat_kind=a.c_feat_kind, w_mse_scale=a.c_w_mse_scale, pool_scales_km=tuple(float(x) for x in a.c_pool_scales_km.split(",")),
                               lp_weight=a.c_lp_weight, lp_sigma_km=a.c_lp_sigma_km, select_last=a.c_select_last)
             log(f"[C] joint decoded-rollout fine-tuning: {sc}")
             tc = time.time()
