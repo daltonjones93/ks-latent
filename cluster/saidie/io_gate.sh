@@ -5,7 +5,9 @@
 MIN=${MIN_MBS:-200}
 while true; do
   f=$(ls $HOME/cm1_cache_C/*.npz $HOME/cm1_cache_D/*.npz | shuf -n 1)
-  s=$(date +%s.%N); dd if="$f" of=/dev/null bs=16M count=32 2>/dev/null; e=$(date +%s.%N)
+  # iflag=direct bypasses the page cache: on 2026-11-21 a cached file read at 938 MB/s while uncached reads ran at ~10 MB/s,
+  # so the first version of this gate released a chain that then stalled for 3 h
+  s=$(date +%s.%N); dd if="$f" of=/dev/null bs=16M count=32 iflag=direct 2>/dev/null; e=$(date +%s.%N)
   r=$(echo "512 / ($e - $s)" | bc); echo "$(date +%H:%M) $(basename $f): $r MB/s"
   [ "$r" -ge "$MIN" ] && exit 0
   sleep 600
