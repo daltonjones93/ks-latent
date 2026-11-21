@@ -195,7 +195,7 @@ def env_stats(sfc, rows, ml_depth=500.0):
             "shear06": round(at(U, 6000.0) - U[0], 2), "rh36": round(sum(rh36) / max(1, len(rh36)), 3), "pw_mm": round(pw, 1)}
 
 
-def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zmax, dth_bl=0.0):
+def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zmax, dth_bl=0.0, cap=0.0):
     """10c: the environment perturbations of --design lhs, in this order: wind (depth stretch, magnitude, deep-layer increment),
     boundary-layer temperature at constant relative humidity (dth_bl, K, full below 1 km, tapered to 0 at 3 km: a warmer
     boundary layer is also moister, the realistic route to high CAPE), free-tropospheric theta, mid-level humidity (capped at 95% RH),
@@ -232,6 +232,9 @@ def perturb_env(sfc0, rows0, dth_aloft, rh_aloft, depth_km, upper, ss, dq, qv_zm
         r[3] = u
         ramp = 0.0 if z < 1500 else (z - 1500) / 2500.0 if z < 4000 else 1.0 if z < 11000 else max(0.0, 1 - (z - 11000) / 2000.0)
         r[1] += dth_aloft * ramp
+        # capping inversion (10c pilot 2): warming that rises over 1.0-1.4 km and fades by 5 km, so d(theta)/dz stays > 0
+        capw = 0.0 if z < 1000 else (z - 1000) / 400.0 if z < 1400 else max(0.0, 1.0 - (z - 1400) / 3600.0)
+        r[1] += cap * capw
     # hydrostatic T, p of the perturbed temperature profile for the RH cap
     pi = (sfc[0] / 1000.0) ** (RD / CP); z_prev = 0.0; thv_prev = sfc[1] * (1 + 0.61 * sfc[2] / 1000.0)
     for r in rows:
@@ -294,6 +297,8 @@ def main():
     ap.add_argument("--dtheta-bl", type=float, nargs=2, default=[0.0, 0.0], help="10c, lhs: boundary-layer theta change at constant RH (K)")
     ap.add_argument("--cape-range", type=float, nargs=2, default=[0.0, 1e9], help="10c, lhs: accepted mixed-layer CAPE (J/kg)")
     ap.add_argument("--shear06-max", type=float, default=1e9, help="10c, lhs: accepted max 0-6 km bulk shear (m/s)")
+    ap.add_argument("--cap-theta", type=float, nargs=2, default=[0.0, 0.0], help="10c, lhs: capping-inversion warming (K) over 1.0-1.4 km, fading by 5 km")
+    ap.add_argument("--cin-per-cape", type=float, default=0.0, help="10c, lhs: reject unless |CIN| >= this x (CAPE - 600) (J/kg)")
     ap.add_argument("--min-dthdz", type=float, default=-1e9, help="10c, lhs: reject soundings with d(theta)/dz below this (K/km) above 200 m")
     ap.add_argument("--rh36-max", type=float, default=1e9, help="10c, lhs: reject soundings with mean 3-6 km RH above this")
     ap.add_argument("--reference-sounding", help="also make mem000 with this exact sounding (validation run)")
@@ -348,15 +353,15 @@ def main():
     if a.reference_sounding:
         members.append(("mem000", read_sounding(a.reference_sounding), {"reference": os.path.abspath(a.reference_sounding)}))
     if a.design == "lhs":
-        box = [a.qv_offset, a.shear_scale, a.dtheta_aloft, a.rh_aloft, a.shear_depth, a.upper_shear, a.dtheta_bl]
+        box = [a.qv_offset, a.shear_scale, a.dtheta_aloft, a.rh_aloft, a.shear_depth, a.upper_shear, a.dtheta_bl, a.cap_theta]
         tried, accepted = 0, []
         while len(accepted) < a.n:
             for x in lhs(rng, a.n, len(box)):
                 if len(accepted) >= a.n:
                     break
                 tried += 1
-                dq, ss, dta, rha, dep, ups, dtb = [lo + u * (hi - lo) for u, (lo, hi) in zip(x, box)]
-                sfc, rows = perturb_env(sfc0, rows0, dta, rha, dep, ups, ss, dq, a.qv_zmax, dtb)
+                dq, ss, dta, rha, dep, ups, dtb, cap = [lo + u * (hi - lo) for u, (lo, hi) in zip(x, box)]
+                sfc, rows = perturb_env(sfc0, rows0, dta, rha, dep, ups, ss, dq, a.qv_zmax, dtb, cap)
                 if max_rh(sfc, rows) > max(1.0, base_rh + 1e-6):
                     continue
                 st = env_stats(sfc, rows)
@@ -364,10 +369,13 @@ def main():
                     continue
                 if st["min_dthdz"] < a.min_dthdz or st["rh36"] > a.rh36_max:
                     continue
-                accepted.append((dq, ss, dta, rha, dep, ups, dtb, sfc, rows, st))
+                if -st["mlcin"] < a.cin_per_cape * (st["mlcape"] - 600.0):   # 10c pilot 2: CM1's domain-wide 0.25 K noise sets off cells
+                    continue                                                  # everywhere when CAPE is high and CIN weak
+
+                accepted.append((dq, ss, dta, rha, dep, ups, dtb, cap, sfc, rows, st))
             if tried > 200 * a.n:
                 sys.exit("lhs: fewer than %d of %d draws accepted; widen --cape-range / --shear06-max" % (len(accepted), tried))
-        for i, (dq, ss, dta, rha, dep, ups, dtb, sfc, rows, st) in zip(range(a.start, a.start + a.n), accepted):
+        for i, (dq, ss, dta, rha, dep, ups, dtb, cap, sfc, rows, st) in zip(range(a.start, a.start + a.n), accepted):
             dth_sfc = rng.gauss(0.0, a.theta_sigma)
             sfc[1] += dth_sfc
             dths = []
@@ -377,7 +385,7 @@ def main():
             members.append(("mem%03d" % i, (sfc, rows),
                             dict(dtheta_sfc=round(dth_sfc, 5), dtheta_levels_below_zmax=dths, qv_offset_gkg=round(dq, 4),
                                  shear_scale=round(ss, 4), dtheta_aloft=round(dta, 3), rh_aloft=round(rha, 3),
-                                 shear_depth_km=round(dep, 3), upper_shear=round(ups, 3), dtheta_bl=round(dtb, 3),
+                                 shear_depth_km=round(dep, 3), upper_shear=round(ups, 3), dtheta_bl=round(dtb, 3), cap_theta=round(cap, 3),
                                  draws_tried=tried, **st)))
     for i in (range(a.start, a.start + a.n) if a.design != "lhs" else []):
         sfc, rows = list(sfc0), [list(r) for r in rows0]
@@ -435,7 +443,7 @@ def main():
         json.dump(meta, f, indent=1)
     with open(os.path.join(a.out, "manifest.csv"), "w", newline="") as f:
         w = csv.writer(f)
-        extra = ["dtheta_bl", "dtheta_aloft", "rh_aloft", "shear_depth_km", "upper_shear", "mlcape", "mlcin", "min_dthdz", "shear03", "shear06", "rh36", "pw_mm"]
+        extra = ["dtheta_bl", "cap_theta", "dtheta_aloft", "rh_aloft", "shear_depth_km", "upper_shear", "mlcape", "mlcin", "min_dthdz", "shear03", "shear06", "rh36", "pw_mm"]
         extra = [k for k in extra if any(k in m for m in manifest)]
         w.writerow(["member", "dtheta_sfc", "qv_offset_gkg", "shear_scale", "max_rh"] + extra)
         for m in manifest:
