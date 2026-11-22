@@ -15,7 +15,7 @@ R=$HOME/cm1_runs; F6=$R/F6_conv416_mixer512_gelu_pred_all
 BASE="--latent-channels 32 --k-max 45 --k-sampling uniform --val-members $VAL --test-members $TEST --noise-channels 4 --crps-samples 4 --eval-samples 8 --tf32 --mmap --steps-b 40000 --mixer-variant gelu_ln --normalizer-from $F6"
 CA="--ae-kind conv --hidden 416 --prop-body mixer --prop-hidden 512 --window-b 48"
 C="--stage-c-steps 30000 --w-sfc-th 2 --stage-c-crps 4 --stage-c-batch 4 --nested-frac 0.5 --stage-c-lr 1e-4"
-gate=$(sbatch --parsable --account=chen-saidie --partition=general --cpus-per-task=4 --mem=8G --time=03:00:00 --job-name=stage_local --output=logs/stage_local_%j.out cluster/saidie/stage_local.sh)
+gate=$(sbatch --parsable --account=chen-saidie --partition=general --cpus-per-task=4 --mem=8G --time=02:00:00 --job-name=stage_local --output=logs/stage_local_%j.out cluster/saidie/stage_local.sh)
 echo "staging $gate"
 gpu() { local dep=$3; sbatch --parsable --time=$2 --dependency=afterok:$dep --job-name=$1 --mem=56G --export=ALL,DATA="$DATA",RUN=$1,EXTRA="$4" cluster/saidie/train_cm1.slurm; }
 seed() { # seed dep -> echoes the Stage C job id
