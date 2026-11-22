@@ -94,7 +94,7 @@ def pooled_cases(subs, names, files, a, lags, n, ref_scale, dev, t_start, rn):
     decodes them; the members are converted to the first model's normalized units and scored together as one ensemble."""
     split0 = subs[0][4][a.split][: a.n_test]
     for m in subs[1:]:
-        if m[4][a.split][: a.n_test] != split0:
+        if not a.members_json and m[4][a.split][: a.n_test] != split0:
             raise ValueError(f"pool {rn}: models have different {a.split} splits")
     ae0, _, norm0, cfg0, _ = subs[0]
     Sm = a.samples // len(subs)
@@ -218,6 +218,8 @@ def main():
     ap.add_argument("--t0", default="120,180,240"); ap.add_argument("--lags", default="5,15,30,60")
     ap.add_argument("--lowpass-km", type=float, default=10.0); ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--members-json", default=None, help="10c: score the storms listed under --members-key in this JSON instead of each model's own split")
+    ap.add_argument("--members-key", default="test")
     ap.add_argument("--split", choices=["test", "val"], default="test", help="9g: score the validation storms (to choose cutoffs) or the test storms")
     ap.add_argument("--paired", default=None, help="manifest.json of the paired runs (T-chaos)")
     ap.add_argument("--base", default=None); ap.add_argument("--branches", default=None)
@@ -251,12 +253,16 @@ def main():
         files = member_files(a.source)
         first = next(iter(models.values()))
         names = (first[1][0] if first[0] == "pool" else first)[4][a.split][: a.n_test]
+        if a.members_json:   # 10c: storms named in a split file (e.g. the new storm types), whatever each model's own split was
+            names = json.loads(Path(a.members_json).expanduser().read_text())[a.members_key][: a.n_test]
+            names = [nm for nm in names if nm in files]
+            print(f"[ts_eval] {len(names)} storms from {a.members_json}:{a.members_key}", flush=True)
         for rn, mdl in models.items():
             if mdl[0] == "pool":
                 res["runs"][rn] = {"samples": a.samples, "pool": len(mdl[1]), "cases": pooled_cases(mdl[1], names, files, a, lags, n, ref_scale, dev, t_start, rn)}
                 continue
             ae, prop, norm, cfg, split = mdl
-            if split[a.split][: a.n_test] != names:
+            if not a.members_json and split[a.split][: a.n_test] != names:
                 print(f"[ts_eval] {rn}: different test split, skipped"); continue
             halo, p = cfg["stage_b"]["halo_sites"], ae.cfg.patch
             mar = (halo + ae.cfg.reach_sites) * p
