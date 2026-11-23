@@ -70,13 +70,21 @@ def main():
     ap.add_argument("--source", default=f"cache:{H}/cm1_cache+{H}/cm1_cache_A2+{H}/cm1_cache_B")
     ap.add_argument("--start-min", type=int, default=60); ap.add_argument("--lead-max", type=int, default=90)
     ap.add_argument("--members", type=int, default=8); ap.add_argument("--cutoffs", default=None)
+    ap.add_argument("--cutoffs8", default=None, help="K-of-8 table for the one-model 8-member comparison line (default: --cutoffs if it is K of 8)")
+    ap.add_argument("--tag", default="", help="suffix for the output file name")
     ap.add_argument("--vars", default="u,w,th,qv,prs,qliq,qice"); ap.add_argument("--xlim", type=float, nargs=2, default=(140, 235))
     ap.add_argument("--fps", type=int, default=6); ap.add_argument("--dpi", type=int, default=100); ap.add_argument("--out", required=True)
     a = ap.parse_args()
     import imageio_ffmpeg
     plt.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
     out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
-    table = json.load(open(Path(a.cutoffs).expanduser()))["cutoffs"] if a.cutoffs else None
+    tj = json.load(open(Path(a.cutoffs).expanduser())) if a.cutoffs else {}
+    table = tj.get("cutoffs")
+    table_S = tj.get("members", 8)                 # cutoffs calibrated for this many members (calibrate_pool_cutoffs.py) or K of 8
+    if a.cutoffs8:
+        a.cutoffs8 = json.load(open(Path(a.cutoffs8).expanduser()))["cutoffs"]
+    elif table_S == 8:
+        a.cutoffs8 = table
     torch.set_num_threads(16); torch.set_grad_enabled(False)
     leads = list(range(1, a.lead_max + 1)); runs = a.run.split(","); nm = len(runs); M = a.members; S = nm * M
     models = []
@@ -94,9 +102,10 @@ def main():
         stats = {}
         for L in leads:
             for k in keys:
-                y = mask(tr[L], k); ms = mask(fc[L], k); K = k_frac(table, k, L, S) if table else 3
+                y = mask(tr[L], k); ms = mask(fc[L], k)
+                K = (k_of(table, k, L) if table_S == S else k_frac(table, k, L, S)) if table else 3
                 b, c = scores(ms.sum(0) >= K, y); _, c1 = scores(ms[0], y)
-                c8 = scores(ms[:M].sum(0) >= (k_of(table, k, L) if table else 3), y)[1] if nm > 1 else None
+                c8 = scores(ms[:M].sum(0) >= (k_of(a.cutoffs8, k, L) if a.cutoffs8 else 3), y)[1] if nm > 1 else None
                 stats[(L, k)] = (K, b, c, ms.sum(0), y, contingency(ms.sum(0) >= K, y), c1, c8)
         nc = 2
         fig = plt.figure(figsize=(12.5, 12.0))
@@ -175,7 +184,7 @@ def main():
             return []
 
         ani = manim.FuncAnimation(fig, frame, frames=len(leads), blit=False)
-        f = out / (f"vote_pool{nm}_{v}_{a.storm}.mp4" if nm > 1 else f"vote_{v}_{a.storm}.mp4")
+        f = out / (f"vote_pool{nm}{a.tag}_{v}_{a.storm}.mp4" if nm > 1 else f"vote_{v}{a.tag}_{a.storm}.mp4")
         ani.save(f, writer=manim.FFMpegWriter(fps=a.fps, bitrate=2400, extra_args=["-pix_fmt", "yuv420p"]), dpi=a.dpi)
         plt.close(fig)
         print(f"[anim] {f}", flush=True)
