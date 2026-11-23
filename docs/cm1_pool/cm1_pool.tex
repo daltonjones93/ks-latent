@@ -15,64 +15,82 @@
 \maketitle
 
 \begin{abstract}
-We describe our current best forecast system for two-dimensional CM1 squall lines. It has three parts. The first is a stochastic latent model, F6: a convolutional column autoencoder and a mixer propagator with noise channels, trained with a fair-CRPS rollout loss on 573 simulated storms. The second is a pool of copies of F6, trained independently with different random seeds, whose members are combined into one ensemble. The third is a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow. On 22 unseen storms the pool of four models beats a single model with the same number of members. Fair CRPS improves by 3.3--5.2\% at every lead from 5 to 90 minutes, the ensemble-mean error by 1.4--3.8\%, and the vote's critical success index by about 0.01. The spread also becomes calibrated (spread/error $\approx 1.0$). A single F6 is itself 13--20\% better in CRPS than our original model. We then discuss whether the system can serve as the forecast model of an ensemble data assimilation cycle. An earlier, smaller model of the same family already works in a latent LETKF, so the question is what changes when the model is stochastic and the ensemble comes from several latent spaces.
+We describe a learned forecast system for two-dimensional CM1 squall lines. It has three parts:
+\begin{itemize}
+\item a stochastic latent model: a convolutional column autoencoder and a mixer propagator with noise channels, trained with a fair-CRPS rollout loss on 573 simulated storms;
+\item a pool of several copies of this model, trained independently with different random seeds, whose members are combined into one ensemble;
+\item a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow.
+\end{itemize}
+On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. We close with what the system implies for ensemble data assimilation.
 \end{abstract}
 
 \section{The model}
 
-\paragraph{Data.} The training data are 2D ($x$--$z$) CM1 squall lines: 400\,km by 20\,km, 250\,m grid spacing, 62 stretched levels, Morrison two-moment microphysics, open lateral boundaries and a grid moving at 12.5\,m\,s$^{-1}$, with 1-minute output for 6\,h. A model state is the column at every grid cell: $u'$, $w$, $\theta'$, $q_v'$, $p'$, and liquid and ice condensate (as $\sqrt{q}$) on 62 levels, i.e.\ 434 channels per column. We train on 573 storms from five ensembles (\texttt{ens\_A}, \texttt{A2}, \texttt{B}, \texttt{C}, \texttt{D}). They share one Weisman--Klemp-type sounding and differ in boundary-layer moisture, near-surface temperature and low-level shear. A further 6 storms are kept for validation (all tuning, including the vote cutoffs) and 22 for testing. No test storm is used in any choice.
-
-\paragraph{One model (F6).} Each model has two networks.
+\paragraph{Data.} The training data are 2D ($x$--$z$) CM1 squall lines with the following setup:
 \begin{itemize}
-\item \emph{Autoencoder} (5.0\,M parameters): a convolutional encoder that maps 8 neighbouring columns (2\,km) to one site with 32 latent channels, with two local mixing layers (hidden width 416), and a mirror decoder. The latent state is a field on a 1D lattice of 2\,km sites, not a single vector.
-\item \emph{Propagator} (11.9\,M parameters): the mixer block of Papers I--II (GELU, LayerNorm, width 512, 3 layers, reach of one site per layer), applied as a residual 1-minute step on the latent field. It is stochastic: 4 Gaussian noise channels are fed in at every step, so repeated rollouts from one initial state give different members. The outermost 3 sites (6\,km) on each side are a halo set from outside the domain.
+\item a 400\,km by 20\,km domain with 250\,m grid spacing and 62 stretched levels;
+\item Morrison two-moment microphysics, open lateral boundaries, and a grid moving at 12.5\,m\,s$^{-1}$;
+\item 1-minute output for 6\,h.
 \end{itemize}
-Training has three stages, all on one H200 GPU (about 4.5\,h per model):
+A model state is the column at every grid cell: $u'$, $w$, $\theta'$, $q_v'$, $p'$, and liquid and ice condensate (as $\sqrt{q}$) on 62 levels, i.e.\ 434 channels per column. There are 601 storms. They share one squall-line sounding and differ in boundary-layer moisture, near-surface temperature and low-level shear. We train on 573 of them, keep 6 for validation (all tuning, including the vote cutoffs) and 22 for testing. No test storm is used in any choice.
+
+\paragraph{One model.} Each model has two networks.
+\begin{itemize}
+\item \emph{Autoencoder} (5.0\,M parameters): a convolutional encoder maps 8 neighbouring columns (2\,km) to one site with 32 latent channels. It has two local mixing layers (hidden width 416), and the decoder mirrors it. The latent state is a field on a 1D lattice of 2\,km sites, not a single vector, so the model works on any domain length.
+\item \emph{Propagator} (11.9\,M parameters): a mixer network (GELU, LayerNorm, width 512, 3 layers, reach of one site per layer). It advances the latent field by one minute as a residual update. It is stochastic: 4 Gaussian noise channels are fed in at every step, so repeated rollouts from one initial state give different ensemble members. The outermost 3 sites (6\,km) on each side form a halo that is set from outside the domain.
+\end{itemize}
+
+\paragraph{Training.} Training has three stages, all on one H200 GPU, and takes about 4.5\,h per model.
 \begin{enumerate}
-\item[A.] Autoencoder, 60\,k steps on 64\,km windows: reconstruction plus a one-step prediction term (a small propagator must predict the next minute from the latent), nested dropout on the latent channels, and weak variance and log-determinant terms against channel collapse.
-\item[B.] Propagator on the frozen latent, 40\,k steps on 96\,km windows: rollouts of up to 45 minutes with a ramped length, scored by the fair CRPS of 4 sampled rollouts against the encoded truth.
-\item[C.] Joint fine-tuning, 30\,k steps: rollouts to 45 minutes are \emph{decoded}, and the fair CRPS is computed in physical space against the true fields, with extra weight on surface $\theta'$. The autoencoder is not frozen, so the latent space adapts to be forecastable.
+\item[A.] \emph{Autoencoder}, 60\,k steps on 64\,km windows. The loss is reconstruction plus a one-step prediction term, in which a small propagator must predict the next minute from the latent. Nested dropout on the latent channels and weak variance and log-determinant terms prevent channel collapse.
+\item[B.] \emph{Propagator} on the frozen latent, 40\,k steps on 96\,km windows. Rollouts are up to 45 minutes long, with a length that ramps up during training, and are scored by the fair CRPS of 4 sampled rollouts against the encoded truth.
+\item[C.] \emph{Joint fine-tuning}, 30\,k steps. Rollouts to 45 minutes are decoded, and the fair CRPS is computed in physical space against the true fields, with extra weight on surface $\theta'$. The autoencoder is not frozen, so the latent space adapts to be forecastable.
 \end{enumerate}
-The decoded rollout loss of stage C was the largest single improvement in this project. Larger models (a 1.9$\times$ autoencoder, a 4$\times$ propagator) and twice the training steps each gained $\le 1\%$ over F6, so this recipe is near its ceiling on the current data.
+The fair CRPS rewards a set of members that is both accurate and spread like the truth, so each member keeps sharp, realistic small-scale structure rather than a smoothed average.
 
-\paragraph{The pool.} A pool is $n$ copies of F6 trained with the same recipe and data but different random seeds (initialization, sampled windows, noise). Each copy is used as its own model. It encodes the initial state with its own encoder, rolls out its own members, and decodes them with its own decoder. The members are combined in physical space, so different latent spaces are not a problem for forecasting. Our standard pool is 4 models $\times$ 8 members.
+\paragraph{The pool.} A pool is $n$ copies of the model trained with the same recipe and data but different random seeds (initialization, sampled windows, noise). Each copy works as a separate model. It encodes the initial state with its own encoder, rolls out its own members, and decodes them with its own decoder. The members are combined in physical space. The standard pool is 4 models $\times$ 8 members.
 
-\paragraph{The vote.} For forecasts of \emph{where} a feature will be, every member is turned into a 0/1 mask with a fixed physical threshold. The 12 features are: updraft $w>2$\,m\,s$^{-1}$; downdraft $w<-1.5$\,m\,s$^{-1}$; $u'>10$ and $u'<-10$\,m\,s$^{-1}$; cold pool $\theta'<-2$\,K; warm core $\theta'>5$\,K; moist $q_v'>1$\,g\,kg$^{-1}$; dry $q_v'<-3$\,g\,kg$^{-1}$; mesohigh $p'>3$\,hPa; mesolow $p'<-1$\,hPa; liquid $>0.5$\,g\,kg$^{-1}$; ice $>1$\,g\,kg$^{-1}$. A grid point is forecast to have the feature if at least $K$ of 8 members have it. $K$ is chosen per feature and lead to maximize the critical success index (CSI) on the validation storms. It is 3 or 4 for most features and 2--3 for downdrafts. For larger ensembles the cutoff is kept as a fraction, $K_S = \lceil K_8 S/8 \rceil$ for $S$ members.
+\paragraph{The vote.} To forecast \emph{where} a feature will be, every member is turned into a 0/1 mask with a fixed physical threshold. The 12 features are:
+\begin{itemize}
+\item updraft $w>2$\,m\,s$^{-1}$ and downdraft $w<-1.5$\,m\,s$^{-1}$;
+\item $u'>10$ and $u'<-10$\,m\,s$^{-1}$;
+\item cold pool $\theta'<-2$\,K and warm core $\theta'>5$\,K;
+\item moist $q_v'>1$\,g\,kg$^{-1}$ and dry $q_v'<-3$\,g\,kg$^{-1}$;
+\item mesohigh $p'>3$\,hPa and mesolow $p'<-1$\,hPa;
+\item liquid $>0.5$\,g\,kg$^{-1}$ and ice $>1$\,g\,kg$^{-1}$.
+\end{itemize}
+A grid point is forecast to have the feature if at least $K$ of 8 members have it. $K$ is chosen per feature and lead to maximize CSI on the validation storms. It is 3 or 4 for most features and 2--3 for downdrafts. For larger ensembles the cutoff is kept as a fraction, $K_S=\lceil K_8 S/8\rceil$ for $S$ members. Figure~\ref{fig:howvote} shows the vote on one storm.
 
+\begin{figure}[h]
+\centering\includegraphics[width=\textwidth]{fig_vote_leads_wp_mem029.png}
+\caption{The vote for updrafts on an unseen storm at +15, +30 and +60\,min (one model, 8 members). Top: truth. Middle: how many members have an updraft at each point (red: true outline). Bottom: the voted forecast as hits, misses and false alarms.}
+\label{fig:howvote}
+\end{figure}
+
+\FloatBarrier
 \section{How well does it forecast?}
 
-\paragraph{Setup.} Forecasts start from the encoded true state at 1, 2 and 3\,h into each of the 22 test storms (66 cases) and run to 90 minutes. The halo is set from the true state, as in all our forecast scores. When the halo is instead held at its starting value, CRPS at 60\,min rises by about 4\%. We report the fair CRPS per variable (normalized units), the RMSE of the ensemble mean, the spread/error ratio, and the CSI and frequency bias (forecast area / true area) of the vote.
-
-\paragraph{A single F6 against earlier models.} Table~\ref{tab:f6} puts one F6 against the original model of this project and against a deterministic twin trained with a mean-squared-error loss. F6 is 13--20\% better than the original in CRPS and 6.5--8\% better in mean error. The deterministic twin has a 2--3\% lower error than F6's 8-member mean. However, it has almost no variance below 5\,km and much lower neighbourhood skill. With 16 or more members F6's mean is also more accurate than the twin's single forecast: the RMSE falls 2.7\% from 8 to 16 members and 4.7--5.2\% at 64. Stochastic members are therefore needed both for the mean and for the small scales.
-
-\begin{table}[h]
-\centering\small
-\begin{tabular}{lccccc}
-\toprule
- & CRPS 15 / 30 / 60\,min & RMSE 30 / 60 & spread/err & FSS $|w|>3$, 10\,km & $w$ power 2--5\,km \\
-\midrule
-original model (\texttt{g\_local48}) & 0 / 0 / 0 & 0 / 0 & --- & 0.786 & 0.43 \\
-deterministic twin (F7, MSE) & $+21$ / $+29$ / $+32$\% & $-9.2$ / $-8.4$\% & --- & 0.597 & 0.03 \\
-\textbf{F6}, 8 members & $\mathbf{-19.6}$ / $\mathbf{-15.7}$ / $\mathbf{-13.1}$\% & $-8.0$ / $-6.5$\% & 0.98 & \textbf{0.821} & 0.79 \\
-\bottomrule
-\end{tabular}
-\caption{One F6 against the original model and the deterministic twin; changes relative to the original model on the 22 test storms. The twin's CRPS is its absolute error. FSS is the fractions skill score of $|w|>3$\,m\,s$^{-1}$ at 10\,km, +30\,min. The last column is the power of $w$ at 2--5\,km wavelengths relative to the truth's.}
-\label{tab:f6}
-\end{table}
-
-\paragraph{The pool against single models.} We compare ensembles with the same number of members (24): each of four single seeds with 24 of its own members, and pools of three and four models (Fig.~\ref{fig:skill}, Table~\ref{tab:pool}).
+\paragraph{Setup.} Forecasts start from the encoded true state at 1, 2 and 3\,h into each of the 22 test storms (66 cases) and run to 90 minutes. The halo is set from the true state; holding it at its starting value instead raises CRPS at 60\,min by about 4\%. The scores are:
 \begin{itemize}
-\item Pooling lowers CRPS by 3.3--5.2\% at every lead from 5 to 90 minutes. The four seeds differ from each other by at most 0.8\%, so the gain is more than four times the seed-to-seed spread. It passes the decision rule we fixed before the run ($>2\times$ the seed spread and $\ge 2\%$).
-\item The ensemble-mean RMSE improves by 1.4--3.8\% (most at short leads). Single models are slightly under-dispersive (spread/error 0.91--1.01); pooled spread/error is 0.99--1.03. Part of the forecast error is in the models themselves, and different seeds make different errors. Single-model members miss this error; seeds that disagree supply it.
-\item Most of the gain comes with the third model: a pool of three has about 90\% of the CRPS gain of a pool of four.
-\item The gain appears for every variable and lead (Fig.~\ref{fig:pervar}). It is largest for $u$ and $q_v$ (5--6\% in CRPS) and smallest for $w$ and liquid water beyond 15\,min (1--2.4\%). For $w$ at +60\,min the mean error does not improve.
+\item the fair CRPS per variable, in normalized units;
+\item the RMSE of the ensemble mean;
+\item the spread/error ratio, where 1 means calibrated;
+\item for the vote, CSI and frequency bias (forecast area / true area).
+\end{itemize}
+
+\paragraph{Pool against single models.} We compare ensembles with the same number of members (24): each of four seeds alone with 24 of its own members, and pools of three and four models (Fig.~\ref{fig:skill}, Table~\ref{tab:pool}).
+\begin{itemize}
+\item \emph{Probabilistic skill.} Pooling lowers CRPS by 3.3--5.2\% at every lead. The four seeds alone differ from each other by at most 0.8\%, so the gain is more than four times the seed-to-seed spread. It passes the decision rule we fixed before the run: more than $2\times$ the seed spread and at least 2\%.
+\item \emph{Calibration.} The ensemble-mean RMSE improves by 1.4--3.8\%, most at short leads. A single model is slightly under-dispersive (spread/error 0.91--1.01). The pool's spread/error is 0.99--1.03. Part of the forecast error comes from the trained model itself. Members of one model all share that model's errors, whereas independently trained models make different errors, so their spread covers this part.
+\item \emph{How many models.} Three models give about 90\% of the CRPS gain of four.
+\item \emph{By variable.} The gain holds for every variable and lead (Fig.~\ref{fig:pervar}). It is largest for $u$ and $q_v$ (5--6\% in CRPS) and smallest for $w$ and liquid water beyond 15\,min (1--2.4\%).
 \end{itemize}
 
 \begin{table}[h]
 \centering\small
 \begin{tabular}{lcccc}
 \toprule
-lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change vs mean single & spread/error, single $\to$ pool \\
+lead & CRPS, single model (4 seeds) & CRPS, pool of 4 & change vs mean single & spread/error, single $\to$ pool \\
 \midrule
 15\,min & 0.0747--0.0758 & 0.0720 & $-4.2\%$ & 0.95 $\to$ 1.01 \\
 30\,min & 0.0951--0.0955 & 0.0920 & $-3.5\%$ & 0.96 $\to$ 1.00 \\
@@ -80,7 +98,7 @@ lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change vs mean single & spread
 90\,min & 0.1336--0.1347 & 0.1293 & $-3.5\%$ & 0.97 $\to$ 1.01 \\
 \bottomrule
 \end{tabular}
-\caption{Fair CRPS (mean over the 7 variables, normalized units) of 24-member ensembles: single seeds against the pool of four (6 members per model). 66 cases.}
+\caption{Fair CRPS (mean over the 7 variables, normalized units) of 24-member ensembles: single models against the pool of four (6 members per model). 66 cases.}
 \label{tab:pool}
 \end{table}
 
@@ -96,7 +114,14 @@ lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change vs mean single & spread
 \label{fig:pervar}
 \end{figure}
 
-\paragraph{The vote.} Figure~\ref{fig:voten} separates the effect of more members from the effect of more models. Each pool of $n$ models $\times$ 8 members is set against one model with the same $8n$ members. Both gain from more members. The pool gains more, and the gap is still growing at four models: mean CSI over the 12 features is $+0.009$, $+0.008$ and $+0.009$ at 15, 30 and 60\,min. Against the 8-member vote of a single model the pool of four is $+0.023$, $+0.022$ and $+0.026$. Figure~\ref{fig:votefeat} shows every feature. The pool beats one model with 32 members for all 12 features at every lead, by 0.001--0.016. Against the 8-member vote, the largest gains are in the features whose position is most uncertain: downdrafts (CSI 0.24 $\to$ 0.28 at 30\,min), the warm core (0.52 $\to$ 0.55) and the mesolow (0.42 $\to$ 0.44). More members also bring the forecast area nearer the truth. The downdraft over-forecast of the 8-member vote (2.1--2.3 times the true area at 30--60\,min) falls to 1.5--1.6. Figure~\ref{fig:map} shows one storm.
+\paragraph{The vote.} Figure~\ref{fig:voten} separates the effect of more members from the effect of more models. Each pool of $n$ models $\times$ 8 members is set against one model with the same $8n$ members.
+\begin{itemize}
+\item Both ensembles gain from more members. The pool gains more, and the gap is still growing at four models: $+0.009$, $+0.008$ and $+0.009$ in mean CSI over the 12 features at 15, 30 and 60\,min.
+\item Against the 8-member vote of one model, the pool of four gains $+0.023$, $+0.022$ and $+0.026$.
+\item The pool beats one model with 32 members for all 12 features at every lead (Fig.~\ref{fig:votefeat}).
+\item The largest gains over the 8-member vote are in the features whose position is most uncertain. Downdraft CSI goes from 0.24 to 0.28 at 30\,min, the warm core from 0.52 to 0.55, and the mesolow from 0.42 to 0.44.
+\item More members also bring the forecast area nearer the truth. The 8-member vote over-forecasts downdrafts at 2.1--2.3 times the true area; in the pool this falls to 1.5--1.6.
+\end{itemize}
 
 \begin{figure}[h]
 \centering\includegraphics[width=\textwidth]{fig_pool_vote_n.png}
@@ -120,46 +145,43 @@ lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change vs mean single & spread
 \FloatBarrier
 \paragraph{Limits.}
 \begin{itemize}
-\item \emph{Small, fast features stay hard.} Updraft CSI is 0.35 at 30\,min and 0.32 at 60; downdraft CSI is 0.28 and 0.20. These features are forecast in roughly the right region but rarely at the right grid point.
-\item \emph{New environments.} All training storms share one base sounding. On a first set of new storms with a varied environment (a Latin hypercube over CAPE 800--4500\,J\,kg$^{-1}$, shear profiles and mid-level humidity), F6 still beats the original model. Its advantage at 30\,min shrinks from 15.7\% to about 5\% (7 storms, preliminary).
-\item \emph{Dying storms.} About a quarter of the new storms decay, and the training set has none. Once a storm has died its fields are exactly zero, the autoencoder output is meaningless, and every model fails. Retraining on 320 new storms, including decaying ones, is queued.
-\item \emph{Boundaries} come from the truth in these scores, as noted above.
+\item \emph{Small, fast features remain hard.} Updraft CSI is 0.35 at 30\,min and 0.32 at 60; downdraft CSI is 0.28 and 0.20. These features are forecast in the right region but rarely at the right grid point.
+\item \emph{One environment.} All training storms share one sounding. On a first set of storms from new environments (varied CAPE from 800 to 4500\,J\,kg$^{-1}$, shear profiles and mid-level humidity; 6 storms, preliminary), CRPS at 30\,min is about twice its value on the test storms. Part of that comes from the stronger storms being harder to forecast.
+\item \emph{Dying storms.} About a quarter of the new-environment storms decay, and the training set has none. Once a storm has died its fields are exactly zero, which the autoencoder cannot represent, and the forecasts fail.
+\item \emph{Retraining under way.} The model is being retrained on 320 new-environment storms, including decaying ones.
+\item \emph{Boundaries} come from the truth in these scores (see Setup).
 \end{itemize}
 
 \section{Could it be used with data assimilation?}
 
-\paragraph{What we have shown with an earlier model of the same family.} Our headline twin experiment used a smaller deterministic model (93 training storms, hand-set latent noise 0.1). It ran a latent-space LETKF (5\,km localization, RTPS 0.9) with 32 members drawn from other storms. Observations were surface $\theta'$, composite reflectivity and radial velocity every 2\,km, assimilated every 5 minutes for 3\,h, with the boundaries held at their starting values. The results, from 22 test storms $\times$ 3 observation-noise seeds:
+\paragraph{What makes it a good DA forecast model.}
 \begin{itemize}
-\item The cycled 1-h forecast error (nMSE) fell from 0.469 with no DA to 0.273 ($-41\%$), with improvement on all 22 storms. The gust front was placed within 0.38\,km.
-\item The latent LETKF beat a static-covariance EnOI with the same model by 23\%. A physical-space LETKF on the same ensemble was 4\% worse than the latent update (0.245 against 0.236 in a smaller test).
-\item Forecasts launched from the analyses stayed better than both persistence and no DA out to 50 minutes.
-\item The prior spread was under-dispersive (spread/error 0.71; mildly U-shaped rank histogram).
-\item The model is cheap: one 32-member DA cycle costs 0.02\,s on a GPU, against about 7.7 core-hours for one CM1 ensemble forecast hour.
+\item \emph{Calibrated spread.} An ensemble filter needs a prior spread that matches the forecast error. The pool provides this directly (spread/error 0.99--1.03 from 5 to 90\,min), without hand-set additive noise or heavy inflation.
+\item \emph{Model error is represented.} Part of the pool's spread comes from disagreement between independently trained models, i.e.\ from model error. Ensemble DA usually has to add model error by hand (additive noise, multiplicative inflation, stochastic physics); here the forecast model supplies it.
+\item \emph{Local latent field.} The latent state lives on 2\,km sites with a finite reach per step, so standard distance-based localization (e.g.\ a 5\,km LETKF radius on the site lattice) applies directly in latent space.
+\item \emph{Cost.} A forecast hour of a 32-member ensemble takes a small fraction of a second on one GPU, so large ensembles and many cycles are cheap compared with running CM1.
+\item \emph{The vote needs no change.} It acts on forecast members only, so forecasts launched from an analysis ensemble can be voted on exactly as above. Only the cutoffs need re-checking for that ensemble size.
 \end{itemize}
-The pooled F6 system is better than that model as a forecast model in every free-forecast measure. Its spread is calibrated without hand-set noise, which addresses the one claim the headline system only half met.
 
-\paragraph{What changes with the pooled F6 system.}
+\paragraph{What has to be solved.}
 \begin{enumerate}
-\item \emph{Several latent spaces.} Each seed has its own encoder, so latent vectors from different models cannot share one LETKF covariance. There are three options:
+\item \emph{Several latent spaces.} Each model in the pool has its own encoder, so latent vectors from different models cannot share one covariance. There are three options:
   \begin{enumerate}
-  \item update in physical space (or on a shared physical-space observation-space covariance) and re-encode each member with its own model's encoder. The physical-space LETKF lost only $\sim$4\% to the latent update in our test.
-  \item run one latent LETKF per model, each with its own 8 members. That is cheap, but 8-member covariances are noisy even with localization.
-  \item train the seeds' propagators on one shared, frozen autoencoder, so the whole pool lives in one latent space. This costs F6's unfrozen stage C, and how much that costs F6 is not measured.
+  \item update the decoded members in physical space, then re-encode each member with its own model's encoder. This is the simplest.
+  \item run one latent LETKF per model, each with its own members. This keeps the latent update, but needs enough members per model for a usable covariance.
+  \item train the pool's propagators on one shared, frozen autoencoder, so all members live in one latent space. This gives up the joint fine-tuning of stage C, and the cost of that has not been measured.
   \end{enumerate}
-  We would start with (a).
-\item \emph{Stochastic members and inflation.} In the earlier test the stochastic version of the model lost to the deterministic one in cycling by 12\%. Its learned noise already made the prior spread large, and RTPS 0.9, tuned for the deterministic model, then over-inflated (spread/error 1.18). The pooled system is calibrated in free forecasts, so it will need much less inflation. RTPS (and any additive noise) must be re-tuned on the validation storms rather than inherited.
-\item \emph{Model error is now in the ensemble.} The pool's extra spread comes from disagreement between models, i.e.\ model error. Ensemble DA normally has to add this by hand, through additive noise, multiplicative inflation or stochastic physics. Here it comes from the forecast model itself. This is the main reason to expect the pool to help in DA beyond its free-forecast gain.
-\item \emph{The vote needs no change.} It acts on the forecast members only. Forecasts launched from an analysis ensemble can be voted on exactly as above, with the cutoffs re-checked for that ensemble size.
-\item \emph{Risks.} The gain of F6 shrinks in new environments, and DA cannot repair a dead storm the autoencoder cannot represent. Assimilation may help with the first, since it keeps the state near the observed storm. The second needs the retrained models. Holding the boundaries at their starting values cost about 10\% in cycled error before and will again.
+\item \emph{Inflation must be re-tuned.} Because the pool's spread is already calibrated, relaxation-to-prior or additive inflation tuned for a deterministic model would over-inflate it. Inflation should be tuned on the validation storms for this system.
+\item \emph{Boundaries.} In a real cycle the halo cannot come from the truth. Holding it at the analysis value degrades long cycles and should be part of any test.
+\item \emph{Robustness.} The model needs the retraining on new environments and decaying storms before DA results can be expected to hold beyond the training environment.
 \end{enumerate}
 
-\paragraph{Proposed test.} Repeat the headline twin (same truths, observations, seeds and held boundaries) with four forecast models:
-\begin{enumerate}
-\item the earlier headline model, as a reference;
-\item one F6 with 32 members;
-\item the pool of 4 $\times$ 8, updated in physical space and re-encoded;
-\item the pool on one shared autoencoder with a latent update.
-\end{enumerate}
-Inflation for each would be tuned on the validation storms. The scores would be cycled nMSE, front displacement, spread/error and rank histograms at the observations, plus the vote's CSI for forecasts from the analyses. We expect part of the 3--5\% free-forecast gain to carry over to the cycled error, and the calibrated spread to reduce the need for inflation. Neither has been measured.
+\paragraph{Proposed test.} A twin experiment on the 22 test storms (3 observation-noise seeds each):
+\begin{itemize}
+\item \emph{Observations:} surface $\theta'$, composite reflectivity and radial velocity every 2\,km, assimilated every 5 minutes for 3\,h, with held boundaries.
+\item \emph{Arms:} one model with 32 members; the pool of 4 $\times$ 8 updated in physical space; and the pool on a shared autoencoder updated in latent space. Inflation is tuned on the validation storms.
+\item \emph{Scores:} cycled forecast error against no DA, gust-front position, spread/error and rank histograms at the observations, and the vote's CSI for forecasts launched from the analyses.
+\end{itemize}
+The prediction is that the pool's calibrated, model-error-aware spread will need little inflation and give lower cycled error than a single model with the same number of members. This has not yet been measured.
 
 \end{document}
