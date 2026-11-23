@@ -2039,3 +2039,19 @@ F6, 8 members, mem029 (unseen), forecasts from 60 min, 1-min frames to +90 min, 
 - Excluding one dead storm (`ens_E1_mem018`, all fields exactly zero from ~60 min): lag 0 / +15 / +30 / +60 min, CRPS −17.2 / −6.8 / −4.7 / −6.5% and RMSE of the mean −10.7 / −3.6 / −1.7 / −4.4% against g_local48. F6 is still better than the original on the new, broader storms (including pilot-4 storms at CAPE 2500-4500 J/kg: −5 / −8% CRPS at +30 / +60), but its advantage at +30 min is 5% against 15.7% on the old environment: **the recipe's gain shrinks away from the training environment** (7 storms x 3 starts; wave 2-5 storms and the 36-storm test set will say how much).
 - The dead storm breaks both models: lag-0 reconstruction RMSE 11-33 (F6) and 0.4-6.6 (original) in normalized units on fields that are exactly zero (an empty input is outside anything either model trained on), so forecasts for a storm that dies are garbage. **22 to 29% of the new storms die out (max |w| < 1 m/s from some time on): 18 of 58 in wave 1 (the old build), 11 of 64 in wave 2, none of the 22 pilot-4 high-CAPE storms.** Dying storms are physical (weak / dry environments) and are kept, but they are reported separately in the 10d evaluation, and the model needs to see them in training (the old ensembles have none).
 **Saidie 2026-11-22/23:** seeds 2, 3, 5 completed (A+B ~2 h 45, Stage C ~1 h 50-2 h); seed 1's Stage C (limit 2 h 10) and the 90-min Stage C (limit 3 h 30; 11566 s of training) finished every step and saved the models, then timed out in the final scoring (no results.json), so audit_eval1 failed on a missing file: `--eval-only` jobs rebuild results.json (9799, 9800); seed 4, the EMA run, the two evaluations and the design study (blocked behind seed 1's dependency) resubmitted with Stage C limit 2 h 40 (9801-9817; cluster/saidie/resubmit_audit2.sh).
+
+### 10b-result (2026-11-23): consensus of independently trained models, measured (66 test cases, 8 members/model, noise T=1.0, IC noise 0)
+Fields (mean over variables; singles = mean of 4 seeds' own 8 members vs pool3/pool4 = 24/32 members), data: docs/fpe_report/data/pool_now_{a,b,c}.json
+
+| lead | CRPS single (seed range) | CRPS pool4 | change | ens-mean RMSE single | RMSE pool4 | spread/RMSE single -> pool4 |
+|---|---|---|---|---|---|---|
+| 15 | 0.0747-0.0758 | 0.0720 | -3.9% | 0.300-0.305 | 0.294 | 0.95 -> 1.01 |
+| 30 | 0.0951-0.0955 | 0.0920 | -3.3% | 0.375-0.378 | 0.370 | 0.96 -> 1.00 |
+| 60 | 0.1174-0.1181 | 0.1139 | -3.1% | 0.416-0.418 | 0.412 | 0.99 -> 1.02 |
+| 90 | 0.1336-0.1347 | 0.1293 | -3.4% | 0.449-0.452 | 0.442 | 0.97 -> 1.01 |
+
+Seed-to-seed CRPS spread is <=0.8%, so the 3-4% gain is >4x seed spread and passes the pre-registered rule (>2x spread, >=2%). pool3 gets ~90% of pool4's gain (0.0924 vs 0.0920 at 30 min); returns diminish after 3 models. Pooling also fixes the slight under-dispersion (spread/RMSE ~0.96 -> ~1.0).
+Vote (animation's rule, K from vote_cutoffs.json, same total members, 66 cases; design_now_test.json): mean CSI pool vs the same members from ONE model, n=1/2/3/4 models:
++15 min 0.648 / 0.663 / 0.669 / 0.671 (single 0.648 / 0.658 / 0.661 / 0.662); +30 min 0.582 / 0.595 / 0.601 / 0.604 (single 0.581-0.596); +60 min 0.543 / 0.559 / 0.565 / 0.569 (single 0.543-0.560).
+So independent models add ~+0.01 CSI over the same number of members from one model (+0.023 at 15 min for 4 models vs 1; ~+0.026 at 60 min), the gain is mostly the first extra model; frequency bias moves toward 1 for w+, th+, u-. w- stays over-forecast (bias 1.5-2.3), w+ CSI stays ~0.3 at 30-60 min.
+Not yet run: noise-temperature / IC-noise grid (jobs 9806-9817), EMA, seed 4.
