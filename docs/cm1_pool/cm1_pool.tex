@@ -90,7 +90,7 @@ A grid point is forecast to have the feature if at least $K$ of 8 members have i
 \centering\small
 \begin{tabular}{lcccc}
 \toprule
-lead & CRPS, single model (4 seeds) & CRPS, pool of 4 & change vs mean single & spread/error, single $\to$ pool \\
+lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change & spread/error, single $\to$ pool \\
 \midrule
 15\,min & 0.0747--0.0758 & 0.0720 & $-4.2\%$ & 0.95 $\to$ 1.01 \\
 30\,min & 0.0951--0.0955 & 0.0920 & $-3.5\%$ & 0.96 $\to$ 1.00 \\
@@ -98,7 +98,7 @@ lead & CRPS, single model (4 seeds) & CRPS, pool of 4 & change vs mean single & 
 90\,min & 0.1336--0.1347 & 0.1293 & $-3.5\%$ & 0.97 $\to$ 1.01 \\
 \bottomrule
 \end{tabular}
-\caption{Fair CRPS (mean over the 7 variables, normalized units) of 24-member ensembles: single models against the pool of four (6 members per model). 66 cases.}
+\caption{Fair CRPS (mean over the 7 variables, normalized units) of 24-member ensembles: single models against the pool of four (6 members per model); change relative to the mean single model. 66 cases.}
 \label{tab:pool}
 \end{table}
 
