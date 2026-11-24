@@ -143,6 +143,62 @@ lead & CRPS, single (4 seeds) & CRPS, pool of 4 & change & spread/error, single 
 \end{figure}}{}
 
 \FloatBarrier
+\subsection*{A single best-guess field: the scale blend}
+
+Many users want one field, not 32 members or a set of yes/no maps. The obvious candidate, the average of all members, has the lowest error of any single field, but it is not a realistic storm:
+\begin{itemize}
+\item \emph{Why the average is smooth.} Members agree on the large scales (the cold pool, the line's position) and disagree on where individual cells are. Averaging keeps the agreement and cancels the disagreement. After 30\,min the average keeps less than 15\% of the true power at wavelengths below 10\,km (Fig.~\ref{fig:blendsum}, middle), so updraft cores become one broad plume (Fig.~\ref{fig:blendmap}).
+\item \emph{Why a member costs error.} A member is realistic but, for a calibrated ensemble, its squared error is about twice that of the average. Measured: its RMSE is 39--42\% higher at every lead.
+\end{itemize}
+
+\paragraph{The blend.} We take the large scales from the average and the small scales from one member:
+\[
+\hat{x} \;=\; G_\sigma * \bar{x} \;+\; \bigl(x_1 - G_\sigma * x_1\bigr),
+\]
+where $\bar{x}$ is the average of the 32 members, $x_1$ is one member, and $G_\sigma$ is a Gaussian filter along $x$. With $\sigma = 1.9$\,km the filter passes half the power at a wavelength of about 10\,km (the \emph{10\,km blend}); $\sigma = 3.7$\,km gives the \emph{20\,km blend}. The blend is applied in the model's normalized units (condensate as $\sqrt{q}$, so it stays non-negative after squaring back) and costs nothing to compute. We compared it on the 66 test cases with the average, one member, the medoid member, alignment of the members before averaging, and probability matching (the average's values replaced by the members' value distribution).
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{3}{c}{RMSE (vs average)} & power 2--5\,km & FSS $|w|>3$ & mean CSI \\
+product & 15\,min & 30\,min & 60\,min & at 60\,min & at 60\,min & at 60\,min \\
+\midrule
+average & 0.313 & 0.393 & 0.436 & 0.08 & 0.55 & 0.540 \\
+probability-matched average & $+8\%$ & $+14\%$ & $+17\%$ & 0.40 & 0.76 & 0.537 \\
+\textbf{10\,km blend} & $+24\%$ & $+19\%$ & $\mathbf{+14\%}$ & \textbf{1.02} & \textbf{0.77} & \textbf{0.523} \\
+20\,km blend & $+34\%$ & $+30\%$ & $+24\%$ & 1.05 & 0.79 & 0.508 \\
+medoid member & $+31\%$ & $+29\%$ & $+31\%$ & 0.88 & 0.80 & 0.477 \\
+one member & $+42\%$ & $+40\%$ & $+40\%$ & 1.06 & 0.79 & 0.466 \\
+\bottomrule
+\end{tabular}
+\caption{Single fields from the pool (4 models $\times$ 8 members), 66 test cases. RMSE in normalized units (all variables) and relative to the average. Power at 2--5\,km is relative to the truth's (1 = realistic). FSS of $|w|>3$\,m\,s$^{-1}$ uses a 10\,km window. Mean CSI is over the 12 features, each thresholded once on the single field.}
+\label{tab:blend}
+\end{table}
+
+\paragraph{Results} (Table~\ref{tab:blend}, Fig.~\ref{fig:blendsum}).
+\begin{itemize}
+\item \emph{Realistic small scales.} The 10\,km blend has the truth's power at 2--5\,km (1.02 at 60\,min, against 0.08 for the average), and its updraft placement (FSS 0.77) equals a member's (0.79), against 0.55 for the average.
+\item \emph{Error well below a member's.} Its RMSE is 14\% above the average at 60\,min and 12.5\% at 90\,min. A member is 40\% above, so the blend removes about two thirds of the error a realistic member pays. The 10\,km blend is the best realistic single field at 30\,min and beyond.
+\item \emph{Best feature scores of any realistic field.} Mean CSI is 0.523 at 60\,min, against 0.466 for a member and 0.477 for the medoid. At 30\,min its feature areas are close to unbiased (frequency bias 0.86--1.0 for the large features; 0.79 for updrafts and 0.63 for downdrafts), whereas the average's updraft and downdraft areas are only 0.58 and 0.23 of the truth's.
+\item \emph{Other methods.} Aligning members before averaging barely changes anything ($<2\%$ in RMSE, no small scales), because members disagree on cell structure, not on a shift of the whole line. Probability matching restores only 40\% of the small-scale power and adds too much at the largest scales. The 20\,km blend is more realistic at 10--20\,km but costs 10 points more error.
+\item \emph{Short leads and a spectral gap.} At 5--15\,min the members still agree on the cells, so the average is already sharp and the blend's member-sourced detail mostly adds error ($+24\%$ at 15\,min); there the average or probability matching is the better single field. The blend is also under-powered near the 10\,km crossover (0.3 of the truth's power at 10--20\,km), where neither source contributes fully.
+\end{itemize}
+\textbf{Recommendation.} Use the ensemble (CRPS, spread) and the vote for probabilities and feature locations, and the 10\,km blend as the single best-guess field from 30\,min on. Animations of the blend for all 7 variables on one unseen storm are in \texttt{docs/fpe\_report/anim\_blend/}.
+
+\begin{figure}[h]
+\centering\includegraphics[width=\textwidth]{fig_blend_summary.png}
+\caption{Single-field products from the pool. Left: RMSE against lead. Middle: power relative to the truth's, per wavelength band, at +60\,min. Right: fraction skill score of $|w|>3$\,m\,s$^{-1}$ in a 10\,km window.}
+\label{fig:blendsum}
+\end{figure}
+
+\begin{figure}[h]
+\centering\includegraphics[width=0.92\textwidth]{fig_blend_w_mem029_L60.png}
+\caption{Vertical velocity on an unseen storm, +60\,min. Top: truth and the 10\,km blend. Middle: the average of the 32 members and the member whose small scales the blend uses. Bottom: the 20\,km blend and the 10\,km blend's error. RMSE (m\,s$^{-1}$, plotted window) in each title; curves at the bottom are RMSE against lead up to this frame.}
+\label{fig:blendmap}
+\end{figure}
+
+\FloatBarrier
 \paragraph{Limits.}
 \begin{itemize}
 \item \emph{Small, fast features remain hard.} Updraft CSI is 0.35 at 30\,min and 0.32 at 60; downdraft CSI is 0.28 and 0.20. These features are forecast in the right region but rarely at the right grid point.

@@ -1,0 +1,256 @@
+"""10c: cycled DA twin with the 4-model pool (independently trained F6 seeds), against one model and no DA.
+
+The pooled forecast system has one latent space per model, so the analysis is done where the members meet: on the decoded
+columns. Each cycle every model advances its own members (its learned noise, boundaries held at t0), the 32 members are
+decoded into one physical ensemble (the 4 models share one normalizer), a per-cell LETKF updates them, and each analysis
+member is re-encoded by the autoencoder of the model that carries it. Systems (--systems):
+  pool_phys     4 models x 8 members, physical-space LETKF, re-encoded per model (the method)
+  single_phys   model 0 alone, 32 members, the same physical-space LETKF (isolates the pooling)
+  single_latent model 0 alone, 32 members, latent LETKF (the G0 headline analysis, isolates the analysis space)
+plus the no-DA runs of the pool and of model 0 from the same initial ensemble. Setup as the G0 headline: theta' (surface) +
+composite reflectivity + radial velocity every 2 km, 5-min cycles for 3 h from t = 60 min, localization 5 km, held
+boundaries, 32 members drawn from training storms (here: those present in --source). Reflectivity uses --refl-run's
+learned operator (trained on true columns; inputs re-scaled from the pool's normalizer to its own).
+
+Free forecasts from the analyses after --forecast-from cycles (60 min, G3) are scored for the ensemble mean, the 10 km scale
+blend (mean > 10 km + member 0 < 10 km; the recommended single field, postproc_eval.py), and member 0: nMSE (normalized
+units, condensate in sqrt) and power / truth at 2-10 km wavelength. The no-DA ensembles get the same forecast scores from
+the same times.
+
+  python scripts/cm1/da_pool.py --runs R0 R1 R2 R3 --refl-run ~/cm1_runs/full_v1_stagec --split test --out DIR --job 0 --n-jobs 11
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+import torch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).parent))
+from da_twin import load_run, member_files  # noqa: E402
+from ks_latent.cm1.data import VARS, ColumnData, Normalizer, _natural_key, load_member  # noqa: E402
+from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis_torch  # noqa: E402
+from ks_latent.cm1.train import encode_members  # noqa: E402
+from ks_latent.cm1.twin import _forecast, _scores  # noqa: E402
+
+DX = 0.25
+SYSTEMS = ("pool_phys", "single_phys", "single_latent")
+
+
+def lowpass(f, sigma_km):
+    """Gaussian low-pass along the last axis (edges replicated); the same filter as postproc_eval.py"""
+    s = sigma_km / DX; r = int(np.ceil(3 * s))
+    k = torch.exp(-0.5 * (torch.arange(-r, r + 1, dtype=f.dtype, device=f.device) / s) ** 2); k = k / k.sum()
+    sh = f.shape
+    y = torch.nn.functional.pad(f.reshape(-1, 1, sh[-1]), (r, r), mode="replicate")
+    return torch.nn.functional.conv1d(y, k.view(1, 1, -1)).reshape(sh)
+
+
+def band_power(f, lo_km=2.0, hi_km=10.0):
+    """power of (C, NX) along x in wavelengths [lo, hi] km, summed over channels"""
+    F = torch.fft.rfft(f - f.mean(-1, keepdim=True), dim=-1)
+    lam = 1.0 / torch.clamp(torch.fft.rfftfreq(f.shape[-1], d=DX), min=1e-9)
+    sel = (lam >= lo_km) & (lam <= hi_km)
+    return float((F[..., sel].abs() ** 2).sum())
+
+
+class System:
+    """models: list of (ae, prop, z_truth); owner: (N,) model index of each member"""
+
+    def __init__(self, models, Z0s, space):
+        self.models, self.space = models, space
+        self.Z = [z.clone() for z in Z0s]
+
+    def decode(self):
+        return torch.cat([m[0].decode(z) for m, z in zip(self.models, self.Z)])
+
+    def forecast(self, t, steps, halo, hold, gen):
+        self.Z = [_forecast(m[1], z, m[2], t, steps, halo, 0.0, gen, hold=hold) for m, z in zip(self.models, self.Z)]
+
+    def set_physical(self, Ua):
+        i = 0
+        for k, (m, z) in enumerate(zip(self.models, self.Z)):
+            n = z.shape[0]
+            self.Z[k] = m[0].encode(Ua[i:i + n]); i += n
+
+
+def main():
+    H = Path.home()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs", nargs="+", required=True)
+    ap.add_argument("--refl-run", default=f"{H}/cm1_runs/full_v1_stagec")
+    ap.add_argument("--source", default=f"cache:{H}/cm1_cache+{H}/cm1_cache_A2+{H}/cm1_cache_B")
+    ap.add_argument("--split", choices=["test", "val"], default="test")
+    ap.add_argument("--systems", nargs="+", default=list(SYSTEMS), choices=SYSTEMS)
+    ap.add_argument("--rtps", type=float, nargs="+", default=[0.9])
+    ap.add_argument("--seeds", type=int, nargs="+", default=[0])
+    ap.add_argument("--members", type=int, default=32)
+    ap.add_argument("--loc-km", type=float, default=5.0)
+    ap.add_argument("--obs-km", type=float, default=2.0); ap.add_argument("--sigma-obs", type=float, default=0.5)
+    ap.add_argument("--sigma-refl", type=float, default=5.0); ap.add_argument("--sigma-vr", type=float, default=2.0)
+    ap.add_argument("--vr-tilts", type=float, nargs="+", default=[0.5, 2.0, 5.0]); ap.add_argument("--radar-x-km", type=float, default=330.0)
+    ap.add_argument("--t0-min", type=float, default=60.0); ap.add_argument("--hours", type=float, default=3.0)
+    ap.add_argument("--cycle-min", type=float, default=5.0)
+    ap.add_argument("--forecast-from", type=int, nargs="*", default=[11, 17, 23, 29])
+    ap.add_argument("--forecast-minutes", type=int, default=60)
+    ap.add_argument("--n-cycles", type=int, default=0, help="override (smoke)")
+    ap.add_argument("--max-truths", type=int, default=0)
+    ap.add_argument("--job", type=int, default=0); ap.add_argument("--n-jobs", type=int, default=1)
+    ap.add_argument("--threads", type=int, default=16)
+    ap.add_argument("--out", required=True)
+    a = ap.parse_args()
+    torch.set_num_threads(a.threads); torch.set_grad_enabled(False)
+    dev = torch.device("cpu")
+    t_start = time.time()
+    out = Path(a.out).expanduser(); out.mkdir(parents=True, exist_ok=True)
+    loaded = [load_run(Path(r).expanduser(), dev) for r in a.runs]
+    norm = loaded[0][2]
+    for L in loaded[1:]:
+        if not np.allclose(L[2].scale, norm.scale):
+            raise ValueError("the pooled models must share one normalizer")
+    split, halo = loaded[0][4], loaded[0][3]["stage_b"]["halo_sites"]
+    files = member_files(a.source)
+    # reflectivity operator, re-scaled from the pool's normalizer to its own
+    from ks_latent.cm1.refl import ReflectivityHead, ReflHeadConfig
+    rr = Path(a.refl_run).expanduser()
+    ck = torch.load(rr / "refl_head.pt", map_location=dev)
+    head = ReflectivityHead(ReflHeadConfig(**ck["cfg"])); head.load_state_dict(ck["state_dict"]); head.eval()
+    nr = Normalizer.from_dict(json.loads((rr / "normalizer.json").read_text()))
+    if tuple(nr.vars) != tuple(norm.vars):
+        raise ValueError("reflectivity head variables differ from the pool's")
+    truths = sorted([n for n in split[a.split] if n in files], key=_natural_key)
+    missing = [n for n in split[a.split] if n not in files]
+    if missing:
+        print(f"[pool-da] {len(missing)} {a.split} storms not in --source, skipped: {missing}")
+    truths = truths[: a.max_truths or None][a.job::a.n_jobs]
+    pool_train = sorted([n for n in split["train"] if n in files], key=_natural_key)
+    ens_names = sorted(np.random.default_rng(0).choice(pool_train, a.members, replace=False).tolist(), key=_natural_key)
+    others = ColumnData([load_member(files[n]) for n in ens_names], norm, dev)
+    Zl, NX, dt = others.Z, others.NX, others.dt
+    ratio = torch.as_tensor(np.repeat(norm.scale / nr.scale, Zl), dtype=torch.float32)[None, :, None]
+    refl_fn = lambda d: head(d * ratio)
+    t0, spc = int(round(a.t0_min * 60 / dt)), int(round(a.cycle_min * 60 / dt))
+    n_cycles = a.n_cycles or int(round(a.hours * 60 / a.cycle_min))
+    nf = int(round(a.forecast_minutes * 60 / dt))
+    nm = len(loaded); per = a.members // nm
+    Z0_single = torch.stack([z[t0] for z in encode_members(loaded[0][0], others)])
+    Z0_pool = []
+    for k, L in enumerate(loaded):   # model k carries members k*per .. (k+1)*per - 1, encoded by its own autoencoder
+        sub = ColumnData([load_member(files[n]) for n in ens_names[k * per:(k + 1) * per]], norm, dev)
+        Z0_pool.append(torch.stack([z[t0] for z in encode_members(L[0], sub)]))
+    from ks_latent.cm1.obs import RadialVelocity
+    from ks_latent.cm1.physics import BaseState
+    obs_every = int(round(a.obs_km / DX))
+    obs_cols = np.arange(obs_every // 2, NX, obs_every)
+    x_obs, x_cell = (obs_cols + 0.5) * DX, (np.arange(NX) + 0.5) * DX
+    vr_op = RadialVelocity(norm, BaseState.from_sounding().z, NX, radar_x_km=a.radar_x_km, tilts_deg=a.vr_tilts,
+                           every_cells=obs_every, col_offset=0)
+    ith, s_th = VARS.index("th") * Zl, float(norm.scale[VARS.index("th")])
+    pos_mask = loaded[0][0].positive_mask[None, :, None]
+    P = Z0_single.shape[1]
+    x_site = (np.arange(P) + 0.5) * loaded[0][0].cfg.patch * DX
+    print(f"[pool-da] {nm} models, {a.members} members ({per} per model in the pool), {len(truths)} {a.split} truths "
+          f"(job {a.job}/{a.n_jobs}), systems {a.systems}, rtps {a.rtps}, seeds {a.seeds}, {n_cycles} cycles", flush=True)
+
+    def fc_scores(sysm, truth, t, gen):
+        """free forecast from the system's current members; per lead: mean / blend10 / member nMSE and 2-10 km power ratio"""
+        Zs = [z.clone() for z in sysm.Z]
+        fs = System(sysm.models, Zs, sysm.space)
+        rec = {k: [] for k in ("nmse_mean", "nmse_blend10", "nmse_member", "pw_mean", "pw_blend10", "pw_member")}
+        for j in range(nf):
+            fs.forecast(t + j, 1, halo, t0, gen)
+            if (j + 1) % 5:
+                continue
+            dec = fs.decode(); u = truth.full(0, t + j + 1, device=dev)[0]
+            mean = dec.mean(0); mem = dec[0]
+            b10 = lowpass(mean, 1.9) + mem - lowpass(mem, 1.9)
+            pt = band_power(u)
+            for nme, f in (("mean", mean), ("blend10", b10), ("member", mem)):
+                rec["nmse_" + nme].append(float(((f - u) ** 2).mean()))
+                rec["pw_" + nme].append(band_power(f) / max(pt, 1e-12))
+        return rec
+
+    def run(sysm, truth, seed, rtps, assimilate):
+        rng = np.random.default_rng(seed)
+        gen = torch.Generator().manual_seed(seed)
+        cfg = LETKFConfig(loc_km=a.loc_km, rtps=rtps)
+        cycles, fcs = [], {}
+        for k in range(n_cycles):
+            t = t0 + k * spc; t1 = t + spc
+            sysm.forecast(t, spc, halo, t0, gen)
+            u_true = truth.full(0, t1, device=dev)[0]
+            y = (u_true[ith, obs_cols] * s_th).double().numpy() + rng.normal(0.0, a.sigma_obs, obs_cols.size)
+            cref_true = truth.cref[0][t1].clamp(min=0).double().numpy()
+            y_refl = np.clip(cref_true[obs_cols] + rng.normal(0.0, a.sigma_refl, obs_cols.size), 0.0, None)
+            vr_true = vr_op.truth_values(u_true); y_vr = vr_true + rng.normal(0.0, a.sigma_vr, vr_true.size)
+            dec = sysm.decode()
+            sk = dict(refl_head=refl_fn, refl_cols=obs_cols, cref_true=cref_true, y_refl=None, vr_op=vr_op, vr_true=vr_true)
+            rec = {"prior": _scores(None, None, u_true, obs_cols, None, norm, Zl, dec=dec, **sk)}
+            rec["prior"]["spread"] = float(dec.var(0, unbiased=True).mean())
+            if assimilate:
+                ops = [lambda d_: d_[:, ith, obs_cols] * s_th, lambda d_: refl_fn(d_)[:, obs_cols], lambda d_: vr_op._from_columns(d_)]
+                Yall = np.concatenate([op(dec).double().numpy() for op in ops], 1)
+                yall = np.concatenate([y, y_refl, y_vr])
+                rall = np.concatenate([np.full(obs_cols.size, a.sigma_obs ** 2), np.full(obs_cols.size, a.sigma_refl ** 2),
+                                       np.full(y_vr.size, a.sigma_vr ** 2)])
+                xall = np.concatenate([x_obs, x_obs, vr_op.x_km])
+                if sysm.space == "latent":
+                    Zb = sysm.Z[0]
+                    Za = letkf_analysis_torch(Zb.double().numpy(), Yall, yall, rall, x_site, xall, cfg, device=dev)
+                    sysm.Z[0] = torch.as_tensor(Za, dtype=Zb.dtype)
+                    dec_a = sysm.decode()
+                else:
+                    Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().numpy(), Yall, yall, rall, x_cell, xall, cfg, device=dev)
+                    Ua = torch.as_tensor(Ua, dtype=dec.dtype).permute(0, 2, 1).contiguous()
+                    Ua = torch.where(pos_mask, Ua.clamp(min=0), Ua)
+                    sysm.set_physical(Ua)
+                    dec_a = sysm.decode()          # the re-encoded analysis: what the next forecast starts from
+                rec["analysis"] = _scores(None, None, u_true, obs_cols, None, norm, Zl, dec=dec_a, **sk)
+                rec["analysis"]["spread"] = float(dec_a.var(0, unbiased=True).mean())
+            for st in rec:
+                rec[st].pop("_mean_dec", None)
+            if k in a.forecast_from:
+                fcs[k] = fc_scores(sysm, truth, t1, gen)
+            cycles.append(rec)
+        half = cycles[len(cycles) // 2:]
+        summ = {}
+        for st in ("prior", "analysis"):
+            if st not in half[0]:
+                continue
+            g = lambda key: float(np.nanmean([c[st][key] for c in half]))
+            summ[st] = {key: g(key) for key in ("nmse_mean_dec", "th_obs_rmse", "th_obs_spread", "refl_obs_rmse",
+                                                 "refl_echo_rmse", "vr_obs_rmse", "vr_obs_spread", "spread")}
+            summ[st]["front_abs_disp_km_median"] = float(np.nanmedian([abs(c[st]["front_disp_km"]) for c in half]))
+            summ[st]["rmse_phys"] = {v: float(np.mean([c[st]["rmse_phys_mean_dec"][v] for c in half])) for v in norm.vars}
+        summ["nmse_by_cycle"] = [c["prior"]["nmse_mean_dec"] for c in cycles]
+        summ["forecast"] = {str(k): v for k, v in fcs.items()}
+        return summ
+
+    res = {}
+    for tn in truths:
+        truth = ColumnData([load_member(files[tn])], norm, dev)
+        zts = [encode_members(L[0], truth)[0] for L in loaded]
+        pool_models = [(L[0], L[1], zt) for L, zt in zip(loaded, zts)]
+        single = [(loaded[0][0], loaded[0][1], zts[0])]
+        r = {"free_pool": [run(System(pool_models, Z0_pool, "physical"), truth, s, 0.0, False) for s in a.seeds],
+             "free_single": [run(System(single, [Z0_single], "physical"), truth, s, 0.0, False) for s in a.seeds]}
+        for sname in a.systems:
+            for rt in a.rtps:
+                mk = (lambda: System(pool_models, Z0_pool, "physical")) if sname == "pool_phys" else \
+                     (lambda: System(single, [Z0_single], "physical")) if sname == "single_phys" else \
+                     (lambda: System(single, [Z0_single], "latent"))
+                r[f"{sname}|{rt}"] = [run(mk(), truth, s, rt, True) for s in a.seeds]
+        res[tn] = r
+        print(f"[pool-da] {tn}: " + "  ".join(f"{k} {np.mean([x['prior']['nmse_mean_dec'] for x in v]):.3f}" for k, v in r.items())
+              + f"  [{time.time() - t_start:.0f}s]", flush=True)
+        (out / f"part_{a.job:02d}.json").write_text(json.dumps({"args": vars(a), "ens_names": ens_names, "results": res}))
+    print(f"[pool-da] done in {(time.time() - t_start) / 60:.1f} min", flush=True)
+
+
+if __name__ == "__main__":
+    main()
