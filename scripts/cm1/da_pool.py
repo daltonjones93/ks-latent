@@ -72,11 +72,20 @@ class System:
     def forecast(self, t, steps, halo, hold, gen):
         self.Z = [_forecast(m[1], z, m[2], t, steps, halo, 0.0, gen, hold=hold) for m, z in zip(self.models, self.Z)]
 
+    def clamp(self, k, z):
+        """clamp model k's latent to its training range (per channel); returns (z, fraction of entries clipped)"""
+        b = self.models[k][3]
+        if b is None:
+            return z, 0.0
+        zc = torch.maximum(torch.minimum(z, b[1]), b[0])
+        return zc, float((zc != z).float().mean())
+
     def set_physical(self, Ua):
-        i = 0
+        i, fr = 0, []
         for k, (m, z) in enumerate(zip(self.models, self.Z)):
             n = z.shape[0]
-            self.Z[k] = m[0].encode(Ua[i:i + n]); i += n
+            self.Z[k], f = self.clamp(k, m[0].encode(Ua[i:i + n])); i += n; fr.append(f)
+        return float(np.mean(fr))
 
 
 def main():
@@ -100,6 +109,11 @@ def main():
     ap.add_argument("--forecast-minutes", type=int, default=60)
     ap.add_argument("--n-cycles", type=int, default=0, help="override (smoke)")
     ap.add_argument("--max-truths", type=int, default=0)
+    ap.add_argument("--truths", nargs="*", default=[], help="these storms only (overrides --split's list)")
+    ap.add_argument("--verbose", action="store_true", help="per-cycle diagnostics")
+    ap.add_argument("--clamp-margin", type=float, default=0.1,
+                    help="clamp each analysis latent channel to the model's range on the ensemble's training storms, widened by "
+                         "this fraction of the range on each side (negative: no clamp)")
     ap.add_argument("--job", type=int, default=0); ap.add_argument("--n-jobs", type=int, default=1)
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--out", required=True)
@@ -127,7 +141,7 @@ def main():
     missing = [n for n in split[a.split] if n not in files]
     if missing:
         print(f"[pool-da] {len(missing)} {a.split} storms not in --source, skipped: {missing}")
-    truths = truths[: a.max_truths or None][a.job::a.n_jobs]
+    truths = (list(a.truths) or truths[: a.max_truths or None])[a.job::a.n_jobs]
     pool_train = sorted([n for n in split["train"] if n in files], key=_natural_key)
     ens_names = sorted(np.random.default_rng(0).choice(pool_train, a.members, replace=False).tolist(), key=_natural_key)
     others = ColumnData([load_member(files[n]) for n in ens_names], norm, dev)
@@ -143,6 +157,14 @@ def main():
     for k, L in enumerate(loaded):   # model k carries members k*per .. (k+1)*per - 1, encoded by its own autoencoder
         sub = ColumnData([load_member(files[n]) for n in ens_names[k * per:(k + 1) * per]], norm, dev)
         Z0_pool.append(torch.stack([z[t0] for z in encode_members(L[0], sub)]))
+    bounds = []
+    for k, L in enumerate(loaded):   # per-channel latent range of each model on the 32 training storms (every 5th frame)
+        if a.clamp_margin < 0:
+            bounds.append(None); continue
+        zz = torch.cat([z[::5].reshape(-1, z.shape[-1]) for z in encode_members(L[0], others)])
+        lo, hi = zz.min(0).values, zz.max(0).values; w = hi - lo
+        bounds.append((lo - a.clamp_margin * w, hi + a.clamp_margin * w))
+        print(f"[pool-da] model {k}: latent range {float(lo.min()):.2f} .. {float(hi.max()):.2f}", flush=True)
     from ks_latent.cm1.obs import RadialVelocity
     from ks_latent.cm1.physics import BaseState
     obs_every = int(round(a.obs_km / DX))
@@ -175,7 +197,7 @@ def main():
                 rec["pw_" + nme].append(band_power(f) / max(pt, 1e-12))
         return rec
 
-    def run(sysm, truth, seed, rtps, assimilate):
+    def run(sysm, truth, seed, rtps, assimilate, tag=""):
         rng = np.random.default_rng(seed)
         gen = torch.Generator().manual_seed(seed)
         cfg = LETKFConfig(loc_km=a.loc_km, rtps=rtps)
@@ -189,12 +211,20 @@ def main():
             y_refl = np.clip(cref_true[obs_cols] + rng.normal(0.0, a.sigma_refl, obs_cols.size), 0.0, None)
             vr_true = vr_op.truth_values(u_true); y_vr = vr_true + rng.normal(0.0, a.sigma_vr, vr_true.size)
             dec = sysm.decode()
+            if a.verbose:
+                zmax = max(float(z.abs().max()) for z in sysm.Z)
+                print(f"    [{tag}] cycle {k}: prior nmse {float(((dec.mean(0) - u_true) ** 2).mean()):.3f}  max|dec| {float(dec.abs().max()):.3g}"
+                      f"  max|z| {zmax:.3g}  member nmse max {float(((dec - u_true) ** 2).mean((1, 2)).max()):.3g}", flush=True)
             sk = dict(refl_head=refl_fn, refl_cols=obs_cols, cref_true=cref_true, y_refl=None, vr_op=vr_op, vr_true=vr_true)
             rec = {"prior": _scores(None, None, u_true, obs_cols, None, norm, Zl, dec=dec, **sk)}
             rec["prior"]["spread"] = float(dec.var(0, unbiased=True).mean())
             if assimilate:
                 ops = [lambda d_: d_[:, ith, obs_cols] * s_th, lambda d_: refl_fn(d_)[:, obs_cols], lambda d_: vr_op._from_columns(d_)]
-                Yall = np.concatenate([op(dec).double().numpy() for op in ops], 1)
+                Ys_ = [op(dec).double().numpy() for op in ops]
+                Yall = np.concatenate(Ys_, 1)
+                if a.verbose:
+                    print(f"    [{tag}] cycle {k}: obs-space spread max th {Ys_[0].std(0).max():.3g} refl {Ys_[1].std(0).max():.3g} "
+                          f"vr {Ys_[2].std(0).max():.3g}; finite {np.isfinite(Yall).all()}", flush=True)
                 yall = np.concatenate([y, y_refl, y_vr])
                 rall = np.concatenate([np.full(obs_cols.size, a.sigma_obs ** 2), np.full(obs_cols.size, a.sigma_refl ** 2),
                                        np.full(y_vr.size, a.sigma_vr ** 2)])
@@ -202,16 +232,30 @@ def main():
                 if sysm.space == "latent":
                     Zb = sysm.Z[0]
                     Za = letkf_analysis_torch(Zb.double().numpy(), Yall, yall, rall, x_site, xall, cfg, device=dev)
-                    sysm.Z[0] = torch.as_tensor(Za, dtype=Zb.dtype)
+                    sysm.Z[0], clip = sysm.clamp(0, torch.as_tensor(Za, dtype=Zb.dtype))
                     dec_a = sysm.decode()
                 else:
                     Ua = letkf_analysis_torch(dec.permute(0, 2, 1).double().numpy(), Yall, yall, rall, x_cell, xall, cfg, device=dev)
                     Ua = torch.as_tensor(Ua, dtype=dec.dtype).permute(0, 2, 1).contiguous()
                     Ua = torch.where(pos_mask, Ua.clamp(min=0), Ua)
-                    sysm.set_physical(Ua)
+                    if a.verbose:
+                        U0 = letkf_analysis_torch(dec.permute(0, 2, 1).double().numpy(), Yall, yall, rall, x_cell, xall,
+                                                  LETKFConfig(loc_km=a.loc_km, rtps=0.0), device=dev)
+                        U0 = torch.as_tensor(U0, dtype=dec.dtype).permute(0, 2, 1)
+                        sb, sa0, sa = dec.std(0), U0.std(0), Ua.std(0)
+                        V = len(norm.vars)
+                        per_v = lambda t: [round(float(x), 2) for x in t.reshape(t.shape[0], V, Zl, -1).abs().amax((0, 2, 3))] if t.dim() == 3 else None
+                        print(f"    [{tag}] cycle {k}: max|Ua| per var {per_v(Ua)}  no-RTPS {per_v(U0)}  prior {per_v(dec)}; "
+                              f"max sa/sb {float((sa / sb.clamp(min=1e-12)).max()):.3g}, max sa0/sb {float((sa0 / sb.clamp(min=1e-12)).max()):.3g}", flush=True)
+                        for mi, (m, z) in enumerate(zip(sysm.models, sysm.Z)):
+                            n = z.shape[0]; sl = slice(mi * n, (mi + 1) * n)
+                            print(f"      model {mi}: max|z| prior {float(z.abs().max()):.3g}, re-encoded analysis {float(m[0].encode(Ua[sl]).abs().max()):.3g}, "
+                                  f"no-RTPS {float(m[0].encode(U0[sl]).abs().max()):.3g}, re-encoded prior {float(m[0].encode(dec[sl]).abs().max()):.3g}", flush=True)
+                    clip = sysm.set_physical(Ua)
                     dec_a = sysm.decode()          # the re-encoded analysis: what the next forecast starts from
                 rec["analysis"] = _scores(None, None, u_true, obs_cols, None, norm, Zl, dec=dec_a, **sk)
                 rec["analysis"]["spread"] = float(dec_a.var(0, unbiased=True).mean())
+                rec["analysis"]["clip_frac"] = clip
             for st in rec:
                 rec[st].pop("_mean_dec", None)
             if k in a.forecast_from:
@@ -228,6 +272,9 @@ def main():
             summ[st]["front_abs_disp_km_median"] = float(np.nanmedian([abs(c[st]["front_disp_km"]) for c in half]))
             summ[st]["rmse_phys"] = {v: float(np.mean([c[st]["rmse_phys_mean_dec"][v] for c in half])) for v in norm.vars}
         summ["nmse_by_cycle"] = [c["prior"]["nmse_mean_dec"] for c in cycles]
+        if assimilate:
+            cf = [c["analysis"]["clip_frac"] for c in cycles]
+            summ["clip_frac_mean"], summ["clip_frac_max"], summ["cycles_clipped"] = float(np.mean(cf)), float(np.max(cf)), int(np.sum(np.array(cf) > 0))
         summ["forecast"] = {str(k): v for k, v in fcs.items()}
         return summ
 
@@ -235,8 +282,8 @@ def main():
     for tn in truths:
         truth = ColumnData([load_member(files[tn])], norm, dev)
         zts = [encode_members(L[0], truth)[0] for L in loaded]
-        pool_models = [(L[0], L[1], zt) for L, zt in zip(loaded, zts)]
-        single = [(loaded[0][0], loaded[0][1], zts[0])]
+        pool_models = [(L[0], L[1], zt, b) for L, zt, b in zip(loaded, zts, bounds)]
+        single = [(loaded[0][0], loaded[0][1], zts[0], bounds[0])]
         r = {"free_pool": [run(System(pool_models, Z0_pool, "physical"), truth, s, 0.0, False) for s in a.seeds],
              "free_single": [run(System(single, [Z0_single], "physical"), truth, s, 0.0, False) for s in a.seeds]}
         for sname in a.systems:
@@ -244,7 +291,7 @@ def main():
                 mk = (lambda: System(pool_models, Z0_pool, "physical")) if sname == "pool_phys" else \
                      (lambda: System(single, [Z0_single], "physical")) if sname == "single_phys" else \
                      (lambda: System(single, [Z0_single], "latent"))
-                r[f"{sname}|{rt}"] = [run(mk(), truth, s, rt, True) for s in a.seeds]
+                r[f"{sname}|{rt}"] = [run(mk(), truth, s, rt, True, tag=f"{sname}|{rt}") for s in a.seeds]
         res[tn] = r
         print(f"[pool-da] {tn}: " + "  ".join(f"{k} {np.mean([x['prior']['nmse_mean_dec'] for x in v]):.3f}" for k, v in r.items())
               + f"  [{time.time() - t_start:.0f}s]", flush=True)

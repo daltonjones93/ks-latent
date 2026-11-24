@@ -59,6 +59,13 @@ def main():
         d = {"prior_nmse": ci(x), "minus_free_pool": ci(x - free), "frac_better_than_free_pool": float(np.mean(x < free))}
         if "analysis" in test[storms[0]][k][0]:
             d["analysis_nmse"] = ci(per_storm(test, k, lambda r: r["analysis"]["nmse_mean_dec"]))
+        if "clip_frac_mean" in test[storms[0]][k][0]:
+            d["clip_frac_mean"] = float(per_storm(test, k, lambda r: r["clip_frac_mean"]).mean())
+            d["clip_frac_max"] = float(per_storm(test, k, lambda r: r["clip_frac_max"]).max())
+            d["frac_storms_clipped"] = float(np.mean(per_storm(test, k, lambda r: r["cycles_clipped"]) > 0))
+            d["cycles_clipped_mean"] = float(per_storm(test, k, lambda r: r["cycles_clipped"]).mean())
+            print(f"  {k}: clamp fired in {d['cycles_clipped_mean']:.1f} of 36 cycles on average, on {100 * d['frac_storms_clipped']:.0f}% of storms; "
+                  f"mean fraction of latent entries clipped {d['clip_frac_mean']:.2e}, max {d['clip_frac_max']:.2e}")
         d["spread_error"] = ci(per_storm(test, k, lambda r: np.sqrt(r["prior"]["spread"] / r["prior"]["nmse_mean_dec"])))
         for q in ("th_obs_rmse", "th_obs_spread", "refl_echo_rmse", "vr_obs_rmse", "front_abs_disp_km_median"):
             d[q] = ci(per_storm(test, k, lambda r, q=q: r["prior"][q]))
