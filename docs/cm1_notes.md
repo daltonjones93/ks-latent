@@ -2081,3 +2081,19 @@ CRPS against F6 at +15 / +30 / +60 / +90 min: −0.4 / −0.8 / −1.2 / −1.9%
 
 ### 2026-11-24: F16 finished; F16s1 / F17 / design_val resubmitted (cluster/saidie/resubmit_new_storms3.sh)
 F16 (old + new storms) finished B and C. F16s1's Stage A was killed at 57k/60k (no ae.pt) and F17's Stage B (mixer 1024) at 38k/40k after 3 h -> F16s1 A-only / B / C 9899-9901; F17 B / C 9902-9903 (4 h 30 each). F16 evaluated now against F6 on the new and old test storms (9904, 9906); the full evaluation (with F16s1, pool, F17) after the chains (9905, 9907). design_val (6 models) timed out at 1 h 15 (12 of 18 cases) -> rerun with 2 h 15 (9908-9913); design_test jobs running.
+
+### 10b: post-processing for low RMSE with realistic structure (user, 2026-11-24; Cashew 793876-793886, 11 jobs, ~10 min; scripts/cm1/postproc_eval.py, postproc_report.py; data docs/fpe_report/data/postproc_test.json; figure docs/fpe_report/figs_pool/fig_postproc.png)
+4-model pool (4 x 8 members), 66 test cases. RMSE relative to the plain average at +30 / +60 / +90 min; power / truth at 2-5 km; FSS of w > 3 m/s at 10 km (+60).
+| product | RMSE +30 / +60 / +90 | power 2-5 km (+60) | FSS w (+60) | mean CSI (+60) |
+|---|---|---|---|---|
+| average | 0 / 0 / 0 | 0.08 | 0.552 | 0.540 |
+| one member | +40 / +40 / +39% | 1.06 | 0.788 | 0.466 |
+| closest member (4) | +29 / +31 / +32% | 0.88 | 0.795 | 0.477 |
+| aligned average, global (1) | +0.9 / +1.5 / +1.4% | 0.10 | 0.589 | 0.538 |
+| aligned average, local (1b) | +2.3 / +1.8 / +1.7% | 0.09 | 0.599 | 0.538 |
+| probability matched (2) | +14 / +17 / +18% | 0.40 | 0.757 | 0.537 |
+| prob. matched aligned (2+1) | +15 / +18 / +19% | 0.42 | 0.784 | 0.535 |
+| avg > 10 km + member < 10 km (3) | +19 / +14 / +13% | 1.02 (5-10 km 0.75, 10-20 km 0.30) | 0.773 | 0.523 |
+| avg > 20 km + member < 20 km (3) | +30 / +24 / +21% | 1.05 (10-20 km 0.76) | 0.794 | 0.508 |
+| avg > 10 km + aligned < 10 km (3+1) | +0.6 / +0.9 / +0.7% | 0.10 | 0.568 | 0.538 |
+Readings: (1) **alignment does not sharpen**: shifting members along x to agree changes the average by < 2% and restores almost no small-scale power (0.08 -> 0.10), so the members' disagreement is in the cell structure itself, not a shift of the whole line (the prediction "aligned average keeps most structure" was wrong). (2) **probability matching** restores intensity (FSS of updrafts 0.55 -> 0.76, power 0.4) for +14-18% RMSE and keeps the average's CSI. (3) **the 10 km scale blend** is the best realistic product: full power at 2-5 km for +13-19% RMSE at 30-90 min, a third of a member's +40% penalty; its 5-20 km scales stay smoother than the truth (0.3-0.75). (4) the closest member is realistic at +30%. No product beats the trade-off the sqrt(2) argument predicts by much: realism costs accuracy roughly in proportion to the unpredictable variance restored.
