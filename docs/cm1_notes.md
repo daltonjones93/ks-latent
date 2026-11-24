@@ -2064,3 +2064,20 @@ Stage A ran 2.5-3x slower than F6's (F16: 60k steps in 10 047 s; F6s4 ~2.4 h; th
 
 ### 10b: vote cutoffs calibrated for the 4-model pool (Saidie 9846; docs/fpe_report/data/vote_cutoffs_pool4.json; animations anim_vote/vote_pool4_cal_<var>_mem029.mp4)
 K of 32 = argmax validation CSI (6 storms x 3 starts) per feature and lead (5-90 min). Large features keep K ~12-16 of 32 at all leads (u jets, cold pool, dry air, liquid, ice, moist); updrafts fall from 14 (+5) to 11 (+15) to 8-9 (+30 to +90); downdrafts from 13 to 10 to 6-8; mesolow 9-12. The CSI-best low K for w over-forecasts the area (updrafts 1.5-1.7x, downdrafts 2.0-2.5x the true area after 30 min). On the test storms (66 cases) the calibrated K vs the 8-member rule scaled to 32: mean CSI 0.670 vs 0.671 (+15), 0.606 vs 0.604 (+30), 0.573 vs 0.569 (+60); largest gains updrafts +0.020 / +0.016 at +30 / +60, liquid +0.007-0.008; mesohigh −0.012 at +15.
+
+### 10b: the AVERAGE of the independently trained models (Saidie 9883; scripts/cm1/mean_eval.py; data docs/fpe_report/data/mean_eval_test.json; animations docs/fpe_report/anim_mean/mean_pool4_<var>_mem029.mp4)
+66 test cases, model-0 normalized units (mean over variables); power = forecast / truth power at 2-5 / 5-10 km wavelengths.
+| forecast | RMSE +5 / 15 / 30 / 60 / 90 | corr +30 / +60 | power 2-5 / 5-10 km, +30 |
+|---|---|---|---|
+| one member | 0.303 / 0.444 / 0.559 / 0.623 / 0.668 | 0.817 / 0.793 | 1.18 / 1.32 |
+| one model, mean of 8 | 0.237 / 0.336 / 0.423 / 0.471 / 0.508 | 0.876 / 0.854 | 0.21 / 0.29 |
+| one model, mean of 32 | 0.228 / 0.325 / 0.406 / 0.454 / 0.491 | 0.885 / 0.865 | 0.09 / 0.15 |
+| **pool mean, 4 models x 8** | **0.219 / 0.317 / 0.400 / 0.446 / 0.480** | **0.888 / 0.867** | 0.08 / 0.13 |
+| deterministic twin F7 (reference) | 0.226 / 0.326 / 0.405 / 0.455 / 0.495 | 0.887 / 0.863 | 0.07 / 0.14 |
+The pool mean is the most accurate field forecast at every lead: −28% RMSE against one member at 30-60 min, −1.6 / −1.8 / −2.2% against one model's 32-member mean at 30 / 60 / 90 min (model diversity, same member count), −1.3 / −2.2 / −2.9% against the deterministic twin. Physical RMSE at +60 min (u, w, theta', qv, p', liquid, ice): pool mean 1.55 m/s, 0.88 m/s, 0.68 K, 0.28 g/kg, 0.21 hPa, 0.19, 0.22 g/kg; one member 2.21, 1.26, 0.96, 0.40, 0.29, 0.27, 0.31. The price is structure: the mean keeps < 15% of the truth's power below 10 km after 30 min (a member keeps all of it, 1.1-1.4x), i.e. it is a smooth expected-value field, not a realistic storm; use the members / vote for structure.
+
+### 10a Q3 result: Stage C weight EMA 0.999 (F14_ema; Saidie 9844; docs/fpe_report/data/audit_ema.json)
+CRPS against F6 at +15 / +30 / +60 / +90 min: −0.4 / −0.8 / −1.2 / −1.9% (seed range 1.4 / 0.4 / 0.6 / 0.8%); RMSE −0.2 / −0.6 / −0.9 / −1.2%. Consistent small gain, but under the pre-registered bar (> 2x seed spread and >= 2% at 30 and 60 min): not adopted as a finding; it costs nothing, so it is a reasonable default for future runs.
+
+### 2026-11-24: F16 finished; F16s1 / F17 / design_val resubmitted (cluster/saidie/resubmit_new_storms3.sh)
+F16 (old + new storms) finished B and C. F16s1's Stage A was killed at 57k/60k (no ae.pt) and F17's Stage B (mixer 1024) at 38k/40k after 3 h -> F16s1 A-only / B / C 9899-9901; F17 B / C 9902-9903 (4 h 30 each). F16 evaluated now against F6 on the new and old test storms (9904, 9906); the full evaluation (with F16s1, pool, F17) after the chains (9905, 9907). design_val (6 models) timed out at 1 h 15 (12 of 18 cases) -> rerun with 2 h 15 (9908-9913); design_test jobs running.
