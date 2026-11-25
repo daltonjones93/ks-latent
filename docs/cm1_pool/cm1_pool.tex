@@ -9,7 +9,7 @@
 
 \title{A pooled ensemble of independently trained latent models\\ for CM1 squall-line forecasts}
 \author{Dalton Jones \and Claude}
-\date{23 November 2026}
+\date{25 November 2026}
 
 \begin{document}
 \maketitle
@@ -21,7 +21,7 @@ We describe a learned forecast system for two-dimensional CM1 squall lines. It h
 \item a pool of several copies of this model, trained independently with different random seeds, whose members are combined into one ensemble;
 \item a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow.
 \end{itemize}
-On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. Nested dropout makes the latent channels readable: in every model, one channel alone explains 70\% of the variance and maps the convective system, and the next mode maps the cold pool. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
+On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. Nested dropout makes the latent channels readable: in every model, one channel alone explains about 70\% of the variance and maps the convective system, and the next mode maps the cold pool. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
 \end{abstract}
 
 \section{The model}
@@ -232,7 +232,7 @@ one member & $+42\%$ & $+40\%$ & $+40\%$ & 1.06 & 0.79 & 0.466 \\
 \begin{itemize}
 \item \emph{One channel carries 70\% of the variance.} Channel 0 alone explains 68--70\% of the variance of all seven variables. The first 4 explain 86\%, the first 8 91\%, and all 32 97\%. The four models agree to within 2\%. The last 1--8 channels on their own explain only 3--7\%.
 \item \emph{Vertical velocity comes last.} One channel explains 72--82\% of $u$, $\theta'$, $q_v'$, $p'$ and condensate, but only 37\% of $w$. $w$ reaches 68\% with 4 channels and 81\% with 8. Updrafts are the smallest and fastest features, so they live in later channels.
-\item \emph{Scale ordering.} Channels 0 and 1 vary on 70--110\,km scales, the size of the convective system and its cold pool. Beyond channel 4 the channels vary on about 25\,km scales.
+\item \emph{Scale ordering.} Channel 0 varies on 93--104\,km scales in every model, the size of the convective system. The cold-pool mode (below) varies on 55--107\,km. From channel 5 on, the channels vary on about 25\,km scales.
 \end{itemize}
 
 \begin{figure}[ht]
@@ -251,9 +251,9 @@ one member & $+42\%$ & $+40\%$ & $+40\%$ & 1.06 & 0.79 & 0.466 \\
 
 \paragraph{What the leading channels are} (Figs.~\ref{fig:nestedhov}, \ref{fig:nestedmeaning}).
 \begin{itemize}
-\item \emph{Channel 0 is the convective system.} In every model it follows the condensate path ($|r| = 0.91$--$0.94$) and the column-mean liquid and ice ($|r| \approx 0.88$). It also correlates with the column-maximum updraft ($r = 0.73$) and against the surface $\theta'$ ($-0.57$). In Fig.~\ref{fig:nestedhov} it marks the rain region of the squall line and its trailing stratiform area. A fit on all the physical quantities explains 90--97\% of its variance on held-out storms.
+\item \emph{Channel 0 is the convective system.} In every model it follows the condensate path ($|r| = 0.91$--$0.94$) and the column-mean liquid and ice ($|r| \approx 0.88$). In model 1 it also correlates with the column-maximum updraft ($r = 0.73$) and against the surface $\theta'$ ($-0.57$). In Fig.~\ref{fig:nestedhov} it marks the rain region of the squall line and its trailing stratiform area. A fit on all the physical quantities explains 90--97\% of its variance on held-out storms.
 \item \emph{The second mode is the cold pool.} The next mode correlates with the column-mean moisture and with the surface $\theta'$ ($|r| = 0.5$--$0.75$). In Fig.~\ref{fig:nestedhov} it fills the cold pool behind the gust front and has a sharp edge at the front itself. Models 1 and 2 put it in channel 1, model 3 in channel 2 and model 4 in channel 3 (their correlations with model 1's channel 1 are 0.87, 0.86 and 0.78).
-\item \emph{Beyond the first two modes the channels mix.} Channels 2 onwards do not match one-to-one between models (best match 0.3--0.7) and none correlates strongly with any single column quantity. They are combinations that describe the internal structure of the line: individual updraft cores, tilts and gravity waves.
+\item \emph{Beyond these two modes the channels mix.} The remaining channels do not match one-to-one between models (best match 0.3--0.7), and none correlates strongly with any single column quantity. Given their 25\,km scales they most likely describe the internal structure of the line, such as individual cells and their tilt, but we have not identified them individually.
 \item \emph{Sign is arbitrary.} The sign of a channel differs between models (channel 0 correlates positively with condensate in two models and negatively in the other two). The physics is in the magnitude and pattern, not the sign.
 \end{itemize}
 
@@ -275,7 +275,7 @@ This is the structure of a squall-line updraft, recovered from one number at one
 \paragraph{Role in the forecast} (Fig.~\ref{fig:nestedorder}, panel 4).
 \begin{itemize}
 \item \emph{No single channel is essential.} Freezing any one channel at its starting value raises the 30-minute error by only 5--40\%. Freezing a group raises it by 36--69\%.
-\item \emph{The order is one of reconstruction, not of dynamics.} The last 16 channels, which carry under 10\% of the variance, matter as much to the forecast as the first 4: freezing them raises the error by 39--69\%. Forcing them to the truth lowers it as much as forcing channels 0--3 does (to 0.26--0.53 of the free error, against 0.29--0.33). The small-scale channels are where the fast, hard-to-forecast motion lives, so the propagator needs all 32.
+\item \emph{The order is one of reconstruction, not of dynamics.} The last 16 channels, which on their own explain only 9--14\% of the variance, matter as much to the forecast as the first 4: freezing them raises the error by 39--69\%. Forcing them to the truth lowers it as much as forcing channels 0--3 does (to 0.26--0.53 of the free error, against 0.29--0.33). The small-scale channels are where the fast, hard-to-forecast motion lives, so the propagator needs all 32.
 \item \emph{Forcing channels 0--3 to the truth} cuts the 30-minute error to about 0.3 of the free forecast. Knowing how the large-scale system evolves is most of the forecast.
 \end{itemize}
 
@@ -331,7 +331,7 @@ One model $\times$32, latent update & $0.314 \pm 0.025$ & 100\% & 0.83 & 0.49 & 
 \item \emph{DA works with the pool.} The prior error falls by 40\% against no DA ($-0.211 \pm 0.061$) and is lower on every one of the 22 storms. $\theta'$ error at the observations falls from 1.42 to 0.48\,K, close to the 0.5\,K observation error. The gust-front error falls from 8\,km to under 0.5\,km, i.e.\ less than one grid site. The error stays flat over the 3\,h, while without DA it keeps growing.
 \item \emph{Better than one model updated the same way.} With the same physical update and the same 32 members, the pool's prior error is lower by $0.025 \pm 0.007$ (7\%), on 86\% of storms.
 \item \emph{Level with one model's latent update.} The single model updated in its own latent space reaches almost the same cycled error (pool lower by $0.004 \pm 0.007$, 59\% of storms; not significant). The pool reaches this with a physical-space update, which works for any mix of models.
-\item \emph{Best-calibrated.} The pool's spread/error is 0.89, against 0.83 and 0.75 for the single model, with the same or less inflation. This is the expected effect of model disagreement in the spread.
+\item \emph{Best-calibrated.} The pool's spread/error is 0.89, against 0.83 and 0.75 for the single model, at the same inflation as the latent update (RTPS 0.6). This is the expected effect of model disagreement in the spread.
 \item \emph{Forecasts from the analyses.} The average of 60-minute forecasts launched from the pool's analyses has nMSE 0.33 at 15\,min and 0.37 at 60\,min, against 0.51--0.54 without DA. At 60\,min it is lower than from the single model's physical update ($-0.020 \pm 0.009$, 82\% of storms) and its latent update ($-0.016 \pm 0.011$, 64\%). The advantage grows with lead time: at 15 and 30\,min the two are level.
 \item \emph{The blend after DA.} The 10\,km blend of forecasts from the analyses has the realistic small-scale power seen before (power/truth 1.06 at 2--10\,km against 0.06 for the average) and about 35\% more error than the average, the same trade-off as without DA. It is still 22--30\% below the average without DA at every lead.
 \end{itemize}
