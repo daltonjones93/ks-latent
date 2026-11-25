@@ -62,7 +62,7 @@ def lowpass(x, sigma_km):
     """Gaussian low-pass along the last axis (open edges: reflect padding)."""
     s = sigma_km / DX
     r = int(np.ceil(3 * s))
-    k = torch.exp(-0.5 * (torch.arange(-r, r + 1, dtype=x.dtype) / s) ** 2); k = k / k.sum()
+    k = torch.exp(-0.5 * (torch.arange(-r, r + 1, dtype=x.dtype, device=x.device) / s) ** 2); k = k / k.sum()
     sh = x.shape
     y = torch.nn.functional.pad(x.reshape(-1, 1, sh[-1]), (r, r), mode="reflect")
     return torch.nn.functional.conv1d(y, k.view(1, 1, -1)).reshape(sh)
