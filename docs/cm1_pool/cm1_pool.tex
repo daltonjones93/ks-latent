@@ -21,7 +21,7 @@ We describe a learned forecast system for two-dimensional CM1 squall lines. It h
 \item a pool of several copies of this model, trained independently with different random seeds, whose members are combined into one ensemble;
 \item a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow.
 \end{itemize}
-On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. We close with what the system implies for ensemble data assimilation.
+On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
 \end{abstract}
 
 \section{The model}
@@ -208,36 +208,64 @@ one member & $+42\%$ & $+40\%$ & $+40\%$ & 1.06 & 0.79 & 0.466 \\
 \item \emph{Boundaries} come from the truth in these scores (see Setup).
 \end{itemize}
 
-\section{Could it be used with data assimilation?}
+\section{Data assimilation with the pool}
 
-\paragraph{What makes it a good DA forecast model.}
+\paragraph{Setup.} A twin experiment on the 22 test storms. The truth is the CM1 run itself.
 \begin{itemize}
-\item \emph{Calibrated spread.} An ensemble filter needs a prior spread that matches the forecast error. The pool provides this directly (spread/error 0.99--1.03 from 5 to 90\,min), without hand-set additive noise or heavy inflation.
-\item \emph{Model error is represented.} Part of the pool's spread comes from disagreement between independently trained models, i.e.\ from model error. Ensemble DA usually has to add model error by hand (additive noise, multiplicative inflation, stochastic physics); here the forecast model supplies it.
-\item \emph{Local latent field.} The latent state lives on 2\,km sites with a finite reach per step, so standard distance-based localization (e.g.\ a 5\,km LETKF radius on the site lattice) applies directly in latent space.
-\item \emph{Cost.} A forecast hour of a 32-member ensemble takes a small fraction of a second on one GPU, so large ensembles and many cycles are cheap compared with running CM1.
-\item \emph{The vote needs no change.} It acts on forecast members only, so forecasts launched from an analysis ensemble can be voted on exactly as above. Only the cutoffs need re-checking for that ensemble size.
+\item \emph{Observations:} surface $\theta'$ ($\sigma = 0.5$\,K), composite reflectivity ($\sigma = 5$\,dBZ) and radial velocity at 0.5, 2 and 5$^\circ$ tilts ($\sigma = 2$\,m\,s$^{-1}$), every 2\,km. They are assimilated every 5 minutes for 3\,h, starting 1\,h into the storm (36 cycles). The boundary halo is held at its starting value, as it would be in a real cycle.
+\item \emph{Initial ensemble:} 32 states drawn from training storms, so the first guess knows nothing about the test storm.
+\item \emph{Pool DA:} each of the 4 models advances its own 8 members. All 32 members are decoded and updated together by a local ensemble transform Kalman filter (LETKF, 5\,km localization) on the decoded columns. Each member is then re-encoded by its own model's encoder. Because the 32 members share one update in physical space, models with different latent spaces can be mixed freely.
+\item \emph{Comparison:} one model with 32 members, updated either the same way in physical space or directly in its latent space; and both ensembles with no DA. The single model is seed 0 of the pool, so it has the same recipe and data.
+\item \emph{Inflation:} relaxation to prior spread (RTPS) of 0.3, 0.6 or 0.9, chosen for each system on 6 validation storms. The pool and the latent update chose 0.6, the single-model physical update 0.3.
+\item \emph{Scores:} errors are averaged over the second half of the cycles (90--180\,min), where the result no longer depends on the first guess. nMSE is the mean squared error in normalized units over all variables. Every 30 minutes a 60-minute forecast is launched from the analysis ensemble.
 \end{itemize}
 
-\paragraph{What has to be solved.}
+\begin{table}[ht]
+\centering\small
+\caption{Cycled DA on 22 test storms, second half of the cycles. Prior = the forecast just before each analysis. $\pm$ is a 95\% interval over storms. ``Front'' is the median absolute gust-front position error.}
+\label{tab:da}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+System & Prior nMSE & Storms better & Spread/ & $\theta'$ RMSE & Front & 60-min forecast \\
+ & & than no DA & error & at obs (K) & (km) & nMSE (average) \\
+\midrule
+Pool, no DA & $0.521 \pm 0.067$ & -- & 1.00 & 1.42 & 7.95 & 0.538 \\
+One model, no DA & $0.537 \pm 0.074$ & -- & 1.02 & 1.42 & 7.43 & 0.562 \\
+\midrule
+\textbf{Pool 4$\times$8, physical update} & $\mathbf{0.310 \pm 0.022}$ & \textbf{100\%} & \textbf{0.89} & \textbf{0.48} & 0.46 & \textbf{0.373} \\
+One model $\times$32, physical update & $0.335 \pm 0.026$ & 100\% & 0.75 & 0.51 & 0.50 & 0.393 \\
+One model $\times$32, latent update & $0.314 \pm 0.025$ & 100\% & 0.83 & 0.49 & 0.45 & 0.389 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig_pool_da.png}
+\caption{Cycled DA on 22 test storms. Left: error of the forecast before each analysis. Middle: per-storm prior nMSE of the pool against the single-model latent update (circles) and against no DA (squares). Right: 60-minute forecasts launched from the pool's analyses (solid) and without DA (dashed), as the average, the 10\,km blend and one member.}
+\label{fig:da}
+\end{figure}
+
+\paragraph{Results} (Table~\ref{tab:da}, Fig.~\ref{fig:da}).
+\begin{itemize}
+\item \emph{DA works with the pool.} The prior error falls by 40\% against no DA ($-0.211 \pm 0.061$) and is lower on every one of the 22 storms. $\theta'$ error at the observations falls from 1.42 to 0.48\,K, close to the 0.5\,K observation error. The gust-front error falls from 8\,km to under 0.5\,km, i.e.\ less than one grid site. The error stays flat over the 3\,h, while without DA it keeps growing.
+\item \emph{Better than one model updated the same way.} With the same physical update and the same 32 members, the pool's prior error is lower by $0.025 \pm 0.007$ (7\%), on 86\% of storms.
+\item \emph{Level with one model's latent update.} The single model updated in its own latent space reaches almost the same cycled error (pool lower by $0.004 \pm 0.007$, 59\% of storms; not significant). The pool reaches this with a physical-space update, which works for any mix of models.
+\item \emph{Best-calibrated.} The pool's spread/error is 0.89, against 0.83 and 0.75 for the single model, with the same or less inflation. This is the expected effect of model disagreement in the spread.
+\item \emph{Forecasts from the analyses.} The average of 60-minute forecasts launched from the pool's analyses has nMSE 0.33 at 15\,min and 0.37 at 60\,min, against 0.51--0.54 without DA. At 60\,min it is lower than from the single model's physical update ($-0.020 \pm 0.009$, 82\% of storms) and its latent update ($-0.016 \pm 0.011$, 64\%). The advantage grows with lead time: at 15 and 30\,min the two are level.
+\item \emph{The blend after DA.} The 10\,km blend of forecasts from the analyses has the realistic small-scale power seen before (power/truth 1.06 at 2--10\,km against 0.06 for the average) and about 35\% more error than the average, the same trade-off as without DA. It is still 22--30\% below the average without DA at every lead.
+\end{itemize}
+
+\paragraph{A safeguard for re-encoding.} The re-encoding step needs one safeguard. In the first run, one of the four encoders mapped a few analysed columns, still within the range of the forecast members, to latent values near 300, against a normal range below about 11. That model's members then blew up in the next forecast and, through the shared update, pulled the whole pool off. This happened on 7 of 22 test storms. Re-encoded latents are now clipped, channel by channel, to each model's range on the training storms plus 10\%, for every system including the latent update. The clip fires in about 7 of 36 cycles and touches $7 \times 10^{-6}$ of the latent entries (at most $2.6 \times 10^{-3}$ in one cycle). It is a guard against rare outliers, not a change to the analysis. That an encoder can be this fragile to slightly off-manifold inputs is a real weakness, and training with perturbed (analysis-like) inputs is the proper fix.
+
+\paragraph{What remains to be solved.}
 \begin{enumerate}
-\item \emph{Several latent spaces.} Each model in the pool has its own encoder, so latent vectors from different models cannot share one covariance. There are three options:
-  \begin{enumerate}
-  \item update the decoded members in physical space, then re-encode each member with its own model's encoder. This is the simplest.
-  \item run one latent LETKF per model, each with its own members. This keeps the latent update, but needs enough members per model for a usable covariance.
-  \item train the pool's propagators on one shared, frozen autoencoder, so all members live in one latent space. This gives up the joint fine-tuning of stage C, and the cost of that has not been measured.
-  \end{enumerate}
-\item \emph{Inflation must be re-tuned.} Because the pool's spread is already calibrated, relaxation-to-prior or additive inflation tuned for a deterministic model would over-inflate it. Inflation should be tuned on the validation storms for this system.
-\item \emph{Boundaries.} In a real cycle the halo cannot come from the truth. Holding it at the analysis value degrades long cycles and should be part of any test.
+\item \emph{Encoder robustness} to analysis states, as above.
+\item \emph{Only one observation-noise realization} per storm has been run so far. The per-storm differences above are paired, so this mainly limits the narrower comparisons (pool against the latent update).
+\item \emph{Boundaries.} The halo is held at its starting value. Over longer cycles it should be updated or supplied by a larger-domain model.
 \item \emph{Robustness.} The model needs the retraining on new environments and decaying storms before DA results can be expected to hold beyond the training environment.
+\item \emph{Shared latent space.} Training the pool's propagators on one shared autoencoder would allow a single latent update across models. Whether this keeps the pool's forecast advantage is untested.
 \end{enumerate}
-
-\paragraph{Proposed test.} A twin experiment on the 22 test storms (3 observation-noise seeds each):
-\begin{itemize}
-\item \emph{Observations:} surface $\theta'$, composite reflectivity and radial velocity every 2\,km, assimilated every 5 minutes for 3\,h, with held boundaries.
-\item \emph{Arms:} one model with 32 members; the pool of 4 $\times$ 8 updated in physical space; and the pool on a shared autoencoder updated in latent space. Inflation is tuned on the validation storms.
-\item \emph{Scores:} cycled forecast error against no DA, gust-front position, spread/error and rank histograms at the observations, and the vote's CSI for forecasts launched from the analyses.
-\end{itemize}
-The prediction is that the pool's calibrated, model-error-aware spread will need little inflation and give lower cycled error than a single model with the same number of members. This has not yet been measured.
 
 \end{document}

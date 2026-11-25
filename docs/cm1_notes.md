@@ -2097,3 +2097,13 @@ F16 (old + new storms) finished B and C. F16s1's Stage A was killed at 57k/60k (
 | avg > 20 km + member < 20 km (3) | +30 / +24 / +21% | 1.05 (10-20 km 0.76) | 0.794 | 0.508 |
 | avg > 10 km + aligned < 10 km (3+1) | +0.6 / +0.9 / +0.7% | 0.10 | 0.568 | 0.538 |
 Readings: (1) **alignment does not sharpen**: shifting members along x to agree changes the average by < 2% and restores almost no small-scale power (0.08 -> 0.10), so the members' disagreement is in the cell structure itself, not a shift of the whole line (the prediction "aligned average keeps most structure" was wrong). (2) **probability matching** restores intensity (FSS of updrafts 0.55 -> 0.76, power 0.4) for +14-18% RMSE and keeps the average's CSI. (3) **the 10 km scale blend** is the best realistic product: full power at 2-5 km for +13-19% RMSE at 30-90 min, a third of a member's +40% penalty; its 5-20 km scales stay smoother than the truth (0.3-0.75). (4) the closest member is realistic at +30%. No product beats the trade-off the sqrt(2) argument predicts by much: realism costs accuracy roughly in proportion to the unpredictable variance restored.
+
+## 10c. Pooled DA twin, final (2026-11-24)
+22 test / 6 val storms, theta' + refl + Vr every 2 km, 5-min cycles x 36, held halo, loc 5 km, 32 members, obs seed 0.
+Latent clamp (training range +10%) on re-encoded latents for all systems; fired ~7/36 cycles, 7e-6 of entries.
+RTPS on val: pool_phys 0.6, single_phys 0.3, single_latent 0.6.
+Prior nMSE (2nd half): free_pool 0.521, free_single 0.537, pool_phys 0.310 (-0.211+-0.061, 100%), single_phys 0.335, single_latent 0.314.
+pool - single_phys -0.025+-0.007 (86%); pool - single_latent -0.004+-0.007 (59%, n.s.).
+Spread/err: pool 0.89, single_latent 0.83, single_phys 0.75. Front 0.46 km. theta obs RMSE 0.48 K.
+60-min forecasts from analyses (mean): pool 0.373 vs single_latent 0.389 (-0.016+-0.011, 64%), single_phys 0.393; no DA 0.538.
+Blend10 from analyses ~35% above mean, power 1.06. Data: docs/fpe_report/data/pool_da.json; fig fig_pool_da.png; doc section in cm1_pool.tex.

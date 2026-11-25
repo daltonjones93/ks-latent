@@ -120,7 +120,8 @@ def main():
     ax[2].plot(leads, ff["nmse_mean"], "--", color="#2A78C2", lw=1.4, label="no DA: average")
     ax[2].plot(leads, ff["nmse_blend10"], "--", color="#1F8A4B", lw=1.4, label="no DA: 10 km blend")
     ax[2].set_xlabel("forecast lead (min)"); ax[2].set_ylabel("nMSE"); ax[2].set_title("60-min forecasts launched during cycling", fontsize=10)
-    ax[2].legend(fontsize=7.5, frameon=False, loc="lower right")
+    ax[2].legend(fontsize=7.5, frameon=False, loc="upper left", ncol=2)
+    ax[2].set_ylim(top=ax[2].get_ylim()[1] + 0.18 * (ax[2].get_ylim()[1] - ax[2].get_ylim()[0]))
     for x in ax:
         x.grid(alpha=0.25)
     fig.legend(*ax[0].get_legend_handles_labels(), loc="lower center", ncol=5, frameon=False, fontsize=8.5)
