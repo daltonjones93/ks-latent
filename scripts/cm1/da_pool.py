@@ -7,6 +7,10 @@ member is re-encoded by the autoencoder of the model that carries it. Systems (-
   pool_phys     4 models x 8 members, physical-space LETKF, re-encoded per model (the method)
   single_phys   model 0 alone, 32 members, the same physical-space LETKF (isolates the pooling)
   single_latent model 0 alone, 32 members, latent LETKF (the G0 headline analysis, isolates the analysis space)
+  single_pff    model 0 alone, 32 members, domain-localized latent particle flow filter (ks_latent/cm1/pff_site.py)
+  pool_pff      4 models x 8 members, one latent PFF per model: all 32 decoded members are encoded by model k (cross-encoding),
+                so model k's prior covariance comes from 32 members; model k keeps the analysis of its own 8 (whose latents are its
+                own, not re-encoded)
 plus the no-DA runs of the pool and of model 0 from the same initial ensemble. Setup as the G0 headline: theta' (surface) +
 composite reflectivity + radial velocity every 2 km, 5-min cycles for 3 h from t = 60 min, localization 5 km, held
 boundaries, 32 members drawn from training storms (here: those present in --source). Reflectivity uses --refl-run's
@@ -35,11 +39,12 @@ sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).parent))
 from da_twin import load_run, member_files  # noqa: E402
 from ks_latent.cm1.data import VARS, ColumnData, Normalizer, _natural_key, load_member  # noqa: E402
 from ks_latent.cm1.letkf import LETKFConfig, letkf_analysis_torch  # noqa: E402
+from ks_latent.cm1.pff_site import PFFSiteConfig, pff_site_analysis  # noqa: E402
 from ks_latent.cm1.train import encode_members  # noqa: E402
 from ks_latent.cm1.twin import _forecast, _scores  # noqa: E402
 
 DX = 0.25
-SYSTEMS = ("pool_phys", "single_phys", "single_latent")
+SYSTEMS = ("pool_phys", "single_phys", "single_latent", "single_pff", "pool_pff")
 
 
 def lowpass(f, sigma_km):
@@ -114,6 +119,8 @@ def main():
     ap.add_argument("--clamp-margin", type=float, default=0.1,
                     help="clamp each analysis latent channel to the model's range on the ensemble's training storms, widened by "
                          "this fraction of the range on each side (negative: no clamp)")
+    ap.add_argument("--pff-loc-km", type=float, default=3.0); ap.add_argument("--pff-taper-km", type=float, default=4.0)
+    ap.add_argument("--pff-half-width", type=int, default=6); ap.add_argument("--pff-steps", type=int, default=12)
     ap.add_argument("--job", type=int, default=0); ap.add_argument("--n-jobs", type=int, default=1)
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--out", required=True)
@@ -229,7 +236,28 @@ def main():
                 rall = np.concatenate([np.full(obs_cols.size, a.sigma_obs ** 2), np.full(obs_cols.size, a.sigma_refl ** 2),
                                        np.full(y_vr.size, a.sigma_vr ** 2)])
                 xall = np.concatenate([x_obs, x_obs, vr_op.x_km])
-                if sysm.space == "latent":
+                if sysm.space in ("pff", "pool_pff"):
+                    pcfg = PFFSiteConfig(loc_km=a.pff_loc_km, taper_km=a.pff_taper_km, half_width=a.pff_half_width,
+                                         n_steps=a.pff_steps, rtps=rtps)
+                    clips, tp = [], time.time()
+                    for mk_, (m_, z_) in enumerate(zip(sysm.models, sysm.Z)):
+                        ae_ = m_[0]
+                        obs_fn = lambda zz, ae_=ae_: torch.cat([op(ae_.decode(zz[None])) for op in ops], 1)[0]
+                        if sysm.space == "pool_pff":     # model k sees all 32 members: its own latents + the others' decoded members encoded by it
+                            n_ = z_.shape[0]; i0 = sum(z.shape[0] for z in sysm.Z[:mk_])
+                            others_ = torch.cat([dec[:i0], dec[i0 + n_:]])
+                            Zk = torch.cat([z_, sysm.clamp(mk_, ae_.encode(others_))[0]])
+                        else:
+                            Zk = z_
+                        with torch.enable_grad():
+                            Za, pinfo = pff_site_analysis(Zk, obs_fn, yall, rall, x_site, xall, pcfg, gen=gen)
+                        sysm.Z[mk_], c_ = sysm.clamp(mk_, Za[: z_.shape[0]]); clips.append(c_)
+                    clip = float(np.mean(clips))
+                    if a.verbose:
+                        print(f"    [{tag}] cycle {k}: PFF {time.time() - tp:.1f}s, {pinfo['n_iterations']} pseudo-steps, "
+                              f"max obs/site {pinfo['n_obs_per_site_max']}", flush=True)
+                    dec_a = sysm.decode()
+                elif sysm.space == "latent":
                     Zb = sysm.Z[0]
                     Za = letkf_analysis_torch(Zb.double().numpy(), Yall, yall, rall, x_site, xall, cfg, device=dev)
                     sysm.Z[0], clip = sysm.clamp(0, torch.as_tensor(Za, dtype=Zb.dtype))
@@ -290,7 +318,9 @@ def main():
             for rt in a.rtps:
                 mk = (lambda: System(pool_models, Z0_pool, "physical")) if sname == "pool_phys" else \
                      (lambda: System(single, [Z0_single], "physical")) if sname == "single_phys" else \
-                     (lambda: System(single, [Z0_single], "latent"))
+                     (lambda: System(single, [Z0_single], "latent")) if sname == "single_latent" else \
+                     (lambda: System(single, [Z0_single], "pff")) if sname == "single_pff" else \
+                     (lambda: System(pool_models, Z0_pool, "pool_pff"))
                 r[f"{sname}|{rt}"] = [run(mk(), truth, s, rt, True, tag=f"{sname}|{rt}") for s in a.seeds]
         res[tn] = r
         print(f"[pool-da] {tn}: " + "  ".join(f"{k} {np.mean([x['prior']['nmse_mean_dec'] for x in v]):.3f}" for k, v in r.items())

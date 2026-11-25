@@ -89,7 +89,9 @@ def pff_site_analysis(Zb: torch.Tensor, obs_fn: Callable[[torch.Tensor], torch.T
     B = cov * rho
     tr = torch.diagonal(B, dim1=-2, dim2=-1).mean(-1)                         # (P,)
     B = B + (cfg.ridge * tr + cfg.ridge_floor)[:, None, None] * torch.eye(d, dtype=dt, device=dev)
-    Binv = torch.linalg.inv(B)
+    if not torch.isfinite(Zw).all():
+        raise ValueError(f"non-finite prior particles: {int((~torch.isfinite(Zw)).sum())} entries")
+    Binv = torch.cholesky_inverse(torch.linalg.cholesky(B))                   # B is SPD (tapered covariance + ridge)
     # observation localization: per site the nearest observations with positive weight
     wobs = _gc((xs[:, None] - xo[None, :]).abs(), cfg.loc_km)                 # (P, n_obs)
     nmax = int((wobs > 0).sum(1).max())
@@ -118,7 +120,9 @@ def pff_site_analysis(Zb: torch.Tensor, obs_fn: Callable[[torch.Tensor], torch.T
         F = A + Binv
         zbar = Z.mean(1)
         cvec = (Binv @ z0[..., None])[..., 0] + (A @ zbar[..., None])[..., 0] + (JtR @ dres[..., None])[..., 0]
-        Finv = torch.linalg.inv(F)
+        if not torch.isfinite(F).all():
+            raise ValueError(f"non-finite flow metric at pseudo-step {s}: {int((~torch.isfinite(J)).sum())} non-finite Jacobian entries")
+        Finv = torch.cholesky_inverse(torch.linalg.cholesky(0.5 * (F + F.transpose(1, 2))))
         Finv = 0.5 * (Finv + Finv.transpose(1, 2))
         zstar = (Finv @ cvec[..., None])[..., 0]
         f = zstar[:, None] - Z
