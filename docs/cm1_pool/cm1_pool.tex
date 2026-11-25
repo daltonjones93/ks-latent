@@ -21,7 +21,7 @@ We describe a learned forecast system for two-dimensional CM1 squall lines. It h
 \item a pool of several copies of this model, trained independently with different random seeds, whose members are combined into one ensemble;
 \item a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow.
 \end{itemize}
-On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
+On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. Nested dropout makes the latent channels readable: in every model, one channel alone explains 70\% of the variance and maps the convective system, and the next mode maps the cold pool. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
 \end{abstract}
 
 \section{The model}
@@ -208,6 +208,85 @@ one member & $+42\%$ & $+40\%$ & $+40\%$ & 1.06 & 0.79 & 0.466 \\
 \item \emph{Boundaries} come from the truth in these scores (see Setup).
 \end{itemize}
 
+\section{What the latent channels mean: nested dropout}
+
+\paragraph{The method.} During autoencoder training (stage A), half of the training samples are decoded from only their first $k$ latent channels, with $k$ drawn uniformly from 1 to 32 and the other channels set to zero. The decoder therefore has to make the best possible field from channel 0 alone, the best from channels 0--1, and so on. This pushes the most important information into the first channels and orders them by importance, much like principal components, but nonlinear and local (each 2\,km site has its own 32 channels). Without it, the 32 channels are interchangeable and none has a meaning of its own.
+
+\paragraph{Analysis.} All four models of the pool, on the 22 test storms (2354 frames, one every 3 minutes after the first 40). For each channel we measure:
+\begin{itemize}
+\item \emph{Ordering:} variance of the decoded field explained when only the first $m$ channels are kept, against only the last $m$.
+\item \emph{Meaning:} correlation, site by site, with physical quantities of the columns at that site (column means of each variable, surface $\theta'$, column maximum and minimum of $w$, condensate).
+\item \emph{Footprint:} the decoded change in every variable when one channel is raised by one standard deviation at a single site. This is averaged over 66 cases at the strongest updraft of mature storms.
+\item \emph{Role in the forecast:} 30-minute rollouts (noise set to zero) with a channel either frozen at its starting value or forced to the encoded truth, compared with the free rollout.
+\item \emph{Agreement between models:} correlation between the channels of the different models.
+\end{itemize}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig_nested_order.png}
+\caption{Ordering of the latent channels in the four models. (1) Variance explained by the first $m$ channels (solid) and the last $m$ (dotted). (2) The same for each variable, model 1. (3) Power-weighted wavelength of each channel along $x$. (4) 30-minute forecast error with a channel (or group) frozen at its starting value (red) or forced to the truth (blue), relative to the free forecast. Bars are the mean of the four models, dots the individual models.}
+\label{fig:nestedorder}
+\end{figure}
+
+\paragraph{The channels are ordered, identically in all four models} (Fig.~\ref{fig:nestedorder}).
+\begin{itemize}
+\item \emph{One channel carries 70\% of the variance.} Channel 0 alone explains 68--70\% of the variance of all seven variables. The first 4 explain 86\%, the first 8 91\%, and all 32 97\%. The four models agree to within 2\%. The last 1--8 channels on their own explain only 3--7\%.
+\item \emph{Vertical velocity comes last.} One channel explains 72--82\% of $u$, $\theta'$, $q_v'$, $p'$ and condensate, but only 37\% of $w$. $w$ reaches 68\% with 4 channels and 81\% with 8. Updrafts are the smallest and fastest features, so they live in later channels.
+\item \emph{Scale ordering.} Channels 0 and 1 vary on 70--110\,km scales, the size of the convective system and its cold pool. Beyond channel 4 the channels vary on about 25\,km scales.
+\end{itemize}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig_nested_hov.png}
+\caption{One test storm over 6 hours. Left: surface $\theta'$ (the cold pool), column-maximum $w$ (updrafts) and mean condensate (the precipitating region). Right: the first four latent channels of model 1 (sign arbitrary; colour centred on the median).}
+\label{fig:nestedhov}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig_nested_meaning.png}
+\caption{Left: correlation of the first 12 channels of model 1 with physical quantities at the same site; the bars give the held-out $R^2$ of each channel fitted on all the quantities (dots: the four models). Right: $|$correlation$|$ between the first 8 channels of model 1 and those of models 2--4.}
+\label{fig:nestedmeaning}
+\end{figure}
+
+\paragraph{What the leading channels are} (Figs.~\ref{fig:nestedhov}, \ref{fig:nestedmeaning}).
+\begin{itemize}
+\item \emph{Channel 0 is the convective system.} In every model it follows the condensate path ($|r| = 0.91$--$0.94$) and the column-mean liquid and ice ($|r| \approx 0.88$). It also correlates with the column-maximum updraft ($r = 0.73$) and against the surface $\theta'$ ($-0.57$). In Fig.~\ref{fig:nestedhov} it marks the rain region of the squall line and its trailing stratiform area. A fit on all the physical quantities explains 90--97\% of its variance on held-out storms.
+\item \emph{The second mode is the cold pool.} The next mode correlates with the column-mean moisture and with the surface $\theta'$ ($|r| = 0.5$--$0.75$). In Fig.~\ref{fig:nestedhov} it fills the cold pool behind the gust front and has a sharp edge at the front itself. Models 1 and 2 put it in channel 1, model 3 in channel 2 and model 4 in channel 3 (their correlations with model 1's channel 1 are 0.87, 0.86 and 0.78).
+\item \emph{Beyond the first two modes the channels mix.} Channels 2 onwards do not match one-to-one between models (best match 0.3--0.7) and none correlates strongly with any single column quantity. They are combinations that describe the internal structure of the line: individual updraft cores, tilts and gravity waves.
+\item \emph{Sign is arbitrary.} The sign of a channel differs between models (channel 0 correlates positively with condensate in two models and negatively in the other two). The physics is in the magnitude and pattern, not the sign.
+\end{itemize}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig_nested_footprint.png}
+\caption{What one channel does to the physical fields. Decoded change of each variable when channel 0--3 of model 1 is raised by one standard deviation at a single 2\,km site (dotted lines), at the strongest updraft of mature storms (66 cases, averaged). Colour scales are shared down each column.}
+\label{fig:nestedfoot}
+\end{figure}
+
+\paragraph{Footprints} (Fig.~\ref{fig:nestedfoot}). Raising channel 0 at one site produces a coherent convective cell:
+\begin{itemize}
+\item a stronger updraft tilted rearward with height, up to 4.5\,m\,s$^{-1}$;
+\item more cloud water at 2--6\,km and a warm core of about 1\,K at 4--10\,km;
+\item a mid-level pressure low of about 0.4\,hPa and the inflow/outflow pattern in $u$.
+\end{itemize}
+This is the structure of a squall-line updraft, recovered from one number at one site. The change stays within about $\pm 5$\,km, the reach of the decoder, so each channel is a local quantity. Channels 1--3 give weaker, more mixed patterns of the same width.
+
+\paragraph{Role in the forecast} (Fig.~\ref{fig:nestedorder}, panel 4).
+\begin{itemize}
+\item \emph{No single channel is essential.} Freezing any one channel at its starting value raises the 30-minute error by only 5--40\%. Freezing a group raises it by 36--69\%.
+\item \emph{The order is one of reconstruction, not of dynamics.} The last 16 channels, which carry under 10\% of the variance, matter as much to the forecast as the first 4: freezing them raises the error by 39--69\%. Forcing them to the truth lowers it as much as forcing channels 0--3 does (to 0.26--0.53 of the free error, against 0.29--0.33). The small-scale channels are where the fast, hard-to-forecast motion lives, so the propagator needs all 32.
+\item \emph{Forcing channels 0--3 to the truth} cuts the 30-minute error to about 0.3 of the free forecast. Knowing how the large-scale system evolves is most of the forecast.
+\end{itemize}
+
+\paragraph{What this gives.}
+\begin{itemize}
+\item \emph{A physically readable latent state.} The first channel is a map of the convective system and the second mode a map of the cold pool, in every model. Both can be plotted and inspected like physical fields.
+\item \emph{A route to compact diagnostics.} Because most of the variance is in a few channels, they are natural targets for a reduced description of the storm, or for checking what observations that see mostly the large scales, such as reflectivity and surface $\theta'$, actually constrain. That has not been measured yet.
+\item \emph{Limits.} The ordering does not make the dynamics low-dimensional: the forecast still needs all 32 channels. Channels beyond the first two differ between independently trained models, so only the first two modes have a meaning that can be compared across models.
+\end{itemize}
+
+\FloatBarrier
 \section{Data assimilation with the pool}
 
 \paragraph{Setup.} A twin experiment on the 22 test storms. The truth is the CM1 run itself.

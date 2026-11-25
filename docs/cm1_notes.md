@@ -2111,3 +2111,11 @@ Blend10 from analyses ~35% above mean, power 1.06. Data: docs/fpe_report/data/po
 ### 2026-11-25: Saidie chains resubmitted again
 Node contention on 11-24 (6 design_val + 2 trainings + 2 CPU evals on dgx1): F16s1 Stage A finished (ae.pt saved) but hit its limit in teardown, so B/C never started; F17 Stage B reached 30k/40k; the CPU evaluations of F16 (9904/9906) reached ~1.1 of 3 models. design_val (6 settings, 18 cases each) completed: ~/cm1_da/design/val_T*_I*.json.
 Resubmitted: F16s1 B 9917 (3h30) -> C 9918; F17 B 9927 (5h) -> C 9928. Evaluations now on GPU, split per model, out ~/cm1_da/eval_new_{test,old_test}/{A,B,C}: A = F6, F16, g_local48 (9921 / 9924, start now); B = F16s1 + pool2 F16+F16s1 (9922 / 9925, after 9918); C = F17 (9929 / 9930, after 9928). Old 9904/9906 dropped (superseded by A).
+
+## 10d. Nested dropout: what the pool's latent channels mean (2026-11-25; Cashew 796044, scripts/cm1/latent_physics.py + plot_latent_physics.py)
+4 pool models (F6, F6s2, F6s3, F6s5; all nested_frac 0.5), 22 test storms, 2354 frames.
+- Ordering (first m channels kept, rest zeroed as in training): m=1 0.68-0.70 of variance, 4: 0.86, 8: 0.91, 32: 0.973; last 1-8 channels: 0.03-0.07. w is last (1 ch 0.37, 4 ch 0.68).
+- Channel 0 = convective system in all 4 models (|r| condensate path 0.91-0.94; sign differs between models), ~100 km scale, held-out ridge R2 0.90-0.97. Second mode = cold pool / moisture (qv, surface th; |r| 0.5-0.75), channel 1 in models 1-2, 2 in model 3, 3 in model 4 (cross-model |r| 0.78-0.87). Channels >= 2 do not match one-to-one across models.
+- Footprint of z0 (+1 std at one site): tilted updraft up to 4.5 m/s, warm core ~1 K, cloud 2-6 km, mid-level p' low ~0.4 hPa; width ~±5 km.
+- Dynamics (30 min, noise 0): freezing one channel +5-40%; group 0-3 +44-58%, 16-31 +39-69%; forcing 0-3 to truth -> 0.29-0.33 of free error, 16-31 -> 0.26-0.53. Ordering is by reconstruction, not dynamics.
+Data docs/fpe_report/data/latent_physics/ (model-1 footprints/hovmoller only); figs fig_nested_{order,meaning,footprint,hov}.png; section in cm1_pool.tex.
