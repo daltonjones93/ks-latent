@@ -2107,3 +2107,7 @@ pool - single_phys -0.025+-0.007 (86%); pool - single_latent -0.004+-0.007 (59%,
 Spread/err: pool 0.89, single_latent 0.83, single_phys 0.75. Front 0.46 km. theta obs RMSE 0.48 K.
 60-min forecasts from analyses (mean): pool 0.373 vs single_latent 0.389 (-0.016+-0.011, 64%), single_phys 0.393; no DA 0.538.
 Blend10 from analyses ~35% above mean, power 1.06. Data: docs/fpe_report/data/pool_da.json; fig fig_pool_da.png; doc section in cm1_pool.tex.
+
+### 2026-11-25: Saidie chains resubmitted again
+Node contention on 11-24 (6 design_val + 2 trainings + 2 CPU evals on dgx1): F16s1 Stage A finished (ae.pt saved) but hit its limit in teardown, so B/C never started; F17 Stage B reached 30k/40k; the CPU evaluations of F16 (9904/9906) reached ~1.1 of 3 models. design_val (6 settings, 18 cases each) completed: ~/cm1_da/design/val_T*_I*.json.
+Resubmitted: F16s1 B 9917 (3h30) -> C 9918; F17 B 9927 (5h) -> C 9928. Evaluations now on GPU, split per model, out ~/cm1_da/eval_new_{test,old_test}/{A,B,C}: A = F6, F16, g_local48 (9921 / 9924, start now); B = F16s1 + pool2 F16+F16s1 (9922 / 9925, after 9918); C = F17 (9929 / 9930, after 9928). Old 9904/9906 dropped (superseded by A).
