@@ -2128,3 +2128,8 @@ Test round: pool_pff RTPS 0.6, jobs ppff_t0-17 (797228-797245, 3h40; val jobs to
 Written into cm1_pool (subsection "A particle flow filter in latent space", Table tab:pff; abstract; remaining-work item).
 Saidie: F16s1 9917 / F17 9927 hung in encode_members after AE reuse (1 core 100%, GPU idle, hours); diagnostics 9946 (64G) / 9947 (480G),
 cluster/saidie/diag_encode_hang.sh. twoscale_eval lowpass device bug fixed (5234aa9); evaluations not yet rerun.
+Saidie hang diagnosed: diag 9946 (64G) / 9947 (480G) both stalled in encode_members (kernel time ~1 core, no major faults, cgroup
+memory ~6 GB), so not the memory limit. On the node, reading 16 frames through the memmap took 0.37 s vs 0.037 s with os.pread
+(whole 500 MB member 0.8 s). ColumnData._read now uses pread (memmap fallback for non-C layouts; exact-match unit test).
+Resubmitted (cluster/saidie/resubmit_new_storms4.sh): F16s1 B 9951 -> C 9952; F17 B 9953 -> C 9954; evaluations A now
+(9955 test / 9958 old_test), B after 9952, C after 9954.

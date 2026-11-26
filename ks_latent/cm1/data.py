@@ -24,6 +24,7 @@ environment. Splits are by whole member, never by frame or window.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -246,11 +247,50 @@ class ColumnData:
         return out.float().permute(0, 1, 3, 2).contiguous(), mem, t0, x0
 
     def _read(self, m: int, t, x0: int = 0, width: int | None = None) -> np.ndarray:
-        """Lazy members: frames `t` (slice or int), columns x0 .. x0+width, normalized float32 (T', width, C)."""
-        a = np.asarray(self.u[m][t, x0:None if width is None else x0 + width], dtype=np.float32)
+        """Lazy members: frames `t` (slice or int), columns x0 .. x0+width, normalized float32 (T', width, C).
+
+        Reads with os.pread rather than through the memory map: on a node under memory pressure, page-faulting a
+        memmap ran ~10x slower than pread (Saidie 2026-11-25: 0.37 s vs 0.04 s for 16 frames), and encoding every
+        member (Stage B start) went from minutes to > 5 h. Falls back to the memmap for non-contiguous layouts."""
+        X = self.u[m]
+        a = self._pread(X, t, x0, width)
+        if a is None:
+            a = np.asarray(X[t, x0:None if width is None else x0 + width])
+        a = a.astype(np.float32)
         if a.ndim == 3:
             a = a[None]
         return a.reshape(a.shape[0], a.shape[1], self.C) / self._s
+
+    @staticmethod
+    def _pread(X: np.memmap, t, x0: int, width: int | None) -> np.ndarray | None:
+        """Frames `t` (int or unit-step slice), columns x0 .. x0+width of a C-ordered memmap, read with os.pread."""
+        if not (X.flags.c_contiguous and getattr(X, "filename", None)):
+            return None
+        T, nx = X.shape[0], X.shape[1]
+        if isinstance(t, (int, np.integer)):
+            t = slice(int(t), int(t) + 1)
+        t0, t1, step = t.indices(T)
+        if step != 1:
+            return None
+        n, w = max(t1 - t0, 0), nx - x0 if width is None else width
+        col = int(np.prod(X.shape[2:])) * X.dtype.itemsize        # bytes of one column (V*Z values)
+        frame = nx * col
+        fd = os.open(X.filename, os.O_RDONLY)
+        try:
+            if w == nx:                                            # whole frames: one contiguous read
+                buf = os.pread(fd, n * frame, X.offset + t0 * frame)
+                if len(buf) != n * frame:
+                    raise OSError(f"{X.filename}: short read ({len(buf)} of {n * frame} bytes)")
+                return np.frombuffer(buf, dtype=X.dtype).reshape((n,) + X.shape[1:])
+            out = np.empty((n, w) + X.shape[2:], dtype=X.dtype)
+            for i in range(n):                                     # a window: one contiguous read per frame
+                buf = os.pread(fd, w * col, X.offset + (t0 + i) * frame + x0 * col)
+                if len(buf) != w * col:
+                    raise OSError(f"{X.filename}: short read ({len(buf)} of {w * col} bytes)")
+                out[i] = np.frombuffer(buf, dtype=X.dtype).reshape((w,) + X.shape[2:])
+            return out
+        finally:
+            os.close(fd)
 
     def full(self, m: int, t: slice | int = slice(None), device: torch.device | None = None) -> torch.Tensor:
         """Whole domain of member `m`: `(T', C, NX)` float32, on `device` (default: the data's device)."""

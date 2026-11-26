@@ -121,6 +121,12 @@ def test_memmapped_members_match_loaded(tmp_path):
     assert we.shape == wl.shape and torch.allclose(we, wl, rtol=2e-3, atol=2e-3)   # eager stores normalized float16
     assert torch.allclose(de.full(1, slice(1, 4)), dl.full(1, slice(1, 4)), rtol=2e-3, atol=2e-3)
     assert dl.full(0, 2).shape == (1, de.C, 64)
+    # the pread reader returns exactly what the memmap holds (whole frames, a window, one frame, an empty range)
+    X = lazy[1].X
+    for t, x0, w in [(slice(1, 5), 0, None), (slice(0, 6), 7, 16), (3, 60, 4), (slice(5, 5), 0, None)]:
+        got = ColumnData._pread(X, t, x0, w)
+        want = np.asarray(X[t, x0:None if w is None else x0 + w])
+        assert got is not None and np.array_equal(got.reshape(want.shape), want)
 
 
 def test_attention_propagator_swiglu():
