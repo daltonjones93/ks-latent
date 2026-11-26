@@ -2119,3 +2119,12 @@ Resubmitted: F16s1 B 9917 (3h30) -> C 9918; F17 B 9927 (5h) -> C 9928. Evaluatio
 - Footprint of z0 (+1 std at one site): tilted updraft up to 4.5 m/s, warm core ~1 K, cloud 2-6 km, mid-level p' low ~0.4 hPa; width ~±5 km.
 - Dynamics (30 min, noise 0): freezing one channel +5-40%; group 0-3 +44-58%, 16-31 +39-69%; forcing 0-3 to truth -> 0.29-0.33 of free error, 16-31 -> 0.26-0.53. Ordering is by reconstruction, not dynamics.
 Data docs/fpe_report/data/latent_physics/ (model-1 footprints/hovmoller only); figs fig_nested_{order,meaning,footprint,hov}.png; section in cm1_pool.tex.
+
+### 2026-11-25: 10e PFF validation (Cashew, 6 val storms, second half of cycles, prior nMSE)
+pool_pff RTPS 0.3/0.6/0.9: 0.307/0.301/0.303 (pool_phys LETKF 0.299/0.298/0.310) -> 0.6; per storm pff - LETKF within 0.012.
+single_pff (4 of 6 storms so far): 0.344/0.334/0.322, still improving at 0.9 (single_latent LETKF 0.307 on the same 4).
+PFF analyses ~40% less spread than LETKF at the same RTPS; reflectivity echo error 4.9 vs 4.2 dBZ (pool), front 0.56 vs 0.33 km; q_l level.
+Test round: pool_pff RTPS 0.6, jobs ppff_t0-17 (797228-797245, 3h40; val jobs took up to 2h49), t18-21 and single_pff test after spff_v* finish.
+Written into cm1_pool (subsection "A particle flow filter in latent space", Table tab:pff; abstract; remaining-work item).
+Saidie: F16s1 9917 / F17 9927 hung in encode_members after AE reuse (1 core 100%, GPU idle, hours); diagnostics 9946 (64G) / 9947 (480G),
+cluster/saidie/diag_encode_hang.sh. twoscale_eval lowpass device bug fixed (5234aa9); evaluations not yet rerun.

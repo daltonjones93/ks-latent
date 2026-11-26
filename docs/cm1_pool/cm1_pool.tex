@@ -21,7 +21,7 @@ We describe a learned forecast system for two-dimensional CM1 squall lines. It h
 \item a pool of several copies of this model, trained independently with different random seeds, whose members are combined into one ensemble;
 \item a vote that turns the ensemble into yes/no forecasts of storm features such as updrafts, downdrafts, the cold pool and the mesolow.
 \end{itemize}
-On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. Nested dropout makes the latent channels readable: in every model, one channel alone explains about 70\% of the variance and maps the convective system, and the next mode maps the cold pool. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested.
+On 22 storms never used in training, a pool of four models beats a single model with the same number of members. Fair CRPS is 3.3--5.2\% lower at every lead from 5 to 90 minutes, the ensemble-mean error is 1.4--3.8\% lower, and the vote's critical success index (CSI) is higher for every feature. The pool's spread is also calibrated (spread/error $\approx 1.0$) without any tuning. Nested dropout makes the latent channels readable: in every model, one channel alone explains about 70\% of the variance and maps the convective system, and the next mode maps the cold pool. For a single deterministic-looking field we recommend a scale blend: the large scales of the ensemble average plus the small scales of one member, which keeps realistic small-scale structure at a moderate cost in error. Finally, the pool can be cycled with an ensemble Kalman filter on decoded fields. Assimilating $\theta'$, reflectivity and radial velocity every 5 minutes for 3\,h lowers the forecast error by 40\% on every test storm and places the gust front within 0.5\,km. It beats a single model with the same update and members by 7\% and is the best calibrated of the systems tested. A latent-space particle flow filter, run per model with the other models' members re-encoded to give each a 32-member covariance, is level with this update in overall error on validation storms but not better on reflectivity or the gust front.
 \end{abstract}
 
 \section{The model}
@@ -338,12 +338,49 @@ One model $\times$32, latent update & $0.314 \pm 0.025$ & 100\% & 0.83 & 0.49 & 
 
 \paragraph{A safeguard for re-encoding.} The re-encoding step needs one safeguard. In the first run, one of the four encoders mapped a few analysed columns, still within the range of the forecast members, to latent values near 300, against a normal range below about 11. That model's members then blew up in the next forecast and, through the shared update, pulled the whole pool off. This happened on 7 of 22 test storms. Re-encoded latents are now clipped, channel by channel, to each model's range on the training storms plus 10\%, for every system including the latent update. The clip fires in about 7 of 36 cycles and touches $7 \times 10^{-6}$ of the latent entries (at most $2.6 \times 10^{-3}$ in one cycle). It is a guard against rare outliers, not a change to the analysis. That an encoder can be this fragile to slightly off-manifold inputs is a real weakness, and training with perturbed (analysis-like) inputs is the proper fix.
 
+\subsection*{A particle flow filter in latent space}
+
+The LETKF assumes Gaussian errors and a linear observation operator; reflectivity and condensate are neither. A particle flow filter (PFF) makes no Gaussian assumption about the posterior and uses the full nonlinear observation operator, so it is the natural nonlinear alternative. We added it in two forms.
+\begin{itemize}
+\item \emph{One model $\times$32, latent PFF.} A natural-gradient PFF in the model's latent space, localized by site: each 2\,km latent site is updated using a window of $\pm 6$ sites, with a Gaspari--Cohn taper (4\,km) on the prior covariance $B$ and observation localization (3\,km). The particles move in pseudo-time under the flow $\dot z = F^{-1}\big[J^\top R^{-1}(y - h(D(z))) - B^{-1}(z - \bar z)\big]$ plus a stochastic term, with the Gauss--Newton metric $F = J^\top R^{-1} J + B^{-1}$. Here $h \circ D$ (decode, then observe) is the full nonlinear operator, and its Jacobian $J$ is taken through the decoder at the ensemble mean. 12 pseudo-time steps, RTPS afterwards as for the LETKF.
+\item \emph{Pool 4$\times$8, one latent PFF per model.} Each model has its own latent space, so one PFF cannot act on all 32 members at once. Instead each model runs its own PFF on 32 particles: its own 8 members, plus the other models' 24 members decoded and re-encoded by this model's encoder. Each model keeps the analysis of its own 8. Its prior covariance $B$ therefore comes from 32 members, including the spread between models, rather than from 8.
+\end{itemize}
+Adding random noise to the 8 members would also give 32 particles, but it adds only a constant to the diagonal of $B$, which the filter already includes as a ridge; it brings no new information about how errors are correlated. Re-encoding the other models' members gives flow-dependent covariance. The cost is one Jacobian per pseudo-step at the mean, so it hardly depends on the number of particles: 54\,s per analysis for the single model and 212\,s for the pool (16 CPU cores).
+
+\begin{table}[ht]
+\centering\small
+\caption{Particle flow filter against the LETKF on the validation storms (second half of the cycles, prior = forecast before each analysis). The pool rows are over all 6 validation storms; the single-model rows over the 4 storms completed so far. Each filter at its best RTPS (in brackets). ``Echo'' = reflectivity error of the ensemble mean where the truth exceeds 10\,dBZ; $q_l$, $q_i$ = liquid and ice condensate RMSE of the ensemble mean, in the model's units of $\sqrt{q}$ ($\sqrt{\mathrm{g\,kg^{-1}}}$).}
+\label{tab:pff}
+\begin{tabular}{lcccccc}
+\toprule
+System & Prior nMSE & $\theta'$ (K) & Echo (dBZ) & Front (km) & $q_l$ & $q_i$ \\
+\midrule
+Pool, no DA & 0.502 & 1.39 & 11.3 & 9.6 & 0.149 & 0.159 \\
+Pool, physical LETKF (0.6) & \textbf{0.298} & \textbf{0.48} & \textbf{4.2} & \textbf{0.33} & 0.096 & \textbf{0.087} \\
+Pool, latent PFF (0.6) & 0.301 & 0.51 & 4.9 & 0.56 & \textbf{0.094} & 0.093 \\
+\midrule
+One model, no DA & 0.523 & 1.35 & 11.4 & 9.1 & 0.148 & 0.163 \\
+One model, latent LETKF (0.6) & \textbf{0.307} & \textbf{0.47} & \textbf{3.9} & \textbf{0.37} & 0.092 & \textbf{0.089} \\
+One model, latent PFF (0.9) & 0.322 & 0.54 & 4.7 & 0.92 & 0.092 & 0.095 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Validation results} (Table~\ref{tab:pff}).
+\begin{itemize}
+\item \emph{The PFF works and the pool form is the better one.} Both cut the prior error by about 40\% against no DA. The pooled PFF is level with the pooled LETKF in overall error (0.301 against 0.298; within 0.012 on each of the 6 storms) and clearly better than the single-model PFF (0.308 against 0.322 on the same 4 storms). Cross-encoding is what lets the pool use a 32-member covariance here.
+\item \emph{It does not beat the LETKF.} The PFF matches the LETKF on liquid condensate but is somewhat worse on reflectivity, $\theta'$ and the gust-front position. We expected its advantage to show in reflectivity, so this is the clearest negative.
+\item \emph{Under-dispersed.} After a PFF analysis the spread is about 40\% smaller than after the LETKF at the same RTPS. The single-model PFF still improves at the largest RTPS tried (0.9), so it likely wants more inflation than our range; the pooled PFF is less sensitive, since the other models' members already widen its prior.
+\end{itemize}
+The same comparison on the 22 test storms is running and will be added to Table~\ref{tab:da}.
+
 \paragraph{What remains to be solved.}
 \begin{enumerate}
 \item \emph{Encoder robustness} to analysis states, as above.
 \item \emph{Only one observation-noise realization} per storm has been run so far. The per-storm differences above are paired, so this mainly limits the narrower comparisons (pool against the latent update).
 \item \emph{Boundaries.} The halo is held at its starting value. Over longer cycles it should be updated or supplied by a larger-domain model.
 \item \emph{Robustness.} The model needs the retraining on new environments and decaying storms before DA results can be expected to hold beyond the training environment.
+\item \emph{Particle flow filter.} The test-storm comparison is still running, and the PFF's inflation needs a wider search (single model) or a better stochastic term, since its analyses are under-dispersed.
 \item \emph{Shared latent space.} Training the pool's propagators on one shared autoencoder would allow a single latent update across models. Whether this keeps the pool's forecast advantage is untested.
 \end{enumerate}
 
